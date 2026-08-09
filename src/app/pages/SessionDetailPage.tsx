@@ -392,6 +392,38 @@ export function SessionDetailPage() {
     if (moved) await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
   }
 
+  function showNextPageConfirmation() {
+    chat.clearUiActions()
+    setSession((current) => current ? {
+      ...current,
+      uiActions: [createNextPageConfirmation()],
+    } : current)
+  }
+
+  async function handleQuizDecline() {
+    if (isActionPending) return
+    setIsActionPending(true)
+    setError(null)
+    try {
+      const result = await sessionsRepository.declineQuiz(activeSession.id)
+      applyTurnResult({
+        ...result,
+        uiActions: normalizeProgressActions(result.uiActions),
+      }, true)
+    } catch (requestError) {
+      if (
+        requestError instanceof ApiClientError
+        && (requestError.status === 404 || requestError.status === 405)
+      ) {
+        showNextPageConfirmation()
+      } else {
+        setError(getRequestErrorMessage(requestError))
+      }
+    } finally {
+      setIsActionPending(false)
+    }
+  }
+
   async function runTurn(
     eventType: 'EXPLAIN_CURRENT_PAGE' | 'QUIZ_TYPE_SELECTED',
     payload: Record<string, unknown>,
@@ -407,7 +439,7 @@ export function SessionDetailPage() {
       })
       applyTurnResult(
         eventType === 'EXPLAIN_CURRENT_PAGE'
-          ? { ...result, uiActions: normalizePostExplainActions(result.uiActions) }
+          ? { ...result, uiActions: normalizeProgressActions(result.uiActions) }
           : result,
         true,
       )
@@ -431,11 +463,7 @@ export function SessionDetailPage() {
 
   async function handleEvent(event: UiActionEvent, selection?: UiActionSelection) {
     if (selection?.choice === 'no' && isQuizProposal(selection.action)) {
-      chat.clearUiActions()
-      setSession((current) => current ? {
-        ...current,
-        uiActions: [createNextPageConfirmation()],
-      } : current)
+      await handleQuizDecline()
       return
     }
     switch (event) {
@@ -739,7 +767,7 @@ function withPagePromptFallback<T extends LearningSession>(session: T): T {
   return { ...session, uiActions: [createExplainPagePrompt()] }
 }
 
-function normalizePostExplainActions(actions: UiAction[]): UiAction[] {
+function normalizeProgressActions(actions: UiAction[]): UiAction[] {
   return actions.map((action) => action.kind === 'MOVE_NEXT_PAGE'
     ? createNextPageConfirmation()
     : action)

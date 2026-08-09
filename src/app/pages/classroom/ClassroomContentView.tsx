@@ -13,8 +13,7 @@ export function ClassroomContentRail({ onSelect, selectedWeekNumber, weeks }: {
   weeks: ClassroomWeek[]
 }) {
   return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white">
-    <div className="px-3 pb-1 pt-2.5"><h2 className="type-body font-bold text-stone-950">주차</h2></div>
-    <nav aria-label="강의실 주차" className="flex-1 space-y-0.5 px-1.5 pb-1.5">
+    <nav aria-label="강의실 주차" className="flex-1 space-y-0.5 p-1.5">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
       {weeks.map((week) => {
         return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><span className={`flex size-6 shrink-0 items-center justify-center rounded-md type-caption font-bold ${selectedWeekNumber === week.weekNumber ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-500'}`}>{week.weekNumber}</span><strong className="min-w-0 flex-1 truncate text-left type-caption">{week.title}</strong><span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${week.status === 'PUBLISHED' ? 'bg-emerald-500' : week.status === 'SCHEDULED' ? 'bg-amber-500' : 'bg-stone-300'}`} /></button>

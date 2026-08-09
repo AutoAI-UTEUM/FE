@@ -129,6 +129,11 @@ describe('remote feature repositories', () => {
       )
       .mockResolvedValueOnce(
         success({
+          uiActions: [{ content: '다음 페이지로 이동할까요?', noEvent: 'WAIT', type: 'BINARY_DECISION', yesEvent: 'MOVE_NEXT_PAGE' }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        success({
           messages: [
             {
               content: '답변',
@@ -159,6 +164,16 @@ describe('remote feature repositories', () => {
       }),
     )
 
+    await expect(repository.declineQuiz('100')).resolves.toMatchObject({
+      messages: [],
+      uiActions: [{ kind: 'BINARY_DECISION', yesEvent: 'MOVE_NEXT_PAGE' }],
+    })
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      '/api/sessions/100/quiz-decline',
+      { method: 'POST', signal: undefined },
+    )
+
     await expect(
       repository.submitTurn('100', {
         eventType: 'USER_QUESTION',
@@ -171,7 +186,7 @@ describe('remote feature repositories', () => {
       pageStatus: 'IN_PROGRESS',
     })
     expect(request).toHaveBeenNthCalledWith(
-      2,
+      3,
       '/api/sessions/100/turns',
       expect.objectContaining({
         body: {
@@ -188,7 +203,7 @@ describe('remote feature repositories', () => {
       startedAt: '2026-08-03T00:00:00Z',
     })
     expect(request).toHaveBeenNthCalledWith(
-      3,
+      4,
       '/api/sessions/100/conversations',
       { method: 'POST', signal: undefined },
     )

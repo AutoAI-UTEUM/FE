@@ -356,6 +356,7 @@ function createRepository(
   return {
     complete: vi.fn(),
     create: vi.fn(),
+    declineQuiz: vi.fn(),
     delete: vi.fn(),
     getById: vi.fn(),
     list: vi.fn(),
