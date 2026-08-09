@@ -43,6 +43,20 @@ describe('classrooms repository', () => {
       method: 'DELETE',
     })
   })
+
+  it('maps legacy notices to global and sends an explicit week when supported', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ data: { items: [{ classroomId: 12, content: '내용', createdAt: '2026-08-01', noticeId: 7, publishedAt: '2026-08-01', title: '공지', updatedAt: '2026-08-01' }] } })
+      .mockResolvedValueOnce({ data: { classroomId: 12, content: '내용', createdAt: '2026-08-01', noticeId: 8, publishedAt: '2026-08-01', title: '주차 공지', updatedAt: '2026-08-01', weekNumber: 3 } })
+    const repository = createClassroomsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.listNotices('12')).resolves.toEqual([expect.objectContaining({ id: '7', weekNumber: null })])
+    await expect(repository.createNotice('12', { content: '내용', title: '주차 공지', weekNumber: 3 })).resolves.toEqual(expect.objectContaining({ id: '8', weekNumber: 3 }))
+    expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/notices', {
+      body: { content: '내용', title: '주차 공지', weekNumber: 3 },
+      method: 'POST',
+    })
+  })
 })
 
 const classroomDto = {

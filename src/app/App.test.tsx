@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -176,13 +176,56 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '공지 관리' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '입장 요청' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '통합 관리' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '입장 요청' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '자료' })).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '초대 코드' })).toBeEnabled()
     expect(screen.getByRole('option', { name: '자연어처리 개론' })).toBeInTheDocument()
   })
 
-  it('keeps the classroom workspace header mounted while changing its menu content', async () => {
+  it('summarizes instructor operations in the integrated management hub', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
+        return apiSuccess({
+          items: [{
+            classroomId: 12,
+            color: 'BLUE',
+            description: '자연어처리 수업',
+            endDate: '2026-11-15',
+            instructorName: '강의자',
+            learnerCount: 20,
+            materialCount: 4,
+            name: '자연어처리 개론',
+            pendingRequestCount: 3,
+            progressRate: 30,
+            startDate: '2026-08-03',
+            status: 'ACTIVE',
+            weekCount: 15,
+          }],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return undefined
+    })
+    renderRoute('/management', {
+      email: 'instructor@example.com',
+      name: '강의자',
+      role: 'INSTRUCTOR',
+    })
+
+    expect(screen.getByRole('heading', { name: '통합 관리' })).toBeInTheDocument()
+    expect(await screen.findByText('전체 학습자')).toBeInTheDocument()
+    expect(screen.getByText('3건')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /자료주차별 자료/ })).toHaveAttribute('href', '/classrooms/12')
+    expect(screen.getByRole('link', { name: /수강생·리포트/ })).toHaveAttribute('href', '/classrooms/12/students')
+    expect(screen.getByRole('link', { name: /입장 요청/ })).toHaveAttribute('href', '/classrooms/12/entrance-requests')
+  })
+
+  it('keeps the classroom workspace header mounted while changing week content', async () => {
     installApiFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/classrooms/12') {
@@ -214,11 +257,16 @@ describe('AppRoutes', () => {
     })
 
     const heading = await screen.findByRole('heading', { level: 1, name: '자료구조' })
-    fireEvent.click(screen.getByRole('link', { name: '공지' }))
+    const weekRail = await screen.findByRole('navigation', { name: '강의실 주차' })
+    const secondWeekButton = within(weekRail).getByText('심화 학습').closest('button')
+    expect(secondWeekButton).not.toBeNull()
+    fireEvent.click(secondWeekButton!)
+    await waitFor(() => expect(within(screen.getByRole('navigation', { name: '강의실 주차' })).getByText('심화 학습').closest('button')).toHaveAttribute('aria-current', 'page'))
+    const filterGroup = screen.getByRole('group', { name: '콘텐츠 유형 필터' })
+    fireEvent.click(within(filterGroup).getByRole('button', { name: '공지' }))
 
-    expect(await screen.findByRole('link', { name: '공지' })).toHaveAttribute('aria-current', 'page')
+    expect(within(filterGroup).getByRole('button', { name: '공지' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBe(heading)
-    expect(await screen.findByRole('region', { name: '공지 관리' })).toBeInTheDocument()
   })
 
   it('loads the instructor report screen from the deployed backend contract', async () => {

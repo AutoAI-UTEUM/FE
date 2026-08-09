@@ -36,7 +36,9 @@ interface ChatPanelProps {
   /** 세션 완료처럼 대화 전체에 적용되는 명령 (채팅 헤더 우측) */
   headerAction?: ReactNode
   /** 현재 페이지 설명을 일반 QA가 아닌 학습 진행 이벤트로 요청한다. */
-  onExplainCurrentPage?: () => void
+  onExplainCurrentPage?: (message?: string) => Promise<void> | void
+  /** 다음 페이지로 이동한 뒤 해당 페이지 설명을 학습 진행 이벤트로 요청한다. */
+  onExplainNextPage?: (message?: string) => Promise<void> | void
   /** 서버가 확정한 턴 상태를 세션 화면과 동기화한다. */
   onTurnCompleted?: (result: SessionTurnResult) => void
   /** 시안 빠른 칩의 "퀴즈 내줘" — 세션 화면의 유형 선택(W4)을 연다. */
@@ -66,6 +68,7 @@ export function ChatPanel({
   conversationAction,
   headerAction,
   onExplainCurrentPage,
+  onExplainNextPage,
   onRequestQuiz,
   onTurnCompleted,
   request,
@@ -133,6 +136,14 @@ export function ChatPanel({
     setError(null)
 
     try {
+      if (onExplainNextPage && isExplainNextPageCommand(trimmedQuestion)) {
+        await onExplainNextPage(trimmedQuestion)
+        return
+      }
+      if (onExplainCurrentPage && isExplainCurrentPageCommand(trimmedQuestion)) {
+        await onExplainCurrentPage(trimmedQuestion)
+        return
+      }
       await chat.submitTurn(
         {
           eventType: 'USER_QUESTION',
@@ -426,6 +437,25 @@ export function ChatPanel({
       )}
     </section>
   )
+}
+
+function isExplainCurrentPageCommand(value: string): boolean {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[?.!,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return /^(현재 |이 )?페이지(를|에 대해)? (쉽게 )?설명(해 ?줘|해 ?주세요|해|)$/u.test(normalized)
+    || /^(쉽게 )?설명(해 ?줘|해 ?주세요)$/u.test(normalized)
+}
+
+function isExplainNextPageCommand(value: string): boolean {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[?.!,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return /다음\s*(페이지|쪽|장)(로|으로|를|을|의|에|에서)?\s*(넘어가서\s*)?(내용(을|를)?\s*)?(쉽게\s*)?(설명|해설|요약)(해\s*줘|해\s*주세요|해줘|해주세요|해)?/u.test(normalized)
 }
 
 function PanelTab({

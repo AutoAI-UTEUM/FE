@@ -125,7 +125,7 @@ describe('remote feature repositories', () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(
-        success({ currentPage: 4, uiActions: [] }),
+        success({ currentPage: 4, pageStatus: 'NOT_EXPLAINED', uiActions: [] }),
       )
       .mockResolvedValueOnce(
         success({
@@ -148,6 +148,7 @@ describe('remote feature repositories', () => {
 
     await expect(repository.movePage('100', 4)).resolves.toMatchObject({
       currentPage: 4,
+      pageStatus: 'NOT_EXPLAINED',
     })
     expect(request).toHaveBeenNthCalledWith(
       1,
@@ -359,7 +360,7 @@ describe('remote feature repositories', () => {
       .mockResolvedValueOnce(
         success({
           gradingResult: {
-            items: [{ feedback: '정답입니다.', questionId: 'q1' }],
+            items: [{ feedback: '정답입니다.', maxScore: 100, questionId: 'q1', score: 40, verdict: 'PARTIAL' }],
           },
           maxScore: 100,
           passed: false,
@@ -390,6 +391,7 @@ describe('remote feature repositories', () => {
       repository.submit(quiz!, { q1: 'a' }),
     ).resolves.toMatchObject({
       diagnosisEntry: { diagnosisId: '30', sessionId: '100' },
+      feedback: [{ maxScore: 100, message: '정답입니다.', questionId: 'q1', score: 40, verdict: 'PARTIAL' }],
       score: 40,
     })
     expect(request).toHaveBeenNthCalledWith(

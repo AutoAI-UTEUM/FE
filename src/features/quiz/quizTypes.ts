@@ -27,8 +27,11 @@ export interface PublicQuiz {
 }
 
 export interface PublicQuizFeedback {
+  maxScore?: number
   message: string
   questionId: string
+  score?: number
+  verdict: 'CORRECT' | 'PARTIAL' | 'UNKNOWN' | 'WRONG'
 }
 
 export interface PublicQuizResult {

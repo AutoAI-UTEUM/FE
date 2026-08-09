@@ -79,6 +79,22 @@ describe('SessionDetailPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('moves the viewer before explaining the next page from a typed prompt', async () => {
+    renderSessionDetail()
+
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    const input = screen.getByLabelText('질문')
+    fireEvent.change(input, { target: { value: '다음 페이지를 설명해 주세요.' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(
+      await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.'),
+    ).toBeInTheDocument()
+  })
+
   it('updates pages only after the page API succeeds', async () => {
     renderSessionDetail()
 
@@ -203,5 +219,36 @@ describe('SessionDetailPage', () => {
         screen.queryByText('현재 페이지를 설명할까요?'),
       ).not.toBeInTheDocument(),
     )
+  })
+
+  it('asks before moving to the next page when a quiz is declined', async () => {
+    renderSessionDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: '네' }))
+    await screen.findByText('퀴즈를 진행할까요?')
+    fireEvent.click(screen.getByRole('button', { name: '아니요' }))
+
+    expect(await screen.findByText('다음 페이지로 이동할까요?')).toBeInTheDocument()
+    expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '네' }))
+    expect(await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
+    expect(await screen.findByText('현재 페이지를 설명할까요?')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '네' }))
+    expect(await screen.findByText('퀴즈를 진행할까요?')).toBeInTheDocument()
+  })
+
+  it('routes an explicit typed explanation command through the learning event', async () => {
+    renderSessionDetail()
+
+    await screen.findByText('현재 페이지를 설명할까요?')
+    const input = screen.getByLabelText('질문')
+    fireEvent.change(input, { target: { value: '현재 페이지 설명해줘' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.')).toBeInTheDocument()
+    expect(screen.getByText('퀴즈를 진행할까요?')).toBeInTheDocument()
   })
 })

@@ -98,10 +98,16 @@ describe('UiActionsRenderer', () => {
     expect(screen.getByText('현재 페이지를 설명할까요?')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '네' }))
-    expect(onEvent).toHaveBeenCalledWith('EXPLAIN_CURRENT_PAGE')
+    expect(onEvent).toHaveBeenCalledWith('EXPLAIN_CURRENT_PAGE', {
+      action: actions[0],
+      choice: 'yes',
+    })
 
     fireEvent.click(screen.getByRole('button', { name: '아니요' }))
-    expect(onEvent).toHaveBeenCalledWith('WAIT')
+    expect(onEvent).toHaveBeenCalledWith('WAIT', {
+      action: actions[0],
+      choice: 'no',
+    })
   })
 
   it('renders diagnosis widgets and move/wait actions', () => {
@@ -125,7 +131,7 @@ describe('UiActionsRenderer', () => {
     expect(onOpenDiagnosis).toHaveBeenCalledWith('30')
 
     fireEvent.click(screen.getByRole('button', { name: '다음 페이지로' }))
-    expect(onEvent).toHaveBeenCalledWith('MOVE_NEXT_PAGE')
+    expect(onEvent).toHaveBeenCalledWith('MOVE_NEXT_PAGE', { action: actions[1] })
 
     expect(screen.getByRole('status')).toHaveTextContent('잠시 생각하기')
   })

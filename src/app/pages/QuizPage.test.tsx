@@ -87,12 +87,17 @@ describe('QuizPage', () => {
     await answerAllQuestions()
     fireEvent.click(screen.getByRole('button', { name: '제출' }))
 
-    expect(await screen.findByText('점수 48')).toBeInTheDocument()
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+    expect(screen.getByText('정답')).toBeInTheDocument()
+    expect(screen.getByText('오답')).toBeInTheDocument()
+    expect(screen.getByText('개념의 정의를 먼저 확인한다.')).toBeInTheDocument()
+    expect(screen.getByText('50 / 50')).toBeInTheDocument()
+    expect(screen.getByText('0 / 50')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '진단으로 이어가기' }),
     ).toHaveAttribute('href', '/sessions/100/diagnosis/42')
     expect(
-      screen.queryByText(/정답|루브릭|private answer/i),
+      screen.queryByText(/정답:|루브릭|private answer/i),
     ).not.toBeInTheDocument()
   })
 })

@@ -4,7 +4,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 확인일 | 2026-08-05 |
+| 확인일 | 2026-08-09 |
 | FE 기준 | `fix/notion-0804-site-feedback` 현재 로컬 변경사항 |
 | BE 기준 | `develop` `docs/api-spec.md` 2026-08-05 |
 | 실행 계약 | 배포 Swagger `/v3/api-docs` 88개 operation |
@@ -157,10 +157,19 @@ POST /api/classrooms/{classroomId}/join-requests/approve-batch
 
 ## 계약 확인 필요
 
-- 주차별 공지를 주차 카드 상단에 안정적으로 표시하려면 공지 생성·수정·목록 계약에
-  선택 `weekNumber`가 필요하다. `weekNumber=null`은 전체 공지, 값이 있으면 해당
-  주차 공지로 정의하고, 목록 응답에도 같은 값을 반환해야 한다. 현재 FE는 데이터
-  손실을 피하기 위해 기존 계약으로 생성 가능한 전체 공지만 제공한다.
+- 강의실 통합 콘텐츠 화면에서 주차별 공지를 저장하려면 공지 생성·수정·목록·상세
+  계약에 선택 `weekNumber`가 필요하다.
+
+  ```http
+  POST  /api/classrooms/{classroomId}/notices
+  PATCH /api/classrooms/{classroomId}/notices/{noticeId}
+  GET   /api/classrooms/{classroomId}/notices
+  ```
+
+  생성·수정 요청과 응답에 `weekNumber: number | null`을 추가한다. `null`은 전체
+  공지, 숫자는 해당 주차 공지다. 기존 응답처럼 필드가 없으면 FE는 전체 공지로
+  해석하며 게시일로 주차를 추정하지 않는다. 배포 Swagger에 계약이 확인된 뒤
+  `VITE_API_CAPABILITIES=notice-weeks`를 추가하면 주차 공지 저장 UI가 활성화된다.
 - 공지 API는 현재 즉시 게시만 가능하다. 예약 게시가 범위라면 `publishAt` 필드 또는
   별도 예약 endpoint가 필요하다.
 - 자료 업로드는 Swagger상 PDF 전용이다. PPT/PPTX 지원 계획이 있다면 허용 MIME,

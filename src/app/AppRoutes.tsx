@@ -13,11 +13,11 @@ import { DiagnosisPage } from './pages/DiagnosisPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { EntranceRequestsPage } from './pages/EntranceRequestsPage'
 import { ExamDetailPage } from './pages/ExamDetailPage'
-import { ExamsPage } from './pages/ExamsPage'
 import { InstructorCalendarPage } from './pages/instructor/InstructorCalendarPage'
 import { InstructorClassroomEditPage } from './pages/instructor/InstructorClassroomEditPage'
 import { InstructorLearningStatusPage } from './pages/instructor/InstructorLearningStatusPage'
-import { InstructorNoticesPage } from './pages/instructor/InstructorNoticesPage'
+import { InstructorManagementPage } from './pages/instructor/InstructorManagementPage'
+import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
 import { InstructorReportCriteriaPage, InstructorReportDetailPage, InstructorReportsPage, InstructorStudentReportsPage } from './pages/instructor/InstructorReportsPage'
 import { LoginPage } from './pages/LoginPage'
 import { LearnerNotesPage } from './pages/learner/LearnerNotesPage'
@@ -70,15 +70,16 @@ export function AppRoutes() {
           <Route path={routes.classroomExamDetail} element={<ExamDetailPage />} />
           <Route path={routes.classroomDetail} element={<ClassroomWorkspaceLayout />}>
             <Route index element={<ClassroomDetailPage />} />
-            <Route path="exams" element={<ExamsPage />} />
+            <Route path="exams" element={<ClassroomContentLegacyRedirect filter="exam" />} />
             <Route element={<RequireInstructor />}>
               <Route path="students" element={<ClassroomStudentsPage />} />
               <Route path="settings" element={<InstructorClassroomEditPage />} />
               <Route path="analytics" element={<InstructorLearningStatusPage />} />
-              <Route path="announcements" element={<InstructorNoticesPage />} />
+              <Route path="announcements" element={<ClassroomContentLegacyRedirect filter="notice" />} />
             </Route>
           </Route>
           <Route element={<RequireInstructor />}>
+            <Route path={routes.management} element={<InstructorManagementPage />} />
             <Route path={routes.legacyClassroomEdit} element={<LegacyClassroomSettingsRedirect />} />
             <Route
               path={routes.learningStatus}

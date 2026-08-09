@@ -7,6 +7,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from './ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader, type ClassroomWorkspaceTab } from './ClassroomWorkspaceHeader'
+import { classroomDetailPath } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
 export function ClassroomWorkspaceLayout() {
@@ -60,8 +61,8 @@ export function ClassroomWorkspaceLayout() {
           actionSlotRef={setActionTarget}
           activeTab={getActiveTab(pathname)}
           classroom={classroom}
-          materialCount={classroom.materialCount}
           root
+          showTabs={pathname !== classroomDetailPath(classroom.id)}
           titleAccessorySlotRef={setTitleAccessoryTarget}
         />
         <Outlet />

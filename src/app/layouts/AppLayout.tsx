@@ -7,15 +7,14 @@ import {
   CircleHelp,
   ClipboardCheck,
   FileCheck2,
-  FileSearch,
   LayoutGrid,
   LogOut,
   Monitor,
   Moon,
   NotebookPen,
+  PanelsTopLeft,
   Settings,
   Sun,
-  UserPlus,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -32,7 +31,6 @@ import { getRoleLabel, isInstructorRole, useAuth } from '../../features/auth'
 import { createFeedbackRepository, type FeedbackCategory } from '../../features/feedback'
 import {
   createClassroomsRepository,
-  getRememberedClassroomId,
   JOIN_REQUESTS_CHANGED_EVENT,
   type Classroom,
 } from '../../features/classrooms'
@@ -46,13 +44,7 @@ import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime } from '../../shared/lib/format'
 import { useTheme, type ThemeMode } from '../../shared/theme'
 import { useToast } from '../../shared/ui'
-import {
-  classroomDetailPath,
-  classroomEntranceRequestsPath,
-  classroomExamsPath,
-  classroomReportsPath,
-  routes,
-} from '../routes'
+import { classroomDetailPath, routes } from '../routes'
 
 const learnerNavigation: Array<{
   icon: LucideIcon
@@ -110,10 +102,9 @@ export function AppLayout() {
       )
       .slice(0, 5)
   }, [calendarEvents, notificationReferenceTime])
-  const classroomContextId = getClassroomIdFromPath(location.pathname) ?? getRememberedClassroomId()
   const primaryNavigation = useMemo(() => isInstructor
-    ? getInstructorNavigation(classroomContextId)
-    : learnerNavigation, [classroomContextId, isInstructor])
+    ? instructorNavigation
+    : learnerNavigation, [isInstructor])
 
   useEffect(() => {
     document.documentElement.classList.toggle(
@@ -403,7 +394,7 @@ export function AppLayout() {
                 >
                   <item.icon aria-hidden="true" className="shrink-0" size={16} />
                   <span className={cx(isCollapsed && 'lg:sr-only')}>{item.label}</span>
-                  {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
+                  {item.label === '통합 관리' && pendingJoinRequestCount > 0 ? (
                     <span
                       aria-label={`${pendingJoinRequestCount}개의 대기 요청`}
                       className={cx(
@@ -637,15 +628,11 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
   )
 }
 
-function getInstructorNavigation(classroomId: string | null): Array<{ icon: LucideIcon; label: string; to: string }> {
-  return [
-    { icon: LayoutGrid, label: '강의실', to: routes.classrooms },
-    { icon: CalendarDays, label: '캘린더', to: routes.calendar },
-    { icon: FileSearch, label: '리포트', to: classroomId ? classroomReportsPath(classroomId) : routes.classrooms },
-    { icon: FileCheck2, label: '시험 관리', to: classroomId ? classroomExamsPath(classroomId) : routes.exams },
-    { icon: UserPlus, label: '입장 요청', to: classroomId ? classroomEntranceRequestsPath(classroomId) : routes.entranceRequests },
-  ]
-}
+const instructorNavigation: Array<{ icon: LucideIcon; label: string; to: string }> = [
+  { icon: LayoutGrid, label: '강의실', to: routes.classrooms },
+  { icon: CalendarDays, label: '캘린더', to: routes.calendar },
+  { icon: PanelsTopLeft, label: '통합 관리', to: routes.management },
+]
 
 function classroomDotClassName(color: Classroom['color']): string {
   return {
@@ -658,15 +645,6 @@ function classroomDotClassName(color: Classroom['color']): string {
   }[color]
 }
 
-function getClassroomIdFromPath(pathname: string): string | null {
-  const match = pathname.match(/^\/classrooms\/([^/]+)/)
-  if (!match?.[1]) return null
-  try {
-    return decodeURIComponent(match[1])
-  } catch {
-    return match[1]
-  }
-}
 
 const themeOptions: Array<{
   icon: LucideIcon
