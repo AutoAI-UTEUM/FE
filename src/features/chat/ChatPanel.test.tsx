@@ -15,6 +15,7 @@ function ChatHarness({
   conversationAction,
   currentPage,
   onExplainCurrentPage,
+  onExplainNextPage,
   onTurnCompleted,
   repository,
   sessionId = '100',
@@ -22,6 +23,7 @@ function ChatHarness({
   conversationAction?: ReactNode
   currentPage?: number
   onExplainCurrentPage?: () => void
+  onExplainNextPage?: () => void
   onTurnCompleted?: (result: SessionTurnResult) => void
   repository: SessionsRepository
   sessionId?: string
@@ -33,6 +35,7 @@ function ChatHarness({
       conversationAction={conversationAction}
       currentPage={currentPage}
       onExplainCurrentPage={onExplainCurrentPage}
+      onExplainNextPage={onExplainNextPage}
       onTurnCompleted={onTurnCompleted}
       sessionId={sessionId}
     />
@@ -147,6 +150,21 @@ describe('ChatPanel', () => {
         },
       }),
     ))
+  })
+
+  it('routes a next-page explanation command through the page-aware callback', async () => {
+    const onExplainNextPage = vi.fn()
+    const repository = createRepository()
+    render(<ChatHarness onExplainNextPage={onExplainNextPage} repository={repository} />)
+    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+
+    fireEvent.change(screen.getByLabelText('질문'), {
+      target: { value: '다음 페이지를 설명해 주세요.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    await waitFor(() => expect(onExplainNextPage).toHaveBeenCalledOnce())
+    expect(repository.submitTurn).not.toHaveBeenCalled()
   })
 
   it('locks input while the learning turn request is pending', async () => {
@@ -298,7 +316,13 @@ describe('ChatPanel', () => {
     })
     render(<ChatHarness repository={repository} />)
 
-    expect(await screen.findByRole('table')).toBeInTheDocument()
+    const table = await screen.findByRole('table')
+    expect(table).toBeInTheDocument()
+    expect(table.closest('.min-w-0')).toHaveClass(
+      'dark:[&_table]:bg-stone-50',
+      'dark:[&_td]:text-stone-900',
+      'dark:[&_th]:bg-stone-100',
+    )
     expect(screen.getByRole('button', { name: 'AI 답변 복사' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'AI 답변 공유' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'AI 답변 노트에 저장' }))

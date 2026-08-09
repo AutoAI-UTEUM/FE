@@ -98,6 +98,13 @@ export interface ClassroomNotice {
   publishedAt: string
   title: string
   updatedAt: string
+  weekNumber: number | null
+}
+
+export interface ClassroomNoticeInput {
+  content: string
+  title: string
+  weekNumber?: number | null
 }
 
 export interface JoinRequest {
@@ -166,6 +173,7 @@ interface NoticeDto {
   publishedAt: string
   title: string
   updatedAt: string
+  weekNumber?: number | null
 }
 
 interface JoinRequestDto {
@@ -295,14 +303,17 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       const { data } = await request<PagedResponse<NoticeDto>>(`/api/classrooms/${encodeURIComponent(id)}/notices?page=0&size=100`, { signal })
       return data.items.map(mapNotice)
     },
-    async createNotice(id: string, input: { content: string; title: string }) {
-      const { data } = await request<NoticeDto>(`/api/classrooms/${encodeURIComponent(id)}/notices`, { body: input, method: 'POST' })
+    async createNotice(id: string, input: ClassroomNoticeInput) {
+      const body: Record<string, unknown> = { content: input.content, title: input.title }
+      if (input.weekNumber !== undefined) body.weekNumber = input.weekNumber
+      const { data } = await request<NoticeDto>(`/api/classrooms/${encodeURIComponent(id)}/notices`, { body, method: 'POST' })
       return mapNotice(data)
     },
-    async updateNotice(id: string, noticeId: string, input: { content?: string; title?: string }) {
+    async updateNotice(id: string, noticeId: string, input: Partial<ClassroomNoticeInput>) {
       const body: Record<string, unknown> = {}
       if (input.title !== undefined) body.title = input.title
       if (input.content !== undefined) body.content = input.content
+      if (input.weekNumber !== undefined) body.weekNumber = input.weekNumber
       const { data } = await request<NoticeDto>(`/api/classrooms/${encodeURIComponent(id)}/notices/${encodeURIComponent(noticeId)}`, { body, method: 'PATCH' })
       return mapNotice(data)
     },
@@ -343,7 +354,7 @@ function mapAnalytics(value: ClassroomAnalyticsDto): ClassroomAnalytics {
 }
 
 function mapNotice(value: NoticeDto): ClassroomNotice {
-  return { ...value, classroomId: String(value.classroomId), id: String(value.noticeId) }
+  return { ...value, classroomId: String(value.classroomId), id: String(value.noticeId), weekNumber: value.weekNumber ?? null }
 }
 
 function mapJoinRequest(value: JoinRequestDto): JoinRequest {

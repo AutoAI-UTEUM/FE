@@ -362,7 +362,6 @@ export function InstructorClassroomEditPage() {
         actions={<><Button onClick={() => navigate(classroomDetailPath(classroom.id))} variant="secondary">되돌리기</Button><Button disabled={!name.trim() || !startDate || isSaving} form="classroom-edit-form" type="submit">{isSaving ? '저장 중' : '변경사항 저장'}</Button></>}
         activeTab="settings"
         classroom={classroom}
-        materialCount={weeks.reduce((sum, week) => sum + week.materials.length, 0)}
       />
 
       <form

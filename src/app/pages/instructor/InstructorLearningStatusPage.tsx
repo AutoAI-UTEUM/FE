@@ -68,7 +68,6 @@ export function InstructorLearningStatusPage() {
         actions={<><p className="type-caption font-medium text-stone-400">{analytics ? `마지막 갱신 ${formatUpdatedAt(analytics.lastUpdatedAt)}` : '마지막 갱신 정보 없음'}</p><ButtonLink to={classroomReportsPath(selectedClassroom.id)} variant="secondary"><FileSearch size={14} />학생 리포트</ButtonLink></>}
         activeTab="analytics"
         classroom={selectedClassroom}
-        materialCount={selectedClassroom.materialCount}
       /> : <h1 className="type-page-title font-bold text-stone-950">학습 현황</h1>}
 
       {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}

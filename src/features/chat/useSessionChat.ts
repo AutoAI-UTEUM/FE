@@ -13,6 +13,7 @@ import type { ChatMessage } from './chatTypes'
 export interface SessionChat {
   appendLocalMessage: (message: ChatMessage) => void
   appendMessages: (messages: SessionMessage[]) => void
+  clearUiActions: () => void
   historyError: string | null
   isLoadingHistory: boolean
   isTurnPending: boolean
@@ -77,6 +78,10 @@ export function useSessionChat(
 
   const appendLocalMessage = useCallback((message: ChatMessage) => {
     setMessages((current) => [...current, message])
+  }, [])
+
+  const clearUiActions = useCallback(() => {
+    setStreamUiActions([])
   }, [])
 
   const reloadHistory = useCallback(() => {
@@ -147,9 +152,9 @@ export function useSessionChat(
 
       try {
         const result = await repository.submitTurn(sessionId, turn)
-        onResult?.(result)
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
+        onResult?.(result)
         setStreamNotice(null)
         return result
       } catch (error) {
@@ -188,6 +193,7 @@ export function useSessionChat(
   return {
     appendLocalMessage,
     appendMessages,
+    clearUiActions,
     historyError,
     isLoadingHistory,
     isTurnPending,

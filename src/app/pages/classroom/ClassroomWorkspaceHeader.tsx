@@ -20,8 +20,8 @@ export function ClassroomWorkspaceHeader({
   actions,
   activeTab,
   classroom,
-  materialCount,
   root = false,
+  showTabs = true,
   titleAccessory,
   titleAccessorySlotRef,
 }: {
@@ -29,8 +29,8 @@ export function ClassroomWorkspaceHeader({
   actions?: ReactNode
   activeTab: ClassroomWorkspaceTab
   classroom: Classroom
-  materialCount?: number
   root?: boolean
+  showTabs?: boolean
   titleAccessory?: ReactNode
   titleAccessorySlotRef?: Ref<HTMLDivElement>
 }) {
@@ -65,21 +65,19 @@ export function ClassroomWorkspaceHeader({
     <header>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="min-w-0 break-words type-page-title font-bold text-stone-950">{classroom.name}</h1>
+            <p className="type-control text-stone-500">
+              {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · {classroom.weekCount}주차 · 수강생 {classroom.learnerCount}명
+            </p>
             {titleAccessory || titleAccessorySlotRef ? <div ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
           </div>
-          <p className="mt-2 type-control text-stone-500">
-            {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · {classroom.weekCount}주차 · 수강생 {classroom.learnerCount}명
-            {materialCount !== undefined ? ` · 자료 ${materialCount}개` : ''}
-          </p>
-          {classroom.description ? <p className="mt-2 max-w-4xl type-body leading-6 text-stone-600">{classroom.description}</p> : null}
         </div>
         {actions || actionSlotRef ? <div className="flex shrink-0 flex-wrap items-center gap-2" ref={actionSlotRef}>{actions}</div> : null}
       </div>
-      <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
+      {showTabs ? <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
         {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? 'page' : undefined} className={activeTab === tab.id ? 'relative flex shrink-0 items-center type-body font-bold text-stone-950 after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-brand-600' : 'relative flex shrink-0 items-center type-body font-medium text-stone-500 hover:text-stone-900'} key={tab.id} preventScrollReset to={tab.to}>{tab.label}</Link>)}
-      </nav>
+      </nav> : null}
     </header>
   )
 }

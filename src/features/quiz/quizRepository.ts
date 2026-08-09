@@ -37,7 +37,10 @@ interface QuizSubmitDto {
   gradingResult?: {
     items?: Array<{
       feedback?: string
+      maxScore?: number
       questionId: number | string
+      score?: number
+      verdict?: string
     }>
   }
   maxScore?: number
@@ -112,8 +115,11 @@ export function createQuizRepository(
                 sessionId: quiz.sessionId,
               },
         feedback: (data.gradingResult?.items ?? []).map((item) => ({
+          maxScore: item.maxScore,
           message: item.feedback ?? '채점이 완료되었습니다.',
           questionId: String(item.questionId),
+          score: item.score,
+          verdict: mapVerdict(item.verdict),
         })),
         maxScore: data.maxScore,
         passed: data.passed,
@@ -122,6 +128,12 @@ export function createQuizRepository(
       }
     },
   }
+}
+
+function mapVerdict(value: string | undefined): 'CORRECT' | 'PARTIAL' | 'UNKNOWN' | 'WRONG' {
+  return value === 'CORRECT' || value === 'PARTIAL' || value === 'WRONG'
+    ? value
+    : 'UNKNOWN'
 }
 
 function mapQuiz(quiz: PublicQuizDto): PublicQuiz {

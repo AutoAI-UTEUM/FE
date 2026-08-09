@@ -791,8 +791,18 @@ const quizSubmitFixture = {
   gradingResult: {
     items: [
       {
-        feedback: '채점이 완료되었습니다.',
-        questionId: 'question-short',
+        feedback: '개념의 정의를 먼저 확인하는 것이 맞습니다.',
+        maxScore: 50,
+        questionId: 'question-mcq',
+        score: 50,
+        verdict: 'CORRECT',
+      },
+      {
+        feedback: '복습 순서를 다시 확인해 보세요.',
+        maxScore: 50,
+        questionId: 'question-review',
+        score: 0,
+        verdict: 'WRONG',
       },
     ],
   },

@@ -139,7 +139,7 @@ export interface SessionsRepository {
     sessionId: string,
     pageNumber: number,
     signal?: AbortSignal,
-  ) => Promise<{ currentPage: number; uiActions: UiAction[] }>
+  ) => Promise<{ currentPage: number; pageStatus?: string; uiActions: UiAction[] }>
   stream: (
     sessionId: string,
     handlers: SessionStreamHandlers,
@@ -238,6 +238,7 @@ export function createSessionsRepository(
     async movePage(sessionId, pageNumber, signal) {
       const { data } = await request<{
         currentPage: number
+        pageStatus?: string
         uiActions?: UiActionDto[]
       }>(`/api/sessions/${encodeURIComponent(sessionId)}/page`, {
         body: { pageNumber },
@@ -246,6 +247,7 @@ export function createSessionsRepository(
       })
       return {
         currentPage: data.currentPage,
+        pageStatus: data.pageStatus,
         uiActions: mapUiActions(data.uiActions),
       }
     },

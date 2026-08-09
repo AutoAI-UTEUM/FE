@@ -60,8 +60,8 @@ export function InstructorNoticesPage() {
 
   const selectedNotice = notices.find((notice) => notice.id === selectedNoticeId) ?? null
   const noticeGroups = useMemo(
-    () => groupNoticesByWeek(notices, classroom?.startDate, classroom?.weekCount),
-    [classroom?.startDate, classroom?.weekCount, notices],
+    () => groupNoticesByWeek(notices),
+    [notices],
   )
 
   function startNewNotice() {
@@ -111,7 +111,7 @@ export function InstructorNoticesPage() {
 
   return (
     <ClassroomWorkspaceContainer>
-      <ClassroomWorkspaceHeader activeTab="notices" classroom={classroom} materialCount={classroom.materialCount} />
+      <ClassroomWorkspaceHeader activeTab="notices" classroom={classroom} />
 
       <section aria-label="공지 관리" className="grid min-h-[540px] overflow-hidden rounded-lg border border-stone-200 bg-white lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="flex min-h-0 flex-col border-b border-stone-200 bg-stone-50/60 lg:border-r lg:border-b-0">
@@ -196,11 +196,11 @@ function NoticeEditor({
   )
 }
 
-function groupNoticesByWeek(notices: ClassroomNotice[], startDate?: string, weekCount?: number): NoticeGroup[] {
+function groupNoticesByWeek(notices: ClassroomNotice[]): NoticeGroup[] {
   const grouped = new Map<number | null, ClassroomNotice[]>()
 
   notices.forEach((notice) => {
-    const weekNumber = getNoticeWeekNumber(notice.publishedAt, startDate, weekCount)
+    const weekNumber = notice.weekNumber
     grouped.set(weekNumber, [...(grouped.get(weekNumber) ?? []), notice])
   })
 
@@ -211,15 +211,6 @@ function groupNoticesByWeek(notices: ClassroomNotice[], startDate?: string, week
       notices: groupedNotices,
       weekNumber,
     }))
-}
-
-function getNoticeWeekNumber(publishedAt: string, startDate?: string, weekCount?: number): number | null {
-  if (!startDate) return null
-  const start = new Date(`${startDate.slice(0, 10)}T00:00:00`)
-  const published = new Date(publishedAt)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(published.getTime())) return null
-  const elapsedDays = Math.floor((published.getTime() - start.getTime()) / 86_400_000)
-  return Math.max(1, Math.min(weekCount ?? Number.MAX_SAFE_INTEGER, Math.floor(elapsedDays / 7) + 1))
 }
 
 function formatNoticeDate(value: string): string {

@@ -5,8 +5,13 @@ import type { UiAction, UiActionEvent } from './sessionTypes'
 interface UiActionsRendererProps {
   actions: UiAction[]
   disabled?: boolean
-  onEvent: (event: UiActionEvent) => void
+  onEvent: (event: UiActionEvent, selection?: UiActionSelection) => void
   onOpenDiagnosis: (diagnosisId: string) => void
+}
+
+export interface UiActionSelection {
+  action: UiAction
+  choice?: 'no' | 'yes'
 }
 
 const decisionButtonClassName =
@@ -32,7 +37,7 @@ export function UiActionsRenderer({
                 <button
                   className={`${decisionButtonClassName} border-brand-600 bg-brand-700 text-white hover:bg-brand-800`}
                   disabled={disabled}
-                  onClick={() => onEvent(action.yesEvent)}
+                  onClick={() => onEvent(action.yesEvent, { action, choice: 'yes' })}
                   type="button"
                 >
                   <Check aria-hidden="true" size={14} />네
@@ -40,7 +45,7 @@ export function UiActionsRenderer({
                 <button
                   className={`${decisionButtonClassName} border-stone-300 bg-white text-stone-700 hover:bg-stone-100`}
                   disabled={disabled}
-                  onClick={() => onEvent(action.noEvent)}
+                  onClick={() => onEvent(action.noEvent, { action, choice: 'no' })}
                   type="button"
                 >
                   <X aria-hidden="true" size={14} />
@@ -77,7 +82,7 @@ export function UiActionsRenderer({
               className="flex min-h-10 items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-left type-body font-semibold text-brand-900 hover:bg-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={disabled}
               key={`${action.kind}-${action.label}`}
-              onClick={() => onEvent('MOVE_NEXT_PAGE')}
+              onClick={() => onEvent('MOVE_NEXT_PAGE', { action })}
               type="button"
             >
               {action.label}

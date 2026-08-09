@@ -21,8 +21,10 @@ import {
   type LearningSession,
   type SessionResourceWeek,
   type SessionTurnResult,
+  type UiAction,
   type UiActionEvent,
 } from '../../features/sessions'
+import type { UiActionSelection } from '../../features/sessions/UiActionsRenderer'
 import {
   Button,
   ButtonLink,
@@ -125,7 +127,7 @@ export function SessionDetailPage() {
           materialTitle = material?.title ?? materialTitle
         }
 
-        const hydratedSession = { ...nextSession, materialTitle, totalPages }
+        const hydratedSession = withPagePromptFallback({ ...nextSession, materialTitle, totalPages })
         setSession(hydratedSession)
         setCurrentPage(hydratedSession.currentPage)
         setError(null)
@@ -328,8 +330,9 @@ export function SessionDetailPage() {
   const activeSession = session
   const totalPages = activeSession.totalPages ?? Math.max(activeSession.currentPage, 1)
 
-  function applyTurnResult(result: SessionTurnResult) {
-    const nextPage = result.currentPage === undefined
+  function applyTurnResult(result: SessionTurnResult, preservePage = false) {
+    chat.clearUiActions()
+    const nextPage = preservePage || result.currentPage === undefined
       ? undefined
       : movePage(result.currentPage, totalPages)
     if (nextPage !== undefined) setCurrentPage(nextPage)
@@ -349,8 +352,8 @@ export function SessionDetailPage() {
       : current)
   }
 
-  async function handlePageMove(nextPage: number) {
-    if (isActionPending) return
+  async function handlePageMove(nextPage: number): Promise<boolean> {
+    if (isActionPending) return false
     const nextSafePage = movePage(nextPage, totalPages)
     setIsActionPending(true)
     setError(null)
@@ -359,17 +362,34 @@ export function SessionDetailPage() {
         activeSession.id,
         nextSafePage,
       )
+      chat.clearUiActions()
       setCurrentPage(result.currentPage)
       setSession((current) =>
         current
-          ? { ...current, currentPage: result.currentPage, uiActions: result.uiActions }
+          ? withPagePromptFallback({
+              ...current,
+              currentPage: result.currentPage,
+              pageStatus: result.pageStatus ?? 'NOT_EXPLAINED',
+              uiActions: result.uiActions,
+            })
           : current,
       )
+      return true
     } catch (requestError) {
       setError(getRequestErrorMessage(requestError))
+      return false
     } finally {
       setIsActionPending(false)
     }
+  }
+
+  async function handleExplainNextPage() {
+    if (currentPage >= totalPages) {
+      setError('마지막 페이지입니다.')
+      return
+    }
+    const moved = await handlePageMove(currentPage + 1)
+    if (moved) await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
   }
 
   async function runTurn(
@@ -385,7 +405,12 @@ export function SessionDetailPage() {
         payload,
         requestId: createTurnRequestId(),
       })
-      applyTurnResult(result)
+      applyTurnResult(
+        eventType === 'EXPLAIN_CURRENT_PAGE'
+          ? { ...result, uiActions: normalizePostExplainActions(result.uiActions) }
+          : result,
+        true,
+      )
       return result
     } catch (requestError) {
       if (
@@ -404,7 +429,15 @@ export function SessionDetailPage() {
     }
   }
 
-  async function handleEvent(event: UiActionEvent) {
+  async function handleEvent(event: UiActionEvent, selection?: UiActionSelection) {
+    if (selection?.choice === 'no' && isQuizProposal(selection.action)) {
+      chat.clearUiActions()
+      setSession((current) => current ? {
+        ...current,
+        uiActions: [createNextPageConfirmation()],
+      } : current)
+      return
+    }
     switch (event) {
       case 'MOVE_NEXT_PAGE':
         await handlePageMove(currentPage + 1)
@@ -413,6 +446,8 @@ export function SessionDetailPage() {
         await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
         return
       case 'SHOW_QUIZ_TYPE_SELECT':
+        chat.clearUiActions()
+        setSession((current) => current ? { ...current, uiActions: [] } : current)
         setIsSelectingQuizType(true)
         return
       case 'COMPLETE_SESSION': {
@@ -430,6 +465,7 @@ export function SessionDetailPage() {
         return
       }
       case 'WAIT':
+        chat.clearUiActions()
         setSession((current) =>
           current ? { ...current, uiActions: [] } : current,
         )
@@ -626,7 +662,7 @@ export function SessionDetailPage() {
                   <UiActionsRenderer
                     actions={availableUiActions}
                     disabled={isActionPending || chat.isTurnPending}
-                    onEvent={(event) => void handleEvent(event)}
+                    onEvent={(event, selection) => void handleEvent(event, selection)}
                     onOpenDiagnosis={(diagnosisId) =>
                       navigate(diagnosisPath(activeSession.id, diagnosisId))
                     }
@@ -668,9 +704,8 @@ export function SessionDetailPage() {
                 학습 완료
               </Button>
             ) : undefined}
-            onExplainCurrentPage={() => {
-              void handleEvent('EXPLAIN_CURRENT_PAGE')
-            }}
+            onExplainCurrentPage={() => handleEvent('EXPLAIN_CURRENT_PAGE')}
+            onExplainNextPage={handleExplainNextPage}
             onRequestQuiz={() => setIsSelectingQuizType(true)}
             onTurnCompleted={applyTurnResult}
             sessionId={activeSession.id}
@@ -679,6 +714,40 @@ export function SessionDetailPage() {
       </section>
     </div>
   )
+}
+
+function createExplainPagePrompt(): UiAction {
+  return {
+    kind: 'BINARY_DECISION',
+    label: '현재 페이지를 설명할까요?',
+    noEvent: 'WAIT',
+    yesEvent: 'EXPLAIN_CURRENT_PAGE',
+  }
+}
+
+function createNextPageConfirmation(): UiAction {
+  return {
+    kind: 'BINARY_DECISION',
+    label: '다음 페이지로 이동할까요?',
+    noEvent: 'WAIT',
+    yesEvent: 'MOVE_NEXT_PAGE',
+  }
+}
+
+function withPagePromptFallback<T extends LearningSession>(session: T): T {
+  if (session.uiActions?.length || session.pageStatus !== 'NOT_EXPLAINED') return session
+  return { ...session, uiActions: [createExplainPagePrompt()] }
+}
+
+function normalizePostExplainActions(actions: UiAction[]): UiAction[] {
+  return actions.map((action) => action.kind === 'MOVE_NEXT_PAGE'
+    ? createNextPageConfirmation()
+    : action)
+}
+
+function isQuizProposal(action: UiAction): boolean {
+  return action.kind === 'BINARY_DECISION'
+    && (action.yesEvent === 'SHOW_QUIZ_TYPE_SELECT' || action.label.includes('퀴즈'))
 }
 
 function createTurnRequestId(): string {

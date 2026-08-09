@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, ChevronRight, Send } from 'lucide-react'
+import { CircleCheckBig, CircleHelp, CircleX, ChevronLeft, ChevronRight, Send, TriangleAlert } from 'lucide-react'
 import {
   useEffect,
   useMemo,
@@ -300,14 +300,15 @@ export function QuizWorkspace({
       </section>
 
       {isSubmitted && result ? (
-        <section className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
-          <div className="flex flex-col gap-4 border-b border-emerald-200 bg-emerald-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <section className={`overflow-hidden rounded-lg border bg-white ${getResultTone(result.passed).border}`}>
+          <div className={`flex flex-col gap-4 border-b px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ${getResultTone(result.passed).header}`}>
             <div className="flex items-center gap-3">
-              <CheckCircle2 aria-hidden="true" className="text-emerald-700" size={20} />
+              <ResultIcon passed={result.passed} />
               <div>
-                <h2 className="type-section-title font-bold text-emerald-950">결과</h2>
-                <p className="mt-1 type-body text-emerald-900">
-                  점수 {result.score}
+                <h2 className={`type-section-title font-bold ${getResultTone(result.passed).title}`}>결과</h2>
+                <p className={`mt-1 type-body ${getResultTone(result.passed).text}`}>
+                  점수 {result.score}{result.maxScore === undefined ? '' : ` / ${result.maxScore}`}
+                  {result.passed === undefined ? '' : result.passed ? ' · 통과' : ' · 보완 필요'}
                 </p>
               </div>
             </div>
@@ -348,17 +349,96 @@ export function QuizWorkspace({
             </div>
           </div>
 
-          <ul className="divide-y divide-stone-200">
-            {result.feedback.map((feedback) => (
-              <li className="px-4 py-3 type-body text-stone-700 sm:px-5" key={feedback.questionId}>
-                {feedback.message}
-              </li>
-            ))}
+          <ul className="divide-y divide-stone-200" aria-label="문항별 채점 결과">
+            {questions.map((item, index) => {
+              const feedback = result.feedback.find((candidate) => candidate.questionId === item.id)
+              const verdict = feedback?.verdict ?? 'UNKNOWN'
+              const tone = getVerdictTone(verdict)
+              return (
+                <li className="px-4 py-4 sm:px-5" key={item.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="type-caption font-semibold text-stone-500">문항 {index + 1}</p>
+                      <h3 className="mt-1 type-body font-bold text-stone-950">{item.prompt}</h3>
+                    </div>
+                    <span className={`inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 type-caption font-bold ${tone.badge}`}>
+                      <VerdictIcon verdict={verdict} />{tone.label}
+                    </span>
+                  </div>
+                  <dl className="mt-3 grid gap-2 rounded-lg bg-stone-50 px-3 py-2.5 type-control sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <dt className="inline font-semibold text-stone-500">내 답안 </dt>
+                      <dd className="inline break-words text-stone-900">{formatSubmittedAnswer(item, answers[item.id])}</dd>
+                    </div>
+                    <div>
+                      <dt className="inline font-semibold text-stone-500">점수 </dt>
+                      <dd className="inline font-bold text-stone-900">{formatItemScore(feedback?.score, feedback?.maxScore)}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 type-body leading-6 text-stone-700">{feedback?.message ?? '문항별 피드백이 제공되지 않았습니다.'}</p>
+                </li>
+              )
+            })}
           </ul>
         </section>
       ) : null}
     </QuizFrame>
   )
+}
+
+function formatSubmittedAnswer(question: PublicQuizQuestion, answer: string | undefined): string {
+  if (!answer) return '제출한 답안 없음'
+  return question.choices?.find((choice) => choice.id === answer)?.label ?? answer
+}
+
+function formatItemScore(score: number | undefined, maxScore: number | undefined): string {
+  if (score === undefined) return '정보 없음'
+  return maxScore === undefined ? `${score}점` : `${score} / ${maxScore}`
+}
+
+function getVerdictTone(verdict: PublicQuizResult['feedback'][number]['verdict']) {
+  if (verdict === 'CORRECT') return { badge: 'bg-emerald-50 text-emerald-800', label: '정답' }
+  if (verdict === 'PARTIAL') return { badge: 'bg-amber-50 text-amber-800', label: '부분 정답' }
+  if (verdict === 'WRONG') return { badge: 'bg-rose-50 text-rose-800', label: '오답' }
+  return { badge: 'bg-stone-100 text-stone-700', label: '채점 완료' }
+}
+
+function VerdictIcon({ verdict }: { verdict: PublicQuizResult['feedback'][number]['verdict'] }) {
+  if (verdict === 'CORRECT') return <CircleCheckBig aria-hidden="true" size={14} />
+  if (verdict === 'PARTIAL') return <TriangleAlert aria-hidden="true" size={14} />
+  if (verdict === 'WRONG') return <CircleX aria-hidden="true" size={14} />
+  return <CircleHelp aria-hidden="true" size={14} />
+}
+
+function getResultTone(passed: boolean | undefined) {
+  if (passed === true) return {
+    border: 'border-emerald-200',
+    header: 'border-emerald-200 bg-emerald-50',
+    icon: 'text-emerald-700',
+    text: 'text-emerald-900',
+    title: 'text-emerald-950',
+  }
+  if (passed === false) return {
+    border: 'border-amber-200',
+    header: 'border-amber-200 bg-amber-50',
+    icon: 'text-amber-700',
+    text: 'text-amber-900',
+    title: 'text-amber-950',
+  }
+  return {
+    border: 'border-stone-200',
+    header: 'border-stone-200 bg-stone-50',
+    icon: 'text-stone-600',
+    text: 'text-stone-700',
+    title: 'text-stone-950',
+  }
+}
+
+function ResultIcon({ passed }: { passed: boolean | undefined }) {
+  const className = getResultTone(passed).icon
+  return passed === false
+    ? <TriangleAlert aria-hidden="true" className={className} size={20} />
+    : <CircleCheckBig aria-hidden="true" className={className} size={20} />
 }
 
 function QuizFrame({
