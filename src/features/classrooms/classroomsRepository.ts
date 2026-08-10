@@ -62,6 +62,8 @@ export interface ClassroomWeek {
 
 export interface ClassroomStudent {
   affiliation?: string
+  aiQuestionCount?: number
+  averageProgressRate?: number
   email: string
   id: string
   joinedAt: string
@@ -147,10 +149,14 @@ interface WeekDto {
 
 interface ClassroomStudentDto {
   affiliation?: string
+  aiQuestionCount?: number
+  aiQuestionCountLast7Days?: number
+  averageProgressRate?: number
   email: string
   joinedAt: string
   lastActiveAt?: string
   name: string
+  progressRate?: number
   status: string
   studentId: number
 }
@@ -342,7 +348,12 @@ function mapWeek(value: WeekDto): ClassroomWeek {
 }
 
 function mapStudent(value: ClassroomStudentDto): ClassroomStudent {
-  return { ...value, id: String(value.studentId) }
+  return {
+    ...value,
+    aiQuestionCount: value.aiQuestionCount ?? value.aiQuestionCountLast7Days,
+    averageProgressRate: value.averageProgressRate ?? value.progressRate,
+    id: String(value.studentId),
+  }
 }
 
 function mapAnalytics(value: ClassroomAnalyticsDto): ClassroomAnalytics {

@@ -312,19 +312,21 @@ export function InstructorClassroomsPage() {
             try {
               const { weekCount, ...classroomInput } = draft
               const created = await repository.create(classroomInput)
-              const results = await Promise.allSettled(
-                Array.from({ length: weekCount }, (_, index) =>
-                  repository.createWeek(created.id, {
+              let createdWeekCount = 0
+              for (let index = 0; index < weekCount; index += 1) {
+                try {
+                  await repository.createWeek(created.id, {
                     releaseAt: toReleaseAt(draft.startDate, index),
                     title: `${index + 1}주차`,
                     weekNumber: index + 1,
-                  }),
-                ),
-              )
+                  })
+                  createdWeekCount += 1
+                } catch {
+                  break
+                }
+              }
               setIsCreateOpen(false)
-              const failed = results.filter(
-                (result) => result.status === 'rejected',
-              ).length
+              const failed = weekCount - createdWeekCount
               showToast(
                 failed
                   ? `강의실은 만들었지만 ${failed}개 주차 생성에 실패했습니다.`

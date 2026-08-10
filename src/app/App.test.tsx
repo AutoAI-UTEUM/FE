@@ -430,7 +430,7 @@ describe('AppRoutes', () => {
     expect(screen.getByLabelText('이메일')).toBeInTheDocument()
   })
 
-  it('returns to the originally requested protected route after login', async () => {
+  it('opens classrooms after login instead of returning to a protected route', async () => {
     renderRoute('/sessions/100', null)
 
     fireEvent.change(screen.getByLabelText('이메일'), {
@@ -441,8 +441,8 @@ describe('AppRoutes', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '로그인' }))
 
-    expect(await screen.findByRole('heading', { name: '학습 공간' })).toBeInTheDocument()
-    expect(screen.getByText('시험 대비 요약.pdf 학습 화면입니다.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '내 강의실' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '학습 공간' })).not.toBeInTheDocument()
   })
 
   it('shows the session expired login notice', () => {

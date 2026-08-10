@@ -7,7 +7,6 @@ import { AuthLayout } from './layouts/AuthLayout'
 import { AuthCallbackPage, ResetPasswordPage } from './pages/AuthCapabilityPages'
 import { ClassroomsPage } from './pages/ClassroomsPage'
 import { ClassroomDetailPage } from './pages/ClassroomDetailPage'
-import { ClassroomStudentsPage } from './pages/classroom/ClassroomStudentsPage'
 import { ClassroomWorkspaceLayout } from './pages/classroom/ClassroomWorkspaceLayout'
 import { DiagnosisPage } from './pages/DiagnosisPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -72,7 +71,7 @@ export function AppRoutes() {
             <Route index element={<ClassroomDetailPage />} />
             <Route path="exams" element={<ClassroomContentLegacyRedirect filter="exam" />} />
             <Route element={<RequireInstructor />}>
-              <Route path="students" element={<ClassroomStudentsPage />} />
+              <Route path="students" element={<Navigate to="../analytics" replace />} />
               <Route path="settings" element={<InstructorClassroomEditPage />} />
               <Route path="analytics" element={<InstructorLearningStatusPage />} />
               <Route path="announcements" element={<ClassroomContentLegacyRedirect filter="notice" />} />

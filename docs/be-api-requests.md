@@ -4,20 +4,38 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 확인일 | 2026-08-09 |
-| FE 기준 | `fix/notion-0804-site-feedback` 현재 로컬 변경사항 |
-| BE 기준 | `develop` `docs/api-spec.md` 2026-08-05 |
-| 실행 계약 | 배포 Swagger `/v3/api-docs` 88개 operation |
+| 확인일 | 2026-08-10 |
+| FE 기준 | `develop` 현재 로컬 변경사항 |
+| BE 기준 | `develop` `docs/api-spec.md` 마지막 갱신 2026-08-02 |
+| 실행 계약 | 배포 Swagger `/v3/api-docs` 91개 operation |
 
 현재 Swagger에 추가된 강의실, 프로필, 환경설정, 일정 조회, 노트, 피드백 API는
 FE repository에 반영했다. 아래에는 **화면은 존재하지만 여전히 공개 API가 없는
 기능**만 남긴다.
 
-## 연결 준비: 퀴즈 제안 거절
+## 페이지별 점검 결과
+
+| 화면 | 연결된 기능 | 공개 API가 없거나 응답이 부족한 기능 |
+| --- | --- | --- |
+| 로그인·회원가입 | 가입, 이메일 중복 확인, 로그인, refresh, 로그아웃 | 비밀번호 재설정, Google OAuth |
+| 설정 | 프로필, 아바타, 환경설정, 회원 탈퇴 | `studyReminder`·새 자료 알림의 실제 이메일/인앱 전달과 읽음 상태 |
+| 강의실 목록 | 생성, 조회, 수정, 종료, 영구 삭제, 초대 코드 | 종료 강의실 재활성화, 서버 검색·추가 정렬 |
+| 강의실 강의 | 주차, PDF 자료, 공지, 시험 CRUD | 주차별 공지, 공지 예약 게시, PPT/PPTX, 처리 실패 상세 |
+| 수강생·입장 요청 | 목록, 제외, 개별 승인·거절 | 수강생별 진도·AI 질문 수, 서버 검색·정렬, 일괄 승인 |
+| 학습 현황·리포트 | 강의실 집계, 리포트 기준·생성·조회 | 수강생별 학습 지표. 리포트 Q&A는 Phase 3 |
+| 캘린더·알림 패널 | 개인 일정 CRUD, 강의실 일정 통합 조회 | 실제 알림 전송, 읽음·삭제·전달 이력 |
+| 자료·세션·PDF·채팅 | 업로드, 세션, 페이지 이동, 대화, 노트, 퀴즈 | 자연어 학습 명령 정규화, 교정 후 재평가 퀴즈 |
+| 시험 | 시험 CRUD, 제출·결과, AI 문항 초안 | 현재 노출 UI 기준 추가 필수 API 없음 |
+
+테마, 패널 너비, 검색창 입력값, 드롭다운 선택 상태처럼 한 기기에서만 필요한 UI
+상태는 서버 API 요청 대상에서 제외한다. 메시지 공유는 Web Share API를 사용하고 지원하지
+않는 환경에서는 복사로 대체하므로 BE API가 필요하지 않다.
+
+## 연결 완료: 퀴즈 제안 거절
 
 퀴즈 제안의 서버 상태를 해제하는 다음 계약을 FE repository와 통합학습 화면에
-연결했다. BE 배포 전 404/405에서는 기존 다음 페이지 확인 UI로 임시 처리하고,
-배포 후에는 응답의 `uiActions`를 그대로 현재 진행 액션으로 교체한다.
+연결했고 2026-08-10 배포 Swagger에서도 계약을 확인했다. 응답의 `uiActions`를
+그대로 현재 진행 액션으로 교체한다.
 
 ```http
 POST /api/sessions/{sessionId}/quiz-decline
@@ -69,6 +87,38 @@ GET  /api/auth/oauth/google/callback
 
 비밀번호 재설정 요청은 계정 존재 여부를 노출하지 않는 동일 응답을 반환하고,
 OAuth 콜백은 현재 refresh HttpOnly cookie 정책을 유지해야 한다.
+
+## P1. 수강생별 학습 현황
+
+현재 `GET /api/classrooms/{classroomId}/students`는 이름, 이메일, 소속, 참여일,
+최근 활동 시각만 반환한다. `학습 현황·리포트`의 수강생 행에 실제 값을 표시하려면
+다음 필드를 응답에 추가하거나 별도 상세 집계 endpoint가 필요하다.
+
+```json
+{
+  "averageProgressRate": 64,
+  "aiQuestionCountLast7Days": 12
+}
+```
+
+수강생이 많을 때도 검색·정렬·페이지네이션이 정확히 동작하도록 목록 query에
+`q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`도 요청한다. FE는 계약 전까지 현재
+받은 페이지 안에서만 검색·정렬하고, 없는 지표는 `-`로 표시한다.
+
+## P1. 알림 전달
+
+환경설정의 `newMaterialNotification`, `studyReminder` 저장 API는 연결돼 있지만,
+새 자료 알림과 "3일 이상 미접속 시 이메일"을 실제로 전달하는 공개 계약은 없다.
+이메일 또는 인앱 알림 수단을 확정한 뒤 다음 기능이 필요하다.
+
+```http
+GET    /api/users/me/notifications
+PATCH  /api/users/me/notifications/{notificationId}/read
+DELETE /api/users/me/notifications/{notificationId}
+```
+
+서버 내부에서는 새 자료 게시와 미접속 조건을 환경설정에 따라 발송하는 작업이
+필요하다. 비밀번호 재설정도 이메일을 사용한다면 같은 발송 인프라로 묶는다.
 
 ## 연결 완료: 캘린더 개인 일정
 
@@ -163,10 +213,13 @@ StateReducer 또는 명령 분류 단계에서 지원 이벤트로 정규화하�
 ```http
 GET  /api/search?q={query}
 POST /api/classrooms/{classroomId}/join-requests/approve-batch
+POST /api/classrooms/{classroomId}/reactivate
 ```
 
 통합 검색은 강의실·자료 결과의 `type`, `id`, `title`, 이동 경로를 반환한다.
-일괄 승인은 현재 입장 요청 UI의 전체 선택 기능을 활성화할 때 필요하다.
+일괄 승인은 현재 입장 요청 UI의 전체 선택 기능을 활성화할 때 필요하다. 종료된
+강의실을 다시 운영하는 정책을 지원한다면 재활성화 endpoint가 필요하며, 지원하지
+않는 정책이면 현재처럼 종료 버튼을 비활성 상태로 유지한다.
 
 ## 계약 확인 필요
 

@@ -2,18 +2,16 @@ import { useContext, useEffect, type ReactNode, type Ref } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 
+import { isInstructorRole, useAuth } from '../../../features/auth'
 import type { Classroom } from '../../../features/classrooms'
 import {
   classroomAnalyticsPath,
-  classroomAnnouncementsPath,
   classroomDetailPath,
   classroomEditPath,
-  classroomExamsPath,
-  classroomStudentsPath,
 } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
-export type ClassroomWorkspaceTab = 'analytics' | 'exams' | 'materials' | 'notices' | 'settings' | 'students'
+export type ClassroomWorkspaceTab = 'course' | 'learning' | 'settings'
 
 export function ClassroomWorkspaceHeader({
   actionSlotRef,
@@ -35,14 +33,14 @@ export function ClassroomWorkspaceHeader({
   titleAccessorySlotRef?: Ref<HTMLDivElement>
 }) {
   const workspaceShell = useContext(ClassroomWorkspaceShellContext)
-  const tabs = [
-    { id: 'materials' as const, label: '자료', to: classroomDetailPath(classroom.id) },
-    { id: 'notices' as const, label: '공지', to: classroomAnnouncementsPath(classroom.id) },
-    { id: 'exams' as const, label: '시험', to: classroomExamsPath(classroom.id) },
-    { id: 'analytics' as const, label: '학습 현황', to: classroomAnalyticsPath(classroom.id) },
-    { id: 'students' as const, label: '수강생·리포트', to: classroomStudentsPath(classroom.id) },
-    { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
-  ]
+  const { user } = useAuth()
+  const tabs = isInstructorRole(user?.role)
+    ? [
+        { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
+        { id: 'learning' as const, label: '학습 현황·리포트', to: classroomAnalyticsPath(classroom.id) },
+        { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
+      ]
+    : [{ id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) }]
 
   useEffect(() => {
     if (!root) workspaceShell?.syncClassroom(classroom)

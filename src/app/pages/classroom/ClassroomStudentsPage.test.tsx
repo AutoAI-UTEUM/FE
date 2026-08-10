@@ -17,7 +17,7 @@ describe('ClassroomStudentsPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { name: '자료구조' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '수강생·리포트' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '학습 현황·리포트' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByText('김학습')).toBeInTheDocument()
     expect(screen.getByText('박미활동')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('activity-desc')

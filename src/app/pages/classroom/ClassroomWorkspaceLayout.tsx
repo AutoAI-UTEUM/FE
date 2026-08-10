@@ -7,7 +7,6 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from './ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader, type ClassroomWorkspaceTab } from './ClassroomWorkspaceHeader'
-import { classroomDetailPath } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
 export function ClassroomWorkspaceLayout() {
@@ -62,7 +61,6 @@ export function ClassroomWorkspaceLayout() {
           activeTab={getActiveTab(pathname)}
           classroom={classroom}
           root
-          showTabs={pathname !== classroomDetailPath(classroom.id)}
           titleAccessorySlotRef={setTitleAccessoryTarget}
         />
         <Outlet />
@@ -72,10 +70,7 @@ export function ClassroomWorkspaceLayout() {
 }
 
 function getActiveTab(pathname: string): ClassroomWorkspaceTab {
-  if (pathname.endsWith('/announcements')) return 'notices'
-  if (pathname.endsWith('/exams')) return 'exams'
-  if (pathname.endsWith('/analytics')) return 'analytics'
-  if (pathname.endsWith('/students')) return 'students'
+  if (pathname.endsWith('/analytics') || pathname.endsWith('/students')) return 'learning'
   if (pathname.endsWith('/settings')) return 'settings'
-  return 'materials'
+  return 'course'
 }

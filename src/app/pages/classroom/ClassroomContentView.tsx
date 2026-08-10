@@ -1,5 +1,5 @@
 import { Bell, BookOpen, ClipboardList, FileText, MoreHorizontal, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
-import type { DragEvent } from 'react'
+import { useState, type DragEvent, type FocusEvent } from 'react'
 
 import type { ClassroomWeek } from '../../../features/classrooms'
 import { Badge, Button, EmptyState } from '../../../shared/ui'
@@ -80,7 +80,7 @@ export function ClassroomContentPanel({
   return <div className="space-y-4 rounded-lg border border-stone-200 bg-white p-4 sm:p-5" onDragLeave={() => setDragging(null)} onDragOver={dragOver} onDrop={drop}>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <h2 className="type-section-title font-bold text-stone-950">{title}</h2>
-      {canManage ? <InlineAddButtons disabled={isUploading} onAdd={onAdd} /> : null}
+      {canManage ? <AddItemMenu disabled={isUploading} onAdd={onAdd} /> : null}
     </div>
 
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="콘텐츠 유형 필터">{([['all', '전체'], ['material', '자료'], ['notice', '공지'], ['exam', '시험']] as const).map(([value, label]) => <button aria-pressed={filter === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${filter === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`} key={value} onClick={() => onFilter(value)} type="button">{label}</button>)}</div>
@@ -90,8 +90,7 @@ export function ClassroomContentPanel({
     {globalItems.length > 0 ? <details className="border-y border-stone-200 py-2" open><summary className="flex min-h-10 cursor-pointer list-none items-center px-1"><span className="type-body font-bold text-stone-900">전체 항목</span></summary><div className="space-y-2 pt-2">{globalItems.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} openingMaterialId={openingMaterialId} />)}</div></details> : null}
 
     <section aria-label={title} className={`space-y-2 rounded-lg transition ${draggingWeek === selectedWeekNumber && selectedWeekNumber !== null ? 'ring-2 ring-brand-100' : ''}`}>
-      {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} openingMaterialId={openingMaterialId} />) : <EmptyState action={canManage ? <Button onClick={() => onAdd('material')} variant="secondary"><Plus size={14} />항목 추가</Button> : undefined} description="추가된 항목이 없습니다." title="항목 없음" />}
-      {canManage && selectedWeekNumber !== null ? <button aria-label={`${selectedWeekNumber}주차 자료 드롭 영역`} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-stone-300 bg-stone-50/60 px-4 type-control text-stone-500 hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700" onClick={() => onAdd('material')} type="button"><Upload size={15} />{isUploading ? '업로드 중' : '자료 추가'}</button> : null}
+      {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} openingMaterialId={openingMaterialId} />) : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
     </section>
   </div>
 }
@@ -113,8 +112,22 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, openingMaterial
   </div>
 }
 
-function InlineAddButtons({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 'exam' | 'material' | 'notice') => void }) {
-  return <div className="flex flex-wrap gap-2">{([['material', FileText, '자료'], ['notice', Bell, '공지'], ['exam', ClipboardList, '시험']] as const).map(([kind, Icon, label]) => <Button disabled={disabled} key={kind} onClick={() => onAdd(kind)} size="sm" variant={kind === 'material' ? 'primary' : 'secondary'}><Icon size={14} />{label} 추가</Button>)}</div>
+function AddItemMenu({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 'exam' | 'material' | 'notice') => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const items = [
+    ['material', Upload, '강의자료 업로드'],
+    ['notice', Bell, '공지 작성'],
+    ['exam', ClipboardList, '시험 만들기'],
+  ] as const
+
+  function closeWhenFocusLeaves(event: FocusEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false)
+  }
+
+  return <div className="relative" onBlur={closeWhenFocusLeaves}>
+    <Button aria-expanded={isOpen} aria-haspopup="menu" disabled={disabled} onClick={() => setIsOpen((open) => !open)} size="sm"><Plus size={14} />새 항목 추가</Button>
+    {isOpen ? <div aria-label="새 항목 유형" className="absolute top-full right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-stone-200 bg-white p-1 shadow-lg" role="menu">{items.map(([kind, Icon, label]) => <button className="flex min-h-9 w-full items-center gap-2 rounded-md px-3 text-left type-control font-semibold text-stone-700 hover:bg-stone-50 hover:text-stone-950" key={kind} onClick={() => { setIsOpen(false); onAdd(kind) }} role="menuitem" type="button"><Icon size={14} />{label}</button>)}</div> : null}
+  </div>
 }
 
 function contentType(item: ClassroomContentItem) {
