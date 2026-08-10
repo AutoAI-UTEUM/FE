@@ -1,6 +1,6 @@
 import { ArrowRight, LogIn } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   hasFormErrors,
@@ -15,10 +15,6 @@ import { Button, TextInput } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
-interface LoginLocationState {
-  from?: string
-}
-
 const initialValues: LoginFormValues = {
   email: '',
   password: '',
@@ -27,7 +23,6 @@ const initialValues: LoginFormValues = {
 export function LoginPage() {
   usePageTitle('로그인')
   const { login } = useAuth()
-  const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [values, setValues] = useState<LoginFormValues>(initialValues)
@@ -49,7 +44,7 @@ export function LoginPage() {
     setServerError(null)
     try {
       await login(values)
-      navigate(getRedirectPath(location.state), { replace: true })
+      navigate(routes.classrooms, { replace: true })
     } catch (error) {
       const formErrors = mapAuthErrorToFormErrors(error)
       if (formErrors) setErrors(formErrors as LoginFormErrors)
@@ -172,13 +167,4 @@ export function LoginPage() {
       </div>
     </div>
   )
-}
-
-function getRedirectPath(state: unknown): string {
-  if (isLoginLocationState(state) && state.from?.startsWith('/')) return state.from
-  return routes.classrooms
-}
-
-function isLoginLocationState(state: unknown): state is LoginLocationState {
-  return typeof state === 'object' && state !== null && 'from' in state
 }

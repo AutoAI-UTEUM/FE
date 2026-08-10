@@ -124,7 +124,22 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
       questionsByPage: [],
     })
     if (url.includes('/invite-code')) return envelope({ inviteCode: '7QK4-MZ2A' })
-    if (url.includes('/students')) return envelope({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+    if (url.includes('/students')) return envelope({
+      items: [{
+        aiQuestionCountLast7Days: 6,
+        averageProgressRate: 64,
+        email: 'learner@example.com',
+        joinedAt: '2026-08-01T00:00:00Z',
+        lastActiveAt: new Date().toISOString(),
+        name: '김학습',
+        status: 'ACTIVE',
+        studentId: 9,
+      }],
+      page: 0,
+      size: 100,
+      totalElements: 1,
+      totalPages: 1,
+    })
     if (url.includes('/weeks')) return envelope({ items: [] })
     if (url.includes('/api/classrooms')) {
       return envelope({
@@ -151,6 +166,64 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
     }
     return envelope(null)
   })
+}
+
+function stubClassroomCreationApi() {
+  const weekNumbers: number[] = []
+  let activeWeekRequests = 0
+  let maxActiveWeekRequests = 0
+
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = new URL(String(input instanceof Request ? input.url : input), 'http://localhost')
+    const method = input instanceof Request ? input.method : init?.method ?? 'GET'
+    const envelope = (data: unknown) =>
+      new Response(JSON.stringify({ data, message: 'ok', success: true }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+
+    if (method === 'GET' && url.pathname === '/api/classrooms') {
+      return envelope({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+    }
+    if (method === 'POST' && url.pathname === '/api/classrooms') {
+      return envelope({
+        classroomId: 12,
+        color: 'BLUE',
+        endDate: '2026-11-15',
+        instructorName: '강의자',
+        learnerCount: 0,
+        name: '자료구조',
+        pendingRequestCount: 0,
+        progressRate: 0,
+        startDate: '2026-08-03',
+        status: 'ACTIVE',
+        weekCount: 15,
+      })
+    }
+    if (method === 'POST' && url.pathname === '/api/classrooms/12/weeks') {
+      const body = JSON.parse(String(input instanceof Request ? await input.clone().text() : init?.body)) as { releaseAt: string; title: string; weekNumber: number }
+      activeWeekRequests += 1
+      maxActiveWeekRequests = Math.max(maxActiveWeekRequests, activeWeekRequests)
+      weekNumbers.push(body.weekNumber)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      activeWeekRequests -= 1
+      return envelope({
+        displayOrder: body.weekNumber,
+        materials: [],
+        releaseAt: body.releaseAt,
+        status: 'SCHEDULED',
+        title: body.title,
+        weekId: body.weekNumber,
+        weekNumber: body.weekNumber,
+      })
+    }
+    return envelope(null)
+  })
+
+  return {
+    getMaxActiveWeekRequests: () => maxActiveWeekRequests,
+    weekNumbers,
+  }
 }
 
 function stubCalendarApi() {
@@ -220,6 +293,20 @@ describe('instructor pages', () => {
       target: { value: '2026-08-10' },
     })
     expect(screen.getByRole('button', { name: '만들기' })).toBeEnabled()
+  })
+
+  it('creates classroom weeks sequentially from week one', async () => {
+    const requests = stubClassroomCreationApi()
+    renderInstructorPage(<InstructorClassroomsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '강의실 만들기' }))
+    fireEvent.change(screen.getByLabelText('강의실 이름'), { target: { value: '자료구조' } })
+    fireEvent.change(screen.getByLabelText('수업 시작일'), { target: { value: '2026-08-03' } })
+    fireEvent.click(screen.getByRole('button', { name: '만들기' }))
+
+    await screen.findByText('15개 주차와 강의실을 만들었습니다.')
+    expect(requests.weekNumbers).toEqual(Array.from({ length: 15 }, (_, index) => index + 1))
+    expect(requests.getMaxActiveWeekRequests()).toBe(1)
   })
 
   it('matches the classroom search controls from the instructor design', () => {
@@ -429,10 +516,12 @@ describe('instructor pages', () => {
       ['/classrooms/12/analytics'],
     )
 
-    expect(await screen.findByRole('link', { name: '학습 현황' })).toHaveAttribute('aria-current', 'page')
-    expect(await screen.findByText('17')).toBeInTheDocument()
-    expect(screen.getByText(/마지막 갱신/)).toBeInTheDocument()
-    expect(screen.getByText('페이지별 AI 질문 수')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: '학습 현황·리포트' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByText('17건')).toBeInTheDocument()
+    expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
+    expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
+    expect(screen.getByText('64%')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/students/9/reports')
     expect(
       screen.queryByRole('button', { name: '리마인더 보내기' }),
     ).not.toBeInTheDocument()

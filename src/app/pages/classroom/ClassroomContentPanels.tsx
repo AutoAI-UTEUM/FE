@@ -65,7 +65,7 @@ export function NoticeContentPanel({
       <label className="type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} value={title} /></label>
       <label className="flex flex-1 flex-col type-control font-semibold text-stone-700">본문<textarea className="mt-1.5 min-h-72 flex-1 resize-none rounded-lg border border-stone-300 px-3.5 py-3 type-body leading-6 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={5000} onChange={(event) => setContent(event.target.value)} value={content} /></label>
     </div>
-    <div className="flex min-h-16 items-center justify-between border-t border-stone-200 px-5">
+    <div className="flex min-h-16 items-center justify-between px-5">
       {notice && onDelete ? <Button className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={disabled || isDeleting} onClick={() => void remove()} type="button" variant="secondary"><Trash2 size={14} />{isDeleting ? '삭제 중' : '삭제'}</Button> : <span />}
       <Button disabled={disabled || weeklyNoticeUnavailable || !title.trim() || !content.trim() || isSubmitting} type="submit"><Save size={14} />{isSubmitting ? '저장 중' : notice ? '변경사항 저장' : '공지 게시'}</Button>
     </div>

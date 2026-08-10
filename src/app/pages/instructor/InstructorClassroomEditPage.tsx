@@ -200,7 +200,7 @@ export function InstructorClassroomEditPage() {
       setWeekTitles(Object.fromEntries(nextWeeks.map((item) => [item.weekNumber, item.title])))
       setWeekStatuses(Object.fromEntries(nextWeeks.map((item) => [
         item.weekNumber,
-        item.status === 'PUBLISHED' ? 'PUBLISHED' : 'PRIVATE',
+        item.status,
       ])))
       showToast('주차를 삭제했습니다.', 'success')
     } catch (requestError) {

@@ -97,7 +97,8 @@ describe('ClassroomDetailPage instructor materials', () => {
       </MemoryRouter>,
     )
 
-    const dropZone = await screen.findByLabelText('1주차 자료 드롭 영역')
+    const contentRegion = await screen.findByRole('region', { name: '1주차 · 자료구조 기초' })
+    expect(screen.getByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBeInTheDocument()
     expect(screen.queryByText('자료구조 강의실')).not.toBeInTheDocument()
     const weekNavigation = screen.getByRole('navigation', { name: '강의실 주차' })
@@ -106,18 +107,21 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByText('2026. 8. 3. - 2026. 11. 15. · 15주차 · 수강생 42명')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '1주차 · 자료구조 기초' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: '콘텐츠 유형 필터' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '자료 추가' }))
+    expect(screen.queryByRole('button', { name: '자료 추가' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '항목 추가' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '새 항목 추가' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '강의자료 업로드' }))
     expect(screen.getByRole('dialog', { name: '강의자료 업로드' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '강의자료 업로드 닫기' }))
-    fireEvent.click(screen.getByRole('button', { name: '주차 추가' }))
-    expect(screen.getByRole('dialog', { name: '주차 추가' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '주차 추가 닫기' }))
+    expect(screen.queryByRole('button', { name: '주차 추가' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '새 항목 추가' }))
+    expect(screen.getByRole('menuitem', { name: '공지 작성' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: '시험 만들기' })).toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
 
     const file = new File(['pdf'], 'lecture.pdf', { type: 'application/pdf' })
-    fireEvent.dragEnter(dropZone, { dataTransfer: { files: [file] } })
-    expect(dropZone).toHaveTextContent('자료 추가')
-    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } })
+    fireEvent.dragEnter(contentRegion, { dataTransfer: { files: [file] } })
+    fireEvent.drop(contentRegion, { dataTransfer: { files: [file] } })
 
     await waitFor(() => expect(uploadedValues).not.toBeNull())
     expect(uploadedValues).toEqual({
@@ -126,6 +130,7 @@ describe('ClassroomDetailPage instructor materials', () => {
       weekNumber: '1',
     })
     expect(await screen.findByRole('button', { name: /lecture자료/ })).toBeInTheDocument()
+    expect(screen.getByText('자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.')).toBeInTheDocument()
     expect(screen.queryByText(/열람 가능/)).not.toBeInTheDocument()
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
   })
@@ -192,10 +197,62 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.queryByText(/24쪽/)).not.toBeInTheDocument()
     expect(screen.queryByText(/8월 2일 업로드/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('1주차 자료 드롭 영역')).not.toBeInTheDocument()
-    expect(screen.getByText('새 항목 추가').closest('summary')).toHaveClass('cursor-not-allowed')
+    expect(screen.queryByText('새 항목 추가')).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /연결 리스트자료/ }))
     expect(await screen.findByText('PDF 뷰어')).toBeInTheDocument()
+  })
+
+  it('refreshes learner materials when the classroom tab becomes active again', async () => {
+    let weekListCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        'http://localhost',
+      )
+
+      if (url.pathname === '/api/classrooms/12') return success(classroomFixture)
+      if (url.pathname === '/api/classrooms/12/weeks') {
+        weekListCalls += 1
+        return success({
+          items: [{
+            ...weekFixture,
+            materials: weekListCalls > 1 ? [{
+              materialId: 92,
+              pageCount: 8,
+              processingStatus: 'READY',
+              title: 'new-lecture.pdf',
+              uploadedAt: '2026-08-10T00:00:00Z',
+            }] : [],
+          }],
+        })
+      }
+      if (url.pathname === '/api/classrooms/12/notices') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/classrooms/12']}>
+        <AuthProvider initialUser={{ email: 'learner@example.com', id: 8, name: '학습자', role: 'LEARNER' }}>
+          <ToastProvider>
+            <Routes>
+              <Route path="/classrooms/:classroomId" element={<ClassroomDetailPage />} />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
+    window.dispatchEvent(new Event('focus'))
+
+    expect(await screen.findByRole('button', { name: /new-lecture자료/ })).toBeInTheDocument()
+    expect(weekListCalls).toBeGreaterThanOrEqual(2)
   })
 })
 
