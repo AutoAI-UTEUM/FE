@@ -189,7 +189,7 @@ export function MaterialsPage() {
         <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
             <h2 className="type-section-title font-bold text-stone-950">PDF 업로드</h2>
-            <p className="mt-1 type-body text-stone-500">45MB 이하 PDF 파일</p>
+            <p className="mt-1 type-body text-stone-500">45MB 이하 PDF 파일 · PPT/PPTX는 PDF로 변환 후 업로드</p>
           </div>
           <Button onClick={refreshProcessingStatuses} type="button" variant="secondary">
             <RefreshCw aria-hidden="true" size={15} />

@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth'
 import { getRequestErrorMessage } from '../../shared/api'
@@ -11,6 +11,7 @@ import {
   type PendingDiagnosis,
 } from '../../features/diagnosis'
 import { createSessionsRepository } from '../../features/sessions'
+import type { QuizKind } from '../../features/quiz'
 import {
   Badge,
   Button,
@@ -23,9 +24,17 @@ import {
 import { sessionDetailPath } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
+const QUIZ_TYPE_OPTIONS: Array<{ kind: QuizKind; label: string }> = [
+  { kind: 'MCQ', label: '객관식' },
+  { kind: 'OX', label: 'OX' },
+  { kind: 'SHORT', label: '단답형' },
+  { kind: 'ESSAY', label: '서술형' },
+]
+
 export function DiagnosisPage() {
   usePageTitle('진단·교정')
   const { diagnosisId, sessionId } = useParams()
+  const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const sessionsRepository = useMemo(
     () => createSessionsRepository(apiRequest),
@@ -43,6 +52,7 @@ export function DiagnosisPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isStartingRetest, setIsStartingRetest] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -85,6 +95,28 @@ export function DiagnosisPage() {
       setError(getRequestErrorMessage(requestError))
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function handleRetest(kind: QuizKind) {
+    if (!sessionId || isStartingRetest) return
+    setIsStartingRetest(true)
+    setError(null)
+    try {
+      const result = await sessionsRepository.submitTurn(sessionId, {
+        eventType: 'QUIZ_TYPE_SELECTED',
+        payload: { quizType: kind },
+        requestId: createRequestId(),
+      })
+      if (!result.activeQuizId) {
+        setError('재평가 퀴즈를 생성하지 못했습니다. 다시 시도해 주세요.')
+        return
+      }
+      navigate(sessionDetailPath(sessionId), { replace: true })
+    } catch (requestError) {
+      setError(getRequestErrorMessage(requestError))
+    } finally {
+      setIsStartingRetest(false)
     }
   }
 
@@ -203,9 +235,25 @@ export function DiagnosisPage() {
             </ul>
           ) : null}
           <div className="border-t border-stone-200 px-4 py-4 sm:px-5">
-            <p className="type-body text-stone-700">{correction.nextQuestionPrompt}</p>
+            <p className="type-body font-semibold text-stone-900">교정 내용을 확인했습니다. 다시 평가할 퀴즈 유형을 선택하세요.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {QUIZ_TYPE_OPTIONS.map((option) => (
+                <Button
+                  disabled={isStartingRetest}
+                  key={option.kind}
+                  onClick={() => void handleRetest(option.kind)}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            {error ? <p className="mt-3 type-body font-medium text-rose-700" role="alert">{error}</p> : null}
+            <p className="mt-4 type-body text-stone-600">{correction.nextQuestionPrompt}</p>
             <ButtonLink
-              className="mt-4"
+              className="mt-3"
               to={sessionDetailPath(pendingDiagnosis.sessionId)}
               variant="secondary"
             >
@@ -217,4 +265,10 @@ export function DiagnosisPage() {
       ) : null}
     </PageContainer>
   )
+}
+
+function createRequestId(): string {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `retest-${Date.now()}`
 }

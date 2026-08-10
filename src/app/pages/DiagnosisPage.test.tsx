@@ -25,6 +25,7 @@ function renderDiagnosisPage() {
             path="/sessions/:sessionId/diagnosis/:diagnosisId"
             element={<DiagnosisPage />}
           />
+          <Route path="/sessions/:sessionId" element={<p>학습 세션 화면</p>} />
         </Routes>
       </MemoryRouter>
     </TestAuthProvider>,
@@ -77,5 +78,10 @@ describe('DiagnosisPage', () => {
     expect(
       screen.getByRole('link', { name: '일반 질문으로 이어가기' }),
     ).toHaveAttribute('href', '/sessions/100')
+    expect(screen.getByRole('button', { name: '객관식' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'OX' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'OX' }))
+    expect(await screen.findByText('학습 세션 화면')).toBeInTheDocument()
   })
 })

@@ -24,7 +24,7 @@ export function AuthLayout() {
             바로 물어보세요.
           </p>
           <p className="max-w-sm type-body leading-relaxed text-stone-500">
-            PDF·PPT를 보면서 AI 학습 도우미와
+            PDF를 보면서 AI 학습 도우미와
             <br />
             대화하는 학습 플랫폼
           </p>
