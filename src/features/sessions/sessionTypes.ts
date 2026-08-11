@@ -58,6 +58,7 @@ export interface SessionMessage {
   messageType?: string
   pageNumber?: number
   senderType: 'AI' | 'USER'
+  status?: 'COMPLETED' | 'FAILED' | 'PENDING'
 }
 
 export interface SessionTurnResult {

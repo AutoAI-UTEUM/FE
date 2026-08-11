@@ -97,6 +97,8 @@ export interface ClassroomNotice {
   content: string
   createdAt: string
   id: string
+  publishAt: string | null
+  published: boolean
   publishedAt: string
   title: string
   updatedAt: string
@@ -105,6 +107,7 @@ export interface ClassroomNotice {
 
 export interface ClassroomNoticeInput {
   content: string
+  publishAt?: string | null
   title: string
   weekNumber?: number | null
 }
@@ -176,6 +179,8 @@ interface NoticeDto {
   content: string
   createdAt: string
   noticeId: number
+  publishAt?: string | null
+  published?: boolean
   publishedAt: string
   title: string
   updatedAt: string
@@ -312,6 +317,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
     async createNotice(id: string, input: ClassroomNoticeInput) {
       const body: Record<string, unknown> = { content: input.content, title: input.title }
       if (input.weekNumber !== undefined) body.weekNumber = input.weekNumber
+      if (input.publishAt !== undefined) body.publishAt = input.publishAt
       const { data } = await request<NoticeDto>(`/api/classrooms/${encodeURIComponent(id)}/notices`, { body, method: 'POST' })
       return mapNotice(data)
     },
@@ -320,6 +326,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       if (input.title !== undefined) body.title = input.title
       if (input.content !== undefined) body.content = input.content
       if (input.weekNumber !== undefined) body.weekNumber = input.weekNumber
+      if (input.publishAt !== undefined) body.publishAt = input.publishAt
       const { data } = await request<NoticeDto>(`/api/classrooms/${encodeURIComponent(id)}/notices/${encodeURIComponent(noticeId)}`, { body, method: 'PATCH' })
       return mapNotice(data)
     },
@@ -365,7 +372,14 @@ function mapAnalytics(value: ClassroomAnalyticsDto): ClassroomAnalytics {
 }
 
 function mapNotice(value: NoticeDto): ClassroomNotice {
-  return { ...value, classroomId: String(value.classroomId), id: String(value.noticeId), weekNumber: value.weekNumber ?? null }
+  return {
+    ...value,
+    classroomId: String(value.classroomId),
+    id: String(value.noticeId),
+    publishAt: value.publishAt ?? null,
+    published: value.published ?? true,
+    weekNumber: value.weekNumber ?? null,
+  }
 }
 
 function mapJoinRequest(value: JoinRequestDto): JoinRequest {

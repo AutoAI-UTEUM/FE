@@ -18,6 +18,8 @@ export interface SessionChat {
   isLoadingHistory: boolean
   isTurnPending: boolean
   messages: ChatMessage[]
+  markMessageFailed: (requestId: string) => void
+  markMessageRetrying: (requestId: string) => void
   reloadHistory: () => void
   startNewConversation: () => Promise<void>
   streamNotice: string | null
@@ -90,6 +92,18 @@ export function useSessionChat(
     setHistoryReloadKey((key) => key + 1)
   }, [])
 
+  const markMessageFailed = useCallback((requestId: string) => {
+    setMessages((current) => current.map((message) => (
+      message.requestId === requestId ? { ...message, status: 'failed' } : message
+    )))
+  }, [])
+
+  const markMessageRetrying = useCallback((requestId: string) => {
+    setMessages((current) => current.map((message) => (
+      message.requestId === requestId ? { ...message, status: 'sent' } : message
+    )))
+  }, [])
+
   const submitTurn = useCallback(
     async (
       turn: SessionTurnRequest,
@@ -158,7 +172,7 @@ export function useSessionChat(
         setStreamNotice(null)
         return result
       } catch (error) {
-        // 스펙 §6: 같은 requestId 재전송은 409 — 메시지 재조회로 최신 상태 복원
+        // 완료된 턴의 중복 requestId는 최신 메시지 복원으로 수렴한다.
         if (
           error instanceof ApiClientError &&
           error.code === 'TURN_ALREADY_PROCESSED'
@@ -197,6 +211,8 @@ export function useSessionChat(
     historyError,
     isLoadingHistory,
     isTurnPending,
+    markMessageFailed,
+    markMessageRetrying,
     messages,
     reloadHistory,
     startNewConversation,
@@ -223,7 +239,7 @@ function mapSessionMessage(message: SessionMessage): ChatMessage {
     messageType: message.messageType,
     pageNumber: message.pageNumber,
     role: message.senderType === 'USER' ? 'user' : 'assistant',
-    status: 'sent',
+    status: message.status === 'FAILED' ? 'failed' : 'sent',
   }
 }
 

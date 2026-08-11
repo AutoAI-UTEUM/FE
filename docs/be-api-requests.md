@@ -221,10 +221,9 @@ POST /api/classrooms/{classroomId}/reactivate
 강의실을 다시 운영하는 정책을 지원한다면 재활성화 endpoint가 필요하며, 지원하지
 않는 정책이면 현재처럼 종료 버튼을 비활성 상태로 유지한다.
 
-## 계약 확인 필요
+## 최근 연결 및 계약 확인
 
-- 강의실 통합 콘텐츠 화면에서 주차별 공지를 저장하려면 공지 생성·수정·목록·상세
-  계약에 선택 `weekNumber`가 필요하다.
+- 공지의 주차 지정·예약 게시 계약은 2026-08-11 dev 배포분부터 연결했다.
 
   ```http
   POST  /api/classrooms/{classroomId}/notices
@@ -232,14 +231,16 @@ POST /api/classrooms/{classroomId}/reactivate
   GET   /api/classrooms/{classroomId}/notices
   ```
 
-  생성·수정 요청과 응답에 `weekNumber: number | null`을 추가한다. `null`은 전체
-  공지, 숫자는 해당 주차 공지다. 기존 응답처럼 필드가 없으면 FE는 전체 공지로
-  해석하며 게시일로 주차를 추정하지 않는다. 배포 Swagger에 계약이 확인된 뒤
-  `VITE_API_CAPABILITIES=notice-weeks`를 추가하면 주차 공지 저장 UI가 활성화된다.
-- 공지 API는 현재 즉시 게시만 가능하다. 예약 게시가 범위라면 `publishAt` 필드 또는
-  별도 예약 endpoint가 필요하다.
-- 자료 업로드는 Swagger상 PDF 전용이다. PPT/PPTX 지원 계획이 있다면 허용 MIME,
-  변환 상태, 변환 실패 사유를 계약에 추가해야 한다.
+  생성·수정 요청은 `weekNumber: number | null`과 `publishAt: string | null`을 사용한다.
+  응답의 게시 여부는 `published`만 신뢰하며, `publishedAt`은 작성·정렬 시각,
+  `publishAt`은 예약 공개 시각으로 구분한다. 구형 응답에 `published`가 없으면 FE는
+  게시된 공지로 처리한다.
+- 메시지 조회의 `status=FAILED`는 전송 실패로 표시한다. 현재 화면에서 실패한 턴은
+  메모리에 보존한 동일 `requestId`로 재전송한다. 메시지 조회 응답은 `requestId`를
+  반환하지 않으므로 새로고침 후 실패 메시지는 상태만 표시하고 재시도 버튼은
+  제공하지 않는다.
+- 자료 업로드는 PDF 전용으로 확정됐다. PPT/PPTX는 선택 단계에서 차단하고 PDF 변환
+  후 업로드 안내를 표시한다.
 - 업로드 요청이 `200`이어도 비동기 처리 후 `FAILED`가 될 수 있으므로 목록·상세
   응답에서 `failureReason`을 일관되게 제공하고 운영 로그의 추적 ID를 반환해야 한다.
 - 강의실 목록 정렬은 `RECENT`, `NAME`만 지원한다. 학습자 UI의 진도 낮은 순과 새

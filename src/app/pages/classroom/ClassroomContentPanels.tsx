@@ -9,7 +9,6 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { Badge, Button, useToast } from '../../../shared/ui'
 
 export function NoticeContentPanel({
-  canUseWeekNumber,
   disabled,
   notice,
   onClose,
@@ -17,7 +16,6 @@ export function NoticeContentPanel({
   onSave,
   weekNumber,
 }: {
-  canUseWeekNumber: boolean
   disabled: boolean
   notice: ClassroomNotice | null
   onClose: () => void
@@ -27,18 +25,26 @@ export function NoticeContentPanel({
 }) {
   const [title, setTitle] = useState(notice?.title ?? '')
   const [content, setContent] = useState(notice?.content ?? '')
+  const [isScheduled, setIsScheduled] = useState(Boolean(notice && !notice.published && notice.publishAt))
+  const [publishAt, setPublishAt] = useState(toDateTimeLocal(notice?.publishAt))
+  const [minimumPublishAt] = useState(() => toDateTimeLocal(new Date().toISOString()))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const selectedWeek = notice ? notice.weekNumber : weekNumber
-  const weeklyNoticeUnavailable = selectedWeek !== null && !canUseWeekNumber
+  const scheduledAt = publishAt ? new Date(publishAt) : null
+  const hasValidSchedule = !isScheduled || Boolean(scheduledAt && !Number.isNaN(scheduledAt.getTime()) && publishAt > minimumPublishAt)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!title.trim() || !content.trim() || isSubmitting || disabled || weeklyNoticeUnavailable) return
+    if (!title.trim() || !content.trim() || isSubmitting || disabled || !hasValidSchedule) return
     setIsSubmitting(true)
     try {
-      const input: ClassroomNoticeInput = { content: content.trim(), title: title.trim() }
-      if (canUseWeekNumber) input.weekNumber = selectedWeek
+      const input: ClassroomNoticeInput = {
+        content: content.trim(),
+        publishAt: isScheduled && scheduledAt ? scheduledAt.toISOString() : null,
+        title: title.trim(),
+        weekNumber: selectedWeek,
+      }
       await onSave(input, notice?.id)
     } finally {
       setIsSubmitting(false)
@@ -58,18 +64,34 @@ export function NoticeContentPanel({
   return <form className="flex min-h-[520px] flex-col rounded-lg border border-stone-200 bg-white" onSubmit={submit}>
     <div className="flex min-h-14 items-center gap-3 border-b border-stone-200 px-5">
       <button aria-label="목록으로 돌아가기" className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100" onClick={onClose} type="button"><ArrowLeft size={16} /></button>
-      <div className="min-w-0 flex-1"><h2 className="type-section-title font-bold text-stone-950">{notice ? '공지 편집' : '공지 작성'}</h2><p className="type-caption text-stone-500">{selectedWeek === null ? '전체 공지' : `${selectedWeek}주차 공지`}</p></div>
+      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="type-section-title font-bold text-stone-950">{notice ? '공지 편집' : '공지 작성'}</h2>{notice ? <Badge tone={notice.published ? 'success' : 'warning'}>{notice.published ? '게시됨' : '예약'}</Badge> : null}</div><p className="type-caption text-stone-500">{selectedWeek === null ? '전체 공지' : `${selectedWeek}주차 공지`}</p></div>
     </div>
-    {weeklyNoticeUnavailable ? <p className="border-b border-amber-200 bg-amber-50 px-5 py-3 type-control text-amber-800" role="status">주차별 공지 API가 준비되면 저장할 수 있습니다. 전체 공지는 지금 등록할 수 있습니다.</p> : null}
     <div className="flex flex-1 flex-col gap-4 p-5">
       <label className="type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} value={title} /></label>
       <label className="flex flex-1 flex-col type-control font-semibold text-stone-700">본문<textarea className="mt-1.5 min-h-72 flex-1 resize-none rounded-lg border border-stone-300 px-3.5 py-3 type-body leading-6 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={5000} onChange={(event) => setContent(event.target.value)} value={content} /></label>
+      <fieldset>
+        <legend className="type-control font-semibold text-stone-700">게시 방식</legend>
+        <div className="mt-1.5 grid grid-cols-2 gap-2">
+          <button aria-pressed={!isScheduled} className={`h-10 rounded-lg border type-control font-semibold ${!isScheduled ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`} disabled={disabled} onClick={() => setIsScheduled(false)} type="button">즉시 게시</button>
+          <button aria-pressed={isScheduled} className={`h-10 rounded-lg border type-control font-semibold ${isScheduled ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`} disabled={disabled} onClick={() => setIsScheduled(true)} type="button">예약 게시</button>
+        </div>
+        {isScheduled ? <label className="mt-3 block type-control font-semibold text-stone-700">예약 공개 시각<input className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} min={minimumPublishAt} onChange={(event) => setPublishAt(event.target.value)} type="datetime-local" value={publishAt} /></label> : null}
+        {isScheduled && !hasValidSchedule ? <p className="mt-1.5 type-caption font-medium text-rose-700" role="alert">현재보다 이후의 예약 시각을 선택하세요.</p> : null}
+      </fieldset>
     </div>
     <div className="flex min-h-16 items-center justify-between px-5">
       {notice && onDelete ? <Button className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={disabled || isDeleting} onClick={() => void remove()} type="button" variant="secondary"><Trash2 size={14} />{isDeleting ? '삭제 중' : '삭제'}</Button> : <span />}
-      <Button disabled={disabled || weeklyNoticeUnavailable || !title.trim() || !content.trim() || isSubmitting} type="submit"><Save size={14} />{isSubmitting ? '저장 중' : notice ? '변경사항 저장' : '공지 게시'}</Button>
+      <Button disabled={disabled || !hasValidSchedule || !title.trim() || !content.trim() || isSubmitting} type="submit"><Save size={14} />{isSubmitting ? '저장 중' : notice ? '변경사항 저장' : isScheduled ? '예약 등록' : '공지 게시'}</Button>
     </div>
   </form>
+}
+
+function toDateTimeLocal(value?: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return localDate.toISOString().slice(0, 16)
 }
 
 export function ExamContentPanel({

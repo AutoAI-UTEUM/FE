@@ -34,6 +34,8 @@ const noticeFixture: ClassroomNotice = {
   content: '내용',
   createdAt: '2026-08-01T00:00:00Z',
   id: '20',
+  publishAt: null,
+  published: true,
   publishedAt: '2026-08-02T00:00:00Z',
   title: '공지',
   updatedAt: '2026-08-02T00:00:00Z',

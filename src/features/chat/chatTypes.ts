@@ -1,5 +1,5 @@
 export type ChatMessageRole = 'assistant' | 'user'
-export type ChatMessageStatus = 'sent' | 'streaming'
+export type ChatMessageStatus = 'failed' | 'sent' | 'streaming'
 
 export interface ChatMessage {
   content: string
@@ -7,6 +7,7 @@ export interface ChatMessage {
   id: string
   messageType?: string
   pageNumber?: number
+  requestId?: string
   role: ChatMessageRole
   status: ChatMessageStatus
 }
