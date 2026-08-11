@@ -1,7 +1,6 @@
 export type ApiCapability =
   | 'analytics'
   | 'oauth'
-  | 'notice-weeks'
   | 'password-reset'
   | 'reports'
   | 'schedule'

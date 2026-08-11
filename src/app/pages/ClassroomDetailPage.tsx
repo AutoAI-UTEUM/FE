@@ -8,7 +8,6 @@ import { createExamsRepository, type Exam } from '../../features/exams'
 import { createMaterialsRepository, validateMaterialUpload } from '../../features/materials'
 import { createSessionsRepository } from '../../features/sessions'
 import { getRequestErrorMessage } from '../../shared/api'
-import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { usePolling } from '../../shared/state'
 import { Button, EmptyState, useToast } from '../../shared/ui'
@@ -49,7 +48,6 @@ export function ClassroomDetailPage() {
   const isInstructor = isInstructorRole(user?.role)
   const isReadOnly = classroom?.status === 'COMPLETED'
   const canManage = isInstructor && !isReadOnly
-  const canUseNoticeWeeks = isApiCapabilityEnabled('notice-weeks')
 
   const loadResource = useCallback(async (key: ResourceKey) => {
     try {
@@ -247,7 +245,7 @@ export function ClassroomDetailPage() {
         weeks={weeks}
       />
       <div className="min-w-0">
-        {editingNotice ? <NoticeContentPanel canUseWeekNumber={canUseNoticeWeeks} disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
+        {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
         {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}
         {!editingNotice && !editingExam ? <ClassroomContentPanel
           canManage={canManage}

@@ -125,10 +125,15 @@ export function ChatPanel({
     if (chat.isTurnPending) return
 
     const requestId = createRequestId()
+    const isProgressCommand = Boolean(
+      (onExplainNextPage && isExplainNextPageCommand(trimmedQuestion))
+      || (onExplainCurrentPage && isExplainCurrentPageCommand(trimmedQuestion)),
+    )
 
     chat.appendLocalMessage({
       content: trimmedQuestion,
       id: `user-${requestId}`,
+      requestId: isProgressCommand ? undefined : requestId,
       role: 'user',
       status: 'sent',
     })
@@ -156,6 +161,29 @@ export function ChatPanel({
         onTurnCompleted,
       )
     } catch (requestError) {
+      if (!isProgressCommand) chat.markMessageFailed(requestId)
+      setError(getChatErrorMessage(requestError))
+    }
+  }
+
+  async function retryMessage(message: ChatMessage) {
+    if (!message.requestId || chat.isTurnPending) return
+    chat.markMessageRetrying(message.requestId)
+    setError(null)
+    try {
+      await chat.submitTurn(
+        {
+          eventType: 'USER_QUESTION',
+          payload: {
+            includeCurrentPage: true,
+            message: message.content,
+          },
+          requestId: message.requestId,
+        },
+        onTurnCompleted,
+      )
+    } catch (requestError) {
+      chat.markMessageFailed(message.requestId)
       setError(getChatErrorMessage(requestError))
     }
   }
@@ -345,6 +373,7 @@ export function ChatPanel({
             key={message.id}
             message={message}
             onCopy={() => void copyMessage(message.content)}
+            onRetry={message.status === 'failed' && message.requestId ? () => void retryMessage(message) : undefined}
             onSaveNote={() => void saveNote(message.content, message.pageNumber, message.id)}
             onShare={() => void shareMessage(message.content)}
           />
@@ -550,11 +579,13 @@ function NotesPanel({
 function MessageBubble({
   message,
   onCopy,
+  onRetry,
   onSaveNote,
   onShare,
 }: {
   message: ChatMessage
   onCopy: () => void
+  onRetry?: () => void
   onSaveNote: () => void
   onShare: () => void
 }) {
@@ -568,7 +599,7 @@ function MessageBubble({
           <p className="break-words type-body leading-6">{message.content}</p>
           <MessageActions messageLabel="내 질문" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} tone="brand" />
         </article>
-        {time ? <span className="type-micro text-stone-400">{time}</span> : null}
+        <div className="flex items-center gap-2">{message.status === 'failed' ? <span className="type-caption font-semibold text-rose-700">전송 실패</span> : null}{onRetry ? <button className="inline-flex items-center gap-1 type-caption font-semibold text-rose-700 hover:text-rose-800" onClick={onRetry} type="button"><RotateCcw aria-hidden="true" size={12} />다시 시도</button> : null}{time ? <span className="type-micro text-stone-400">{time}</span> : null}</div>
       </div>
     )
   }

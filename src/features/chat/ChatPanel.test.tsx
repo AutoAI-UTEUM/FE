@@ -193,6 +193,45 @@ describe('ChatPanel', () => {
     resolveTurn?.({ messages: [], uiActions: [] })
   })
 
+  it('retries a failed question with the original request id', async () => {
+    const submitTurn = vi.fn()
+      .mockRejectedValueOnce(new Error('AI 응답에 실패했습니다.'))
+      .mockResolvedValueOnce({ messages: [], uiActions: [] })
+    const repository = createRepository({ submitTurn })
+    render(<ChatHarness repository={repository} />)
+    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+
+    fireEvent.change(screen.getByLabelText('질문'), {
+      target: { value: '핵심 개념을 알려 주세요.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    expect(await screen.findByText('전송 실패')).toBeInTheDocument()
+    const firstRequestId = submitTurn.mock.calls[0]?.[1].requestId
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledTimes(2))
+    expect(submitTurn.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      requestId: firstRequestId,
+    }))
+  })
+
+  it('labels failed messages restored from server history', async () => {
+    const repository = createRepository({
+      listMessages: vi.fn().mockResolvedValue([{
+        content: '실패한 질문',
+        createdAt: '2026-08-11T00:00:00Z',
+        id: '91',
+        senderType: 'USER',
+        status: 'FAILED',
+      }]),
+    })
+    render(<ChatHarness repository={repository} />)
+
+    expect(await screen.findByText('전송 실패')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+  })
+
   it('starts a server-side conversation before clearing the visible chat', async () => {
     const repository = createRepository({
       listMessages: vi.fn().mockResolvedValue([{ content: '이전 답변', createdAt: '2026-08-03T00:00:00Z', id: '1', senderType: 'AI' }]),

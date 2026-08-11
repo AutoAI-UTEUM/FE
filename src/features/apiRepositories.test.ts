@@ -140,6 +140,7 @@ describe('remote feature repositories', () => {
               createdAt: '2026-07-27T00:00:00Z',
               messageId: 501,
               senderType: 'AI',
+              status: 'COMPLETED',
             },
           ],
           state: { currentPage: 3, pageStatus: 'IN_PROGRESS' },
@@ -182,7 +183,7 @@ describe('remote feature repositories', () => {
       }),
     ).resolves.toMatchObject({
       currentPage: 3,
-      messages: [{ id: '501', senderType: 'AI' }],
+      messages: [{ id: '501', senderType: 'AI', status: 'COMPLETED' }],
       pageStatus: 'IN_PROGRESS',
     })
     expect(request).toHaveBeenNthCalledWith(

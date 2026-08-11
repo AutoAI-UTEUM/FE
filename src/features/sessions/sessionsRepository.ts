@@ -55,6 +55,7 @@ interface SessionMessageDto {
   messageType?: string
   pageNumber?: number
   senderType: 'AI' | 'USER'
+  status?: 'COMPLETED' | 'FAILED' | 'PENDING'
 }
 
 interface CursorPage<T> {
@@ -416,6 +417,7 @@ function mapMessage(message: SessionMessageDto): SessionMessage {
   return {
     ...message,
     id: String(message.messageId),
+    status: message.status ?? 'COMPLETED',
   }
 }
 
