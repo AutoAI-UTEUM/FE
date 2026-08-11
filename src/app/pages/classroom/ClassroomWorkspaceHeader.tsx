@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../../features/auth'
 import type { Classroom } from '../../../features/classrooms'
+import { PageHeader } from '../../../shared/ui'
 import {
   classroomAnalyticsPath,
   classroomDetailPath,
@@ -61,18 +62,16 @@ export function ClassroomWorkspaceHeader({
 
   return (
     <header>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h1 className="min-w-0 break-words type-page-title font-bold text-stone-950">{classroom.name}</h1>
-            <p className="type-control text-stone-500">
-              {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · {classroom.weekCount}주차 · 수강생 {classroom.learnerCount}명
-            </p>
-            {titleAccessory || titleAccessorySlotRef ? <div ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
-          </div>
-        </div>
-        {actions || actionSlotRef ? <div className="flex shrink-0 flex-wrap items-center gap-2" ref={actionSlotRef}>{actions}</div> : null}
-      </div>
+      <PageHeader
+        actions={actions || actionSlotRef ? <div className="contents" ref={actionSlotRef}>{actions}</div> : undefined}
+        title={classroom.name}
+        titleAccessory={<>
+          <p className="type-control text-stone-500">
+            {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · {classroom.weekCount}주차 · 수강생 {classroom.learnerCount}명
+          </p>
+          {titleAccessory || titleAccessorySlotRef ? <div className="contents" ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
+        </>}
+      />
       {showTabs ? <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
         {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? 'page' : undefined} className={activeTab === tab.id ? 'relative flex shrink-0 items-center type-body font-bold text-stone-950 after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-brand-600' : 'relative flex shrink-0 items-center type-body font-medium text-stone-500 hover:text-stone-900'} key={tab.id} preventScrollReset to={tab.to}>{tab.label}</Link>)}
       </nav> : null}

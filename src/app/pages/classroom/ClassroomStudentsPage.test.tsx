@@ -20,9 +20,9 @@ describe('ClassroomStudentsPage', () => {
     expect(screen.getByRole('link', { name: '학습 현황·리포트' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByText('김학습')).toBeInTheDocument()
     expect(screen.getByText('박미활동')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('activity-desc')
-    fireEvent.change(screen.getByRole('combobox', { name: '수강생 정렬' }), { target: { value: 'name-asc' } })
-    expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('name-asc')
+    expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('RECENT_ACTIVITY')
+    fireEvent.change(screen.getByRole('combobox', { name: '수강생 정렬' }), { target: { value: 'NAME' } })
+    expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('NAME')
 
     fireEvent.click(screen.getByRole('button', { name: '7일 이상 미활동 1' }))
     expect(screen.queryByText('김학습')).not.toBeInTheDocument()
@@ -41,6 +41,18 @@ describe('ClassroomStudentsPage', () => {
     await waitFor(() => expect(removed).toEqual(['9']))
     expect(screen.queryByText('김학습')).not.toBeInTheDocument()
   })
+
+  it('uses server-side name search and low-progress sorting', async () => {
+    const requested: string[] = []
+    stubApi([], requested)
+    renderPage()
+    await screen.findByText('김학습')
+
+    fireEvent.change(screen.getByPlaceholderText('이름 검색'), { target: { value: '김' } })
+    fireEvent.change(screen.getByRole('combobox', { name: '수강생 정렬' }), { target: { value: 'LOW_PROGRESS' } })
+
+    await waitFor(() => expect(requested.some((url) => url.includes('q=%EA%B9%80') && url.includes('sort=LOW_PROGRESS'))).toBe(true))
+  })
 })
 
 function renderPage() {
@@ -53,16 +65,17 @@ function renderPage() {
   )
 }
 
-function stubApi(removed: string[] = []) {
+function stubApi(removed: string[] = [], requested: string[] = []) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+    requested.push(url.toString())
     const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
     if (url.pathname === '/api/classrooms/12') return success(classroomFixture)
     if (url.pathname === '/api/classrooms/12/notices') return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     if (url.pathname === '/api/classrooms/12/students' && method === 'GET') return success({
       items: [
-        { affiliation: '서울대학교', email: 'learner@example.com', joinedAt: '2026-08-02T01:00:00Z', lastActiveAt: '2026-08-05T08:00:00Z', name: '김학습', status: 'ACTIVE', studentId: 9 },
-        { affiliation: 'KAIST', email: 'inactive@example.com', joinedAt: '2026-07-10T01:00:00Z', lastActiveAt: '2026-07-20T08:00:00Z', name: '박미활동', status: 'ACTIVE', studentId: 10 },
+        { affiliation: '서울대학교', aiQuestionCountLast7Days: 4, averageProgressRate: 62, email: 'learner@example.com', joinedAt: '2026-08-02T01:00:00Z', lastActiveAt: '2026-08-05T08:00:00Z', name: '김학습', status: 'ACTIVE', studentId: 9 },
+        { affiliation: 'KAIST', aiQuestionCountLast7Days: 0, averageProgressRate: 12, email: 'inactive@example.com', joinedAt: '2026-07-10T01:00:00Z', lastActiveAt: '2026-07-20T08:00:00Z', name: '박미활동', status: 'ACTIVE', studentId: 10 },
       ],
       page: 0,
       size: 100,

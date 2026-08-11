@@ -5,7 +5,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice, type ClassroomNoticeInput, type ClassroomWeek } from '../../features/classrooms'
 import { createExamsRepository, type Exam } from '../../features/exams'
-import { createMaterialsRepository, validateMaterialUpload } from '../../features/materials'
+import { createMaterialsRepository, getMaterialFailureMessage, validateMaterialUpload } from '../../features/materials'
 import { createSessionsRepository } from '../../features/sessions'
 import { getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
@@ -157,12 +157,9 @@ export function ClassroomDetailPage() {
     setIsUploading(true)
     try {
       const material = await materialsRepository.upload(file, { classroomId, weekNumber })
-      const targetWeek = weeks.find((week) => week.weekNumber === weekNumber)
       const uploadMessage = material.status === 'FAILED'
-        ? '파일 처리에 실패했습니다.'
-        : targetWeek && !isWeekVisibleToLearners(targetWeek)
-          ? '자료를 업로드했습니다. 학습자에게 보이려면 해당 주차를 공개하세요.'
-          : '자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.'
+        ? getMaterialFailureMessage(material.failureReason)
+        : '자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.'
       showToast(uploadMessage, material.status === 'FAILED' ? 'danger' : 'success')
       if (material.status !== 'FAILED') setPendingMaterialId(material.id)
       materialRefreshAttempts.current = 0
@@ -240,8 +237,10 @@ export function ClassroomDetailPage() {
 
     <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:grid-cols-[190px_minmax(0,1fr)]">
       <ClassroomContentRail
+        endDate={classroom.endDate}
         onSelect={(weekNumber) => updateQuery({ panel: null, week: weekNumber === null ? 'all' : String(weekNumber) })}
         selectedWeekNumber={selectedWeekNumber}
+        startDate={classroom.startDate}
         weeks={weeks}
       />
       <div className="min-w-0">
@@ -249,6 +248,7 @@ export function ClassroomDetailPage() {
         {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}
         {!editingNotice && !editingExam ? <ClassroomContentPanel
           canManage={canManage}
+          endDate={classroom.endDate}
           errors={resourceErrors}
           filter={filter}
           globalItems={globalItems}
@@ -276,6 +276,7 @@ export function ClassroomDetailPage() {
           selectedWeek={selectedWeek}
           selectedWeekNumber={selectedWeekNumber}
           setDragging={setDraggingWeek}
+          startDate={classroom.startDate}
           draggingWeek={draggingWeek}
         /> : null}
       </div>
@@ -310,13 +311,6 @@ function parseFilter(value: string | null): ClassroomContentFilter {
 
 function sortWeeks(weeks: ClassroomWeek[]): ClassroomWeek[] {
   return [...weeks].sort((left, right) => left.displayOrder - right.displayOrder || left.weekNumber - right.weekNumber)
-}
-
-function isWeekVisibleToLearners(week: ClassroomWeek): boolean {
-  if (week.status === 'PUBLISHED' || week.status === 'BREAK') return true
-  if (week.status !== 'SCHEDULED' || !week.releaseAt) return false
-  const releaseTime = Date.parse(week.releaseAt)
-  return !Number.isNaN(releaseTime) && releaseTime <= Date.now()
 }
 
 function UploadMaterialDialog({ initialWeekNumber, isUploading, onClose, onUpload, weeks }: { initialWeekNumber?: number; isUploading: boolean; onClose: () => void; onUpload: (file: File, weekNumber: number) => Promise<boolean>; weeks: ClassroomWeek[] }) {

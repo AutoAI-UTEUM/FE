@@ -59,9 +59,6 @@ describe('InstructorClassroomEditPage', () => {
       if (url.pathname === '/api/classrooms/12/invite-code') {
         return success({ inviteCode: '7QK4-MZ2A' })
       }
-      if (url.pathname === '/api/classrooms/12/weeks/101/status') {
-        return success({ displayOrder: 1, materials: [], status: 'BREAK', title: '1주차', weekId: 101, weekNumber: 1 })
-      }
       if (url.pathname === '/api/classrooms/12/permanent' && method === 'DELETE') {
         const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body))
         permanentDeleteBodies.push(body)
@@ -123,11 +120,10 @@ describe('InstructorClassroomEditPage', () => {
       'xl:overflow-hidden',
     )
 
-    expect(screen.getByRole('button', { name: '1주차 공개' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '1주차 예약' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '1주차 비공개' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '1주차 휴강' }))
-    expect(await screen.findByRole('button', { name: '1주차 휴강' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: '1주차 공개' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '1주차 예약' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '1주차 비공개' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '1주차 휴강' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '1주차 삭제' })).toBeInTheDocument()
 
     const dataTransfer = { effectAllowed: 'none', setData: vi.fn() }

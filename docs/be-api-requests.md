@@ -88,11 +88,10 @@ GET  /api/auth/oauth/google/callback
 비밀번호 재설정 요청은 계정 존재 여부를 노출하지 않는 동일 응답을 반환하고,
 OAuth 콜백은 현재 refresh HttpOnly cookie 정책을 유지해야 한다.
 
-## P1. 수강생별 학습 현황
+## 연결 완료. 수강생별 학습 현황
 
-현재 `GET /api/classrooms/{classroomId}/students`는 이름, 이메일, 소속, 참여일,
-최근 활동 시각만 반환한다. `학습 현황·리포트`의 수강생 행에 실제 값을 표시하려면
-다음 필드를 응답에 추가하거나 별도 상세 집계 endpoint가 필요하다.
+2026-08-11 기준 `GET /api/classrooms/{classroomId}/students`에 다음 지표와
+검색·정렬 query가 배포되어 FE에 연결됐다.
 
 ```json
 {
@@ -101,9 +100,7 @@ OAuth 콜백은 현재 refresh HttpOnly cookie 정책을 유지해야 한다.
 }
 ```
 
-수강생이 많을 때도 검색·정렬·페이지네이션이 정확히 동작하도록 목록 query에
-`q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`도 요청한다. FE는 계약 전까지 현재
-받은 페이지 안에서만 검색·정렬하고, 없는 지표는 `-`로 표시한다.
+목록 query는 `q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`를 사용한다.
 
 ## P1. 알림 전달
 
@@ -241,10 +238,34 @@ POST /api/classrooms/{classroomId}/reactivate
   제공하지 않는다.
 - 자료 업로드는 PDF 전용으로 확정됐다. PPT/PPTX는 선택 단계에서 차단하고 PDF 변환
   후 업로드 안내를 표시한다.
-- 업로드 요청이 `200`이어도 비동기 처리 후 `FAILED`가 될 수 있으므로 목록·상세
-  응답에서 `failureReason`을 일관되게 제공하고 운영 로그의 추적 ID를 반환해야 한다.
+- 업로드 요청이 `200`이어도 비동기 처리 후 `FAILED`가 될 수 있다. 2026-08-11
+  배포 계약의 `failureReason=EXTRACTION_FAILED|PAGE_LIMIT_EXCEEDED|SCHEDULING_FAILED`와
+  `traceId`를 FE에 연결했다.
+- 수강생 목록의 `q`와 `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`,
+  `averageProgressRate`, `aiQuestionCountLast7Days`를 FE 검색·정렬·현황 표에 연결했다.
 - 강의실 목록 정렬은 `RECENT`, `NAME`만 지원한다. 학습자 UI의 진도 낮은 순과 새
   자료 우선 정렬을 서버에서 지원하려면 enum 확장이 필요하다.
-- 강의자 강의실 카드의 자료 수를 표시하기 위해 현재는 각 강의실의 주차 목록을
-  추가 조회한다. `ClassroomSummaryResponse.materialCount`를 제공하면 목록의 N+1
-  요청을 제거할 수 있다.
+- `ClassroomSummaryResponse.materialCount`는 강의실 카드에 연결했다. 현재 주차
+  목록 추가 조회는 통합 검색의 자료 인덱스를 만들기 위해 유지하며, 조회 실패
+  시에도 서버의 자료 수 집계값을 보존한다.
+
+## P1. 공지 첨부파일·AI 초안
+
+Notion `8/6 기준 사이트 피드백`의 공지 작성 개선 중 마크다운 편집·미리보기는
+기존 `content` 문자열 계약으로 FE에 반영했다. 첨부파일과 공지 작성 AI는 공개
+API가 없어 다음 계약이 필요하다.
+
+```http
+POST   /api/classrooms/{classroomId}/notice-attachments
+DELETE /api/classrooms/{classroomId}/notice-attachments/{attachmentId}
+POST   /api/classrooms/{classroomId}/notices/ai-draft
+```
+
+- 첨부 업로드는 `multipart/form-data`의 `file`을 받고 `attachmentId`, `fileName`,
+  `contentType`, `size`, `downloadUrl`을 반환한다.
+- 공지 생성·수정 요청에 `attachmentIds: string[]`를 추가하고, 목록·상세 응답에는
+  동일 첨부 메타데이터 배열을 반환한다. 미게시 공지에 연결되지 않은 임시 첨부의
+  만료 정책도 함께 정의해야 한다.
+- AI 초안 요청은 `title?`, `prompt`, `weekNumber?`를 받고 Markdown 본문 `content`를
+  반환한다. 생성 결과는 자동 게시하지 않고 강의자가 편집·확인한 뒤 기존 공지
+  생성 API로 저장한다.

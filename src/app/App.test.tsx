@@ -176,53 +176,11 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '공지 관리' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '통합 관리' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '입장 요청' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '통합 관리' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '입장 요청' })).toHaveAttribute('href', '/entrance-requests')
     expect(screen.queryByRole('link', { name: '자료' })).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '초대 코드' })).toBeEnabled()
     expect(screen.getByRole('option', { name: '자연어처리 개론' })).toBeInTheDocument()
-  })
-
-  it('summarizes instructor operations in the integrated management hub', async () => {
-    installApiFixtureServer((request) => {
-      const url = new URL(request.url)
-      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
-        return apiSuccess({
-          items: [{
-            classroomId: 12,
-            color: 'BLUE',
-            description: '자연어처리 수업',
-            endDate: '2026-11-15',
-            instructorName: '강의자',
-            learnerCount: 20,
-            materialCount: 4,
-            name: '자연어처리 개론',
-            pendingRequestCount: 3,
-            progressRate: 30,
-            startDate: '2026-08-03',
-            status: 'ACTIVE',
-            weekCount: 15,
-          }],
-          page: 0,
-          size: 100,
-          totalElements: 1,
-          totalPages: 1,
-        })
-      }
-      return undefined
-    })
-    renderRoute('/management', {
-      email: 'instructor@example.com',
-      name: '강의자',
-      role: 'INSTRUCTOR',
-    })
-
-    expect(screen.getByRole('heading', { name: '통합 관리' })).toBeInTheDocument()
-    expect(await screen.findByText('전체 학습자')).toBeInTheDocument()
-    expect(screen.getByText('3건')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /자료주차별 자료/ })).toHaveAttribute('href', '/classrooms/12')
-    expect(screen.getByRole('link', { name: /수강생·리포트/ })).toHaveAttribute('href', '/classrooms/12/students')
-    expect(screen.getByRole('link', { name: /입장 요청/ })).toHaveAttribute('href', '/classrooms/12/entrance-requests')
   })
 
   it('keeps the classroom workspace header mounted while changing week content', async () => {

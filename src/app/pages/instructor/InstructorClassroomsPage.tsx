@@ -652,7 +652,7 @@ async function loadCardDetails(
             : classroom.inviteCode,
         materialCount: weeks.reduce(
           (sum, week) => sum + week.materials.length,
-          0,
+          weeksResult.status === 'fulfilled' ? 0 : (classroom.materialCount ?? 0),
         ),
         searchMaterials: weeks.flatMap((week) =>
           week.materials.map((material) => ({

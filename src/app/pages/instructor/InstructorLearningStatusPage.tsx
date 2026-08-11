@@ -35,7 +35,7 @@ export function InstructorLearningStatusPage() {
       const [classrooms, nextAnalytics, nextStudents] = await Promise.all([
         repository.list(),
         repository.getAnalytics(classroomId),
-        repository.listStudents(classroomId),
+        repository.listStudents(classroomId, { sort: 'RECENT_ACTIVITY' }),
       ])
       const nextClassroom = classrooms.find((item) => item.id === classroomId) ?? classrooms[0]
       if (!nextClassroom) throw new Error('강의실 정보를 확인할 수 없습니다.')

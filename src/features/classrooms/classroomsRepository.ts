@@ -5,6 +5,7 @@ export type ClassroomColor = 'BLUE' | 'GREEN' | 'PURPLE' | 'ORANGE' | 'RED' | 'G
 export type ClassroomStatus = 'ACTIVE' | 'COMPLETED'
 export type JoinRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 export type ClassroomWeekStatus = 'PRIVATE' | 'SCHEDULED' | 'PUBLISHED' | 'BREAK'
+export type ClassroomStudentSort = 'RECENT_ACTIVITY' | 'NAME' | 'LOW_PROGRESS'
 
 export const JOIN_REQUESTS_CHANGED_EVENT = 'edupilot:join-requests-changed'
 
@@ -63,6 +64,7 @@ export interface ClassroomWeek {
 export interface ClassroomStudent {
   affiliation?: string
   aiQuestionCount?: number
+  aiQuestionCountLast7Days: number
   averageProgressRate?: number
   email: string
   id: string
@@ -131,6 +133,7 @@ interface ClassroomDto {
   instructorName: string
   inviteCode?: string
   learnerCount?: number
+  materialCount?: number
   name: string
   pendingRequestCount?: number
   progressRate?: number
@@ -275,9 +278,16 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       )
       return mapAnalytics(data)
     },
-    async listStudents(id: string, signal?: AbortSignal) {
+    async listStudents(
+      id: string,
+      options: { query?: string; sort?: ClassroomStudentSort } = {},
+      signal?: AbortSignal,
+    ) {
+      const params = new URLSearchParams({ page: '0', size: '100' })
+      if (options.query?.trim()) params.set('q', options.query.trim())
+      if (options.sort) params.set('sort', options.sort)
       const { data } = await request<PagedResponse<ClassroomStudentDto>>(
-        `/api/classrooms/${encodeURIComponent(id)}/students?page=0&size=100`,
+        `/api/classrooms/${encodeURIComponent(id)}/students?${params}`,
         { signal },
       )
       return data.items.map(mapStudent)
@@ -342,7 +352,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
 }
 
 function mapClassroom(value: ClassroomDto): Classroom {
-  return { ...value, id: String(value.classroomId), learnerCount: value.learnerCount ?? 0, pendingRequestCount: value.pendingRequestCount ?? 0, progressRate: value.progressRate ?? 0 }
+  return { ...value, id: String(value.classroomId), learnerCount: value.learnerCount ?? 0, materialCount: value.materialCount ?? 0, pendingRequestCount: value.pendingRequestCount ?? 0, progressRate: value.progressRate ?? 0 }
 }
 
 function mapWeek(value: WeekDto): ClassroomWeek {
@@ -358,6 +368,7 @@ function mapStudent(value: ClassroomStudentDto): ClassroomStudent {
   return {
     ...value,
     aiQuestionCount: value.aiQuestionCount ?? value.aiQuestionCountLast7Days,
+    aiQuestionCountLast7Days: value.aiQuestionCountLast7Days ?? value.aiQuestionCount ?? 0,
     averageProgressRate: value.averageProgressRate ?? value.progressRate,
     id: String(value.studentId),
   }

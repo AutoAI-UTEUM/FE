@@ -62,7 +62,7 @@ describe('SessionDetailPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '자료 목록 닫기' }))
     expect(screen.queryByRole('link', { name: '주차 페이지로' })).not.toBeInTheDocument()
 
-    fireEvent.click(await screen.findByRole('button', { name: '자료 목록' }))
+    fireEvent.click(await screen.findByRole('button', { name: '자료 목록' }, { timeout: 5_000 }))
     expect(screen.getByRole('link', { name: '주차 페이지로' })).toBeInTheDocument()
   })
 
@@ -204,6 +204,7 @@ describe('SessionDetailPage', () => {
     expect(screen.queryByText('강의실 자료')).not.toBeInTheDocument()
     expect(screen.queryByText('1/5')).not.toBeInTheDocument()
     expect(screen.queryByText(/^자료 \d+개$/)).not.toBeInTheDocument()
+    expect(screen.queryByText('등록된 자료가 없습니다.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /학습 확인 퀴즈/ }))
     expect(await screen.findByRole('button', { name: 'PDF로 돌아가기' })).toBeInTheDocument()

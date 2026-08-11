@@ -12,9 +12,9 @@ import {
   Monitor,
   Moon,
   NotebookPen,
-  PanelsTopLeft,
   Settings,
   Sun,
+  UserPlus,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -389,12 +389,20 @@ export function AppLayout() {
               <div className="contents" key={item.label}>
                 <NavLink
                   to={item.to}
-                  className={({ isActive }) => navLinkClassName(isActive, isCollapsed)}
+                  className={({ isActive }) => {
+                    const isEntranceRequestsPath = location.pathname.endsWith('/entrance-requests')
+                    const isItemActive = item.to === routes.entranceRequests
+                      ? isEntranceRequestsPath
+                      : item.to === routes.classrooms
+                        ? isActive && !isEntranceRequestsPath
+                        : isActive
+                    return navLinkClassName(isItemActive, isCollapsed)
+                  }}
                   title={item.label}
                 >
                   <item.icon aria-hidden="true" className="shrink-0" size={16} />
                   <span className={cx(isCollapsed && 'lg:sr-only')}>{item.label}</span>
-                  {item.label === '통합 관리' && pendingJoinRequestCount > 0 ? (
+                  {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
                     <span
                       aria-label={`${pendingJoinRequestCount}개의 대기 요청`}
                       className={cx(
@@ -631,7 +639,7 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
 const instructorNavigation: Array<{ icon: LucideIcon; label: string; to: string }> = [
   { icon: LayoutGrid, label: '강의실', to: routes.classrooms },
   { icon: CalendarDays, label: '캘린더', to: routes.calendar },
-  { icon: PanelsTopLeft, label: '통합 관리', to: routes.management },
+  { icon: UserPlus, label: '입장 요청', to: routes.entranceRequests },
 ]
 
 function classroomDotClassName(color: Classroom['color']): string {

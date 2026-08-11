@@ -10,7 +10,7 @@ import { createQuestion, isExamDraftValid } from '../../features/exams/examEdito
 import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime } from '../../shared/lib/format'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Badge, Button, EmptyState, useToast } from '../../shared/ui'
+import { Badge, Button, EmptyState, PageHeader, useToast } from '../../shared/ui'
 import { classroomExamsPath, examDetailPath } from '../routes'
 import { ClassroomWorkspaceContainer } from './classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from './classroom/ClassroomWorkspaceHeader'
@@ -54,7 +54,7 @@ export function ExamsPage() {
   }, [classroomId, examsRepository, status])
 
   return <ClassroomWorkspaceContainer>
-    {selectedClassroom ? <ClassroomWorkspaceHeader actions={isInstructor ? <Button disabled={!classroomId} onClick={() => { setComposerWeekNumber(undefined); setIsComposerOpen(true) }}><Plus size={15} />시험 만들기</Button> : undefined} activeTab="course" classroom={selectedClassroom} titleAccessory={<ClassroomSelect classrooms={classrooms} onChange={(nextClassroomId) => navigate(classroomExamsPath(nextClassroomId), { replace: true })} value={classroomId} />} /> : <h1 className="type-page-title font-bold text-stone-950">시험</h1>}
+    {selectedClassroom ? <ClassroomWorkspaceHeader actions={isInstructor ? <Button disabled={!classroomId} onClick={() => { setComposerWeekNumber(undefined); setIsComposerOpen(true) }}><Plus size={15} />시험 만들기</Button> : undefined} activeTab="course" classroom={selectedClassroom} titleAccessory={<ClassroomSelect classrooms={classrooms} onChange={(nextClassroomId) => navigate(classroomExamsPath(nextClassroomId), { replace: true })} value={classroomId} />} /> : <PageHeader title="시험" />}
     <div className="flex gap-2" role="group" aria-label="시험 상태 필터">{([['', '전체'], ['DRAFT', '초안'], ['PUBLISHED', '공개'], ['CLOSED', '종료']] as const).filter(([value]) => isInstructor || value !== 'DRAFT').map(([value, label]) => <button aria-pressed={status === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${status === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600'}`} key={value} onClick={() => { setIsLoading(true); setStatus(value) }} type="button">{label}</button>)}</div>
     {isLoading ? <p className="py-16 text-center type-body text-stone-500" role="status">시험을 불러오는 중입니다.</p> : null}
     {error ? <EmptyState description={error} title="시험을 불러오지 못했습니다" /> : null}

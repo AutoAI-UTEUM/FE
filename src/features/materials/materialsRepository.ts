@@ -4,6 +4,7 @@ import type {
   AuthenticatedRequest,
 } from '../auth'
 import type {
+  MaterialFailureReason,
   MaterialStatus,
   StudyMaterial,
 } from './materialTypes'
@@ -11,12 +12,13 @@ import type {
 interface MaterialDto {
   activeSessionId?: number | string | null
   createdAt: string
-  failureReason?: string | null
+  failureReason?: MaterialFailureReason | null
   fileSizeBytes?: number | null
   materialId: number | string
   pageCount?: number | null
   processingStatus: MaterialStatus
   title: string
+  traceId?: string | null
 }
 
 export interface MaterialsRepository {
@@ -135,5 +137,6 @@ function mapMaterial(material: MaterialDto): StudyMaterial {
     pageCount: material.pageCount ?? undefined,
     status: material.processingStatus,
     title: material.title,
+    traceId: material.traceId ?? undefined,
   }
 }

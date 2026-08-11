@@ -6,7 +6,7 @@ import { ExamEditor } from '../../../features/exams/ExamEditor'
 import { createQuestion, isExamDraftValid } from '../../../features/exams/examEditorModel'
 import type { CreateExamInput, Exam, ExamsRepository } from '../../../features/exams/examsRepository'
 import { getRequestErrorMessage } from '../../../shared/api'
-import { Badge, Button, useToast } from '../../../shared/ui'
+import { Badge, Button, MarkdownEditor, useToast } from '../../../shared/ui'
 
 export function NoticeContentPanel({
   disabled,
@@ -68,7 +68,10 @@ export function NoticeContentPanel({
     </div>
     <div className="flex flex-1 flex-col gap-4 p-5">
       <label className="type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} value={title} /></label>
-      <label className="flex flex-1 flex-col type-control font-semibold text-stone-700">본문<textarea className="mt-1.5 min-h-72 flex-1 resize-none rounded-lg border border-stone-300 px-3.5 py-3 type-body leading-6 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={5000} onChange={(event) => setContent(event.target.value)} value={content} /></label>
+      <div className="flex min-h-0 flex-1 flex-col type-control font-semibold text-stone-700">
+        <span>본문</span>
+        <MarkdownEditor ariaLabel="본문" className="mt-1.5" disabled={disabled} maxLength={5000} onChange={setContent} value={content} />
+      </div>
       <fieldset>
         <legend className="type-control font-semibold text-stone-700">게시 방식</legend>
         <div className="mt-1.5 grid grid-cols-2 gap-2">
