@@ -15,10 +15,10 @@ function renderPage() {
 }
 
 describe('ClassroomsPage', () => {
-  it('shows the classroom count without an academic term', () => {
+  it('keeps the learner header free of role-specific count and term labels', () => {
     renderPage()
 
-    expect(screen.getByText('참여 중 0개')).toBeInTheDocument()
+    expect(screen.queryByText(/참여 중 \d+개/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\d{4}년 \d학기/)).not.toBeInTheDocument()
   })
 

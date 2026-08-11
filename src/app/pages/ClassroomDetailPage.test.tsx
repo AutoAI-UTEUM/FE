@@ -261,6 +261,62 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(await screen.findByRole('button', { name: /new-lecture자료/ })).toBeInTheDocument()
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
   })
+
+  it('shows every classroom week to learners when the backend omits unreleased weeks', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        'http://localhost',
+      )
+
+      if (url.pathname === '/api/classrooms/12') {
+        return success({ ...classroomFixture, weekCount: 3 })
+      }
+      if (url.pathname === '/api/classrooms/12/weeks') {
+        return success({
+          items: [{
+            ...weekFixture,
+            materials: [{
+              materialId: 93,
+              pageCount: 12,
+              processingStatus: 'READY',
+              title: 'published.pdf',
+              uploadedAt: '2026-08-10T00:00:00Z',
+            }],
+          }],
+        })
+      }
+      if (url.pathname === '/api/classrooms/12/notices') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/classrooms/12']}>
+        <AuthProvider initialUser={{ email: 'learner@example.com', id: 8, name: '학습자', role: 'LEARNER' }}>
+          <ToastProvider>
+            <Routes>
+              <Route path="/classrooms/:classroomId" element={<ClassroomDetailPage />} />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    const weekNavigation = await screen.findByRole('navigation', { name: '강의실 주차' })
+    expect(within(weekNavigation).getByText('자료구조 기초')).toBeInTheDocument()
+    expect(within(weekNavigation).getByText('2주차')).toBeInTheDocument()
+    expect(within(weekNavigation).getByText('3주차')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /published자료/ })).toBeInTheDocument()
+
+    fireEvent.click(within(weekNavigation).getByText('3주차'))
+    expect(await screen.findByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료 추가' })).not.toBeInTheDocument()
+  })
 })
 
 const classroomFixture = {
