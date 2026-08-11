@@ -14,7 +14,6 @@ import {
   rememberClassroomId,
   type Classroom,
   type ClassroomWeek,
-  type ClassroomWeekStatus,
 } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
@@ -26,8 +25,6 @@ import {
 import { classroomDetailPath, routes } from '../../routes'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
-
-type WeekDisplayStatus = ClassroomWeekStatus
 
 export function InstructorClassroomEditPage() {
   usePageTitle('강의실 설정')
@@ -52,7 +49,6 @@ export function InstructorClassroomEditPage() {
   const [startDate, setStartDate] = useState('')
   const [weekCount, setWeekCount] = useState(1)
   const [weekOrder, setWeekOrder] = useState<number[]>([])
-  const [weekStatuses, setWeekStatuses] = useState<Record<number, WeekDisplayStatus>>({})
   const [draggedWeek, setDraggedWeek] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -84,10 +80,6 @@ export function InstructorClassroomEditPage() {
         const missingWeeks = Array.from({ length: nextWeekCount }, (_, index) => index + 1)
           .filter((weekNumber) => !existingOrder.includes(weekNumber))
         setWeekOrder([...existingOrder, ...missingWeeks])
-        setWeekStatuses(Object.fromEntries(nextWeeks.map((week) => [
-          week.weekNumber,
-          week.status,
-        ])))
         setInviteCode(nextInviteCode)
         setName(nextClassroom.name)
         setDescription(nextClassroom.description ?? '')
@@ -114,7 +106,6 @@ export function InstructorClassroomEditPage() {
     const nextWeekNumber = Math.max(0, ...weekOrder) + 1
     setWeekCount((value) => value + 1)
     setWeekOrder((current) => [...current, nextWeekNumber])
-    setWeekStatuses((current) => ({ ...current, [nextWeekNumber]: 'PRIVATE' }))
   }
 
   function moveWeekTo(sourceWeekNumber: number, targetWeekNumber: number) {
@@ -159,23 +150,6 @@ export function InstructorClassroomEditPage() {
     }
   }
 
-  async function changeWeekStatus(weekNumber: number, status: WeekDisplayStatus) {
-    const week = weekByNumber.get(weekNumber)
-    if (!week) {
-      setWeekStatuses((current) => ({ ...current, [weekNumber]: status }))
-      return
-    }
-
-    try {
-      const updated = await repository.changeWeekStatus(classroomId, week.id, status)
-      setWeeks((current) => current.map((item) => item.weekNumber === weekNumber ? updated : item))
-      setWeekStatuses((current) => ({ ...current, [weekNumber]: updated.status }))
-      showToast(`${weekNumber}주차 상태를 변경했습니다.`, 'success')
-    } catch (requestError) {
-      showToast(getRequestErrorMessage(requestError), 'danger')
-    }
-  }
-
   async function deleteWeek(weekNumber: number) {
     const week = weekByNumber.get(weekNumber)
     if (week?.materials.length) {
@@ -198,10 +172,6 @@ export function InstructorClassroomEditPage() {
       setWeekCount(nextWeekCount)
       setWeekOrder(Array.from({ length: nextWeekCount }, (_, index) => index + 1))
       setWeekTitles(Object.fromEntries(nextWeeks.map((item) => [item.weekNumber, item.title])))
-      setWeekStatuses(Object.fromEntries(nextWeeks.map((item) => [
-        item.weekNumber,
-        item.status,
-      ])))
       showToast('주차를 삭제했습니다.', 'success')
     } catch (requestError) {
       showToast(getRequestErrorMessage(requestError), 'danger')
@@ -415,7 +385,7 @@ export function InstructorClassroomEditPage() {
                 return (
                   <div
                     aria-label={`${displayWeekNumber}주차 항목`}
-                    className={`grid min-h-11 grid-cols-[22px_42px_minmax(0,1fr)_auto] items-center gap-1.5 border-b border-stone-100 px-2.5 transition-colors last:border-0 ${draggedWeek === weekNumber ? 'bg-brand-50/70 opacity-60' : 'bg-white'}`}
+                    className={`grid min-h-11 grid-cols-[22px_42px_minmax(0,1fr)_32px] items-center gap-1.5 border-b border-stone-100 px-2.5 transition-colors last:border-0 ${draggedWeek === weekNumber ? 'bg-brand-50/70 opacity-60' : 'bg-white'}`}
                     key={weekNumber}
                     onDragEnter={(event) => enterWeekDropTarget(event, weekNumber)}
                     onDragOver={(event) => { if (draggedWeek !== null) event.preventDefault() }}
@@ -445,12 +415,15 @@ export function InstructorClassroomEditPage() {
                       placeholder="주차 이름 (선택)"
                       value={weekTitles[weekNumber] ?? week?.title ?? ''}
                     />
-                    <WeekStatusButtons
-                      displayWeekNumber={displayWeekNumber}
-                      onDelete={() => void deleteWeek(weekNumber)}
-                      onStatusChange={(status) => void changeWeekStatus(weekNumber, status)}
-                      status={weekStatuses[weekNumber] ?? getWeekDisplayStatus(week)}
-                    />
+                    <button
+                      aria-label={`${displayWeekNumber}주차 삭제`}
+                      className="flex size-7 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
+                      onClick={() => void deleteWeek(weekNumber)}
+                      title="주차 삭제"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={13} />
+                    </button>
                   </div>
                 )
               })}
@@ -557,7 +530,7 @@ function BasicInformationSection({
             </output>
           </div>
         </div>
-        <p className="type-micro leading-5 text-stone-400">시작일을 변경하면 주차 공개 일정도 같은 간격으로 이동하며 종료일은 주차 수에 따라 계산됩니다.</p>
+        <p className="type-micro leading-5 text-stone-400">시작일을 변경하면 종료일은 주차 수에 따라 다시 계산됩니다.</p>
         <div>
           <p className="type-caption font-semibold text-stone-700">강의실 코드</p>
           <div className="mt-1 flex min-h-11 items-center gap-2 rounded-lg bg-stone-50 px-3">
@@ -568,59 +541,6 @@ function BasicInformationSection({
         </div>
       </div>
     </section>
-  )
-}
-
-function WeekStatusButtons({
-  displayWeekNumber,
-  onDelete,
-  onStatusChange,
-  status,
-}: {
-  displayWeekNumber: number
-  onDelete: () => void
-  onStatusChange: (status: WeekDisplayStatus) => void
-  status: WeekDisplayStatus
-}) {
-  const options: Array<{ label: string; value: WeekDisplayStatus }> = [
-    { label: '공개', value: 'PUBLISHED' },
-    { label: '예약', value: 'SCHEDULED' },
-    { label: '비공개', value: 'PRIVATE' },
-    { label: '휴강', value: 'BREAK' },
-  ]
-
-  return (
-    <div aria-label={`${displayWeekNumber}주차 상태`} className="flex items-center gap-1">
-      {options.map((option) => (
-        <button
-          aria-label={`${displayWeekNumber}주차 ${option.label}`}
-          aria-pressed={status === option.value}
-          className={status === option.value
-            ? option.value === 'PUBLISHED'
-              ? 'h-7 rounded-md bg-brand-600 px-2 type-micro font-bold text-white'
-              : option.value === 'SCHEDULED'
-                ? 'h-7 rounded-md bg-amber-100 px-2 type-micro font-bold text-amber-800'
-                : option.value === 'BREAK'
-                  ? 'h-7 rounded-md bg-rose-100 px-2 type-micro font-bold text-rose-700'
-                  : 'h-7 rounded-md bg-stone-700 px-2 type-micro font-bold text-white'
-            : 'h-7 rounded-md border border-stone-200 bg-white px-2 type-micro font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-800'}
-          key={option.value}
-          onClick={() => onStatusChange(option.value)}
-          type="button"
-        >
-          {option.label}
-        </button>
-      ))}
-      <button
-        aria-label={`${displayWeekNumber}주차 삭제`}
-        className="flex size-7 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
-        onClick={onDelete}
-        title="주차 삭제"
-        type="button"
-      >
-        <Trash2 aria-hidden="true" size={13} />
-      </button>
-    </div>
   )
 }
 
@@ -635,8 +555,4 @@ function toReleaseAt(startDate: string, weekIndex: number): string {
   date.setDate(date.getDate() + weekIndex * 7)
   date.setHours(0, 0, 0, 0)
   return date.toISOString()
-}
-
-function getWeekDisplayStatus(week?: ClassroomWeek): WeekDisplayStatus {
-  return week?.status ?? 'PRIVATE'
 }

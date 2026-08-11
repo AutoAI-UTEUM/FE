@@ -22,7 +22,6 @@ export const routes = {
   legacyReportDetail: '/reports/:reportId',
   legacyClassroomEdit: '/classrooms/:classroomId/edit',
   calendar: '/calendar',
-  management: '/management',
   notes: '/notes',
   reviewQuizzes: '/review-quizzes',
   exams: '/exams',

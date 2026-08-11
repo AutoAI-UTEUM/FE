@@ -90,11 +90,6 @@ export function SessionResourcePanel({
                   ) : null}
                 </li>
               ))}
-              {week.materials.length === 0 ? (
-                <li className="px-2 py-1 type-micro text-stone-400">
-                  등록된 자료가 없습니다.
-                </li>
-              ) : null}
             </ul>
           </section>
         ))}
@@ -144,7 +139,7 @@ function ResourceRow({
   return (
     <Link
       className={cx(
-        'flex min-h-9.5 items-start gap-2 rounded-lg px-2 py-2 type-control',
+        'flex min-h-9.5 items-center gap-2 rounded-lg px-2 py-2 type-control',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         isActive
           ? 'bg-white font-semibold text-stone-900 shadow-sm'
@@ -156,7 +151,7 @@ function ResourceRow({
     >
       <span
         className={cx(
-          'flex h-4.5 w-8 shrink-0 items-center justify-center rounded type-micro font-bold',
+          'flex h-5 w-8 shrink-0 items-center justify-center self-center rounded type-micro font-bold leading-none',
           getMaterialKind(title) === 'PPT'
             ? 'bg-amber-100 text-amber-700'
             : 'bg-rose-100 text-rose-700',

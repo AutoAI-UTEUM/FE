@@ -1,12 +1,13 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   Button,
   ButtonLink,
   EmptyState,
   ErrorState,
+  MarkdownEditor,
   PageContainer,
   PageHeader,
   TextInput,
@@ -93,5 +94,17 @@ describe('shared ui', () => {
     render(<PageHeader title="내 강의실" />)
 
     expect(screen.getByRole('heading', { name: '내 강의실' })).toHaveClass('type-page-title')
+    expect(screen.getByRole('heading', { name: '내 강의실' }).closest('header')).toHaveClass('sm:items-start')
+  })
+
+  it('previews markdown while preserving the editable source', () => {
+    const onChange = vi.fn()
+    const { container } = render(<MarkdownEditor onChange={onChange} value="# 공지 안내" />)
+
+    expect(container.querySelector('textarea')).toHaveValue('# 공지 안내')
+    fireEvent.click(container.querySelector('button[aria-pressed="false"]') as HTMLButtonElement)
+
+    expect(container.querySelector('h1')).toHaveTextContent('공지 안내')
+    expect(container.querySelector('textarea')).not.toBeInTheDocument()
   })
 })

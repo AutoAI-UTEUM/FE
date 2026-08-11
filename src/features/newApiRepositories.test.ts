@@ -86,13 +86,13 @@ describe('2026-08-04 API additions', () => {
     await expect(repository.changeWeekStatus('12', '91', 'BREAK')).resolves.toMatchObject({ id: '91', status: 'BREAK' })
     await repository.reorderWeeks('12', ['91'])
     await expect(repository.getAnalytics('12')).resolves.toMatchObject({ materials: [{ id: '10' }], questionsByPage: [{ materialId: '10' }] })
-    await expect(repository.listStudents('12')).resolves.toMatchObject([{ id: '7', name: '학습자' }])
+    await expect(repository.listStudents('12', { query: '학습', sort: 'LOW_PROGRESS' })).resolves.toMatchObject([{ id: '7', name: '학습자' }])
     await repository.removeStudent('12', '7')
 
     expect(request).toHaveBeenNthCalledWith(1, '/api/classrooms/12/weeks/91/status', { body: { status: 'BREAK' }, method: 'PATCH' })
     expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/weeks/reorder', { body: { orderedWeekIds: [91] }, method: 'PATCH' })
     expect(request).toHaveBeenNthCalledWith(3, '/api/classrooms/12/analytics', { signal: undefined })
-    expect(request).toHaveBeenNthCalledWith(4, '/api/classrooms/12/students?page=0&size=100', { signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(4, '/api/classrooms/12/students?page=0&size=100&q=%ED%95%99%EC%8A%B5&sort=LOW_PROGRESS', { signal: undefined })
     expect(request).toHaveBeenNthCalledWith(5, '/api/classrooms/12/students/7', { method: 'DELETE' })
   })
 

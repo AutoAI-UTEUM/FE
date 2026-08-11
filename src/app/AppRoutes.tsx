@@ -15,7 +15,6 @@ import { ExamDetailPage } from './pages/ExamDetailPage'
 import { InstructorCalendarPage } from './pages/instructor/InstructorCalendarPage'
 import { InstructorClassroomEditPage } from './pages/instructor/InstructorClassroomEditPage'
 import { InstructorLearningStatusPage } from './pages/instructor/InstructorLearningStatusPage'
-import { InstructorManagementPage } from './pages/instructor/InstructorManagementPage'
 import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
 import { InstructorReportCriteriaPage, InstructorReportDetailPage, InstructorReportsPage, InstructorStudentReportsPage } from './pages/instructor/InstructorReportsPage'
 import { LoginPage } from './pages/LoginPage'
@@ -78,7 +77,6 @@ export function AppRoutes() {
             </Route>
           </Route>
           <Route element={<RequireInstructor />}>
-            <Route path={routes.management} element={<InstructorManagementPage />} />
             <Route path={routes.legacyClassroomEdit} element={<LegacyClassroomSettingsRedirect />} />
             <Route
               path={routes.learningStatus}

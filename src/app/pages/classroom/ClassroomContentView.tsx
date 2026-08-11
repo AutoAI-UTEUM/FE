@@ -1,5 +1,5 @@
-import { Bell, BookOpen, ClipboardList, FileText, MoreHorizontal, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
-import { useState, type DragEvent, type FocusEvent } from 'react'
+import { Bell, BookOpen, ClipboardList, FileText, MoreHorizontal, RefreshCw, Trash2, Upload } from 'lucide-react'
+import type { DragEvent } from 'react'
 
 import type { ClassroomWeek } from '../../../features/classrooms'
 import { Badge, Button, EmptyState } from '../../../shared/ui'
@@ -7,16 +7,19 @@ import type { ClassroomContentFilter, ClassroomContentItem } from './classroomCo
 
 type ResourceKey = 'exams' | 'notices' | 'weeks'
 
-export function ClassroomContentRail({ onSelect, selectedWeekNumber, weeks }: {
+export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, startDate, weeks }: {
+  endDate: string
   onSelect: (weekNumber: number | null) => void
   selectedWeekNumber: number | null
+  startDate: string
   weeks: ClassroomWeek[]
 }) {
   return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white">
     <nav aria-label="강의실 주차" className="flex-1 space-y-0.5 p-1.5">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
       {weeks.map((week) => {
-        return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><span className={`flex size-6 shrink-0 items-center justify-center rounded-md type-caption font-bold ${selectedWeekNumber === week.weekNumber ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-500'}`}>{week.weekNumber}</span><strong className="min-w-0 flex-1 truncate text-left type-caption">{week.title}</strong><span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${week.status === 'PUBLISHED' ? 'bg-emerald-500' : week.status === 'SCHEDULED' ? 'bg-amber-500' : 'bg-stone-300'}`} /></button>
+        const period = formatWeekPeriod(startDate, endDate, week.weekNumber)
+        return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={weekRailButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><strong className="min-w-0 truncate text-left type-caption">{week.title}</strong>{period ? <span className="text-left type-micro tabular-nums text-stone-400">{period}</span> : <span />}</button>
       })}
       {weeks.length === 0 ? <p className="px-3 py-8 text-center type-control text-stone-400">등록된 주차 없음</p> : null}
     </nav>
@@ -26,6 +29,7 @@ export function ClassroomContentRail({ onSelect, selectedWeekNumber, weeks }: {
 export function ClassroomContentPanel({
   canManage,
   draggingWeek,
+  endDate,
   errors,
   filter,
   globalItems,
@@ -41,9 +45,11 @@ export function ClassroomContentPanel({
   selectedWeek,
   selectedWeekNumber,
   setDragging,
+  startDate,
 }: {
   canManage: boolean
   draggingWeek: number | null
+  endDate: string
   errors: Partial<Record<ResourceKey, string>>
   filter: ClassroomContentFilter
   globalItems: ClassroomContentItem[]
@@ -59,8 +65,10 @@ export function ClassroomContentPanel({
   selectedWeek?: ClassroomWeek
   selectedWeekNumber: number | null
   setDragging: (weekNumber: number | null) => void
+  startDate: string
 }) {
-  const title = selectedWeekNumber === null ? '전체 콘텐츠' : `${selectedWeekNumber}주차 · ${selectedWeek?.title ?? ''}`
+  const title = selectedWeekNumber === null ? '전체 콘텐츠' : selectedWeek?.title ?? ''
+  const period = selectedWeekNumber === null ? '' : formatWeekPeriod(startDate, endDate, selectedWeekNumber)
 
   function dragOver(event: DragEvent<HTMLElement>) {
     if (!canManage || selectedWeekNumber === null) return
@@ -79,8 +87,11 @@ export function ClassroomContentPanel({
 
   return <div className="space-y-4 rounded-lg border border-stone-200 bg-white p-4 sm:p-5" onDragLeave={() => setDragging(null)} onDragOver={dragOver} onDrop={drop}>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <h2 className="type-section-title font-bold text-stone-950">{title}</h2>
-      {canManage ? <AddItemMenu disabled={isUploading} onAdd={onAdd} /> : null}
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="type-section-title font-bold text-stone-950">{title}</h2>
+        {period ? <span className="type-caption tabular-nums text-stone-500">{period}</span> : null}
+      </div>
+      {canManage ? <AddItemButtons disabled={isUploading} onAdd={onAdd} /> : null}
     </div>
 
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="콘텐츠 유형 필터">{([['all', '전체'], ['material', '자료'], ['notice', '공지'], ['exam', '시험']] as const).map(([value, label]) => <button aria-pressed={filter === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${filter === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`} key={value} onClick={() => onFilter(value)} type="button">{label}</button>)}</div>
@@ -112,21 +123,15 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, openingMaterial
   </div>
 }
 
-function AddItemMenu({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 'exam' | 'material' | 'notice') => void }) {
-  const [isOpen, setIsOpen] = useState(false)
+function AddItemButtons({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 'exam' | 'material' | 'notice') => void }) {
   const items = [
-    ['material', Upload, '강의자료 업로드'],
-    ['notice', Bell, '공지 작성'],
-    ['exam', ClipboardList, '시험 만들기'],
+    ['material', Upload, '자료 추가'],
+    ['notice', Bell, '공지 추가'],
+    ['exam', ClipboardList, '시험 추가'],
   ] as const
 
-  function closeWhenFocusLeaves(event: FocusEvent<HTMLDivElement>) {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false)
-  }
-
-  return <div className="relative" onBlur={closeWhenFocusLeaves}>
-    <Button aria-expanded={isOpen} aria-haspopup="menu" disabled={disabled} onClick={() => setIsOpen((open) => !open)} size="sm"><Plus size={14} />새 항목 추가</Button>
-    {isOpen ? <div aria-label="새 항목 유형" className="absolute top-full right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-stone-200 bg-white p-1 shadow-lg" role="menu">{items.map(([kind, Icon, label]) => <button className="flex min-h-9 w-full items-center gap-2 rounded-md px-3 text-left type-control font-semibold text-stone-700 hover:bg-stone-50 hover:text-stone-950" key={kind} onClick={() => { setIsOpen(false); onAdd(kind) }} role="menuitem" type="button"><Icon size={14} />{label}</button>)}</div> : null}
+  return <div aria-label="새 항목 유형" className="flex flex-wrap items-center gap-2" role="group">
+    {items.map(([kind, Icon, label], index) => <Button disabled={disabled} key={kind} onClick={() => onAdd(kind)} size="sm" variant={index === 0 ? 'primary' : 'secondary'}><Icon size={14} />{label}</Button>)}
   </div>
 }
 
@@ -146,4 +151,35 @@ function resourceLabel(key: ResourceKey): string {
 
 function railButtonClass(selected: boolean): string {
   return `flex h-8 w-full items-center gap-1.5 rounded-md px-1.5 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
+}
+
+function weekRailButtonClass(selected: boolean): string {
+  return `grid h-8 w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md px-2 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
+}
+
+function formatWeekPeriod(startDate: string, endDate: string, weekNumber: number): string {
+  const courseStart = parseLocalDate(startDate)
+  const courseEnd = parseLocalDate(endDate)
+  if (!courseStart || !courseEnd || weekNumber < 1) return ''
+
+  const weekStart = addDays(courseStart, (weekNumber - 1) * 7)
+  if (weekStart > courseEnd) return ''
+  const calculatedEnd = addDays(weekStart, 6)
+  const weekEnd = calculatedEnd > courseEnd ? courseEnd : calculatedEnd
+  return `${formatCompactDate(weekStart)} - ${formatCompactDate(weekEnd)}`
+}
+
+function parseLocalDate(value: string): Date | null {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  if (!year || !month || !day) return null
+  const date = new Date(year, month - 1, day)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+function formatCompactDate(date: Date): string {
+  return `${date.getMonth() + 1}.${date.getDate()}`
 }

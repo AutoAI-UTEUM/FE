@@ -17,6 +17,7 @@ import {
 
 import {
   createMaterialsRepository,
+  getMaterialFailureMessage,
   getMaterialStatusLabel,
   validateMaterialUpload,
   type MaterialStatus,
@@ -305,8 +306,12 @@ export function MaterialsPage() {
                   </p>
                   {material.status === 'FAILED' ? (
                     <p className="mt-2 type-caption font-medium text-rose-700">
-                      {material.failureReason ??
-                        '파일 업로드는 완료됐지만 PDF 분석에 실패했습니다.'}
+                      {getMaterialFailureMessage(material.failureReason)}
+                      {material.traceId ? (
+                        <span className="ml-1 font-normal text-rose-500">
+                          문의 코드 {material.traceId}
+                        </span>
+                      ) : null}
                     </p>
                   ) : null}
                   {material.activeSessionId ? (

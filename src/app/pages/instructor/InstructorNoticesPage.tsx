@@ -6,7 +6,7 @@ import { useAuth } from '../../../features/auth'
 import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, EmptyState, useToast } from '../../../shared/ui'
+import { Button, EmptyState, MarkdownEditor, useToast } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
@@ -186,7 +186,10 @@ function NoticeEditor({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
         <label className="block type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} placeholder="공지 제목을 입력하세요" value={title} /></label>
-        <label className="flex min-h-0 flex-1 flex-col type-control font-semibold text-stone-700">본문<textarea className="mt-1.5 min-h-64 flex-1 resize-none rounded-lg border border-stone-300 px-3.5 py-3 type-body leading-6 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={5000} onChange={(event) => setContent(event.target.value)} placeholder="공지 내용을 입력하세요" value={content} /></label>
+        <div className="flex min-h-0 flex-1 flex-col type-control font-semibold text-stone-700">
+          <span>본문</span>
+          <MarkdownEditor ariaLabel="본문" className="mt-1.5" disabled={disabled} maxLength={5000} onChange={setContent} placeholder="공지 내용을 입력하세요" value={content} />
+        </div>
       </div>
       <div className="flex min-h-16 items-center justify-between px-5">
         {onDelete ? <Button className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={disabled || removing} onClick={() => void onDelete()} type="button" variant="secondary"><Trash2 aria-hidden="true" size={14} />{removing ? '삭제 중' : '공지 삭제'}</Button> : <span />}

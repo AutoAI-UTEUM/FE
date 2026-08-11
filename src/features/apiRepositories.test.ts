@@ -87,6 +87,25 @@ describe('remote feature repositories', () => {
     })
   })
 
+  it('maps structured material failure metadata', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      createdAt: '2026-08-10T00:00:00Z',
+      failureReason: 'PAGE_LIMIT_EXCEEDED',
+      materialId: 12,
+      processingStatus: 'FAILED',
+      title: 'too-long.pdf',
+      traceId: 'upload-trace-12',
+    }))
+    const repository = createMaterialsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getById('12')).resolves.toMatchObject({
+      failureReason: 'PAGE_LIMIT_EXCEEDED',
+      id: '12',
+      status: 'FAILED',
+      traceId: 'upload-trace-12',
+    })
+  })
+
   it('parses session SSE content events', async () => {
     const encoder = new TextEncoder()
     const rawRequest = vi.fn().mockResolvedValue(
