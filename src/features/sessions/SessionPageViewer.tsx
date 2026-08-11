@@ -56,7 +56,7 @@ export function SessionPageViewer({
   const viewerGridClassName = cx(
     'grid min-h-0 flex-1',
     isOutlineVisible
-      ? 'grid-cols-[108px_minmax(0,1fr)] sm:grid-cols-[120px_minmax(0,1fr)]'
+      ? 'grid-cols-[144px_minmax(0,1fr)] sm:grid-cols-[152px_minmax(0,1fr)]'
       : 'grid-cols-[minmax(0,1fr)]',
   )
 
@@ -329,7 +329,7 @@ function PageOutline({
   return (
     <nav
       aria-label="자료 페이지"
-      className="grid content-start gap-2 overflow-y-auto border-r border-stone-200 bg-stone-50 p-2"
+      className="grid content-start gap-2 overflow-y-auto border-r border-stone-200 bg-stone-50 p-2 [scrollbar-gutter:stable]"
     >
       {Array.from({ length: totalPages }, (_, index) => index + 1).map(
         (pageNumber) => (

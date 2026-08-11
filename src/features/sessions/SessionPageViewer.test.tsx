@@ -31,9 +31,10 @@ describe('SessionPageViewer', () => {
     fireEvent.click(outlineButton)
 
     expect(outlineButton).toHaveAttribute('aria-pressed', 'true')
-    expect(
-      screen.getByRole('navigation', { name: '자료 페이지' }),
-    ).toBeInTheDocument()
+    const pageOutline = screen.getByRole('navigation', { name: '자료 페이지' })
+    expect(pageOutline).toBeInTheDocument()
+    expect(pageOutline).toHaveClass('[scrollbar-gutter:stable]')
+    expect(pageOutline.parentElement).toHaveClass('grid-cols-[144px_minmax(0,1fr)]')
 
     fireEvent.click(screen.getByRole('button', { name: '너비 맞춤' }))
     expect(screen.getByRole('button', { name: '너비 맞춤' })).toHaveAttribute('aria-pressed', 'true')
