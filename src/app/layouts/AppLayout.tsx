@@ -2,6 +2,7 @@ import {
   Bell,
   BookOpenCheck,
   CalendarDays,
+  Check,
   ChevronsLeft,
   ChevronsRight,
   CircleHelp,
@@ -80,9 +81,15 @@ export function AppLayout() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
-  const [instructorClassrooms, setInstructorClassrooms] = useState<Classroom[]>([])
+  const [sidebarClassrooms, setSidebarClassrooms] = useState<Classroom[]>([])
   const [notificationReferenceTime, setNotificationReferenceTime] = useState(
     () => Date.now(),
+  )
+  const notificationStorageKey = `edupilot:read-calendar-events:${user?.id ?? user?.email ?? 'anonymous'}`
+  const [readNotificationIdsByUser, setReadNotificationIdsByUser] = useState<Record<string, string[]>>({})
+  const readNotificationIds = useMemo(
+    () => readNotificationIdsByUser[notificationStorageKey] ?? readNotificationIdsFromStorage(notificationStorageKey),
+    [notificationStorageKey, readNotificationIdsByUser],
   )
   const roleLabel = getRoleLabel(user?.role)
   const isInstructor = isInstructorRole(user?.role)
@@ -98,10 +105,11 @@ export function AppLayout() {
     return calendarEvents
       .filter(
         (event) =>
-          new Date(event.startsAt).getTime() >= notificationReferenceTime,
+          new Date(event.startsAt).getTime() >= notificationReferenceTime &&
+          !readNotificationIds.includes(event.id),
       )
       .slice(0, 5)
-  }, [calendarEvents, notificationReferenceTime])
+  }, [calendarEvents, notificationReferenceTime, readNotificationIds])
   const primaryNavigation = useMemo(() => isInstructor
     ? instructorNavigation
     : learnerNavigation, [isInstructor])
@@ -117,20 +125,20 @@ export function AppLayout() {
   }, [isStudyWorkspace])
 
   useEffect(() => {
-    if (!isInstructor) {
-      return
-    }
-
     let cancelled = false
     const refresh = () => {
       classroomsRepository
         .list()
         .then((items) => {
           if (!cancelled) {
-            setInstructorClassrooms(items.filter((item) => item.status === 'ACTIVE'))
-            setPendingJoinRequestCount(
-              items.reduce((sum, item) => sum + item.pendingRequestCount, 0),
+            setSidebarClassrooms(
+              isInstructor
+                ? items.filter((item) => item.status === 'ACTIVE')
+                : items,
             )
+            setPendingJoinRequestCount(isInstructor
+              ? items.reduce((sum, item) => sum + item.pendingRequestCount, 0)
+              : 0)
           }
         })
         .catch(() => undefined)
@@ -327,7 +335,6 @@ export function AppLayout() {
                 isCollapsed && 'lg:flex-col',
               )}
             >
-              {isInstructor ? (
               <div className="relative" ref={notificationsRef}>
                 <button
                   aria-expanded={isNotificationsOpen}
@@ -352,6 +359,17 @@ export function AppLayout() {
                   <NotificationPanel
                     events={upcomingEvents}
                     isCollapsed={isCollapsed}
+                    onMarkRead={() => {
+                      const nextIds = [...new Set([
+                        ...readNotificationIds,
+                        ...upcomingEvents.map((event) => event.id),
+                      ])]
+                      setReadNotificationIdsByUser((current) => ({
+                        ...current,
+                        [notificationStorageKey]: nextIds,
+                      }))
+                      window.localStorage.setItem(notificationStorageKey, JSON.stringify(nextIds))
+                    }}
                     onOpenCalendar={() => {
                       setIsNotificationsOpen(false)
                       navigate(routes.calendar)
@@ -359,7 +377,6 @@ export function AppLayout() {
                   />
                 ) : null}
               </div>
-              ) : null}
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex"
@@ -414,9 +431,9 @@ export function AppLayout() {
                     </span>
                   ) : null}
                 </NavLink>
-                {isInstructor && item.label === '강의실' && instructorClassrooms.length > 0 ? (
+                {item.label === '강의실' && sidebarClassrooms.length > 0 ? (
                   <div className={cx('ml-5 hidden border-l border-stone-200 py-1 pl-2 lg:flex lg:flex-col lg:gap-0.5', isCollapsed && 'lg:hidden')}>
-                    {instructorClassrooms.map((classroom) => (
+                    {sidebarClassrooms.map((classroom) => (
                       <NavLink
                         className={({ isActive }) => cx(
                           'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800',
@@ -482,40 +499,6 @@ export function AppLayout() {
               </span>
             </span>
           </button>
-          {!isInstructor && !isCollapsed ? (
-            <div className="relative" ref={notificationsRef}>
-              <button
-                aria-expanded={isNotificationsOpen}
-                aria-haspopup="dialog"
-                aria-label={`알림 ${upcomingEvents.length}개`}
-                className="relative flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-                onClick={() => {
-                  setIsNotificationsOpen((open) => !open)
-                  setIsMenuOpen(false)
-                }}
-                title="예정 알림"
-                type="button"
-              >
-                <Bell aria-hidden="true" size={15} />
-                {upcomingEvents.length > 0 ? (
-                  <span className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 type-micro font-bold leading-4 text-white">
-                    {upcomingEvents.length > 9 ? '9+' : upcomingEvents.length}
-                  </span>
-                ) : null}
-              </button>
-              {isNotificationsOpen ? (
-                <NotificationPanel
-                  events={upcomingEvents}
-                  isCollapsed={false}
-                  onOpenCalendar={() => {
-                    setIsNotificationsOpen(false)
-                    navigate(routes.calendar)
-                  }}
-                  placement="footer"
-                />
-              ) : null}
-            </div>
-          ) : null}
           {isMenuOpen ? (
             <div
               className={cx(
@@ -557,11 +540,13 @@ export function AppLayout() {
 function NotificationPanel({
   events,
   isCollapsed,
+  onMarkRead,
   onOpenCalendar,
   placement = 'header',
 }: {
   events: CalendarEvent[]
   isCollapsed: boolean
+  onMarkRead: () => void
   onOpenCalendar: () => void
   placement?: 'footer' | 'header'
 }) {
@@ -581,13 +566,26 @@ function NotificationPanel({
     >
       <div className="flex h-12 items-center justify-between border-b border-stone-100 px-4">
         <h2 className="type-body font-bold text-stone-900">예정 알림</h2>
-        <button
-          className="type-caption font-semibold text-brand-700 hover:text-brand-900"
-          onClick={onOpenCalendar}
-          type="button"
-        >
-          캘린더 열기
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 type-micro font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-800 disabled:cursor-default disabled:opacity-40"
+            disabled={events.length === 0}
+            onClick={onMarkRead}
+            type="button"
+          >
+            <Check aria-hidden="true" size={12} />
+            읽음 처리
+          </button>
+          <button
+            aria-label="캘린더 열기"
+            className="inline-flex size-7 items-center justify-center rounded-md text-brand-700 hover:bg-brand-50 hover:text-brand-900"
+            onClick={onOpenCalendar}
+            title="캘린더 열기"
+            type="button"
+          >
+            <CalendarDays aria-hidden="true" size={14} />
+          </button>
+        </div>
       </div>
       {events.length > 0 ? (
         <div className="max-h-80 overflow-y-auto py-1.5">
@@ -623,6 +621,15 @@ function NotificationPanel({
       )}
     </div>
   )
+}
+
+function readNotificationIdsFromStorage(storageKey: string): string[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]') as unknown
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {

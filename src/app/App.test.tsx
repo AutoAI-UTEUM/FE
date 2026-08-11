@@ -120,6 +120,44 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
   })
 
+  it('shows enrolled classrooms in the learner sidebar', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
+        return apiSuccess({
+          items: [{
+            classroomId: 12,
+            color: 'BLUE',
+            currentWeek: 1,
+            description: '학습자 강의실',
+            endDate: '2026-11-15',
+            instructorName: '박교수',
+            learnerCount: 20,
+            name: '자연어처리 개론',
+            pendingRequestCount: 0,
+            progressRate: 30,
+            startDate: '2026-08-03',
+            status: 'ACTIVE',
+            weekCount: 15,
+          }],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return undefined
+    })
+
+    renderRoute('/')
+
+    expect(await screen.findByRole('link', { name: '자연어처리 개론' })).toHaveAttribute(
+      'href',
+      '/classrooms/12',
+    )
+    expect(screen.getByRole('button', { name: '알림 0개' })).toBeInTheDocument()
+  })
+
   it('shows an access error for learners on instructor-only routes', () => {
     renderRoute('/classrooms/12/entrance-requests')
 
@@ -365,6 +403,13 @@ describe('AppRoutes', () => {
     expect(
       screen.getByRole('button', { name: '캘린더 열기' }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '캘린더 열기' })).not.toHaveTextContent('캘린더 열기')
+
+    fireEvent.click(screen.getByRole('button', { name: '읽음 처리' }))
+
+    expect(notificationPanel).toHaveTextContent('예정된 알림이 없습니다')
+    expect(screen.getByRole('button', { name: '알림 0개' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('edupilot:read-calendar-events:7')).not.toBeNull()
   })
 
   it('renders the not found route for unknown paths', () => {

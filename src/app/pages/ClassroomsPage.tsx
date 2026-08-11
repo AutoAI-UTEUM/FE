@@ -153,7 +153,6 @@ function LearnerClassroomsPage() {
     <PageContainer>
       <PageHeader
         title="내 강의실"
-        titleAccessory={<p className="type-caption text-stone-400">참여 중 {classrooms.length}개</p>}
         actions={<>
           <button
             aria-label="강의실 검색"
@@ -247,17 +246,22 @@ function LearnerClassroomsPage() {
         </h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sortedClassrooms.map((classroom) => (
-            <Link className="flex min-h-44 flex-col rounded-lg border border-stone-200 bg-white p-4 hover:border-brand-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" key={classroom.id} to={classroomDetailPath(classroom.id)}>
-              <div className="flex items-center gap-3">
-                <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg type-body font-bold ${getClassroomTone(classroom)}`}>
+            <Link className="flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 hover:border-brand-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" key={classroom.id} to={classroomDetailPath(classroom.id)}>
+              <div className="flex items-start gap-4">
+                <span className={`flex size-11 shrink-0 items-center justify-center rounded-lg type-body font-bold ${getClassroomTone(classroom)}`}>
                   {classroom.name.slice(0, 1)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <h2 className="truncate type-body font-bold text-stone-950">{classroom.name}</h2>
+                  <h2 className="truncate type-card-title font-bold text-stone-950">{classroom.name}</h2>
                   <p className="mt-0.5 truncate type-micro text-stone-400">
                     {classroom.instructorName} · {classroom.currentWeek ?? 1}주차
                   </p>
                 </div>
+                <span className={classroom.status === 'ACTIVE'
+                  ? 'rounded-full bg-emerald-50 px-2 py-1 type-micro font-semibold text-emerald-700'
+                  : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'}>
+                  {classroom.status === 'ACTIVE' ? '수강 중' : '종료'}
+                </span>
               </div>
               <div className="mt-auto pt-5">
                 <div className="flex items-center justify-between type-micro">

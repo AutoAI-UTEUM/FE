@@ -49,23 +49,27 @@ export function ClassroomDetailPage() {
   const isReadOnly = classroom?.status === 'COMPLETED'
   const canManage = isInstructor && !isReadOnly
 
-  const loadResource = useCallback(async (key: ResourceKey) => {
+  const loadResource = useCallback(async (key: ResourceKey, classroomSnapshot?: Classroom) => {
     try {
-      if (key === 'weeks') setWeeks(sortWeeks(await classroomsRepository.listWeeks(classroomId)))
+      if (key === 'weeks') {
+        const loadedWeeks = await classroomsRepository.listWeeks(classroomId)
+        setWeeks(getVisibleWeeks(loadedWeeks, classroomSnapshot, isInstructor))
+      }
       if (key === 'notices') setNotices(await classroomsRepository.listNotices(classroomId))
       if (key === 'exams') setExams(await examsRepository.list(classroomId))
       setResourceErrors((current) => ({ ...current, [key]: undefined }))
     } catch (error) {
       setResourceErrors((current) => ({ ...current, [key]: getRequestErrorMessage(error) }))
     }
-  }, [classroomId, classroomsRepository, examsRepository])
+  }, [classroomId, classroomsRepository, examsRepository, isInstructor])
 
   const load = useCallback(async () => {
     setIsLoading(true)
     setClassroomError(null)
     try {
-      setClassroom(await classroomsRepository.get(classroomId))
-      await Promise.all([loadResource('weeks'), loadResource('notices'), loadResource('exams')])
+      const nextClassroom = await classroomsRepository.get(classroomId)
+      setClassroom(nextClassroom)
+      await Promise.all([loadResource('weeks', nextClassroom), loadResource('notices'), loadResource('exams')])
     } catch (error) {
       setClassroomError(getRequestErrorMessage(error))
     } finally {
@@ -83,7 +87,7 @@ export function ClassroomDetailPage() {
     function refreshVisibleContent() {
       if (document.visibilityState === 'visible') {
         void Promise.all([
-          loadResource('weeks'),
+          loadResource('weeks', classroom ?? undefined),
           loadResource('notices'),
           loadResource('exams'),
         ])
@@ -96,7 +100,7 @@ export function ClassroomDetailPage() {
       window.removeEventListener('focus', refreshVisibleContent)
       document.removeEventListener('visibilitychange', refreshVisibleContent)
     }
-  }, [loadResource])
+  }, [classroom, loadResource])
 
   const refreshWeekMaterials = useCallback(async (materialId?: string) => {
     const expectedId = materialId ?? pendingMaterialId
@@ -106,7 +110,11 @@ export function ClassroomDetailPage() {
     }
     if (expectedId) materialRefreshAttempts.current += 1
     try {
-      const nextWeeks = sortWeeks(await classroomsRepository.listWeeks(classroomId))
+      const nextWeeks = getVisibleWeeks(
+        await classroomsRepository.listWeeks(classroomId),
+        classroom ?? undefined,
+        isInstructor,
+      )
       setWeeks(nextWeeks)
       if (expectedId && nextWeeks.some((week) => week.materials.some((material) => material.id === expectedId))) {
         materialRefreshAttempts.current = 0
@@ -115,7 +123,7 @@ export function ClassroomDetailPage() {
     } catch {
       // The visible retry control handles background refresh failures.
     }
-  }, [classroomId, classroomsRepository, pendingMaterialId])
+  }, [classroom, classroomId, classroomsRepository, isInstructor, pendingMaterialId])
 
   usePolling(
     Boolean(pendingMaterialId) || weeks.some((week) => week.materials.some((material) => material.status === 'PROCESSING')),
@@ -311,6 +319,33 @@ function parseFilter(value: string | null): ClassroomContentFilter {
 
 function sortWeeks(weeks: ClassroomWeek[]): ClassroomWeek[] {
   return [...weeks].sort((left, right) => left.displayOrder - right.displayOrder || left.weekNumber - right.weekNumber)
+}
+
+function getVisibleWeeks(
+  loadedWeeks: ClassroomWeek[],
+  classroom: Classroom | undefined,
+  isInstructor: boolean,
+): ClassroomWeek[] {
+  if (isInstructor || !classroom) return sortWeeks(loadedWeeks)
+
+  const weeksByNumber = new Map(loadedWeeks.map((week) => [week.weekNumber, week]))
+  const lastReturnedWeek = loadedWeeks.reduce(
+    (maximum, week) => Math.max(maximum, week.weekNumber),
+    0,
+  )
+  const weekCount = Math.max(classroom.weekCount, lastReturnedWeek)
+
+  return Array.from({ length: weekCount }, (_, index) => {
+    const weekNumber = index + 1
+    return weeksByNumber.get(weekNumber) ?? {
+      displayOrder: weekNumber,
+      id: `upcoming-${classroom.id}-${weekNumber}`,
+      materials: [],
+      status: 'SCHEDULED',
+      title: `${weekNumber}주차`,
+      weekNumber,
+    }
+  })
 }
 
 function UploadMaterialDialog({ initialWeekNumber, isUploading, onClose, onUpload, weeks }: { initialWeekNumber?: number; isUploading: boolean; onClose: () => void; onUpload: (file: File, weekNumber: number) => Promise<boolean>; weeks: ClassroomWeek[] }) {

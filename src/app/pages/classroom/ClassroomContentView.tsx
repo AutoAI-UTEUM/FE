@@ -17,8 +17,8 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
   return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white">
     <nav aria-label="강의실 주차" className="flex-1 space-y-0.5 p-1.5">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
-      {weeks.map((week) => {
-        const period = formatWeekPeriod(startDate, endDate, week.weekNumber)
+      {weeks.map((week, index) => {
+        const period = formatWeekPeriod(startDate, endDate, index + 1)
         return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={weekRailButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><strong className="min-w-0 truncate text-left type-caption">{week.title}</strong>{period ? <span className="text-left type-micro tabular-nums text-stone-400">{period}</span> : <span />}</button>
       })}
       {weeks.length === 0 ? <p className="px-3 py-8 text-center type-control text-stone-400">등록된 주차 없음</p> : null}
@@ -68,7 +68,9 @@ export function ClassroomContentPanel({
   startDate: string
 }) {
   const title = selectedWeekNumber === null ? '전체 콘텐츠' : selectedWeek?.title ?? ''
-  const period = selectedWeekNumber === null ? '' : formatWeekPeriod(startDate, endDate, selectedWeekNumber)
+  const period = selectedWeekNumber === null || !selectedWeek
+    ? ''
+    : formatWeekPeriod(startDate, endDate, selectedWeek.displayOrder)
 
   function dragOver(event: DragEvent<HTMLElement>) {
     if (!canManage || selectedWeekNumber === null) return

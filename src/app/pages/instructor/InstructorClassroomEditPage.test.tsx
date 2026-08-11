@@ -219,6 +219,96 @@ describe('InstructorClassroomEditPage', () => {
     expect(await screen.findByText('강의실 주차 페이지')).toBeInTheDocument()
   })
 
+  it('keeps reordered weeks as a draft until the save button is pressed', async () => {
+    const writes: Array<{ body: Record<string, unknown>; method: string; pathname: string }> = []
+    const firstWeek = {
+      displayOrder: 1,
+      materials: [],
+      releaseAt: '2026-08-02T15:00:00Z',
+      status: 'PUBLISHED',
+      title: '기초',
+      weekId: 101,
+      weekNumber: 1,
+    }
+    const secondWeek = {
+      displayOrder: 2,
+      materials: [],
+      releaseAt: '2026-08-09T15:00:00Z',
+      status: 'SCHEDULED',
+      title: '심화',
+      weekId: 102,
+      weekNumber: 2,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+      if (method !== 'GET') {
+        const body = input instanceof Request
+          ? await input.clone().json() as Record<string, unknown>
+          : JSON.parse(String(init?.body)) as Record<string, unknown>
+        writes.push({ body, method, pathname: url.pathname })
+      }
+
+      if (url.pathname === '/api/classrooms/12' && method === 'GET') {
+        return success({ ...classroomFixture, endDate: '2026-08-16', weekCount: 2 })
+      }
+      if (url.pathname === '/api/classrooms/12/weeks' && method === 'GET') {
+        return success({ items: [firstWeek, secondWeek] })
+      }
+      if (url.pathname === '/api/classrooms/12/invite-code') {
+        return success({ inviteCode: '7QK4-MZ2A' })
+      }
+      if (url.pathname === '/api/classrooms/12/weeks/1' && method === 'PATCH') {
+        return success({ ...firstWeek, releaseAt: String(writes.at(-1)?.body.releaseAt) })
+      }
+      if (url.pathname === '/api/classrooms/12/weeks/2' && method === 'PATCH') {
+        return success({ ...secondWeek, releaseAt: String(writes.at(-1)?.body.releaseAt) })
+      }
+      if (url.pathname === '/api/classrooms/12/weeks/reorder' && method === 'PATCH') {
+        return success({
+          items: [
+            { ...secondWeek, displayOrder: 1 },
+            { ...firstWeek, displayOrder: 2 },
+          ],
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/classrooms/12/edit']}>
+        <AuthProvider initialUser={{ email: 'instructor@example.com', id: 7, name: '강의자', role: 'INSTRUCTOR' }}>
+          <ToastProvider>
+            <Routes>
+              <Route path="/classrooms/:classroomId/edit" element={<InstructorClassroomEditPage />} />
+              <Route path="/classrooms/:classroomId" element={<p>강의실 주차 페이지</p>} />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    const dataTransfer = { effectAllowed: 'none', setData: vi.fn() }
+    fireEvent.dragStart(await screen.findByRole('button', { name: '1주차 순서 이동' }), { dataTransfer })
+    const secondWeekRow = screen.getByLabelText('2주차 항목')
+    fireEvent.dragEnter(secondWeekRow, { dataTransfer })
+    fireEvent.drop(secondWeekRow, { dataTransfer })
+
+    expect(writes).toEqual([])
+    expect(screen.queryByText('주차 순서를 변경했습니다.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('1주차 이름')).toHaveValue('심화')
+
+    fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
+
+    await waitFor(() => expect(writes.some((write) => write.pathname.endsWith('/weeks/reorder'))).toBe(true))
+    const weekWrites = writes.filter((write) => /\/weeks\/\d+$/.test(write.pathname))
+    expect(weekWrites).toHaveLength(2)
+    expect(toKoreanDate(String(weekWrites.find((write) => write.pathname.endsWith('/1'))?.body.releaseAt))).toBe('2026-08-10')
+    expect(toKoreanDate(String(weekWrites.find((write) => write.pathname.endsWith('/2'))?.body.releaseAt))).toBe('2026-08-03')
+    expect(await screen.findByText('강의실 주차 페이지')).toBeInTheDocument()
+  })
+
   it('expands the classroom period before creating an added week', async () => {
     const writes: Array<{ body: Record<string, unknown>; method: string; pathname: string }> = []
     let weekCreated = false
@@ -335,4 +425,13 @@ function success(data: unknown): Response {
       status: 200,
     },
   )
+}
+
+function toKoreanDate(value: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+  }).format(new Date(value))
 }

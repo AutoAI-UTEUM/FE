@@ -133,23 +133,6 @@ export function InstructorClassroomEditPage() {
     moveWeekTo(draggedWeek, weekNumber)
   }
 
-  async function persistWeekOrder() {
-    setDraggedWeek(null)
-    const orderedWeekIds = weekOrder
-      .map((weekNumber) => weekByNumber.get(weekNumber)?.id)
-      .filter((weekId): weekId is string => Boolean(weekId))
-    if (orderedWeekIds.length !== weeks.length || orderedWeekIds.length === 0) return
-    try {
-      const reordered = await repository.reorderWeeks(classroomId, orderedWeekIds)
-      setWeeks(reordered)
-      setWeekOrder([...reordered].sort((left, right) => left.displayOrder - right.displayOrder).map((week) => week.weekNumber))
-      showToast('주차 순서를 변경했습니다.', 'success')
-    } catch (requestError) {
-      setWeekOrder([...weeks].sort((left, right) => left.displayOrder - right.displayOrder).map((week) => week.weekNumber))
-      showToast(getRequestErrorMessage(requestError), 'danger')
-    }
-  }
-
   async function deleteWeek(weekNumber: number) {
     const week = weekByNumber.get(weekNumber)
     if (week?.materials.length) {
@@ -224,6 +207,17 @@ export function InstructorClassroomEditPage() {
         ...(startDate !== classroom.startDate ? { shiftWeekReleaseDates: true } : {}),
       }
       const isRangeExpanding = new Date(`${nextEndDate}T00:00:00Z`) > new Date(`${classroom.endDate}T00:00:00Z`)
+      const originalWeekOrder = [...weeks]
+        .sort((left, right) => left.displayOrder - right.displayOrder)
+        .map((week) => week.weekNumber)
+      const existingDraftOrder = weekOrder.filter((weekNumber) => weekByNumber.has(weekNumber))
+      const orderChanged = existingDraftOrder.some(
+        (weekNumber, index) => weekNumber !== originalWeekOrder[index],
+      )
+      const scheduleChanged = startDate !== classroom.startDate || orderChanged
+      const positionByWeekNumber = new Map(
+        weekOrder.map((weekNumber, index) => [weekNumber, index]),
+      )
 
       // The server validates new weeks against the current classroom date range.
       if (isRangeExpanding && Object.keys(classroomChanges).length > 0) {
@@ -233,14 +227,19 @@ export function InstructorClassroomEditPage() {
       for (let weekNumber = 1; weekNumber <= weekCount; weekNumber += 1) {
         const existingWeek = weekByNumber.get(weekNumber)
         const nextTitle = weekTitles[weekNumber]?.trim() || `${weekNumber}주차`
+        const weekIndex = positionByWeekNumber.get(weekNumber) ?? weekNumber - 1
+        const nextReleaseAt = toReleaseAt(startDate, weekIndex)
         if (!existingWeek) {
           await repository.createWeek(classroomId, {
-            releaseAt: toReleaseAt(startDate, weekNumber - 1),
+            releaseAt: nextReleaseAt,
             title: nextTitle,
             weekNumber,
           })
-        } else if (existingWeek.title !== nextTitle) {
-          await repository.updateWeek(classroomId, weekNumber, { title: nextTitle })
+        } else if (existingWeek.title !== nextTitle || scheduleChanged) {
+          await repository.updateWeek(classroomId, weekNumber, {
+            ...(scheduleChanged ? { releaseAt: nextReleaseAt } : {}),
+            ...(existingWeek.title !== nextTitle ? { title: nextTitle } : {}),
+          })
         }
       }
 
@@ -260,8 +259,8 @@ export function InstructorClassroomEditPage() {
       const currentWeekIds = [...savedWeeks]
         .sort((left, right) => left.displayOrder - right.displayOrder)
         .map((week) => week.id)
-      const orderChanged = orderedWeekIds.some((weekId, index) => weekId !== currentWeekIds[index])
-      if (orderedWeekIds.length === savedWeeks.length && orderedWeekIds.length > 0 && orderChanged) {
+      const savedOrderChanged = orderedWeekIds.some((weekId, index) => weekId !== currentWeekIds[index])
+      if (orderedWeekIds.length === savedWeeks.length && orderedWeekIds.length > 0 && savedOrderChanged) {
         await repository.reorderWeeks(classroomId, orderedWeekIds)
       }
       showToast('강의실 정보를 저장했습니다.', 'success')
@@ -389,7 +388,7 @@ export function InstructorClassroomEditPage() {
                     key={weekNumber}
                     onDragEnter={(event) => enterWeekDropTarget(event, weekNumber)}
                     onDragOver={(event) => { if (draggedWeek !== null) event.preventDefault() }}
-                    onDrop={(event) => { event.preventDefault(); void persistWeekOrder() }}
+                    onDrop={(event) => { event.preventDefault(); setDraggedWeek(null) }}
                   >
                     <div>
                       <button
