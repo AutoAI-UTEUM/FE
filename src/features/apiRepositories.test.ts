@@ -55,7 +55,7 @@ describe('remote feature repositories', () => {
     )
 
     const file = new File(['pdf'], '새 자료.pdf', { type: 'application/pdf' })
-    await expect(repository.upload(file)).resolves.toMatchObject({
+    await expect(repository.upload(file, { title: '새 자료' })).resolves.toMatchObject({
       id: '11',
       status: 'PROCESSING',
     })
@@ -65,7 +65,7 @@ describe('remote feature repositories', () => {
     }
     expect(uploadOptions.method).toBe('POST')
     expect(uploadOptions.body.get('file')).toBe(file)
-    expect(uploadOptions.body.get('title')).toBe('새 자료.pdf')
+    expect(uploadOptions.body.get('title')).toBe('새 자료')
   })
 
   it('loads authenticated PDF files as binary data', async () => {

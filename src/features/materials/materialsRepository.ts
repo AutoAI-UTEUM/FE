@@ -35,7 +35,12 @@ export interface MaterialsRepository {
   refreshStatuses: (signal?: AbortSignal) => Promise<StudyMaterial[]>
   upload: (
     file: File,
-    options?: { classroomId?: string; signal?: AbortSignal; weekNumber?: number },
+    options: {
+      classroomId?: string
+      signal?: AbortSignal
+      title: string
+      weekNumber?: number
+    },
   ) => Promise<StudyMaterial>
 }
 
@@ -97,7 +102,7 @@ export function createMaterialsRepository(
     async upload(file, options) {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('title', file.name)
+      formData.append('title', options.title.trim())
       if (options?.classroomId && options.weekNumber) {
         formData.append('classroomId', options.classroomId)
         formData.append('weekNumber', String(options.weekNumber))

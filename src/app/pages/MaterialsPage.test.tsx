@@ -160,7 +160,7 @@ describe('MaterialsPage', () => {
   })
 
   it(
-    'adds the material returned by the upload API',
+    'lets the user confirm an extensionless title before uploading',
     async () => {
       renderMaterialsPage()
       await screen.findByText('시험 대비 요약.pdf')
@@ -173,10 +173,18 @@ describe('MaterialsPage', () => {
         },
       })
 
+      expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('uploaded')
+      expect(screen.queryByRole('heading', { name: 'uploaded' })).not.toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('textbox', { name: '자료 제목' }), {
+        target: { value: '최적화 강의' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: '업로드' }))
+
       expect(
         await screen.findByRole(
           'heading',
-          { name: 'uploaded.pdf' },
+          { name: '최적화 강의' },
           { timeout: 10_000 },
         ),
       ).toBeInTheDocument()
@@ -186,6 +194,63 @@ describe('MaterialsPage', () => {
     },
     15_000,
   )
+
+  it('removes an uppercase PDF extension and rejects an empty title', async () => {
+    renderMaterialsPage()
+    await screen.findByText('시험 대비 요약.pdf')
+
+    fireEvent.change(screen.getByLabelText('PDF 파일'), {
+      target: {
+        files: [new File(['pdf'], 'LECTURE.PDF', { type: 'application/pdf' })],
+      },
+    })
+
+    const titleInput = screen.getByRole('textbox', { name: '자료 제목' })
+    const uploadButton = screen.getByRole('button', { name: '업로드' })
+    expect(titleInput).toHaveValue('LECTURE')
+    expect(uploadButton).toBeEnabled()
+
+    fireEvent.change(titleInput, { target: { value: '   ' } })
+    expect(uploadButton).toBeDisabled()
+  })
+
+  it('ignores duplicate submissions while an upload is pending', async () => {
+    let uploadCalls = 0
+    let resolveUpload!: (response: Response) => void
+    const pendingUpload = new Promise<Response>((resolve) => {
+      resolveUpload = resolve
+    })
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'POST' && url.pathname === '/api/materials') {
+        uploadCalls += 1
+        return pendingUpload
+      }
+      return undefined
+    })
+    renderMaterialsPage()
+    await screen.findByText('시험 대비 요약.pdf')
+
+    fireEvent.change(screen.getByLabelText('PDF 파일'), {
+      target: {
+        files: [new File(['pdf'], 'lecture.pdf', { type: 'application/pdf' })],
+      },
+    })
+
+    const form = screen.getByRole('textbox', { name: '자료 제목' }).closest('form')
+    expect(form).not.toBeNull()
+    fireEvent.submit(form!)
+    fireEvent.submit(form!)
+
+    await waitFor(() => expect(uploadCalls).toBe(1))
+    resolveUpload(apiSuccess({
+      createdAt: '2026-08-12T00:00:00Z',
+      materialId: 99,
+      processingStatus: 'PROCESSING',
+      title: 'lecture',
+    }))
+    expect(await screen.findByRole('heading', { name: 'lecture' })).toBeInTheDocument()
+  })
 })
 
 describe('MaterialViewerRedirectPage', () => {

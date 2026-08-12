@@ -13,13 +13,17 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
+  type FormEvent,
 } from 'react'
 
 import {
   createMaterialsRepository,
+  getDefaultMaterialTitle,
   getMaterialFailureMessage,
   getMaterialStatusLabel,
+  MAX_MATERIAL_TITLE_LENGTH,
   validateMaterialUpload,
+  validateMaterialTitle,
   type MaterialStatus,
   type StudyMaterial,
 } from '../../features/materials'
@@ -53,13 +57,17 @@ export function MaterialsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isDropActive, setIsDropActive] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
+  const [materialTitle, setMaterialTitle] = useState('')
   const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(
     null,
   )
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const materialMutationVersionRef = useRef(0)
+  const uploadInFlightRef = useRef(false)
   const readyCount = useMemo(
     () => materials.filter((material) => material.status === 'READY').length,
     [materials],
@@ -104,34 +112,59 @@ export function MaterialsPage() {
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
-    await acceptFile(file)
+    acceptFile(file)
     event.target.value = ''
   }
 
   async function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setIsDropActive(false)
-    await acceptFile(event.dataTransfer.files?.[0] ?? null)
+    acceptFile(event.dataTransfer.files?.[0] ?? null)
   }
 
-  async function acceptFile(file: File | null) {
+  function acceptFile(file: File | null) {
     const validationError = validateMaterialUpload(file)
     setUploadError(validationError)
 
     if (validationError || !file) {
+      setSelectedFile(null)
       setSelectedFileName(null)
+      setMaterialTitle('')
       return
     }
 
+    setSelectedFile(file)
+    setSelectedFileName(file.name)
+    setMaterialTitle(getDefaultMaterialTitle(file.name))
+  }
+
+  async function submitUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (uploadInFlightRef.current) return
+
+    const fileError = validateMaterialUpload(selectedFile)
+    const titleError = validateMaterialTitle(materialTitle)
+    const validationError = fileError ?? titleError
+    setUploadError(validationError)
+    if (validationError || !selectedFile) return
+
+    uploadInFlightRef.current = true
+    setIsUploading(true)
     try {
-      const nextMaterial = await repository.upload(file)
+      const nextMaterial = await repository.upload(selectedFile, {
+        title: materialTitle.trim(),
+      })
       materialMutationVersionRef.current += 1
-      setSelectedFileName(file.name)
       setMaterials((current) => [nextMaterial, ...current])
+      setSelectedFile(null)
+      setSelectedFileName(null)
+      setMaterialTitle('')
       showToast('업로드를 시작했습니다. 처리 상태를 확인하세요.', 'success')
     } catch (error) {
       setUploadError(getRequestErrorMessage(error))
-      setSelectedFileName(null)
+    } finally {
+      uploadInFlightRef.current = false
+      setIsUploading(false)
     }
   }
 
@@ -186,7 +219,7 @@ export function MaterialsPage() {
         }
       />
 
-      <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <form className="overflow-hidden rounded-xl border border-stone-200 bg-white" onSubmit={submitUpload}>
         <div className="flex flex-col gap-3 border-b border-stone-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
             <h2 className="type-section-title font-bold text-stone-950">PDF 업로드</h2>
@@ -238,6 +271,7 @@ export function MaterialsPage() {
           </div>
           <Button
             className="mt-3 shrink-0 sm:mt-0"
+            disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >
@@ -246,12 +280,38 @@ export function MaterialsPage() {
           </Button>
         </div>
 
+        <div className="mx-4 mb-4 flex flex-col gap-3 sm:mx-5 sm:mb-5 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1 type-control font-semibold text-stone-700">
+            자료 제목
+            <input
+              aria-invalid={Boolean(materialTitle && validateMaterialTitle(materialTitle))}
+              className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body text-stone-950 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              disabled={!selectedFile || isUploading}
+              maxLength={MAX_MATERIAL_TITLE_LENGTH}
+              onChange={(event) => {
+                setMaterialTitle(event.target.value)
+                setUploadError(null)
+              }}
+              placeholder="자료 제목을 입력하세요."
+              value={materialTitle}
+            />
+          </label>
+          <Button
+            className="shrink-0"
+            disabled={!selectedFile || Boolean(validateMaterialTitle(materialTitle)) || isUploading}
+            type="submit"
+          >
+            <Upload aria-hidden="true" size={15} />
+            {isUploading ? '업로드 중' : '업로드'}
+          </Button>
+        </div>
+
         {uploadError ? (
           <p className="mx-4 mb-4 type-body font-medium text-rose-700 sm:mx-5 sm:mb-5" role="alert">
             {uploadError}
           </p>
         ) : null}
-      </section>
+      </form>
 
       <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
         <div className="flex items-center justify-between border-b border-stone-200 px-4 py-4 sm:px-5">
