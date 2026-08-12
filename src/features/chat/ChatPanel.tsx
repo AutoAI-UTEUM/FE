@@ -1,11 +1,14 @@
 import {
   ArrowUp,
+  CheckCircle2,
   Copy,
   FileText,
+  ListChecks,
   NotebookPen,
   RotateCcw,
   Share2,
   Trash2,
+  XCircle,
 } from 'lucide-react'
 import {
   useEffect,
@@ -19,11 +22,11 @@ import {
 } from 'react'
 import { cx } from '../../shared/lib/cx'
 import { getRequestErrorMessage } from '../../shared/api'
-import { formatTime } from '../../shared/lib/format'
+import { formatDateTime, formatTime } from '../../shared/lib/format'
 import { Button, MarkdownContent } from '../../shared/ui'
 import type { AuthenticatedRequest } from '../auth'
 import { createNotesRepository, type Note } from '../notes'
-import type { SessionTurnResult } from '../sessions'
+import type { SessionQuizSummary, SessionTurnResult } from '../sessions'
 import type { ChatMessage } from './chatTypes'
 import { getChatErrorMessage, type SessionChat } from './useSessionChat'
 
@@ -43,6 +46,12 @@ interface ChatPanelProps {
   onTurnCompleted?: (result: SessionTurnResult) => void
   /** 시안 빠른 칩의 "퀴즈 내줘" — 세션 화면의 유형 선택(W4)을 연다. */
   onRequestQuiz?: () => void
+  /** 현재 학습 세션에서 생성된 퀴즈 기록. */
+  quizzes?: SessionQuizSummary[]
+  quizzesError?: string | null
+  isLoadingQuizzes?: boolean
+  onOpenQuiz?: (quizId: string) => void
+  onReloadQuizzes?: () => void
   request?: AuthenticatedRequest
   sessionId: string
 }
@@ -69,14 +78,19 @@ export function ChatPanel({
   headerAction,
   onExplainCurrentPage,
   onExplainNextPage,
+  onOpenQuiz,
   onRequestQuiz,
+  onReloadQuizzes,
   onTurnCompleted,
+  quizzes = [],
+  quizzesError = null,
+  isLoadingQuizzes = false,
   request,
   sessionId,
 }: ChatPanelProps) {
   const [question, setQuestion] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'chat' | 'notes'>('chat')
+  const [tab, setTab] = useState<'chat' | 'notes' | 'quizzes'>('chat')
   const [notes, setNotes] = useState<Note[]>([])
   const [notesError, setNotesError] = useState<string | null>(null)
   const [hiddenMessageCount, setHiddenMessageCount] = useState(0)
@@ -237,8 +251,15 @@ export function ChatPanel({
       })
       setNotes((current) => [...current, note])
       setNotesError(null)
+      setError(null)
+      setMessageActionStatus('노트에 저장했습니다.')
       setTab('notes')
-    } catch (requestError) { setNotesError(getRequestErrorMessage(requestError)); setTab('notes') }
+    } catch (requestError) {
+      const message = getRequestErrorMessage(requestError)
+      setNotesError(message)
+      setError(`노트를 저장하지 못했습니다. ${message}`)
+      setMessageActionStatus('노트를 저장하지 못했습니다.')
+    }
   }
 
   async function startNewConversation() {
@@ -297,22 +318,31 @@ export function ChatPanel({
         className,
       )}
     >
-      <div className="flex h-13 shrink-0 items-center gap-1 border-b border-stone-200 px-3">
-        <PanelTab
-          isActive={tab === 'chat'}
-          label="AI 채팅"
-          onSelect={() => setTab('chat')}
-        />
-        <PanelTab
-          count={notes.length}
-          isActive={tab === 'notes'}
-          label="내 노트"
-          onSelect={() => setTab('notes')}
-        />
+      <div className="flex h-13 shrink-0 items-center border-b border-stone-200 px-3">
+        <div className="flex h-full min-w-0 flex-1 overflow-x-auto" role="tablist">
+          <PanelTab
+            isActive={tab === 'chat'}
+            label="AI 채팅"
+            onSelect={() => setTab('chat')}
+          />
+          <PanelTab
+            count={quizzes.length}
+            isActive={tab === 'quizzes'}
+            label="내 퀴즈"
+            onSelect={() => setTab('quizzes')}
+          />
+          <PanelTab
+            count={notes.length}
+            isActive={tab === 'notes'}
+            label="내 노트"
+            onSelect={() => setTab('notes')}
+          />
+        </div>
         <span className="sr-only">세션 {sessionId}</span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-2 flex shrink-0 items-center gap-1.5">
           {headerAction}
-          <button
+          {tab === 'chat' ? <button
+            aria-label={isStartingConversation ? '새 대화 시작 중' : '대화 새로 시작'}
             className="flex items-center gap-1.5 px-2 py-1 type-caption text-stone-400 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
             disabled={isStartingConversation || chat.isTurnPending}
             onClick={() => void startNewConversation()}
@@ -320,12 +350,20 @@ export function ChatPanel({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={13} />
-            {isStartingConversation ? '시작 중' : '대화 새로 시작'}
-          </button>
+            <span className="hidden 2xl:inline">{isStartingConversation ? '시작 중' : '대화 새로 시작'}</span>
+          </button> : null}
         </div>
       </div>
 
-      {tab === 'notes' ? (
+      {tab === 'quizzes' ? (
+        <QuizzesPanel
+          error={quizzesError}
+          isLoading={isLoadingQuizzes}
+          onOpen={onOpenQuiz}
+          onReload={onReloadQuizzes}
+          quizzes={quizzes}
+        />
+      ) : tab === 'notes' ? (
         <NotesPanel
           notes={notes}
           error={notesError}
@@ -468,6 +506,107 @@ export function ChatPanel({
   )
 }
 
+function QuizzesPanel({
+  error,
+  isLoading,
+  onOpen,
+  onReload,
+  quizzes,
+}: {
+  error: string | null
+  isLoading: boolean
+  onOpen?: (quizId: string) => void
+  onReload?: () => void
+  quizzes: SessionQuizSummary[]
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
+        <p className="type-body font-medium text-stone-500" role="status">내 퀴즈를 불러오는 중입니다.</p>
+      </div>
+    )
+  }
+
+  if (error && quizzes.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="type-body font-medium text-rose-700" role="alert">{error}</p>
+        {onReload ? <Button onClick={onReload} size="sm" type="button" variant="secondary"><RotateCcw size={13} />다시 시도</Button> : null}
+      </div>
+    )
+  }
+
+  if (quizzes.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+        <ListChecks aria-hidden="true" className="text-stone-300" size={27} />
+        <p className="type-body font-semibold text-stone-500">생성된 퀴즈가 없습니다.</p>
+        <p className="type-caption text-stone-400">학습 중 퀴즈를 만들면 여기에 기록됩니다.</p>
+      </div>
+    )
+  }
+
+  const orderedQuizzes = [...quizzes].sort((left, right) =>
+    (right.createdAt ?? '').localeCompare(left.createdAt ?? ''),
+  )
+
+  return (
+    <div className="grid min-h-0 flex-1 content-start gap-2.5 overflow-y-auto px-4 py-4">
+      {error ? <p className="type-caption font-medium text-rose-700" role="alert">{error}</p> : null}
+      {orderedQuizzes.map((quiz) => {
+        const submitted = quiz.submitted === true
+        return (
+          <button
+            aria-label={`${quiz.title} ${submitted ? '결과 및 문제 보기' : '퀴즈 이어 풀기'}`}
+            className="rounded-xl border border-stone-200 bg-white p-3.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-default disabled:hover:border-stone-200 disabled:hover:bg-white"
+            disabled={!onOpen}
+            key={quiz.quizId}
+            onClick={() => onOpen?.(quiz.quizId)}
+            type="button"
+          >
+            <div className="flex items-start gap-3">
+              <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${submitted ? quiz.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700' : 'bg-brand-50 text-brand-700'}`}>
+                {submitted ? quiz.passed ? <CheckCircle2 aria-hidden="true" size={18} /> : <XCircle aria-hidden="true" size={18} /> : <ListChecks aria-hidden="true" size={18} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="min-w-0 flex-1 truncate type-body font-bold text-stone-950" title={quiz.title}>{quiz.title}</h3>
+                  <span className="rounded-full bg-stone-100 px-2 py-0.5 type-micro font-semibold text-stone-600">{getQuizKindLabel(quiz.quizType)}</span>
+                </div>
+                {submitted ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <strong className="type-section-title text-stone-950">{formatQuizScore(quiz)}</strong>
+                    <span className={`type-caption font-bold ${quiz.passed ? 'text-emerald-700' : 'text-rose-700'}`}>{quiz.passed ? '통과' : '보완 필요'}</span>
+                  </div>
+                ) : <p className="mt-2 type-caption font-semibold text-amber-700">응시 전</p>}
+                {quiz.createdAt ? <p className="mt-1 type-micro text-stone-400">{formatDateTime(quiz.createdAt)}</p> : null}
+              </div>
+            </div>
+            <p className="mt-3 text-center type-caption font-semibold text-brand-700">
+              {submitted ? '결과 및 문제 보기' : '퀴즈 이어 풀기'}
+            </p>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function formatQuizScore(quiz: SessionQuizSummary): string {
+  if (quiz.score === undefined) return '채점 완료'
+  return quiz.maxScore === undefined ? `${quiz.score}점` : `${quiz.score} / ${quiz.maxScore}점`
+}
+
+function getQuizKindLabel(quizType: string): string {
+  const labels: Record<string, string> = {
+    ESSAY: '서술형',
+    MCQ: '객관식',
+    OX: 'OX',
+    SHORT: '단답형',
+  }
+  return labels[quizType] ?? quizType
+}
+
 function isExplainCurrentPageCommand(value: string): boolean {
   const normalized = value
     .toLowerCase()
@@ -597,18 +736,22 @@ function MessageBubble({
         <article className="max-w-[85%] rounded-xl rounded-br-[4px] bg-brand-600 px-3.5 py-2.5 text-white">
           <span className="sr-only">내 질문</span>
           <p className="break-words type-body leading-6">{message.content}</p>
-          <MessageActions messageLabel="내 질문" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} tone="brand" />
         </article>
-        <div className="flex items-center gap-2">{message.status === 'failed' ? <span className="type-caption font-semibold text-rose-700">전송 실패</span> : null}{onRetry ? <button className="inline-flex items-center gap-1 type-caption font-semibold text-rose-700 hover:text-rose-800" onClick={onRetry} type="button"><RotateCcw aria-hidden="true" size={12} />다시 시도</button> : null}{time ? <span className="type-micro text-stone-400">{time}</span> : null}</div>
+        <div className="flex items-center justify-end gap-1">
+          {message.status === 'failed' ? <span className="mr-1 type-caption font-semibold text-rose-700">전송 실패</span> : null}
+          {onRetry ? <button className="mr-1 inline-flex items-center gap-1 type-caption font-semibold text-rose-700 hover:text-rose-800" onClick={onRetry} type="button"><RotateCcw aria-hidden="true" size={12} />다시 시도</button> : null}
+          {time ? <span className="type-micro text-stone-400">{time}</span> : null}
+          <MessageActions messageLabel="내 질문" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      <article className="max-w-[90%] rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5 text-stone-900">
+    <div className="flex min-w-0 w-full flex-col items-start gap-1">
+      <article className="w-full min-w-0 rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5 text-stone-900">
         <span className="sr-only">AI 답변</span>
-        <MarkdownContent content={message.content} />
+        <MarkdownContent content={message.content} isStreaming={message.status === 'streaming'} />
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {message.pageNumber ? (
             <p className="inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 py-1 type-caption font-semibold text-brand-700">
@@ -616,10 +759,12 @@ function MessageBubble({
               {message.pageNumber}쪽 참조
             </p>
           ) : null}
-          <MessageActions messageLabel="AI 답변" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} />
         </div>
       </article>
-      {time ? <span className="type-micro text-stone-400">{time}</span> : null}
+      <div className="flex items-center gap-1">
+        {time ? <span className="type-micro text-stone-400">{time}</span> : null}
+        <MessageActions messageLabel="AI 답변" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} />
+      </div>
     </div>
   )
 }
@@ -629,26 +774,19 @@ function MessageActions({
   onCopy,
   onSaveNote,
   onShare,
-  tone = 'neutral',
 }: {
   messageLabel: string
   onCopy: () => void
   onSaveNote: () => void
   onShare: () => void
-  tone?: 'brand' | 'neutral'
 }) {
-  const className = cx(
-    'flex size-7 items-center justify-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
-    tone === 'brand'
-      ? 'text-white/75 hover:bg-white/15 hover:text-white focus-visible:outline-white'
-      : 'text-stone-400 hover:bg-white hover:text-brand-700 focus-visible:outline-brand-600',
-  )
+  const className = 'flex size-6 items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 text-stone-400 hover:bg-stone-100 hover:text-brand-700 focus-visible:outline-brand-600'
 
   return (
-    <div className={cx('flex items-center gap-0.5', tone === 'brand' ? 'mt-2 justify-end border-t border-white/15 pt-1.5' : 'ml-auto')}>
-      <button aria-label={`${messageLabel} 복사`} className={className} onClick={onCopy} title="복사" type="button"><Copy aria-hidden="true" size={13} /></button>
-      <button aria-label={`${messageLabel} 공유`} className={className} onClick={onShare} title="공유" type="button"><Share2 aria-hidden="true" size={13} /></button>
-      <button aria-label={`${messageLabel} 노트에 저장`} className={className} onClick={onSaveNote} title="노트에 저장" type="button"><NotebookPen aria-hidden="true" size={13} /></button>
+    <div className="flex items-center gap-0.5">
+      <button aria-label={`${messageLabel} 복사`} className={className} onClick={onCopy} title="복사" type="button"><Copy aria-hidden="true" size={12} /></button>
+      <button aria-label={`${messageLabel} 공유`} className={className} onClick={onShare} title="공유" type="button"><Share2 aria-hidden="true" size={12} /></button>
+      <button aria-label={`${messageLabel} 노트에 저장`} className={className} onClick={onSaveNote} title="노트에 저장" type="button"><NotebookPen aria-hidden="true" size={12} /></button>
     </div>
   )
 }

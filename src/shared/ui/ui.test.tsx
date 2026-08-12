@@ -8,6 +8,7 @@ import {
   EmptyState,
   ErrorState,
   MarkdownEditor,
+  MarkdownContent,
   PageContainer,
   PageHeader,
   TextInput,
@@ -106,5 +107,20 @@ describe('shared ui', () => {
 
     expect(container.querySelector('h1')).toHaveTextContent('공지 안내')
     expect(container.querySelector('textarea')).not.toBeInTheDocument()
+  })
+
+  it('renders strong emphasis when AI wraps Korean text and quotes together', () => {
+    render(<MarkdownContent content={'최적화는 **“제약 안에서 목적 함수를 찾는 수학 용어”**입니다.'} />)
+
+    const emphasized = screen.getByText('제약 안에서 목적 함수를 찾는 수학 용어')
+    expect(emphasized.tagName).toBe('STRONG')
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument()
+  })
+
+  it('hides an unfinished strong delimiter while an answer is streaming', () => {
+    render(<MarkdownContent content="응답을 **작성하는 중" isStreaming />)
+
+    expect(screen.getByText('응답을 작성하는 중')).toBeInTheDocument()
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument()
   })
 })

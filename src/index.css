@@ -141,6 +141,10 @@ html.study-workspace-active #root {
   overflow: hidden;
 }
 
+html.study-workspace-active {
+  scrollbar-gutter: auto;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;

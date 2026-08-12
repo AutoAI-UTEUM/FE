@@ -54,11 +54,34 @@ interface QuizSubmitDto {
   }>
 }
 
+interface QuizSubmissionDetailDto {
+  items?: Array<{
+    correctAnswer?: string | null
+    explanation?: string | null
+    feedback?: string | null
+    maxScore?: number | null
+    questionId: number | string
+    score?: number | null
+    submittedAnswer?: string | null
+    verdict?: string | null
+  }>
+  maxScore?: number | null
+  passed?: boolean | null
+  quizId: number | string
+  score: number
+  submissionId: number | string
+  submittedAt: string
+}
+
 export interface QuizRepository {
   getById: (
     quizId: string,
     signal?: AbortSignal,
   ) => Promise<PublicQuiz | null>
+  getSubmission: (
+    quizId: string,
+    signal?: AbortSignal,
+  ) => Promise<PublicQuizResult | null>
   submit: (
     quiz: PublicQuiz,
     answers: QuizAnswers,
@@ -77,6 +100,33 @@ export function createQuizRepository(
           { signal },
         )
         return mapQuiz(data)
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 404) return null
+        throw error
+      }
+    },
+    async getSubmission(quizId, signal) {
+      try {
+        const { data } = await request<QuizSubmissionDetailDto>(
+          `/api/quizzes/${encodeURIComponent(quizId)}/submission`,
+          { signal },
+        )
+        return {
+          feedback: (data.items ?? []).map((item) => ({
+            correctAnswer: item.correctAnswer ?? undefined,
+            explanation: item.explanation ?? undefined,
+            maxScore: item.maxScore ?? undefined,
+            message: item.feedback ?? '채점이 완료되었습니다.',
+            questionId: String(item.questionId),
+            score: item.score ?? undefined,
+            submittedAnswer: item.submittedAnswer ?? undefined,
+            verdict: mapVerdict(item.verdict ?? undefined),
+          })),
+          maxScore: data.maxScore ?? undefined,
+          passed: data.passed ?? undefined,
+          score: data.score,
+          submittedAt: data.submittedAt,
+        }
       } catch (error) {
         if (error instanceof ApiClientError && error.status === 404) return null
         throw error

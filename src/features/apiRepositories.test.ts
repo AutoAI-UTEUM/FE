@@ -468,6 +468,41 @@ describe('remote feature repositories', () => {
     })
   })
 
+  it('loads the current learner quiz submission with answers and grading details', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      items: [{
+        correctAnswer: 'true',
+        explanation: '정답은 O입니다.',
+        feedback: '정답입니다.',
+        maxScore: 100,
+        questionId: 'q-ox',
+        score: 100,
+        submittedAnswer: 'true',
+        verdict: 'CORRECT',
+      }],
+      maxScore: 100,
+      passed: true,
+      quizId: 51,
+      score: 100,
+      submissionId: 201,
+      submittedAt: '2026-08-12T00:00:00Z',
+    }))
+    const repository = createQuizRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getSubmission('51')).resolves.toMatchObject({
+      feedback: [{
+        correctAnswer: 'true',
+        explanation: '정답은 O입니다.',
+        questionId: 'q-ox',
+        submittedAnswer: 'true',
+        verdict: 'CORRECT',
+      }],
+      passed: true,
+      score: 100,
+    })
+    expect(request).toHaveBeenCalledWith('/api/quizzes/51/submission', { signal: undefined })
+  })
+
   it('loads learner memory using the material query parameter', async () => {
     const request = vi.fn().mockResolvedValue(
       success({

@@ -97,17 +97,20 @@ describe('ClassroomDetailPage instructor materials', () => {
       </MemoryRouter>,
     )
 
-    const contentRegion = await screen.findByRole('region', { name: '자료구조 기초' })
+    await screen.findByRole('region', { name: '전체 콘텐츠' })
     expect(screen.getByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '강의' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '학습 현황·리포트' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '강의' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '학습 현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
+    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
     expect(screen.getByRole('link', { name: '관리' })).toBeInTheDocument()
     expect(screen.queryByText('자료구조 강의실')).not.toBeInTheDocument()
     const weekNavigation = screen.getByRole('navigation', { name: '강의실 주차' })
+    const allItemsButton = within(weekNavigation).getByRole('button', { name: '전체 항목' })
     const firstWeekButton = within(weekNavigation).getByText('자료구조 기초').closest('button')
     const secondWeekButton = within(weekNavigation).getByText('심화').closest('button')
-    expect(firstWeekButton).toHaveAttribute('aria-current', 'page')
+    expect(allItemsButton).toHaveAttribute('aria-current', 'page')
+    expect(firstWeekButton).not.toHaveAttribute('aria-current')
     expect(firstWeekButton).toHaveClass('grid-cols-[minmax(0,1fr)_72px]')
     expect(secondWeekButton).toHaveClass('grid-cols-[minmax(0,1fr)_72px]')
     expect(within(weekNavigation).queryByText('1', { exact: true })).not.toBeInTheDocument()
@@ -115,8 +118,9 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(within(weekNavigation).getByText('8.3 - 8.9')).toBeInTheDocument()
     expect(within(weekNavigation).getByText('8.10 - 8.16')).toBeInTheDocument()
     expect(screen.getByText('2026. 8. 3. - 2026. 11. 15. · 15주차 · 수강생 42명')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '자료구조 기초' })).toBeInTheDocument()
-    expect(screen.getAllByText('8.3 - 8.9')).toHaveLength(2)
+    expect(screen.getByRole('heading', { name: '전체 콘텐츠' })).toBeInTheDocument()
+    expect(screen.getAllByText('8.3 - 8.9')).toHaveLength(1)
+    expect(screen.getByRole('region', { name: '강의실 통합 콘텐츠' })).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)]')
     expect(screen.getByRole('group', { name: '콘텐츠 유형 필터' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '새 항목 추가' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '공지 추가' })).toBeInTheDocument()
@@ -127,6 +131,8 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.queryByRole('button', { name: '주차 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
 
+    fireEvent.click(firstWeekButton!)
+    const contentRegion = await screen.findByRole('region', { name: '자료구조 기초' })
     const file = new File(['pdf'], 'lecture.pdf', { type: 'application/pdf' })
     fireEvent.dragEnter(contentRegion, { dataTransfer: { files: [file] } })
     fireEvent.drop(contentRegion, { dataTransfer: { files: [file] } })
@@ -137,10 +143,13 @@ describe('ClassroomDetailPage instructor materials', () => {
       file,
       weekNumber: '1',
     })
-    expect(await screen.findByRole('button', { name: /lecture자료/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'lecture' })).toBeInTheDocument()
+    expect(within(contentRegion).getByText('PDF')).toBeInTheDocument()
+    expect(within(contentRegion).queryByText('자료', { exact: true })).not.toBeInTheDocument()
     expect(screen.getByText('자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.')).toBeInTheDocument()
     expect(screen.queryByText(/열람 가능/)).not.toBeInTheDocument()
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByRole('region', { name: '전체 콘텐츠' })).not.toBeInTheDocument()
   })
 
   it('keeps completed classroom materials read-only and available for viewing', async () => {
@@ -209,7 +218,7 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.queryByRole('button', { name: '공지 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '시험 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /연결 리스트자료/ }))
+    fireEvent.click(screen.getByRole('button', { name: '연결 리스트' }))
     expect(await screen.findByText('PDF 뷰어')).toBeInTheDocument()
   })
 
@@ -259,9 +268,11 @@ describe('ClassroomDetailPage instructor materials', () => {
     )
 
     expect(await screen.findByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '전체 항목' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('link', { name: '강의' })).not.toBeInTheDocument()
     window.dispatchEvent(new Event('focus'))
 
-    expect(await screen.findByRole('button', { name: /new-lecture자료/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'new-lecture' })).toBeInTheDocument()
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
   })
 
@@ -346,10 +357,10 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(secondWeek.compareDocumentPosition(thirdWeek) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(weekNavigation).queryByText('2주차')).not.toBeInTheDocument()
     expect(within(weekNavigation).queryByText('3주차')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /published자료/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'published' })).toBeInTheDocument()
 
     fireEvent.click(thirdWeek)
-    expect(await screen.findByRole('button', { name: /scheduled-week자료/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'scheduled-week' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '자료 추가' })).not.toBeInTheDocument()
   })
 })

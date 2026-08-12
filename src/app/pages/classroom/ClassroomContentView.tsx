@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ClipboardList, FileText, MoreHorizontal, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { Bell, BookOpen, ClipboardList, MoreHorizontal, RefreshCw, Trash2, Upload } from 'lucide-react'
 import type { DragEvent } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
@@ -115,10 +115,12 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, openingMaterial
   onRemoveMaterial: (weekNumber: number, materialId: string, title: string) => Promise<void>
   openingMaterialId: string | null
 }) {
-  const values = contentType(item)
+  const values = item.kind === 'material' ? null : contentType(item)
   return <div className="flex min-h-14 items-center gap-3 rounded-lg border border-stone-200 bg-white px-4 py-2.5 hover:bg-stone-50/70">
-    <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${values.iconClass}`}><values.Icon size={16} /></span>
-    <button className="min-w-0 flex-1 text-left" disabled={item.kind === 'material' && item.source.status !== 'READY'} onClick={() => onItem(item)} type="button"><span className="flex flex-wrap items-center gap-2"><strong className="break-words type-body font-bold text-stone-950">{displayTitle(item.title)}</strong><Badge tone={values.tone}>{values.label}</Badge>{item.kind === 'notice' ? <Badge tone={item.source.published ? 'success' : 'warning'}>{item.source.published ? '게시됨' : '예약'}</Badge> : null}{item.kind === 'exam' ? <Badge tone={item.source.status === 'PUBLISHED' ? 'success' : item.source.status === 'CLOSED' ? 'warning' : 'neutral'}>{item.source.status === 'PUBLISHED' ? '공개' : item.source.status === 'CLOSED' ? '종료' : '초안'}</Badge> : null}</span></button>
+    {item.kind === 'material'
+      ? <span className="flex h-5 w-8 shrink-0 items-center justify-center rounded bg-rose-100 type-micro font-bold leading-none text-rose-700">PDF</span>
+      : values ? <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${values.iconClass}`}><values.Icon size={16} /></span> : null}
+    <button className="min-w-0 flex-1 text-left" disabled={item.kind === 'material' && item.source.status !== 'READY'} onClick={() => onItem(item)} type="button"><span className="flex flex-wrap items-center gap-2"><strong className="break-words type-body font-bold text-stone-950">{displayTitle(item.title)}</strong>{values ? <Badge tone={values.tone}>{values.label}</Badge> : null}{item.kind === 'notice' ? <Badge tone={item.source.published ? 'success' : 'warning'}>{item.source.published ? '게시됨' : '예약'}</Badge> : null}{item.kind === 'exam' ? <Badge tone={item.source.status === 'PUBLISHED' ? 'success' : item.source.status === 'CLOSED' ? 'warning' : 'neutral'}>{item.source.status === 'PUBLISHED' ? '공개' : item.source.status === 'CLOSED' ? '종료' : '초안'}</Badge> : null}</span></button>
     {item.kind === 'material' && openingMaterialId === item.source.id ? <span className="type-caption text-brand-700">PDF 여는 중</span> : null}
     {canManage && item.kind === 'material' ? <button aria-label={`${item.title} 제거`} className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700" onClick={() => void onRemoveMaterial(item.weekNumber, item.source.id, item.title)} type="button"><Trash2 size={14} /></button> : null}
     <MoreHorizontal className="shrink-0 text-stone-300" size={16} />
@@ -138,7 +140,6 @@ function AddItemButtons({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 
 }
 
 function contentType(item: ClassroomContentItem) {
-  if (item.kind === 'material') return { Icon: FileText, iconClass: 'bg-rose-50 text-rose-700', label: '자료', tone: 'danger' as const }
   if (item.kind === 'notice') return { Icon: Bell, iconClass: 'bg-amber-50 text-amber-700', label: '공지', tone: 'warning' as const }
   return { Icon: ClipboardList, iconClass: 'bg-brand-50 text-brand-700', label: '시험', tone: 'info' as const }
 }

@@ -113,6 +113,18 @@ describe('apiRequest', () => {
     })
   })
 
+  it('maps non-JSON rate limit responses before parsing the response body', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<html>too many requests</html>', { status: 429 }),
+    )
+
+    await expect(apiRequest('/api/example')).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      message: '요청이 많아요, 잠시 후 다시 시도해 주세요.',
+      status: 429,
+    })
+  })
+
   it.each(['https://ai.example.com/internal/ai/turn', '//localhost:8000/internal/ai/turn']) (
     'rejects absolute or protocol-relative paths: %s',
     async (path) => {

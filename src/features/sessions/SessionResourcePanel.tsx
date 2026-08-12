@@ -1,12 +1,10 @@
-import { ChevronLeft, PanelLeftClose } from 'lucide-react'
+import { PanelLeftClose } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { cx } from '../../shared/lib/cx'
-import type { SessionQuizSummary } from './sessionTypes'
 
 export interface SessionResourceMaterial {
   id: string
-  quizzes: SessionQuizSummary[]
   sessionId?: string
   status: 'PROCESSING' | 'READY' | 'FAILED'
   title: string
@@ -20,33 +18,20 @@ export interface SessionResourceWeek {
 
 interface SessionResourcePanelProps {
   activeMaterialId?: string
-  backLabel: string
-  backTo: string
   onClose: () => void
-  onOpenQuiz: (quizId: string) => void
   resourcePath: (material: SessionResourceMaterial) => string
   weeks: SessionResourceWeek[]
 }
 
 export function SessionResourcePanel({
   activeMaterialId,
-  backLabel,
-  backTo,
   onClose,
-  onOpenQuiz,
   resourcePath,
   weeks,
 }: SessionResourcePanelProps) {
   return (
-    <aside className="hidden h-full min-h-0 w-[240px] shrink-0 flex-col overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-stone-50/60 p-3 [scrollbar-gutter:stable] xl:flex">
-      <div className="flex items-center gap-1">
-        <Link
-          className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 type-control text-stone-500 hover:bg-white hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-          to={backTo}
-        >
-          <ChevronLeft aria-hidden="true" size={14} />
-          <span className="truncate">{backLabel}</span>
-        </Link>
+    <aside className="hidden h-full min-h-0 w-[240px] shrink-0 flex-col overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-stone-50/60 p-3 xl:flex">
+      <div className="flex justify-end">
         <button
           aria-label="자료 목록 닫기"
           className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
@@ -58,7 +43,7 @@ export function SessionResourcePanel({
         </button>
       </div>
 
-      <div className="mt-3.5 grid min-w-0 w-full max-w-full gap-3">
+      <div className="mt-3.5 grid min-w-0 w-full max-w-full gap-2">
         {weeks.map((week, index) => (
           <section
             className="min-w-0 w-full max-w-full overflow-hidden"
@@ -84,15 +69,6 @@ export function SessionResourcePanel({
                     to={resourcePath(material)}
                     title={material.title}
                   />
-                  {material.quizzes.length > 0 ? (
-                    <ul className="ml-8 grid min-w-0 max-w-full gap-0.5 overflow-hidden border-l border-stone-200 pl-1.5">
-                      {material.quizzes.map((quiz) => (
-                        <li className="min-w-0 w-full max-w-full" key={quiz.quizId}>
-                          <QuizRow onOpen={() => onOpenQuiz(quiz.quizId)} quiz={quiz} />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
                 </li>
               ))}
             </ul>
@@ -106,27 +82,6 @@ export function SessionResourcePanel({
       </div>
 
     </aside>
-  )
-}
-
-function QuizRow({
-  onOpen,
-  quiz,
-}: {
-  onOpen: () => void
-  quiz: SessionQuizSummary
-}) {
-  return (
-    <button
-      className="flex min-h-8 min-w-0 w-full max-w-full items-start gap-1.5 overflow-hidden rounded-md px-2 py-1.5 text-left type-caption text-stone-500 hover:bg-white hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-      onClick={onOpen}
-      type="button"
-    >
-      <span className="min-w-0 flex-1 break-words leading-5">{quiz.title}</span>
-      <span className="shrink-0 type-micro text-stone-400">
-        {getQuizKindLabel(quiz.quizType)}
-      </span>
-    </button>
   )
 }
 
@@ -144,7 +99,7 @@ function ResourceRow({
   return (
     <Link
       className={cx(
-        'flex min-h-9.5 min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-2 type-control',
+        'flex min-h-8.5 min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-1.5 type-control',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         isActive
           ? 'bg-white font-semibold text-stone-900 shadow-sm'
@@ -176,14 +131,4 @@ function ResourceRow({
 
 function getMaterialKind(title: string): 'PDF' | 'PPT' {
   return /\.pptx?$/i.test(title.trim()) ? 'PPT' : 'PDF'
-}
-
-function getQuizKindLabel(quizType: string): string {
-  const labels: Record<string, string> = {
-    ESSAY: '서술형',
-    MCQ: '객관식',
-    OX: 'OX',
-    SHORT: '단답형',
-  }
-  return labels[quizType] ?? quizType
 }

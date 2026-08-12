@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SessionPageViewer } from './SessionPageViewer'
@@ -43,15 +44,20 @@ describe('SessionPageViewer', () => {
   it('reopens the resource list from the viewer toolbar', () => {
     const onOpenResources = vi.fn()
     render(
-      <SessionPageViewer
-        currentPage={1}
-        file={undefined}
-        onMovePage={vi.fn()}
-        onOpenResources={onOpenResources}
-        totalPages={3}
-      />,
+      <MemoryRouter>
+        <SessionPageViewer
+          backTo="/classrooms/12"
+          currentPage={1}
+          file={undefined}
+          onMovePage={vi.fn()}
+          onOpenResources={onOpenResources}
+          totalPages={3}
+        />
+      </MemoryRouter>,
     )
 
+    expect(screen.getByRole('link', { name: '주차 페이지로' })).toHaveAttribute('href', '/classrooms/12')
+    expect(screen.getByRole('link', { name: '주차 페이지로' })).not.toHaveTextContent('주차 페이지로')
     fireEvent.click(screen.getByRole('button', { name: '자료 목록' }))
     expect(onOpenResources).toHaveBeenCalledOnce()
   })

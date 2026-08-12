@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
+import { Link } from 'react-router-dom'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 
@@ -23,6 +24,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString()
 
 interface SessionPageViewerProps {
+  backTo?: string
   currentPage: number
   file?: Blob | null
   fileError?: string | null
@@ -36,6 +38,7 @@ interface SessionPageViewerProps {
 type PageFitMode = 'page' | 'height' | 'width'
 
 export function SessionPageViewer({
+  backTo,
   currentPage,
   file,
   fileError,
@@ -136,6 +139,16 @@ export function SessionPageViewer({
   return (
     <section aria-label="PDF 뷰어" className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-y-0 border-stone-200 bg-white" ref={viewerRef}>
       <div className="flex h-13 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
+        {backTo ? (
+          <Link
+            aria-label="주차 페이지로"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            title="주차 페이지로"
+            to={backTo}
+          >
+            <ChevronLeft aria-hidden="true" size={16} />
+          </Link>
+        ) : null}
         <h2 className="hidden min-w-0 truncate type-body font-semibold text-stone-950 sm:block">
           {materialTitle ?? '학습 자료'}
         </h2>

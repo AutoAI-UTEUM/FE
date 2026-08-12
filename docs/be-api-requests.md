@@ -4,7 +4,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 확인일 | 2026-08-10 |
+| 확인일 | 2026-08-12 |
 | FE 기준 | `develop` 현재 로컬 변경사항 |
 | BE 기준 | `develop` `docs/api-spec.md` 마지막 갱신 2026-08-02 |
 | 실행 계약 | 배포 Swagger `/v3/api-docs` 91개 operation |
@@ -21,8 +21,8 @@ FE repository에 반영했다. 아래에는 **화면은 존재하지만 여전�
 | 설정 | 프로필, 아바타, 환경설정, 회원 탈퇴 | `studyReminder`·새 자료 알림의 실제 이메일/인앱 전달과 읽음 상태 |
 | 강의실 목록 | 생성, 조회, 수정, 종료, 영구 삭제, 초대 코드 | 종료 강의실 재활성화, 서버 검색·추가 정렬 |
 | 강의실 강의 | 주차, PDF 자료, 공지, 시험 CRUD | 주차별 공지, 공지 예약 게시, PPT/PPTX, 처리 실패 상세 |
-| 수강생·입장 요청 | 목록, 제외, 개별 승인·거절 | 수강생별 진도·AI 질문 수, 서버 검색·정렬, 일괄 승인 |
-| 학습 현황·리포트 | 강의실 집계, 리포트 기준·생성·조회 | 수강생별 학습 지표. 리포트 Q&A는 Phase 3 |
+| 수강생·입장 요청 | 목록, 제외, 개별 승인·거절, 수강생별 진도·최근 7일 AI 질문, 서버 검색·정렬 | 일괄 승인 |
+| 학습 현황·리포트 | 자료별 현황, 페이지별 질문 수, 수강생별 지표, 리포트 기준·생성·조회 | 리포트 Q&A는 Phase 3 |
 | 캘린더·알림 패널 | 개인 일정 CRUD, 강의실 일정 통합 조회 | 실제 알림 전송, 읽음·삭제·전달 이력 |
 | 자료·세션·PDF·채팅 | 업로드, 세션, 페이지 이동, 대화, 노트, 퀴즈 | 자연어 학습 명령 정규화, 교정 후 재평가 퀴즈 |
 | 시험 | 시험 CRUD, 제출·결과, AI 문항 초안 | 현재 노출 UI 기준 추가 필수 API 없음 |
@@ -101,6 +101,18 @@ OAuth 콜백은 현재 refresh HttpOnly cookie 정책을 유지해야 한다.
 ```
 
 목록 query는 `q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`를 사용한다.
+
+학습 현황 화면의 세 영역은 모두 현재 배포 API에 연결돼 있다.
+
+- 자료별 학습 현황: `GET /api/classrooms/{classroomId}/analytics`의 `materials`
+- 페이지별 질문 수: 같은 응답의 `questionsByPage`
+- 수강생별 학습 현황: `GET /api/classrooms/{classroomId}/students`의
+  `averageProgressRate`, `aiQuestionCountLast7Days`, `lastActiveAt`
+
+따라서 이 화면을 위해 새로 필요한 API는 없다. 다만 실제 질문이 존재하는 강의실에서
+`aiQuestionCountLast7Days`와 `questionsByPage`가 계속 0으로 반환되면 신규 계약이 아니라
+BE 집계 로직 점검 대상으로 처리한다. `qa_threads`의 강의실 연결 자료 범위와 USER 메시지
+생성 시각이 최근 7일 집계에 포함되는지 확인이 필요하다.
 
 ## P1. 알림 전달
 
@@ -280,3 +292,47 @@ POST   /api/classrooms/{classroomId}/notices/ai-draft
 - AI 초안 요청은 `title?`, `prompt`, `weekNumber?`를 받고 Markdown 본문 `content`를
   반환한다. 생성 결과는 자동 게시하지 않고 강의자가 편집·확인한 뒤 기존 공지
   생성 API로 저장한다.
+
+## P1. 내 퀴즈 문항별 제출 결과 조회
+
+현재 `GET /api/sessions/{sessionId}/quizzes`는 퀴즈별 점수·통과 여부만 반환하고,
+`GET /api/quizzes/{quizId}`는 공개 문항과 `submitted` 상태만 반환한다. 제출 당시
+`POST /api/quizzes/{quizId}/submit` 응답에 포함된 문항별 정답·오답·피드백은
+새로고침 후 다시 조회할 수 없다. 제출 완료 퀴즈를 초기 문제로 다시 보여주지 않고
+기존 응시 결과를 복원하려면 다음 조회 계약이 필요하다.
+
+```http
+GET /api/quizzes/{quizId}/submission
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "quizId": 50,
+    "submittedAt": "2026-08-12T10:30:00Z",
+    "score": 80,
+    "maxScore": 100,
+    "passed": true,
+    "gradingResult": {
+      "items": [
+        {
+          "questionId": 501,
+          "submittedAnswer": "B",
+          "correct": true,
+          "earnedScore": 20,
+          "feedback": "핵심 개념을 정확히 구분했습니다."
+        }
+      ]
+    }
+  }
+}
+```
+
+- 학습자 본인의 제출 결과만 조회할 수 있어야 한다.
+- 문항 순서와 공개 문항 정보는 `GET /api/quizzes/{quizId}`와 안정적으로 결합할 수
+  있도록 같은 `questionId`를 사용한다.
+- 미제출 퀴즈는 404 또는 명시적인 `submitted=false` 응답 중 하나로 계약을
+  확정한다.
+- FE는 이 API가 배포되기 전까지 `내 퀴즈`에서 점수·통과 여부만 표시하고 제출
+  완료 퀴즈를 다시 응시 화면으로 열지 않는다.

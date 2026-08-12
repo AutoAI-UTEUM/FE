@@ -113,6 +113,7 @@ export interface ExamsRepository {
   list: (classroomId: string, status?: ExamStatus, signal?: AbortSignal) => Promise<Exam[]>
   listSubmissions: (examId: string, signal?: AbortSignal) => Promise<InstructorSubmissionSummary[]>
   publish: (examId: string, signal?: AbortSignal) => Promise<Exam>
+  regrade: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
   submit: (examId: string, answers: Record<string, string>, requestId: string, signal?: AbortSignal) => Promise<ExamSubmission>
   update: (examId: string, input: Partial<CreateExamInput>, signal?: AbortSignal) => Promise<Exam>
 }
@@ -252,6 +253,13 @@ export function createExamsRepository(request: AuthenticatedRequest): ExamsRepos
     async publish(examId, signal) {
       const { data } = await request<ExamDto>(`/api/exams/${encodeURIComponent(examId)}/publish`, { method: 'POST', signal })
       return mapExam(data)
+    },
+    async regrade(examId, submissionId, signal) {
+      const { data } = await request<ExamSubmissionDto>(`/api/exams/${encodeURIComponent(examId)}/submissions/${encodeURIComponent(submissionId)}/regrade`, {
+        method: 'POST',
+        signal,
+      })
+      return mapSubmission(data)
     },
     async submit(examId, answers, requestId, signal) {
       const { data } = await request<ExamSubmissionDto>(`/api/exams/${encodeURIComponent(examId)}/submissions`, {

@@ -29,6 +29,7 @@ import {
   PageContainer,
   PageHeader,
 } from '../../shared/ui'
+import type { SessionQuizSummary } from '../../features/sessions'
 import { diagnosisPath, routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
@@ -48,6 +49,7 @@ interface QuizWorkspaceProps {
   onBackToPdf?: () => void
   onSubmitted?: (result: PublicQuizResult) => void
   quizId?: string
+  reviewSummary?: SessionQuizSummary
 }
 
 export function QuizWorkspace({
@@ -55,6 +57,7 @@ export function QuizWorkspace({
   onBackToPdf,
   onSubmitted,
   quizId: quizIdProp,
+  reviewSummary,
 }: QuizWorkspaceProps) {
   usePageTitle(embedded ? '학습 공간' : '퀴즈')
   const { quizId: routeQuizId } = useParams()
@@ -75,20 +78,40 @@ export function QuizWorkspace({
   const [reloadKey, setReloadKey] = useState(0)
   const questions = quiz?.questions ?? []
   const question = questions[currentQuestionIndex] ?? questions[0]
-  const answeredCount = questions.filter((item) => answers[item.id]?.trim()).length
-  const availableKinds = Array.from(
-    new Set(questions.map((item) => item.kind)),
-  )
   const diagnosisEntry = result?.diagnosisEntry
+  const isReviewMode = reviewSummary?.submitted === true
+  const isReadOnly = isSubmitted || isReviewMode
+  const resultSummary = isReviewMode ? reviewSummary : result
+  const currentFeedback = result?.feedback.find(
+    (candidate) => candidate.questionId === question?.id,
+  )
 
   useEffect(() => {
     if (!quizId) return
     const controller = new AbortController()
-    repository
-      .getById(quizId, controller.signal)
-      .then((nextQuiz) => {
+    Promise.all([
+      repository.getById(quizId, controller.signal),
+      isReviewMode
+        ? repository.getSubmission(quizId, controller.signal)
+        : Promise.resolve(null),
+    ])
+      .then(([nextQuiz, submissionResult]) => {
         setQuiz(nextQuiz)
-        setError(null)
+        if (isReviewMode && submissionResult) {
+          setResult(submissionResult)
+          setAnswers(Object.fromEntries(
+            submissionResult.feedback
+              .filter((item) => item.submittedAnswer !== undefined)
+              .map((item) => [item.questionId, item.submittedAnswer ?? '']),
+          ))
+          setIsSubmitted(true)
+          setError(null)
+        } else if (isReviewMode) {
+          setResult(null)
+          setError('과거 퀴즈 제출 결과를 찾을 수 없습니다.')
+        } else {
+          setError(null)
+        }
       })
       .catch((requestError: unknown) => {
         if (!controller.signal.aborted) {
@@ -98,15 +121,7 @@ export function QuizWorkspace({
       })
 
     return () => controller.abort()
-  }, [quizId, reloadKey, repository])
-
-  function handleKindChange(kind: QuizKind) {
-    if (isSubmitted) return
-    setCurrentQuestionIndex(
-      questions.findIndex((candidate) => candidate.kind === kind),
-    )
-    setError(null)
-  }
+  }, [isReviewMode, quizId, reloadKey, repository])
 
   function updateAnswer(questionId: string, value: string) {
     setAnswers((current) => ({ ...current, [questionId]: value }))
@@ -203,55 +218,30 @@ export function QuizWorkspace({
   return (
     <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
       <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-        <div className="border-b border-stone-200 px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap gap-1.5" role="tablist">
-            {availableKinds.map((kind) => (
-              <button
-                aria-selected={kind === question.kind}
-                className={[
-                  'min-h-9 rounded-lg border px-3 py-1.5 type-caption font-bold',
-                  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
-                  kind === question.kind
-                    ? 'border-brand-700 bg-brand-50 text-brand-800'
-                    : 'border-stone-200 text-stone-500 hover:bg-stone-50',
-                ].join(' ')}
-                disabled={isSubmitted}
-                key={kind}
-                onClick={() => handleKindChange(kind)}
-                role="tab"
-                type="button"
-              >
-                {quizKindLabels[kind]}
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="type-caption font-semibold text-stone-600">
-              문항 {currentQuestionIndex + 1} / {questions.length} · 답변{' '}
-              {answeredCount} / {questions.length}
-            </p>
-            <div
-              aria-label={`퀴즈 답변 진행률 ${answeredCount} / ${questions.length}`}
-              className="h-1 w-full overflow-hidden rounded-full bg-stone-200 sm:w-48"
-              role="progressbar"
-            >
-              <div
-                className="h-full bg-brand-700"
-                style={{
-                  width: `${(answeredCount / questions.length) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
+          <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-start gap-4">
+            <h2 className="min-w-0 type-dialog-title font-bold text-stone-950" id={`quiz-question-${question.id}`}>
+              {question.prompt}
+            </h2>
+            <span className="w-full whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
+              문항 {currentQuestionIndex + 1} / {questions.length}
+            </span>
+          </div>
           <QuestionInput
-            disabled={isSubmitted}
+            disabled={isReadOnly}
+            labelId={`quiz-question-${question.id}`}
             onChange={(value) => updateAnswer(question.id, value)}
             question={question}
             value={answers[question.id] ?? ''}
           />
+
+          {result ? (
+            <QuestionResultDetails
+              answer={answers[question.id]}
+              feedback={currentFeedback}
+              question={question}
+            />
+          ) : null}
 
           {error ? (
             <p className="mt-4 type-body font-medium text-rose-700" role="alert">
@@ -259,67 +249,34 @@ export function QuizWorkspace({
             </p>
           ) : null}
 
-          <div className="mt-6 flex flex-col gap-3 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex gap-2">
-              <Button
-                disabled={isSubmitted || currentQuestionIndex <= 0}
-                onClick={() => {
-                  setCurrentQuestionIndex((index) => Math.max(index - 1, 0))
-                  setError(null)
-                }}
-                type="button"
-                variant="secondary"
-              >
-                <ChevronLeft aria-hidden="true" size={15} />
-                이전 문항
-              </Button>
-              <Button
-                disabled={
-                  isSubmitted ||
-                  currentQuestionIndex >= questions.length - 1
-                }
-                onClick={() => {
-                  setCurrentQuestionIndex((index) =>
-                    Math.min(index + 1, questions.length - 1),
-                  )
-                  setError(null)
-                }}
-                type="button"
-                variant="secondary"
-              >
-                다음 문항
-                <ChevronRight aria-hidden="true" size={15} />
-              </Button>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div aria-label="퀴즈 정보" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 type-caption text-stone-600">
+              <strong className="font-semibold text-stone-800">{quizKindLabels[question.kind]}</strong>
+              {resultSummary ? (
+                <>
+                  <span aria-hidden="true" className="text-stone-300">·</span>
+                  <strong className={resultSummary.passed === false
+                    ? 'font-semibold text-amber-700'
+                    : resultSummary.passed === true
+                      ? 'font-semibold text-emerald-700'
+                      : 'font-semibold text-stone-700'}>
+                    {resultSummary.score === undefined
+                      ? '채점 완료'
+                      : `점수 ${resultSummary.score}${resultSummary.maxScore === undefined ? '' : ` / ${resultSummary.maxScore}`}`}
+                    {resultSummary.passed === undefined ? '' : resultSummary.passed ? ' · 통과' : ' · 보완 필요'}
+                  </strong>
+                </>
+              ) : null}
             </div>
-            <Button disabled={isSubmitted || isSubmitting} type="submit">
-              <Send aria-hidden="true" size={15} />
-              {isSubmitting ? '제출 중' : isSubmitted ? '제출 완료' : '제출'}
-            </Button>
-          </div>
-        </form>
-      </section>
-
-      {isSubmitted && result ? (
-        <section className={`overflow-hidden rounded-lg border bg-white ${getResultTone(result.passed).border}`}>
-          <div className={`flex flex-col gap-4 border-b px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ${getResultTone(result.passed).header}`}>
-            <div className="flex items-center gap-3">
-              <ResultIcon passed={result.passed} />
-              <div>
-                <h2 className={`type-section-title font-bold ${getResultTone(result.passed).title}`}>결과</h2>
-                <p className={`mt-1 type-body ${getResultTone(result.passed).text}`}>
-                  점수 {result.score}{result.maxScore === undefined ? '' : ` / ${result.maxScore}`}
-                  {result.passed === undefined ? '' : result.passed ? ' · 통과' : ' · 보완 필요'}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {shouldShowDiagnosisEntry(result) && diagnosisEntry ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {result && shouldShowDiagnosisEntry(result) && diagnosisEntry ? (
                 embedded ? (
                   <Button
                     onClick={() => navigate(diagnosisPath(
                       diagnosisEntry.sessionId,
                       diagnosisEntry.diagnosisId,
                     ))}
+                    size="sm"
                     type="button"
                     variant="secondary"
                   >
@@ -327,6 +284,7 @@ export function QuizWorkspace({
                   </Button>
                 ) : (
                   <ButtonLink
+                    size="sm"
                     to={diagnosisPath(
                       diagnosisEntry.sessionId,
                       diagnosisEntry.diagnosisId,
@@ -337,57 +295,125 @@ export function QuizWorkspace({
                   </ButtonLink>
                 )
               ) : null}
-              {embedded && onBackToPdf ? (
-                <Button onClick={onBackToPdf} type="button" variant="secondary">
-                  PDF로 돌아가기
+              {!isReviewMode ? (
+                <Button disabled={isSubmitted || isSubmitting} size="sm" type="submit">
+                  <Send aria-hidden="true" size={14} />
+                  {isSubmitting ? '제출 중' : isSubmitted ? '제출 완료' : '제출'}
                 </Button>
-              ) : (
-                <ButtonLink to={routes.sessions} variant="secondary">
+              ) : null}
+              {resultSummary && !embedded ? (
+                <ButtonLink size="sm" to={routes.sessions} variant="secondary">
                   세션으로 돌아가기
                 </ButtonLink>
-              )}
+              ) : null}
+              <div className="ml-1 flex gap-1.5">
+                <button
+                  aria-label="이전 문항"
+                  className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400"
+                  disabled={currentQuestionIndex <= 0}
+                  onClick={() => {
+                    setCurrentQuestionIndex((index) => Math.max(index - 1, 0))
+                    setError(null)
+                  }}
+                  title="이전 문항"
+                  type="button"
+                >
+                  <ChevronLeft aria-hidden="true" size={15} />
+                </button>
+                <button
+                  aria-label="다음 문항"
+                  className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400"
+                  disabled={currentQuestionIndex >= questions.length - 1}
+                  onClick={() => {
+                    setCurrentQuestionIndex((index) =>
+                      Math.min(index + 1, questions.length - 1),
+                    )
+                    setError(null)
+                  }}
+                  title="다음 문항"
+                  type="button"
+                >
+                  <ChevronRight aria-hidden="true" size={15} />
+                </button>
+              </div>
             </div>
           </div>
-
-          <ul className="divide-y divide-stone-200" aria-label="문항별 채점 결과">
-            {questions.map((item, index) => {
-              const feedback = result.feedback.find((candidate) => candidate.questionId === item.id)
-              const verdict = feedback?.verdict ?? 'UNKNOWN'
-              const tone = getVerdictTone(verdict)
-              return (
-                <li className="px-4 py-4 sm:px-5" key={item.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="type-caption font-semibold text-stone-500">문항 {index + 1}</p>
-                      <h3 className="mt-1 type-body font-bold text-stone-950">{item.prompt}</h3>
-                    </div>
-                    <span className={`inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 type-caption font-bold ${tone.badge}`}>
-                      <VerdictIcon verdict={verdict} />{tone.label}
-                    </span>
-                  </div>
-                  <dl className="mt-3 grid gap-2 rounded-lg bg-stone-50 px-3 py-2.5 type-control sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <div className="min-w-0">
-                      <dt className="inline font-semibold text-stone-500">내 답안 </dt>
-                      <dd className="inline break-words text-stone-900">{formatSubmittedAnswer(item, answers[item.id])}</dd>
-                    </div>
-                    <div>
-                      <dt className="inline font-semibold text-stone-500">점수 </dt>
-                      <dd className="inline font-bold text-stone-900">{formatItemScore(feedback?.score, feedback?.maxScore)}</dd>
-                    </div>
-                  </dl>
-                  <p className="mt-2 type-body leading-6 text-stone-700">{feedback?.message ?? '문항별 피드백이 제공되지 않았습니다.'}</p>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      ) : null}
+        </form>
+      </section>
     </QuizFrame>
   )
 }
 
+function QuestionResultDetails({
+  answer,
+  feedback,
+  question,
+}: {
+  answer?: string
+  feedback?: PublicQuizResult['feedback'][number]
+  question: PublicQuizQuestion
+}) {
+  const verdict = feedback?.verdict ?? 'UNKNOWN'
+  const tone = getVerdictTone(verdict)
+  const correctAnswer = feedback?.correctAnswer
+    ? formatCorrectAnswer(question, feedback.correctAnswer)
+    : undefined
+  const explanation = feedback?.explanation?.trim()
+    && normalizeResultText(feedback.explanation) !== normalizeResultText(correctAnswer)
+    ? feedback.explanation.trim()
+    : undefined
+  const feedbackMessage = feedback?.message?.trim()
+    && normalizeResultText(feedback.message) !== normalizeResultText(correctAnswer)
+    && normalizeResultText(feedback.message) !== normalizeResultText(explanation)
+    ? feedback.message.trim()
+    : undefined
+
+  return (
+    <section className={`mt-5 rounded-lg border px-4 py-4 ${tone.panel}`} aria-label="현재 문항 채점 결과">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className={`inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 type-caption font-bold ${tone.badge}`}>
+          <VerdictIcon verdict={verdict} />{tone.label}
+        </span>
+        <strong className="type-control text-stone-900">{formatItemScore(feedback?.score, feedback?.maxScore)}</strong>
+      </div>
+      <dl className="mt-3 grid gap-2 type-control">
+        <div className="min-w-0">
+          <dt className="inline font-semibold text-stone-500">내 답안 </dt>
+          <dd className="inline break-words text-stone-900">{formatSubmittedAnswer(question, answer)}</dd>
+        </div>
+        {correctAnswer ? (
+          <div className="min-w-0">
+            <dt className="inline font-semibold text-stone-500">정답·기준 답안 </dt>
+            <dd className="inline break-words text-stone-900">{correctAnswer}</dd>
+          </div>
+        ) : null}
+        {explanation ? (
+          <div className="min-w-0">
+            <dt className="inline font-semibold text-stone-500">해설 </dt>
+            <dd className="inline break-words leading-5 text-stone-700">{explanation}</dd>
+          </div>
+        ) : null}
+        {feedbackMessage ? (
+          <div className="min-w-0">
+            <dt className="inline font-semibold text-stone-500">피드백 </dt>
+            <dd className="inline break-words leading-5 text-stone-700">{feedbackMessage}</dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
+  )
+}
+
+function normalizeResultText(value?: string): string {
+  return (value ?? '').replace(/^(정답|기준 답안|해설|피드백)\s*[:：]?\s*/i, '').replace(/\s+/g, '').toLowerCase()
+}
+
 function formatSubmittedAnswer(question: PublicQuizQuestion, answer: string | undefined): string {
   if (!answer) return '제출한 답안 없음'
+  return question.choices?.find((choice) => choice.id === answer)?.label ?? answer
+}
+
+function formatCorrectAnswer(question: PublicQuizQuestion, answer: string): string {
   return question.choices?.find((choice) => choice.id === answer)?.label ?? answer
 }
 
@@ -397,10 +423,26 @@ function formatItemScore(score: number | undefined, maxScore: number | undefined
 }
 
 function getVerdictTone(verdict: PublicQuizResult['feedback'][number]['verdict']) {
-  if (verdict === 'CORRECT') return { badge: 'bg-emerald-50 text-emerald-800', label: '정답' }
-  if (verdict === 'PARTIAL') return { badge: 'bg-amber-50 text-amber-800', label: '부분 정답' }
-  if (verdict === 'WRONG') return { badge: 'bg-rose-50 text-rose-800', label: '오답' }
-  return { badge: 'bg-stone-100 text-stone-700', label: '채점 완료' }
+  if (verdict === 'CORRECT') return {
+    badge: 'bg-emerald-100 text-emerald-800',
+    label: '정답',
+    panel: 'border-emerald-200 bg-emerald-50/50',
+  }
+  if (verdict === 'PARTIAL') return {
+    badge: 'bg-amber-100 text-amber-800',
+    label: '부분 정답',
+    panel: 'border-amber-200 bg-amber-50/50',
+  }
+  if (verdict === 'WRONG') return {
+    badge: 'bg-rose-100 text-rose-800',
+    label: '오답',
+    panel: 'border-rose-200 bg-rose-50/50',
+  }
+  return {
+    badge: 'bg-stone-100 text-stone-700',
+    label: '채점 완료',
+    panel: 'border-stone-200 bg-stone-50/60',
+  }
 }
 
 function VerdictIcon({ verdict }: { verdict: PublicQuizResult['feedback'][number]['verdict'] }) {
@@ -408,37 +450,6 @@ function VerdictIcon({ verdict }: { verdict: PublicQuizResult['feedback'][number
   if (verdict === 'PARTIAL') return <TriangleAlert aria-hidden="true" size={14} />
   if (verdict === 'WRONG') return <CircleX aria-hidden="true" size={14} />
   return <CircleHelp aria-hidden="true" size={14} />
-}
-
-function getResultTone(passed: boolean | undefined) {
-  if (passed === true) return {
-    border: 'border-emerald-200',
-    header: 'border-emerald-200 bg-emerald-50',
-    icon: 'text-emerald-700',
-    text: 'text-emerald-900',
-    title: 'text-emerald-950',
-  }
-  if (passed === false) return {
-    border: 'border-amber-200',
-    header: 'border-amber-200 bg-amber-50',
-    icon: 'text-amber-700',
-    text: 'text-amber-900',
-    title: 'text-amber-950',
-  }
-  return {
-    border: 'border-stone-200',
-    header: 'border-stone-200 bg-stone-50',
-    icon: 'text-stone-600',
-    text: 'text-stone-700',
-    title: 'text-stone-950',
-  }
-}
-
-function ResultIcon({ passed }: { passed: boolean | undefined }) {
-  const className = getResultTone(passed).icon
-  return passed === false
-    ? <TriangleAlert aria-hidden="true" className={className} size={20} />
-    : <CircleCheckBig aria-hidden="true" className={className} size={20} />
 }
 
 function QuizFrame({
@@ -492,20 +503,21 @@ function getBackAction(embedded: boolean, onBackToPdf?: () => void) {
 
 function QuestionInput({
   disabled,
+  labelId,
   onChange,
   question,
   value,
 }: {
   disabled: boolean
+  labelId: string
   onChange: (value: string) => void
   question: PublicQuizQuestion
   value: string
 }) {
   if (question.kind === 'MCQ' || question.kind === 'OX') {
     return (
-      <fieldset className="space-y-4">
-        <legend className="type-dialog-title font-bold text-stone-950">{question.prompt}</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+      <fieldset aria-labelledby={labelId} className="mt-4">
+        <div className="grid gap-2">
           {question.choices?.map((choice) => (
             <label
               className={[
@@ -535,10 +547,9 @@ function QuestionInput({
 
   if (question.kind === 'SHORT') {
     return (
-      <label className="block">
-        <span className="type-dialog-title font-bold text-stone-950">{question.prompt}</span>
+      <label aria-labelledby={labelId} className="mt-4 block">
         <input
-          className="mt-4 min-h-10 w-full rounded-lg border border-stone-300 px-3 py-2 type-body focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          className="min-h-10 w-full rounded-lg border border-stone-300 px-3 py-2 type-body focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
           disabled={disabled}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
           value={value}
@@ -548,10 +559,9 @@ function QuestionInput({
   }
 
   return (
-    <label className="block">
-      <span className="type-dialog-title font-bold text-stone-950">{question.prompt}</span>
+    <label aria-labelledby={labelId} className="mt-4 block">
       <textarea
-        className="mt-4 min-h-36 w-full rounded-lg border border-stone-300 px-3 py-2 type-body focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
+        className="min-h-36 w-full rounded-lg border border-stone-300 px-3 py-2 type-body focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
         disabled={disabled}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
         value={value}
