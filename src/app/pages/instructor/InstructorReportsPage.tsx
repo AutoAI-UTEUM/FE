@@ -28,7 +28,7 @@ import {
   type ReportStudent,
   type StudentReport,
 } from '../../../features/reports'
-import { getRequestErrorMessage } from '../../../shared/api'
+import { ApiClientError, getRequestErrorMessage } from '../../../shared/api'
 import { isApiCapabilityEnabled } from '../../../shared/config/capabilities'
 import { formatDateTime } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
@@ -40,6 +40,7 @@ import {
   classroomReportsPath,
   classroomStudentReportsPath,
 } from '../../routes'
+import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
 const reportsEnabled = isApiCapabilityEnabled('reports')
 
@@ -82,12 +83,14 @@ export function InstructorReportsPage() {
     return () => controller.abort()
   }, [classroomId, repository])
 
+  const selectedClassroom = classrooms.find((classroom) => classroom.id === classroomId)
+  const classroomSelector = <label><span className="sr-only">강의실 선택</span><select className="h-9 min-w-40 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600" onChange={(event) => { setIsLoading(true); setError(null); navigate(classroomReportsPath(event.target.value), { replace: true }) }} value={classroomId}>{classrooms.length === 0 ? <option value="">강의실 없음</option> : classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
+  const headerActions = classroomId ? <ButtonLink to={classroomReportCriteriaPath(classroomId)} variant="secondary"><Settings2 size={14} />평가 기준</ButtonLink> : undefined
+
   return <PageContainer>
-    <PageHeader
-      actions={classroomId ? <ButtonLink to={classroomReportCriteriaPath(classroomId)} variant="secondary"><Settings2 size={14} />평가 기준</ButtonLink> : undefined}
-      title="학습 리포트"
-      titleAccessory={<label><span className="sr-only">강의실 선택</span><select className="h-9 min-w-40 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600" onChange={(event) => { setIsLoading(true); setError(null); navigate(classroomReportsPath(event.target.value), { replace: true }) }} value={classroomId}>{classrooms.length === 0 ? <option value="">강의실 없음</option> : classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>}
-    />
+    {selectedClassroom
+      ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="reports" classroom={selectedClassroom} titleAccessory={classroomSelector} />
+      : <PageHeader actions={headerActions} title="학습 리포트" titleAccessory={classroomSelector} />}
     {!reportsEnabled ? <ReportsUnavailableState /> : null}
     {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
     {reportsEnabled && error ? <ErrorState description={error} title="학습자 목록을 불러오지 못했습니다" /> : null}
@@ -266,7 +269,7 @@ export function InstructorReportDetailPage() {
   return <PageContainer>
     <PageHeader actions={<ButtonLink to={classroomStudentReportsPath(classroomId, studentId)} variant="secondary">버전 목록</ButtonLink>} title={report.studentName ? `${report.studentName} 리포트` : '학생 리포트'} titleAccessory={<span className="type-caption text-stone-500">버전 {report.version ?? '-'}</span>} />
     {hasInsufficientData ? <section className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-4" role="status"><p className="type-body font-semibold text-amber-950">관찰 데이터 축적 중</p><p className="mt-1 type-caption leading-5 text-amber-800">근거가 부족한 항목은 점수로 환산하지 않습니다. 추가 학습 기록이 쌓인 뒤 리포트를 다시 생성해 주세요.</p></section> : null}
-    <section className="grid gap-3 sm:grid-cols-3"><Metric label="종합 단계" value={overallStage} /><Metric label="종합 점수" value={report.overallScore === null ? '데이터 부족' : `${report.overallScore}점`} /><Metric label="추세" value={report.overallScore === null ? '데이터 부족' : getTrendLabel(report.trend)} trend={report.overallScore === null ? undefined : report.trend} /></section>
+    <section className="grid gap-3 sm:grid-cols-3"><Metric label="종합 단계" value={overallStage} /><Metric label="종합 점수" value={report.overallScore === null ? '데이터 부족' : `${report.overallScore}점`} /><Metric label="동일 범위의 이전 리포트 대비" value={report.overallScore === null ? '데이터 부족' : getTrendLabel(report.trend)} trend={report.overallScore === null ? undefined : report.trend} /></section>
     {report.overview ? <section className="border-y border-stone-200 py-5"><h2 className="type-section-title font-bold">종합 해석</h2><p className="mt-2 type-body leading-6 text-stone-600">{report.overview}</p></section> : null}
     <section aria-labelledby="criteria-results-title"><h2 className="type-section-title font-bold" id="criteria-results-title">평가 항목</h2><div className="mt-3 grid gap-3 lg:grid-cols-3">{report.criterionResults.map((result) => <CriterionResultCard evidence={report.evidence} key={result.criterionKey} result={result} />)}</div></section>
     <section className="grid gap-3 lg:grid-cols-2"><StatementSection evidence={report.evidence} items={report.strengths} title="강점" /><StatementSection evidence={report.evidence} items={report.improvements} title="보완점" /><StatementSection evidence={report.evidence} items={report.misconceptionCandidates} title="오개념 후보" /><StatementSection evidence={report.evidence} items={report.recommendedActions} title="추천 지도 행동" /></section>
@@ -316,7 +319,11 @@ export function InstructorReportCriteriaPage() {
       setCriteria((items) => [...items, created])
       setName(''); setDescription(''); setRubric('')
       show('평가 기준을 추가했습니다.', 'success')
-    } catch (requestError) { setError(getRequestErrorMessage(requestError)) }
+    } catch (requestError) {
+      setError(requestError instanceof ApiClientError && requestError.status === 409
+        ? '기본 평가 기준 또는 기존 커스텀 기준과 이름이 중복됩니다.'
+        : getRequestErrorMessage(requestError))
+    }
     finally { setIsSaving(false) }
   }
 

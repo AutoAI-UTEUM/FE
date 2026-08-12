@@ -17,7 +17,8 @@ describe('ClassroomStudentsPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { name: '자료구조' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '학습 현황·리포트' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '학습 현황' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
     expect(screen.getByText('김학습')).toBeInTheDocument()
     expect(screen.getByText('박미활동')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('RECENT_ACTIVITY')
@@ -74,7 +75,7 @@ function stubApi(removed: string[] = [], requested: string[] = []) {
     if (url.pathname === '/api/classrooms/12/notices') return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     if (url.pathname === '/api/classrooms/12/students' && method === 'GET') return success({
       items: [
-        { affiliation: '서울대학교', aiQuestionCountLast7Days: 4, averageProgressRate: 62, email: 'learner@example.com', joinedAt: '2026-08-02T01:00:00Z', lastActiveAt: '2026-08-05T08:00:00Z', name: '김학습', status: 'ACTIVE', studentId: 9 },
+        { affiliation: '서울대학교', aiQuestionCountLast7Days: 4, averageProgressRate: 62, email: 'learner@example.com', joinedAt: '2026-08-02T01:00:00Z', lastActiveAt: '2026-08-11T08:00:00Z', name: '김학습', status: 'ACTIVE', studentId: 9 },
         { affiliation: 'KAIST', aiQuestionCountLast7Days: 0, averageProgressRate: 12, email: 'inactive@example.com', joinedAt: '2026-07-10T01:00:00Z', lastActiveAt: '2026-07-20T08:00:00Z', name: '박미활동', status: 'ACTIVE', studentId: 10 },
       ],
       page: 0,

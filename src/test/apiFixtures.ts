@@ -427,6 +427,39 @@ export async function handleApiFixtureRequest(
     return apiSuccess(quizSubmitFixture)
   }
 
+  if (request.method === 'GET' && path === '/api/quizzes/50/submission') {
+    return apiSuccess({
+      items: [
+        {
+          correctAnswer: 'mcq-a',
+          explanation: '새 개념은 정의부터 확인해야 합니다.',
+          feedback: '개념의 정의를 먼저 확인하는 것이 맞습니다.',
+          maxScore: 50,
+          questionId: 'question-mcq',
+          score: 50,
+          submittedAnswer: 'mcq-a',
+          verdict: 'CORRECT',
+        },
+        {
+          correctAnswer: 'review-a',
+          explanation: '이해가 낮은 페이지를 복습해야 합니다.',
+          feedback: '복습 순서를 다시 확인해 보세요.',
+          maxScore: 50,
+          questionId: 'question-review',
+          score: 0,
+          submittedAnswer: 'review-b',
+          verdict: 'WRONG',
+        },
+      ],
+      maxScore: 100,
+      passed: false,
+      quizId: 50,
+      score: 48,
+      submissionId: 200,
+      submittedAt: '2026-07-28T00:10:00Z',
+    })
+  }
+
   return apiFailure('NOT_FOUND', `${request.method} ${path}`, 404)
 }
 

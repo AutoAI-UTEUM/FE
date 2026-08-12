@@ -1,10 +1,10 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
 import { installApiFixtureServer } from '../../test/apiFixtureServer'
-import { QuizPage } from './QuizPage'
+import { QuizPage, QuizWorkspace } from './QuizPage'
 
 beforeEach(() => {
   installApiFixtureServer()
@@ -46,12 +46,12 @@ describe('QuizPage', () => {
 
     fireEvent.click(trueChoice)
     expect(trueChoice).toBeChecked()
-    expect(screen.getByText('문항 1 / 1 · 답변 1 / 1')).toBeInTheDocument()
+    expect(screen.getByText('문항 1 / 1')).toBeInTheDocument()
   })
 
   it('validates an empty answer from an API quiz', async () => {
     renderQuizPage()
-    await screen.findByText('문항 1 / 2 · 답변 0 / 2')
+    await screen.findByLabelText('퀴즈 정보')
 
     fireEvent.click(screen.getByRole('button', { name: '제출' }))
 
@@ -67,18 +67,16 @@ describe('QuizPage', () => {
     expect(
       await screen.findByRole('button', { name: '제출 완료' }),
     ).toBeDisabled()
-    expect(screen.getByRole('heading', { name: '결과' })).toBeInTheDocument()
+    expect(screen.getByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
   })
 
   it('shows progress across API questions', async () => {
     renderQuizPage()
 
-    expect(
-      await screen.findByText('문항 1 / 2 · 답변 0 / 2'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
 
-    expect(screen.getByText('문항 2 / 2 · 답변 0 / 2')).toBeInTheDocument()
+    expect(screen.getByText('문항 2 / 2')).toBeInTheDocument()
   })
 
   it('renders the diagnosis action returned by quiz submission', async () => {
@@ -88,16 +86,50 @@ describe('QuizPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '제출' }))
 
     expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
-    expect(screen.getByText('정답')).toBeInTheDocument()
-    expect(screen.getByText('오답')).toBeInTheDocument()
-    expect(screen.getByText('개념의 정의를 먼저 확인한다.')).toBeInTheDocument()
-    expect(screen.getByText('50 / 50')).toBeInTheDocument()
-    expect(screen.getByText('0 / 50')).toBeInTheDocument()
+    let questionResult = screen.getByRole('region', { name: '현재 문항 채점 결과' })
+    expect(within(questionResult).getByText('오답')).toBeInTheDocument()
+    expect(within(questionResult).getByText('0 / 50')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '이전 문항' }))
+    questionResult = screen.getByRole('region', { name: '현재 문항 채점 결과' })
+    expect(within(questionResult).getByText('정답')).toBeInTheDocument()
+    expect(within(questionResult).getByText('50 / 50')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '진단으로 이어가기' }),
     ).toHaveAttribute('href', '/sessions/100/diagnosis/42')
     expect(
       screen.queryByText(/정답:|루브릭|private answer/i),
     ).not.toBeInTheDocument()
+  })
+
+  it('restores answers, verdicts, correct answers, and explanations in review mode', async () => {
+    render(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace
+            embedded
+            quizId="50"
+            reviewSummary={{
+              maxScore: 100,
+              passed: false,
+              quizId: '50',
+              quizType: 'MCQ',
+              score: 48,
+              submitted: true,
+              title: '학습 확인 퀴즈',
+            }}
+          />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+    expect(screen.getByText('정답')).toBeInTheDocument()
+    expect(screen.getByText('정답·기준 답안')).toBeInTheDocument()
+    expect(screen.getByText('해설')).toBeInTheDocument()
+    expect(screen.getByText('새 개념은 정의부터 확인해야 합니다.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
+    expect(screen.getByText('오답')).toBeInTheDocument()
+    expect(screen.getByText('이해가 낮은 페이지를 복습해야 합니다.')).toBeInTheDocument()
+    expect(screen.getByText('복습 순서를 다시 확인해 보세요.')).toBeInTheDocument()
   })
 })

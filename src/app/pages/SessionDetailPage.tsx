@@ -20,6 +20,7 @@ import {
   SessionResourcePanel,
   UiActionsRenderer,
   type LearningSession,
+  type SessionQuizSummary,
   type SessionResourceWeek,
   type SessionTurnResult,
   type UiAction,
@@ -86,15 +87,17 @@ export function SessionDetailPage() {
   const [isSelectingQuizType, setIsSelectingQuizType] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [embeddedQuizId, setEmbeddedQuizId] = useState<string | null>(null)
+  const [embeddedQuizReviewSummary, setEmbeddedQuizReviewSummary] = useState<SessionQuizSummary>()
+  const [sessionQuizzes, setSessionQuizzes] = useState<SessionQuizSummary[]>([])
+  const [sessionQuizzesError, setSessionQuizzesError] = useState<string | null>(null)
+  const [isLoadingSessionQuizzes, setIsLoadingSessionQuizzes] = useState(false)
   const [resourceWeeks, setResourceWeeks] = useState<SessionResourceWeek[]>([])
   const [resourceReloadKey, setResourceReloadKey] = useState(0)
   const [materialFile, setMaterialFile] = useState<Blob | null | undefined>()
   const [materialFileError, setMaterialFileError] = useState<string | null>(null)
   const [chatPanelWidth, setChatPanelWidth] = useState<number | null>(null)
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
-  const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(
-    () => window.innerWidth >= 1536,
-  )
+  const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
   const chat = useSessionChat(sessionsRepository, sessionId ?? '')
@@ -194,9 +197,42 @@ export function SessionDetailPage() {
       && autoOpenedQuizIdRef.current !== activeQuizId
     ) {
       autoOpenedQuizIdRef.current = activeQuizId
+      setEmbeddedQuizReviewSummary(undefined)
       setEmbeddedQuizId(activeQuizId)
     }
   }, [session?.activeQuizId, session?.pageStatus])
+
+  useEffect(() => {
+    const activeSessionId = session?.id
+    if (!activeSessionId) return
+
+    const controller = new AbortController()
+    const loadSessionQuizzes = async () => {
+      await Promise.resolve()
+      if (controller.signal.aborted) return
+
+      setIsLoadingSessionQuizzes(true)
+      try {
+        const quizzes = await sessionsRepository.listQuizzes(
+          activeSessionId,
+          controller.signal,
+        )
+        if (controller.signal.aborted) return
+        setSessionQuizzes(quizzes)
+        setSessionQuizzesError(null)
+      } catch (requestError: unknown) {
+        if (!controller.signal.aborted) {
+          setSessionQuizzesError(getRequestErrorMessage(requestError))
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingSessionQuizzes(false)
+      }
+    }
+
+    void loadSessionQuizzes()
+
+    return () => controller.abort()
+  }, [resourceReloadKey, session?.id, sessionsRepository])
 
   useEffect(() => {
     const activeSessionId = session?.id
@@ -226,14 +262,6 @@ export function SessionDetailPage() {
           ...listedSessions.filter((item) => item.id !== activeSessionId),
         ]
         const sessionByMaterial = selectSessionsByMaterial(sessions)
-        const quizzesBySession = new Map(
-          await Promise.all(
-            Array.from(sessionByMaterial.values()).map(async (item) => [
-              item.id,
-              await sessionsRepository.listQuizzes(item.id, controller.signal),
-            ] as const),
-          ),
-        )
 
         if (controller.signal.aborted) return
         const orderedWeeks = [...context.weeks].sort(
@@ -247,9 +275,6 @@ export function SessionDetailPage() {
             const materialSession = sessionByMaterial.get(material.id)
             return {
               id: material.id,
-              quizzes: materialSession
-                ? (quizzesBySession.get(materialSession.id) ?? [])
-                : [],
               sessionId: materialSession?.id,
               status: material.status,
               title: material.title,
@@ -512,7 +537,9 @@ export function SessionDetailPage() {
     setIsSelectingQuizType(false)
     if (result.activeQuizId) {
       autoOpenedQuizIdRef.current = result.activeQuizId
+      setEmbeddedQuizReviewSummary(undefined)
       setEmbeddedQuizId(result.activeQuizId)
+      setResourceReloadKey((key) => key + 1)
     }
   }
 
@@ -532,6 +559,12 @@ export function SessionDetailPage() {
     } catch (requestError) {
       setError(getRequestErrorMessage(requestError))
     }
+  }
+
+  function handleOpenQuizHistory(quizId: string) {
+    const summary = sessionQuizzes.find((quiz) => quiz.quizId === quizId)
+    setEmbeddedQuizReviewSummary(summary?.submitted ? summary : undefined)
+    setEmbeddedQuizId(quizId)
   }
 
   const availableUiActions = chat.streamUiActions.length > 0
@@ -593,10 +626,7 @@ export function SessionDetailPage() {
         {isResourcePanelOpen ? (
           <SessionResourcePanel
             activeMaterialId={activeSession.materialId}
-            backLabel="주차 페이지로"
-            backTo={weekPagePath}
             onClose={() => setIsResourcePanelOpen(false)}
-            onOpenQuiz={setEmbeddedQuizId}
             resourcePath={(material) =>
               material.sessionId
                 ? sessionDetailPath(material.sessionId)
@@ -626,12 +656,17 @@ export function SessionDetailPage() {
             {embeddedQuizId ? (
               <QuizWorkspace
                 embedded
-                onBackToPdf={() => setEmbeddedQuizId(null)}
+                onBackToPdf={() => {
+                  setEmbeddedQuizId(null)
+                  setEmbeddedQuizReviewSummary(undefined)
+                }}
                 onSubmitted={() => void refreshLearningProgress()}
                 quizId={embeddedQuizId}
+                reviewSummary={embeddedQuizReviewSummary}
               />
             ) : (
               <SessionPageViewer
+                backTo={weekPagePath}
                 currentPage={currentPage}
                 file={materialFile}
                 fileError={materialFileError}
@@ -704,7 +739,10 @@ export function SessionDetailPage() {
 
                 {activeSession.activeQuizId && !isSelectingQuizType && !embeddedQuizId ? (
                   <Button
-                    onClick={() => setEmbeddedQuizId(activeSession.activeQuizId ?? null)}
+                    onClick={() => {
+                      setEmbeddedQuizReviewSummary(undefined)
+                      setEmbeddedQuizId(activeSession.activeQuizId ?? null)
+                    }}
                     size="sm"
                     type="button"
                     variant="secondary"
@@ -739,8 +777,13 @@ export function SessionDetailPage() {
             ) : undefined}
             onExplainCurrentPage={() => handleEvent('EXPLAIN_CURRENT_PAGE')}
             onExplainNextPage={handleExplainNextPage}
+            onOpenQuiz={handleOpenQuizHistory}
             onRequestQuiz={() => setIsSelectingQuizType(true)}
+            onReloadQuizzes={() => setResourceReloadKey((key) => key + 1)}
             onTurnCompleted={applyTurnResult}
+            quizzes={sessionQuizzes}
+            quizzesError={sessionQuizzesError}
+            isLoadingQuizzes={isLoadingSessionQuizzes}
             sessionId={activeSession.id}
           />
         </div>

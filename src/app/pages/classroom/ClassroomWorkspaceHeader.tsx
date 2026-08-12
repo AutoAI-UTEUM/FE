@@ -7,11 +7,13 @@ import type { Classroom } from '../../../features/classrooms'
 import { PageHeader } from '../../../shared/ui'
 import {
   classroomAnalyticsPath,
+  classroomDetailPath,
   classroomEditPath,
+  classroomReportsPath,
 } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
-export type ClassroomWorkspaceTab = 'course' | 'learning' | 'settings'
+export type ClassroomWorkspaceTab = 'course' | 'learning' | 'reports' | 'settings'
 
 export function ClassroomWorkspaceHeader({
   actionSlotRef,
@@ -36,7 +38,9 @@ export function ClassroomWorkspaceHeader({
   const { user } = useAuth()
   const tabs = isInstructorRole(user?.role)
     ? [
-        { id: 'learning' as const, label: '학습 현황·리포트', to: classroomAnalyticsPath(classroom.id) },
+        { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
+        { id: 'learning' as const, label: '학습 현황', to: classroomAnalyticsPath(classroom.id) },
+        { id: 'reports' as const, label: '리포트', to: classroomReportsPath(classroom.id) },
         { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
       ]
     : []

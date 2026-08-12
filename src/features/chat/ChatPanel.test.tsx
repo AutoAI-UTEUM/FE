@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { AuthenticatedRequest } from '../auth'
 import type { SessionsRepository, SessionTurnResult } from '../sessions'
 import { ChatPanel } from './ChatPanel'
 import { useSessionChat } from './useSessionChat'
@@ -17,6 +18,7 @@ function ChatHarness({
   onExplainCurrentPage,
   onExplainNextPage,
   onTurnCompleted,
+  request,
   repository,
   sessionId = '100',
 }: {
@@ -25,6 +27,7 @@ function ChatHarness({
   onExplainCurrentPage?: () => void
   onExplainNextPage?: () => void
   onTurnCompleted?: (result: SessionTurnResult) => void
+  request?: AuthenticatedRequest
   repository: SessionsRepository
   sessionId?: string
 }) {
@@ -37,6 +40,7 @@ function ChatHarness({
       onExplainCurrentPage={onExplainCurrentPage}
       onExplainNextPage={onExplainNextPage}
       onTurnCompleted={onTurnCompleted}
+      request={request}
       sessionId={sessionId}
     />
   )
@@ -364,10 +368,43 @@ describe('ChatPanel', () => {
     )
     expect(screen.getByRole('button', { name: 'AI 답변 복사' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'AI 답변 공유' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AI 답변 복사' }).closest('article')).toBeNull()
+    expect(screen.getByText('AI 답변').closest('article')).toHaveClass('w-full', 'min-w-0')
     fireEvent.click(screen.getByRole('button', { name: 'AI 답변 노트에 저장' }))
 
     expect(await screen.findByRole('heading', { name: '워터마킹' })).toBeInTheDocument()
     expect(screen.getByRole('table')).toBeInTheDocument()
+  })
+
+  it('keeps the chat visible and reports a note save failure', async () => {
+    const request = vi.fn(async (_path: string, options?: { method?: string }) => {
+      if (!options?.method || options.method === 'GET') {
+        return {
+          data: { items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 },
+          success: true,
+        }
+      }
+      throw new Error('학습 자료를 찾을 수 없습니다.')
+    }) as unknown as AuthenticatedRequest
+    const repository = createRepository({
+      listMessages: vi.fn().mockResolvedValue([
+        {
+          content: '저장할 AI 답변',
+          createdAt: '2026-07-27T00:00:00Z',
+          id: '500',
+          senderType: 'AI',
+        },
+      ]),
+    })
+
+    render(<ChatHarness repository={repository} request={request} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 답변 노트에 저장' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '노트를 저장하지 못했습니다. 학습 자료를 찾을 수 없습니다.',
+    )
+    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: '내 노트' })).toHaveAttribute('aria-selected', 'false')
   })
 
   it('shows message actions on user chat bubbles', async () => {
@@ -386,6 +423,7 @@ describe('ChatPanel', () => {
     expect(await screen.findByRole('button', { name: '내 질문 복사' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '내 질문 공유' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '내 질문 노트에 저장' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '내 질문 복사' }).closest('article')).toBeNull()
   })
 })
 

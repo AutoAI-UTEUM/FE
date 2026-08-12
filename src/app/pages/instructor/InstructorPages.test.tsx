@@ -520,12 +520,15 @@ describe('instructor pages', () => {
       ['/classrooms/12/analytics'],
     )
 
-    expect(await screen.findByRole('link', { name: '학습 현황·리포트' })).toHaveAttribute('aria-current', 'page')
-    expect(await screen.findByText('17건')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: '학습 현황' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('link', { name: '리포트' }).some((link) => link.getAttribute('href') === '/classrooms/12/reports')).toBe(true)
+    expect(await screen.findByText('최근 7일 AI 질문')).toBeInTheDocument()
+    expect(screen.getByText('6건')).toBeInTheDocument()
+    expect(screen.queryByLabelText('학습 현황 요약')).not.toBeInTheDocument()
     expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
     expect(screen.getByText('64%')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/students/9/reports')
+    expect(screen.getAllByRole('link', { name: '리포트' }).some((link) => link.getAttribute('href') === '/classrooms/12/students/9/reports')).toBe(true)
     expect(
       screen.queryByRole('button', { name: '리마인더 보내기' }),
     ).not.toBeInTheDocument()

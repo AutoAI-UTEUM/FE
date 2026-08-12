@@ -60,18 +60,21 @@ describe('exams repository', () => {
       .mockResolvedValueOnce(success(submissionDto))
       .mockResolvedValueOnce(success(submissionDto))
       .mockResolvedValueOnce(success(submissionDto))
+      .mockResolvedValueOnce(success({ ...submissionDto, status: 'SUBMITTED' }))
       .mockResolvedValueOnce(success({ items: [{ ...submissionDto, attemptCount: 1, userId: 7, userName: '김학습' }], page: 0, size: 100, totalElements: 1, totalPages: 1 }))
     const repository = createExamsRepository(request as AuthenticatedRequest)
 
     await expect(repository.submit('10', { q1: '답' }, 'request-1')).resolves.toMatchObject({ id: '300', status: 'GRADED' })
     await repository.getMySubmission('10', 1)
     await repository.getSubmission('10', '300')
+    await expect(repository.regrade('10', '300')).resolves.toMatchObject({ id: '300', status: 'SUBMITTED' })
     await expect(repository.listSubmissions('10')).resolves.toMatchObject([{ id: '300', userId: '7' }])
 
     expect(request).toHaveBeenNthCalledWith(1, '/api/exams/10/submissions', expect.objectContaining({ body: { answers: [{ answer: '답', questionId: 'q1' }], requestId: 'request-1' }, method: 'POST' }))
     expect(request).toHaveBeenNthCalledWith(2, '/api/exams/10/submissions/me?attemptNo=1', { signal: undefined })
     expect(request).toHaveBeenNthCalledWith(3, '/api/exams/10/submissions/300', { signal: undefined })
-    expect(request).toHaveBeenNthCalledWith(4, '/api/exams/10/submissions?page=0&size=100', { signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(4, '/api/exams/10/submissions/300/regrade', { method: 'POST', signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(5, '/api/exams/10/submissions?page=0&size=100', { signal: undefined })
   })
 
   it('generates editable AI question drafts without persisting internal source context fields', async () => {

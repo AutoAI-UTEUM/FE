@@ -60,4 +60,16 @@ describe('rawApiRequest', () => {
       },
     )
   })
+
+  it('maps non-JSON rate limit responses', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<html>too many requests</html>', { status: 429 }),
+    )
+
+    await expect(rawApiRequest('/api/materials')).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      message: '요청이 많아요, 잠시 후 다시 시도해 주세요.',
+      status: 429,
+    })
+  })
 })

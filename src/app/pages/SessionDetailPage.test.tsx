@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -56,14 +57,17 @@ describe('SessionDetailPage', () => {
     ).toHaveAttribute('href', '/classrooms/12')
   })
 
-  it('closes and restores the resource list', async () => {
+  it('starts with the resource list closed and allows reopening it', async () => {
     renderSessionDetail()
 
-    fireEvent.click(await screen.findByRole('button', { name: '자료 목록 닫기' }))
-    expect(screen.queryByRole('link', { name: '주차 페이지로' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '자료 목록' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료 목록 닫기' })).not.toBeInTheDocument()
 
-    fireEvent.click(await screen.findByRole('button', { name: '자료 목록' }, { timeout: 5_000 }))
-    expect(screen.getByRole('link', { name: '주차 페이지로' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '자료 목록' }))
+    expect(await screen.findByRole('button', { name: '자료 목록 닫기' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '자료 목록 닫기' }))
+    expect(screen.getByRole('button', { name: '자료 목록' })).toBeInTheDocument()
   })
 
   it('reflects the page confirmed by a chat turn in the visible viewer', async () => {
@@ -173,7 +177,7 @@ describe('SessionDetailPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '객관식' }))
     expect(await screen.findByRole('button', { name: 'PDF로 돌아가기' })).toBeInTheDocument()
-    expect(await screen.findByText('문항 1 / 2 · 답변 0 / 2')).toBeInTheDocument()
+    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'PDF로 돌아가기' }))
     expect(
@@ -185,15 +189,16 @@ describe('SessionDetailPage', () => {
     renderSessionDetail('/sessions/103')
 
     expect(await screen.findByRole('button', { name: 'PDF로 돌아가기' })).toBeInTheDocument()
-    expect(await screen.findByText('문항 1 / 2 · 답변 0 / 2')).toBeInTheDocument()
+    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'PDF로 돌아가기' }))
     expect(await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
   })
 
-  it('groups current-classroom materials and quizzes by week', async () => {
+  it('keeps the left panel material-only and shows submitted quiz history in My Quizzes', async () => {
     renderSessionDetail()
 
+    fireEvent.click(await screen.findByRole('button', { name: '자료 목록' }))
     const firstWeekLabel = await screen.findByText('핵심 개념')
     const secondWeekLabel = screen.getByText('심화 학습')
     expect(
@@ -220,13 +225,17 @@ describe('SessionDetailPage', () => {
     const materialListItem = materialLink?.closest('li')
     const materialList = materialListItem?.parentElement
     const materialSection = materialList?.parentElement
+    const weekList = materialSection?.parentElement
     const resourcePanel = longMaterialTitle.closest('aside')
     expect(materialLink).toHaveClass(
       'min-w-0',
       'w-full',
       'max-w-full',
       'overflow-hidden',
+      'min-h-8.5',
+      'py-1.5',
     )
+    expect(weekList).toHaveClass('gap-2')
     expect(materialListItem).toHaveClass('min-w-0', 'w-full', 'max-w-full')
     expect(materialList).toHaveClass('min-w-0', 'w-full', 'max-w-full')
     expect(materialSection).toHaveClass(
@@ -235,17 +244,26 @@ describe('SessionDetailPage', () => {
       'max-w-full',
       'overflow-hidden',
     )
-    expect(resourcePanel).toHaveClass('[scrollbar-gutter:stable]')
-    expect(screen.getByText('학습 확인 퀴즈')).toBeInTheDocument()
-    expect(screen.getByText('객관식')).toBeInTheDocument()
-    expect(screen.queryByText('48점')).not.toBeInTheDocument()
+    expect(resourcePanel).not.toHaveClass('[scrollbar-gutter:stable_both-edges]')
+    expect(screen.queryByText('학습 확인 퀴즈')).not.toBeInTheDocument()
     expect(screen.queryByText('강의실 자료')).not.toBeInTheDocument()
     expect(screen.queryByText('1/5')).not.toBeInTheDocument()
     expect(screen.queryByText(/^자료 \d+개$/)).not.toBeInTheDocument()
     expect(screen.queryByText('등록된 자료가 없습니다.')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /학습 확인 퀴즈/ }))
-    expect(await screen.findByRole('button', { name: 'PDF로 돌아가기' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /내 퀴즈/ }))
+    expect(await screen.findByText('학습 확인 퀴즈')).toBeInTheDocument()
+    expect(screen.getByText('객관식')).toBeInTheDocument()
+    expect(screen.getByText('48 / 100점')).toBeInTheDocument()
+    expect(screen.getByText('보완 필요')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', {
+      name: '학습 확인 퀴즈 결과 및 문제 보기',
+    }))
+
+    const quizInfo = await screen.findByLabelText('퀴즈 정보')
+    expect(within(quizInfo).getByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+    expect(screen.getByText('새 개념을 학습할 때 가장 먼저 확인할 정보는 무엇인가요?')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
   })
 
   it('dismisses the widget when the no/WAIT branch is chosen', async () => {

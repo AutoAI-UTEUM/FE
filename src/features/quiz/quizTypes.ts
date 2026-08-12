@@ -27,10 +27,13 @@ export interface PublicQuiz {
 }
 
 export interface PublicQuizFeedback {
+  correctAnswer?: string
+  explanation?: string
   maxScore?: number
   message: string
   questionId: string
   score?: number
+  submittedAnswer?: string
   verdict: 'CORRECT' | 'PARTIAL' | 'UNKNOWN' | 'WRONG'
 }
 

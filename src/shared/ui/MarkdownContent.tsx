@@ -9,6 +9,7 @@ import { cx } from '../lib/cx'
 interface MarkdownContentProps {
   className?: string
   content: string
+  isStreaming?: boolean
 }
 
 const markdownCodePattern = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
@@ -65,7 +66,31 @@ function normalizeParenthesizedLatex(content: string): string {
   return normalized
 }
 
-function normalizeMarkdownLatex(content: string): string {
+function normalizeWrappedStrongPunctuation(content: string): string {
+  return content.replace(
+    /\*\*(["'“‘「『(])([^*\n]+?)(["'”’」』)])\*\*/g,
+    (_, opening: string, value: string, closing: string) => (
+      `${opening}**${value}**${closing}`
+    ),
+  )
+}
+
+function hideIncompleteStreamingStrongDelimiter(content: string): string {
+  const delimiters: number[] = []
+  for (let index = 0; index < content.length - 1; index += 1) {
+    if (content[index] === '*' && content[index + 1] === '*' && content[index - 1] !== '\\') {
+      delimiters.push(index)
+      index += 1
+    }
+  }
+  if (delimiters.length % 2 === 0) return content
+  const lastDelimiter = delimiters.at(-1)
+  return lastDelimiter === undefined
+    ? content
+    : `${content.slice(0, lastDelimiter)}${content.slice(lastDelimiter + 2)}`
+}
+
+function normalizeMarkdownLatex(content: string, isStreaming: boolean): string {
   return content
     .split(markdownCodePattern)
     .map((segment, index) => {
@@ -79,12 +104,17 @@ function normalizeMarkdownLatex(content: string): string {
           `$${expression.trim()}$`
         ))
 
-      return normalizeParenthesizedLatex(withStandardDelimiters)
+      const withStableStrongEmphasis = normalizeWrappedStrongPunctuation(withStandardDelimiters)
+      return normalizeParenthesizedLatex(
+        isStreaming
+          ? hideIncompleteStreamingStrongDelimiter(withStableStrongEmphasis)
+          : withStableStrongEmphasis,
+      )
     })
     .join('')
 }
 
-export function MarkdownContent({ className, content }: MarkdownContentProps) {
+export function MarkdownContent({ className, content, isStreaming = false }: MarkdownContentProps) {
   return (
     <div
       className={cx(
@@ -110,7 +140,7 @@ export function MarkdownContent({ className, content }: MarkdownContentProps) {
         rehypePlugins={[rehypeKatex]}
         remarkPlugins={[remarkGfm, remarkMath]}
       >
-        {normalizeMarkdownLatex(content)}
+        {normalizeMarkdownLatex(content, isStreaming)}
       </Markdown>
     </div>
   )

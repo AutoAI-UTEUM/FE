@@ -239,7 +239,7 @@ export function ClassroomDetailPage() {
 
     {isInstructor && isReadOnly ? <p className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 type-caption text-stone-600"><Archive size={15} />종료된 강의실입니다. 콘텐츠를 확인할 수 있지만 새 항목을 추가하거나 수정할 수 없습니다.</p> : null}
 
-    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:grid-cols-[190px_minmax(0,1fr)]">
+    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
       <ClassroomContentRail
         endDate={classroom.endDate}
         onSelect={(weekNumber) => updateQuery({ panel: null, week: weekNumber === null ? 'all' : String(weekNumber) })}
@@ -302,6 +302,7 @@ async function copyInviteCode(classroom: Classroom, repository: ReturnType<typeo
 }
 
 function resolveSelectedWeek(value: string | null, classroom: Classroom | null, weeks: ClassroomWeek[]): number | null {
+  if (value === null) return null
   if (value === 'all') return null
   const requested = Number(value)
   if (Number.isInteger(requested) && weeks.some((week) => week.weekNumber === requested)) return requested
