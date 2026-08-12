@@ -5,7 +5,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice, type ClassroomNoticeInput, type ClassroomWeek } from '../../features/classrooms'
 import { createExamsRepository, type Exam } from '../../features/exams'
-import { createMaterialsRepository, getMaterialFailureMessage, validateMaterialUpload } from '../../features/materials'
+import { createMaterialsRepository, getDefaultMaterialTitle, getMaterialFailureMessage, MAX_MATERIAL_TITLE_LENGTH, validateMaterialTitle, validateMaterialUpload } from '../../features/materials'
 import { createSessionsRepository } from '../../features/sessions'
 import { getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
@@ -40,11 +40,13 @@ export function ClassroomDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadTargetWeek, setUploadTargetWeek] = useState<number | null>(null)
+  const [uploadInitialFile, setUploadInitialFile] = useState<File | null>(null)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [draggingWeek, setDraggingWeek] = useState<number | null>(null)
   const [pendingMaterialId, setPendingMaterialId] = useState<string | null>(null)
   const [openingMaterialId, setOpeningMaterialId] = useState<string | null>(null)
   const materialRefreshAttempts = useRef(0)
+  const uploadInFlightRef = useRef(false)
   const isInstructor = isInstructorRole(user?.role)
   const isReadOnly = classroom?.status === 'COMPLETED'
   const canManage = isInstructor && !isReadOnly
@@ -151,16 +153,17 @@ export function ClassroomDetailPage() {
     }, { replace })
   }
 
-  async function uploadMaterial(file: File, weekNumber: number): Promise<boolean> {
-    if (!canManage) return false
-    const validationError = validateMaterialUpload(file)
+  async function uploadMaterial(file: File, title: string, weekNumber: number): Promise<boolean> {
+    if (!canManage || uploadInFlightRef.current) return false
+    const validationError = validateMaterialUpload(file) ?? validateMaterialTitle(title)
     if (validationError) {
       showToast(validationError, 'danger')
       return false
     }
+    uploadInFlightRef.current = true
     setIsUploading(true)
     try {
-      const material = await materialsRepository.upload(file, { classroomId, weekNumber })
+      const material = await materialsRepository.upload(file, { classroomId, title, weekNumber })
       const uploadMessage = material.status === 'FAILED'
         ? getMaterialFailureMessage(material.failureReason)
         : '자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.'
@@ -173,6 +176,7 @@ export function ClassroomDetailPage() {
       showToast(getRequestErrorMessage(error), 'danger')
       return false
     } finally {
+      uploadInFlightRef.current = false
       setIsUploading(false)
     }
   }
@@ -261,10 +265,16 @@ export function ClassroomDetailPage() {
           onAdd={(kind) => {
             if (kind === 'material') {
               setUploadTargetWeek(selectedWeekNumber ?? weeks[0]?.weekNumber ?? null)
+              setUploadInitialFile(null)
               setIsUploadDialogOpen(true)
             } else updateQuery({ panel: `${kind}-new` })
           }}
-          onDrop={(file) => selectedWeekNumber !== null ? void uploadMaterial(file, selectedWeekNumber) : undefined}
+          onDrop={(file) => {
+            if (selectedWeekNumber === null) return
+            setUploadTargetWeek(selectedWeekNumber)
+            setUploadInitialFile(file)
+            setIsUploadDialogOpen(true)
+          }}
           onFilter={(nextFilter) => updateQuery({ filter: nextFilter === 'all' ? null : nextFilter })}
           onItem={(item) => {
             if (item.kind === 'material') void openMaterial(item.source.id)
@@ -286,7 +296,7 @@ export function ClassroomDetailPage() {
       </div>
     </section>
 
-    {isUploadDialogOpen ? <UploadMaterialDialog initialWeekNumber={uploadTargetWeek ?? undefined} isUploading={isUploading} onClose={() => setIsUploadDialogOpen(false)} onUpload={uploadMaterial} weeks={weeks} /> : null}
+    {isUploadDialogOpen ? <UploadMaterialDialog initialFile={uploadInitialFile ?? undefined} initialWeekNumber={uploadTargetWeek ?? undefined} isUploading={isUploading} onClose={() => { setIsUploadDialogOpen(false); setUploadInitialFile(null) }} onUpload={uploadMaterial} weeks={weeks} /> : null}
   </ClassroomWorkspaceContainer>
 }
 
@@ -318,9 +328,19 @@ function sortWeeks(weeks: ClassroomWeek[]): ClassroomWeek[] {
   return [...weeks].sort((left, right) => left.displayOrder - right.displayOrder || left.weekNumber - right.weekNumber)
 }
 
-function UploadMaterialDialog({ initialWeekNumber, isUploading, onClose, onUpload, weeks }: { initialWeekNumber?: number; isUploading: boolean; onClose: () => void; onUpload: (file: File, weekNumber: number) => Promise<boolean>; weeks: ClassroomWeek[] }) {
+function UploadMaterialDialog({ initialFile, initialWeekNumber, isUploading, onClose, onUpload, weeks }: { initialFile?: File; initialWeekNumber?: number; isUploading: boolean; onClose: () => void; onUpload: (file: File, title: string, weekNumber: number) => Promise<boolean>; weeks: ClassroomWeek[] }) {
   const [weekNumber, setWeekNumber] = useState(initialWeekNumber ?? weeks[0]?.weekNumber ?? 1)
-  const [file, setFile] = useState<File | null>(null)
-  async function submit(event: FormEvent) { event.preventDefault(); if (file && await onUpload(file, weekNumber)) onClose() }
-  return <div aria-label="강의자료 업로드" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">강의자료 업로드</h2><button aria-label="강의자료 업로드 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{weeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><span className="mt-1 type-caption text-stone-400">PDF · 최대 45MB</span><span className="mt-1 type-caption text-stone-500">PPT/PPTX는 PDF로 변환 후 업로드해 주세요.</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" /></label><div className="mt-5 flex justify-end gap-2"><Button onClick={onClose} variant="secondary">취소</Button><Button disabled={!file || isUploading} type="submit">{isUploading ? '업로드 중' : '업로드'}</Button></div></form></div>
+  const [file, setFile] = useState<File | null>(initialFile ?? null)
+  const [title, setTitle] = useState(initialFile ? getDefaultMaterialTitle(initialFile.name) : '')
+  const fileError = file ? validateMaterialUpload(file) : null
+  const titleError = validateMaterialTitle(title)
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (file && !fileError && !titleError && await onUpload(file, title.trim(), weekNumber)) onClose()
+  }
+  function selectFile(nextFile: File | null) {
+    setFile(nextFile)
+    setTitle(nextFile ? getDefaultMaterialTitle(nextFile.name) : '')
+  }
+  return <div aria-label="강의자료 업로드" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">강의자료 업로드</h2><button aria-label="강의자료 업로드 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{weeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><span className="mt-1 type-caption text-stone-400">PDF · 최대 45MB</span><span className="mt-1 type-caption text-stone-500">PPT/PPTX는 PDF로 변환 후 업로드해 주세요.</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} type="file" /></label>{fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}<label className="mt-4 block type-control font-semibold">자료 제목<input aria-invalid={Boolean(titleError)} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={MAX_MATERIAL_TITLE_LENGTH} onChange={(event) => setTitle(event.target.value)} placeholder="자료 제목을 입력하세요." value={title} /></label>{titleError && file ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{titleError}</p> : null}<div className="mt-5 flex justify-end gap-2"><Button onClick={onClose} variant="secondary">취소</Button><Button disabled={!file || Boolean(fileError) || Boolean(titleError) || isUploading} type="submit">{isUploading ? '업로드 중' : '업로드'}</Button></div></form></div>
 }

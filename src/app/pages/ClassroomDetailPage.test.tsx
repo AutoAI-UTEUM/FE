@@ -17,6 +17,7 @@ describe('ClassroomDetailPage instructor materials', () => {
     let uploadedValues: {
       classroomId: FormDataEntryValue | null
       file: FormDataEntryValue | null
+      title: FormDataEntryValue | null
       weekNumber: FormDataEntryValue | null
     } | null = null
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -65,6 +66,7 @@ describe('ClassroomDetailPage instructor materials', () => {
         uploadedValues = {
           classroomId: body.get('classroomId'),
           file: body.get('file'),
+          title: body.get('title'),
           weekNumber: body.get('weekNumber'),
         }
         return success({
@@ -137,10 +139,15 @@ describe('ClassroomDetailPage instructor materials', () => {
     fireEvent.dragEnter(contentRegion, { dataTransfer: { files: [file] } })
     fireEvent.drop(contentRegion, { dataTransfer: { files: [file] } })
 
+    expect(screen.getByRole('dialog', { name: '강의자료 업로드' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('lecture')
+    fireEvent.click(screen.getByRole('button', { name: '업로드' }))
+
     await waitFor(() => expect(uploadedValues).not.toBeNull())
     expect(uploadedValues).toEqual({
       classroomId: '12',
       file,
+      title: 'lecture',
       weekNumber: '1',
     })
     expect(await screen.findByRole('button', { name: 'lecture' })).toBeInTheDocument()

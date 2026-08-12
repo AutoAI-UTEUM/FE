@@ -687,19 +687,25 @@ function CreateClassroomDialog({
   onSubmit,
 }: {
   onClose: () => void
-  onSubmit: (draft: CreateClassroomDraft) => void
+  onSubmit: (draft: CreateClassroomDraft) => Promise<void> | void
 }) {
   const [description, setDescription] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [name, setName] = useState('')
   const [startDate, setStartDate] = useState('')
   const [weekCount, setWeekCount] = useState(15)
+  const submitLockRef = useRef(false)
   const endDate = getEndDate(startDate, weekCount)
   const canSubmit = Boolean(name.trim() && startDate && weekCount > 0)
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (canSubmit) {
-      onSubmit({
+    if (!canSubmit || submitLockRef.current) return
+
+    submitLockRef.current = true
+    setIsSubmitting(true)
+    try {
+      await onSubmit({
         color: 'BLUE',
         description: description.trim(),
         endDate,
@@ -707,6 +713,9 @@ function CreateClassroomDialog({
         startDate,
         weekCount,
       })
+    } finally {
+      submitLockRef.current = false
+      setIsSubmitting(false)
     }
   }
 
@@ -728,6 +737,7 @@ function CreateClassroomDialog({
           <button
             aria-label="닫기"
             className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100"
+            disabled={isSubmitting}
             onClick={onClose}
             type="button"
           >
@@ -803,11 +813,11 @@ function CreateClassroomDialog({
           />
         </label>
         <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose} variant="ghost">
+          <Button disabled={isSubmitting} onClick={onClose} variant="ghost">
             취소
           </Button>
-          <Button disabled={!canSubmit} type="submit">
-            만들기
+          <Button disabled={!canSubmit || isSubmitting} type="submit">
+            {isSubmitting ? '만드는 중' : '만들기'}
           </Button>
         </div>
       </form>

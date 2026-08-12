@@ -169,6 +169,7 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
 }
 
 function stubClassroomCreationApi() {
+  let createClassroomRequests = 0
   const weekBodies: Array<{ title: string; weekNumber: number }> = []
   const weekNumbers: number[] = []
   let activeWeekRequests = 0
@@ -187,6 +188,7 @@ function stubClassroomCreationApi() {
       return envelope({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     }
     if (method === 'POST' && url.pathname === '/api/classrooms') {
+      createClassroomRequests += 1
       return envelope({
         classroomId: 12,
         color: 'BLUE',
@@ -223,6 +225,7 @@ function stubClassroomCreationApi() {
   })
 
   return {
+    getCreateClassroomRequests: () => createClassroomRequests,
     getMaxActiveWeekRequests: () => maxActiveWeekRequests,
     weekBodies,
     weekNumbers,
@@ -311,6 +314,23 @@ describe('instructor pages', () => {
     expect(requests.weekNumbers).toEqual(Array.from({ length: 15 }, (_, index) => index + 1))
     expect(requests.weekBodies.every((body) => !('releaseAt' in body))).toBe(true)
     expect(requests.getMaxActiveWeekRequests()).toBe(1)
+  })
+
+  it('creates only one classroom when the submit button is double-clicked', async () => {
+    const requests = stubClassroomCreationApi()
+    renderInstructorPage(<InstructorClassroomsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '강의실 만들기' }))
+    fireEvent.change(screen.getByLabelText('강의실 이름'), { target: { value: '중복 방지 강의실' } })
+    fireEvent.change(screen.getByLabelText('수업 시작일'), { target: { value: '2026-08-03' } })
+
+    const submitButton = screen.getByRole('button', { name: '만들기' })
+    fireEvent.click(submitButton)
+    fireEvent.click(submitButton)
+
+    expect(screen.getByRole('button', { name: '만드는 중' })).toBeDisabled()
+    await screen.findByText('15개 주차와 강의실을 만들었습니다.')
+    expect(requests.getCreateClassroomRequests()).toBe(1)
   })
 
   it('matches the classroom search controls from the instructor design', () => {

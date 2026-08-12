@@ -1,4 +1,23 @@
 export const MAX_MATERIAL_UPLOAD_BYTES = 45 * 1024 * 1024
+export const MAX_MATERIAL_TITLE_LENGTH = 255
+
+export function getDefaultMaterialTitle(fileName: string): string {
+  return fileName.replace(/\.pdf$/i, '').trim()
+}
+
+export function validateMaterialTitle(title: string): string | null {
+  const normalizedTitle = title.trim()
+
+  if (!normalizedTitle) {
+    return '자료 제목을 입력하세요.'
+  }
+
+  if (normalizedTitle.length > MAX_MATERIAL_TITLE_LENGTH) {
+    return `자료 제목은 ${MAX_MATERIAL_TITLE_LENGTH}자 이하로 입력하세요.`
+  }
+
+  return null
+}
 
 export function validateMaterialUpload(file: File | null | undefined): string | null {
   if (!file) {
