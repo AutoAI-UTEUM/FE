@@ -194,10 +194,48 @@ describe('SessionDetailPage', () => {
   it('groups current-classroom materials and quizzes by week', async () => {
     renderSessionDetail()
 
-    expect(await screen.findByText('1주차')).toBeInTheDocument()
+    const firstWeekLabel = await screen.findByText('핵심 개념')
+    const secondWeekLabel = screen.getByText('심화 학습')
+    expect(
+      firstWeekLabel.compareDocumentPosition(secondWeekLabel)
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByText('1주차')).toBeInTheDocument()
     expect(screen.getByText('2주차')).toBeInTheDocument()
+    expect(screen.getByText('1주차')).toHaveClass('whitespace-nowrap')
+    expect(screen.queryByText('8.3 - 8.9')).not.toBeInTheDocument()
+    expect(screen.queryByText('8.10 - 8.16')).not.toBeInTheDocument()
     expect(screen.getAllByText('시험 대비 요약.pdf')).toHaveLength(2)
-    expect(screen.getByText('강의 노트 5주차.pdf')).toBeInTheDocument()
+    const longMaterialTitle = screen.getByText('강의 노트 5주차.pdf')
+    expect(longMaterialTitle).toHaveClass(
+      'overflow-hidden',
+      'text-ellipsis',
+      'whitespace-nowrap',
+    )
+    expect(longMaterialTitle).toHaveAttribute(
+      'title',
+      '강의 노트 5주차.pdf',
+    )
+    const materialLink = longMaterialTitle.closest('a')
+    const materialListItem = materialLink?.closest('li')
+    const materialList = materialListItem?.parentElement
+    const materialSection = materialList?.parentElement
+    const resourcePanel = longMaterialTitle.closest('aside')
+    expect(materialLink).toHaveClass(
+      'min-w-0',
+      'w-full',
+      'max-w-full',
+      'overflow-hidden',
+    )
+    expect(materialListItem).toHaveClass('min-w-0', 'w-full', 'max-w-full')
+    expect(materialList).toHaveClass('min-w-0', 'w-full', 'max-w-full')
+    expect(materialSection).toHaveClass(
+      'min-w-0',
+      'w-full',
+      'max-w-full',
+      'overflow-hidden',
+    )
+    expect(resourcePanel).toHaveClass('[scrollbar-gutter:stable]')
     expect(screen.getByText('학습 확인 퀴즈')).toBeInTheDocument()
     expect(screen.getByText('객관식')).toBeInTheDocument()
     expect(screen.queryByText('48점')).not.toBeInTheDocument()

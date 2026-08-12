@@ -54,7 +54,31 @@ describe('2026-08-04 API additions', () => {
     })
   })
 
-  it('connects classroom analytics, week state/order, and student management', async () => {
+  it('does not expose derived week release schedules in the calendar', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      items: [
+        {
+          dateTime: '2026-08-10T00:00:00Z',
+          kind: 'WEEK_RELEASE',
+          scheduleId: 'WEEK-91',
+          title: '1주차 공개',
+        },
+        {
+          dateTime: '2026-08-11T00:00:00Z',
+          kind: 'NOTICE_PUBLISH',
+          scheduleId: 'NOTICE-7',
+          title: '과제 안내',
+        },
+      ],
+    }))
+    const repository = createCalendarRepository(request as AuthenticatedRequest)
+
+    await expect(repository.list()).resolves.toMatchObject([
+      { backendId: 'NOTICE-7', kind: 'NOTICE', title: '과제 안내' },
+    ])
+  })
+
+  it('connects classroom analytics, week order, and student management', async () => {
     const week = {
       averageProgressRate: 21,
       displayOrder: 1,
@@ -65,7 +89,6 @@ describe('2026-08-04 API additions', () => {
       weekNumber: 1,
     }
     const request = vi.fn()
-      .mockResolvedValueOnce(success({ ...week }))
       .mockResolvedValueOnce(success({ items: [week] }))
       .mockResolvedValueOnce(success({
         aiQuestionCountLast7Days: 11,
@@ -83,17 +106,15 @@ describe('2026-08-04 API additions', () => {
       .mockResolvedValueOnce(success(null))
     const repository = createClassroomsRepository(request as AuthenticatedRequest)
 
-    await expect(repository.changeWeekStatus('12', '91', 'BREAK')).resolves.toMatchObject({ id: '91', status: 'BREAK' })
     await repository.reorderWeeks('12', ['91'])
     await expect(repository.getAnalytics('12')).resolves.toMatchObject({ materials: [{ id: '10' }], questionsByPage: [{ materialId: '10' }] })
     await expect(repository.listStudents('12', { query: '학습', sort: 'LOW_PROGRESS' })).resolves.toMatchObject([{ id: '7', name: '학습자' }])
     await repository.removeStudent('12', '7')
 
-    expect(request).toHaveBeenNthCalledWith(1, '/api/classrooms/12/weeks/91/status', { body: { status: 'BREAK' }, method: 'PATCH' })
-    expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/weeks/reorder', { body: { orderedWeekIds: [91] }, method: 'PATCH' })
-    expect(request).toHaveBeenNthCalledWith(3, '/api/classrooms/12/analytics', { signal: undefined })
-    expect(request).toHaveBeenNthCalledWith(4, '/api/classrooms/12/students?page=0&size=100&q=%ED%95%99%EC%8A%B5&sort=LOW_PROGRESS', { signal: undefined })
-    expect(request).toHaveBeenNthCalledWith(5, '/api/classrooms/12/students/7', { method: 'DELETE' })
+    expect(request).toHaveBeenNthCalledWith(1, '/api/classrooms/12/weeks/reorder', { body: { orderedWeekIds: [91] }, method: 'PATCH' })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/analytics', { signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/classrooms/12/students?page=0&size=100&q=%ED%95%99%EC%8A%B5&sort=LOW_PROGRESS', { signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(4, '/api/classrooms/12/students/7', { method: 'DELETE' })
   })
 
   it('sends the expanded classroom date update contract', async () => {
@@ -111,14 +132,12 @@ describe('2026-08-04 API additions', () => {
 
     await repository.update('12', {
       endDate: '2026-11-22',
-      shiftWeekReleaseDates: true,
       startDate: '2026-08-10',
     })
 
     expect(request).toHaveBeenCalledWith('/api/classrooms/12', {
       body: {
         endDate: '2026-11-22',
-        shiftWeekReleaseDates: true,
         startDate: '2026-08-10',
       },
       method: 'PATCH',

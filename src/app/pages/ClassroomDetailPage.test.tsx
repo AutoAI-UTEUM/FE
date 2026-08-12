@@ -100,6 +100,9 @@ describe('ClassroomDetailPage instructor materials', () => {
     const contentRegion = await screen.findByRole('region', { name: '자료구조 기초' })
     expect(screen.getByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '강의' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '학습 현황·리포트' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '관리' })).toBeInTheDocument()
     expect(screen.queryByText('자료구조 강의실')).not.toBeInTheDocument()
     const weekNavigation = screen.getByRole('navigation', { name: '강의실 주차' })
     const firstWeekButton = within(weekNavigation).getByText('자료구조 기초').closest('button')
@@ -262,7 +265,7 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows every classroom week to learners when the backend omits unreleased weeks', async () => {
+  it('uses the same backend week titles and display order for learners', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = new URL(
         input instanceof Request ? input.url : String(input),
@@ -274,16 +277,44 @@ describe('ClassroomDetailPage instructor materials', () => {
       }
       if (url.pathname === '/api/classrooms/12/weeks') {
         return success({
-          items: [{
-            ...weekFixture,
-            materials: [{
-              materialId: 93,
-              pageCount: 12,
-              processingStatus: 'READY',
-              title: 'published.pdf',
-              uploadedAt: '2026-08-10T00:00:00Z',
-            }],
-          }],
+          items: [
+            {
+              ...weekFixture,
+              displayOrder: 2,
+              title: '시계열 기본 II',
+              weekId: 102,
+              weekNumber: 2,
+            },
+            {
+              ...weekFixture,
+              displayOrder: 1,
+              materials: [{
+                materialId: 93,
+                pageCount: 12,
+                processingStatus: 'READY',
+                title: 'published.pdf',
+                uploadedAt: '2026-08-10T00:00:00Z',
+              }],
+              title: '시계열 기본 I',
+              weekId: 101,
+              weekNumber: 1,
+            },
+            {
+              ...weekFixture,
+              displayOrder: 3,
+              materials: [{
+                materialId: 94,
+                pageCount: 20,
+                processingStatus: 'READY',
+                title: 'scheduled-week.pdf',
+                uploadedAt: '2026-08-11T00:00:00Z',
+              }],
+              status: 'SCHEDULED',
+              title: 'Optimization',
+              weekId: 103,
+              weekNumber: 3,
+            },
+          ],
         })
       }
       if (url.pathname === '/api/classrooms/12/notices') {
@@ -308,13 +339,17 @@ describe('ClassroomDetailPage instructor materials', () => {
     )
 
     const weekNavigation = await screen.findByRole('navigation', { name: '강의실 주차' })
-    expect(within(weekNavigation).getByText('자료구조 기초')).toBeInTheDocument()
-    expect(within(weekNavigation).getByText('2주차')).toBeInTheDocument()
-    expect(within(weekNavigation).getByText('3주차')).toBeInTheDocument()
+    const firstWeek = within(weekNavigation).getByText('시계열 기본 I')
+    const secondWeek = within(weekNavigation).getByText('시계열 기본 II')
+    const thirdWeek = within(weekNavigation).getByText('Optimization')
+    expect(firstWeek.compareDocumentPosition(secondWeek) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(secondWeek.compareDocumentPosition(thirdWeek) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(weekNavigation).queryByText('2주차')).not.toBeInTheDocument()
+    expect(within(weekNavigation).queryByText('3주차')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /published자료/ })).toBeInTheDocument()
 
-    fireEvent.click(within(weekNavigation).getByText('3주차'))
-    expect(await screen.findByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
+    fireEvent.click(thirdWeek)
+    expect(await screen.findByRole('button', { name: /scheduled-week자료/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '자료 추가' })).not.toBeInTheDocument()
   })
 })

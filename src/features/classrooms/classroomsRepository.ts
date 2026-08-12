@@ -37,7 +37,6 @@ export interface CreateClassroomInput {
 
 export interface UpdateClassroomInput extends Omit<Partial<CreateClassroomInput>, 'description'> {
   description?: string | null
-  shiftWeekReleaseDates?: boolean
 }
 
 export interface ClassroomMaterial {
@@ -230,7 +229,6 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       if (input.name !== undefined) body.name = input.name
       if (input.startDate !== undefined) body.startDate = input.startDate
       if (input.endDate !== undefined) body.endDate = input.endDate
-      if (input.shiftWeekReleaseDates !== undefined) body.shiftWeekReleaseDates = input.shiftWeekReleaseDates
       if (input.color !== undefined) body.color = input.color
       if (input.description !== undefined) body.description = input.description
       const { data } = await request<ClassroomDto>(`/api/classrooms/${encodeURIComponent(id)}`, { body, method: 'PATCH' })
@@ -255,14 +253,12 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
     },
     async listWeeks(id: string, signal?: AbortSignal) {
       const { data } = await request<{ items: WeekDto[] }>(`/api/classrooms/${encodeURIComponent(id)}/weeks`, { signal })
-      return data.items.map(mapWeek)
-    },
-    async changeWeekStatus(id: string, weekId: string, status: ClassroomWeekStatus) {
-      const { data } = await request<WeekDto>(
-        `/api/classrooms/${encodeURIComponent(id)}/weeks/${encodeURIComponent(weekId)}/status`,
-        { body: { status }, method: 'PATCH' },
-      )
-      return mapWeek(data)
+      return data.items
+        .map(mapWeek)
+        .sort((left, right) =>
+          left.displayOrder - right.displayOrder
+          || left.weekNumber - right.weekNumber,
+        )
     },
     async reorderWeeks(id: string, orderedWeekIds: string[]) {
       const { data } = await request<{ items: WeekDto[] }>(
@@ -298,7 +294,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
         { method: 'DELETE' },
       )
     },
-    async createWeek(id: string, input: { releaseAt?: string; title: string; weekNumber?: number }) {
+    async createWeek(id: string, input: { title: string; weekNumber?: number }) {
       const { data } = await request<WeekDto>(`/api/classrooms/${encodeURIComponent(id)}/weeks`, { body: input, method: 'POST' })
       return mapWeek(data)
     },
@@ -310,10 +306,9 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       const { data } = await request<{ inviteCode: string }>(`/api/classrooms/${encodeURIComponent(id)}/invite-code/regenerate`, { method: 'POST' })
       return data.inviteCode
     },
-    async updateWeek(id: string, weekNumber: number, input: { releaseAt?: string; title?: string }) {
+    async updateWeek(id: string, weekNumber: number, input: { title?: string }) {
       const body: Record<string, unknown> = {}
       if (input.title !== undefined) body.title = input.title
-      if (input.releaseAt !== undefined) body.releaseAt = input.releaseAt
       const { data } = await request<WeekDto>(`/api/classrooms/${encodeURIComponent(id)}/weeks/${weekNumber}`, { body, method: 'PATCH' })
       return mapWeek(data)
     },

@@ -139,9 +139,9 @@ GET    /api/classrooms/{classroomId}/students
 DELETE /api/classrooms/{classroomId}/students/{studentId}
 ```
 
-강의실 수정의 `startDate`, `endDate`, `shiftWeekReleaseDates`도 공개 PATCH 계약에
-연결했다. 영구 삭제 API도 2026-08-06 배포 Swagger에 추가되어 FE 재확인
-다이얼로그와 연결했다.
+강의실 수정의 `startDate`, `endDate`는 공개 PATCH 계약에 연결했다. FE에서는 주차
+예약 공개 기능을 제거했으므로 `shiftWeekReleaseDates`는 더 이상 전송하지 않는다.
+영구 삭제 API도 2026-08-06 배포 Swagger에 추가되어 FE 재확인 다이얼로그와 연결했다.
 
 ```http
 DELETE /api/classrooms/{classroomId}/permanent
@@ -150,15 +150,26 @@ DELETE /api/classrooms/{classroomId}/permanent
 영구 삭제는 확인용 강의실명을 body의 `confirmName`으로 전송하며, trim 후 현재
 강의실명과 정확히 일치할 때만 요청한다.
 
-## 연결 완료: 주차 순서와 운영 상태
+## P0. 주차 상시 노출 정책으로 변경
 
-주차 드래그 순서와 `PRIVATE`, `SCHEDULED`, `PUBLISHED`, `BREAK` 상태를 아래 API로
-저장한다.
+FE에서는 주차의 `PRIVATE`, `SCHEDULED`, `PUBLISHED`, `BREAK` 상태 변경 UI와
+예약 공개 시각 입력을 제거했다. 신규 주차 생성 요청은 `releaseAt`을 생략하며,
+주차 순서 변경만 아래 API로 저장한다.
 
 ```http
 PATCH /api/classrooms/{classroomId}/weeks/reorder
-PATCH /api/classrooms/{classroomId}/weeks/{weekNumber}/status
 ```
+
+2026-08-12 BE `develop`은 학습자 `GET /api/classrooms/{classroomId}/weeks`에도 상태와
+관계없이 전체 주차와 연결 자료를 반환하도록 변경됐다. FE는 역할과 관계없이 이
+응답을 `displayOrder ASC`로 정렬하며 `PRIVATE`, `SCHEDULED` 주차의 자료도 별도
+필터 없이 표시한다.
+
+- 자료 상세·파일·세션 생성 권한에서 주차 상태와 `releaseAt` 조건 제거 완료 여부를
+  통합 테스트로 지속 확인한다.
+- 기존 `classroom_weeks`의 상태를 `PUBLISHED`, `releaseAt`을 `null`로 일괄 정리한다.
+- `WEEK_RELEASE` 파생 일정을 통합 일정 응답에서 제거하거나 deprecated 처리한다.
+- 공지 예약 게시와 시험 공개·마감 상태는 콘텐츠 단위 기능이므로 그대로 유지한다.
 
 ## 연결 완료: 학습 대화 제어
 

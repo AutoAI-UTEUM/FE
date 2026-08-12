@@ -7,6 +7,7 @@ import {
   createClassroomsRepository,
   getRememberedClassroomId,
   rememberClassroomId,
+  type Classroom,
   type ClassroomWeek,
 } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
@@ -235,7 +236,12 @@ export function SessionDetailPage() {
         )
 
         if (controller.signal.aborted) return
-        setResourceWeeks(context.weeks.map((week) => ({
+        const orderedWeeks = [...context.weeks].sort(
+          (left, right) =>
+            left.displayOrder - right.displayOrder
+            || left.weekNumber - right.weekNumber,
+        )
+        setResourceWeeks(orderedWeeks.map((week) => ({
           id: week.id,
           materials: week.materials.map((material) => {
             const materialSession = sessionByMaterial.get(material.id)
@@ -250,7 +256,6 @@ export function SessionDetailPage() {
             }
           }),
           title: week.title,
-          weekNumber: week.weekNumber,
         })))
       } catch {
         if (!controller.signal.aborted) setResourceWeeks([])
@@ -791,12 +796,15 @@ async function findClassroomContext(
   materialId: string,
   preferredClassroomId: string | null,
   signal: AbortSignal,
-): Promise<{ classroomId: string; weeks: ClassroomWeek[] } | null> {
+): Promise<{ classroom: Classroom; classroomId: string; weeks: ClassroomWeek[] } | null> {
   if (preferredClassroomId) {
     try {
-      const weeks = await repository.listWeeks(preferredClassroomId, signal)
+      const [classroom, weeks] = await Promise.all([
+        repository.get(preferredClassroomId, signal),
+        repository.listWeeks(preferredClassroomId, signal),
+      ])
       if (weeksContainMaterial(weeks, materialId)) {
-        return { classroomId: preferredClassroomId, weeks }
+        return { classroom, classroomId: preferredClassroomId, weeks }
       }
     } catch {
       if (signal.aborted) return null
@@ -809,7 +817,7 @@ async function findClassroomContext(
     try {
       const weeks = await repository.listWeeks(classroom.id, signal)
       if (weeksContainMaterial(weeks, materialId)) {
-        return { classroomId: classroom.id, weeks }
+        return { classroom, classroomId: classroom.id, weeks }
       }
     } catch {
       if (signal.aborted) return null

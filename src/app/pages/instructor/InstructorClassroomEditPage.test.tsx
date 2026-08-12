@@ -259,12 +259,6 @@ describe('InstructorClassroomEditPage', () => {
       if (url.pathname === '/api/classrooms/12/invite-code') {
         return success({ inviteCode: '7QK4-MZ2A' })
       }
-      if (url.pathname === '/api/classrooms/12/weeks/1' && method === 'PATCH') {
-        return success({ ...firstWeek, releaseAt: String(writes.at(-1)?.body.releaseAt) })
-      }
-      if (url.pathname === '/api/classrooms/12/weeks/2' && method === 'PATCH') {
-        return success({ ...secondWeek, releaseAt: String(writes.at(-1)?.body.releaseAt) })
-      }
       if (url.pathname === '/api/classrooms/12/weeks/reorder' && method === 'PATCH') {
         return success({
           items: [
@@ -303,9 +297,7 @@ describe('InstructorClassroomEditPage', () => {
 
     await waitFor(() => expect(writes.some((write) => write.pathname.endsWith('/weeks/reorder'))).toBe(true))
     const weekWrites = writes.filter((write) => /\/weeks\/\d+$/.test(write.pathname))
-    expect(weekWrites).toHaveLength(2)
-    expect(toKoreanDate(String(weekWrites.find((write) => write.pathname.endsWith('/1'))?.body.releaseAt))).toBe('2026-08-10')
-    expect(toKoreanDate(String(weekWrites.find((write) => write.pathname.endsWith('/2'))?.body.releaseAt))).toBe('2026-08-03')
+    expect(weekWrites).toHaveLength(0)
     expect(await screen.findByText('강의실 주차 페이지')).toBeInTheDocument()
   })
 
@@ -425,13 +417,4 @@ function success(data: unknown): Response {
       status: 200,
     },
   )
-}
-
-function toKoreanDate(value: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-  }).format(new Date(value))
 }

@@ -169,6 +169,7 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
 }
 
 function stubClassroomCreationApi() {
+  const weekBodies: Array<{ title: string; weekNumber: number }> = []
   const weekNumbers: number[] = []
   let activeWeekRequests = 0
   let maxActiveWeekRequests = 0
@@ -201,17 +202,18 @@ function stubClassroomCreationApi() {
       })
     }
     if (method === 'POST' && url.pathname === '/api/classrooms/12/weeks') {
-      const body = JSON.parse(String(input instanceof Request ? await input.clone().text() : init?.body)) as { releaseAt: string; title: string; weekNumber: number }
+      const body = JSON.parse(String(input instanceof Request ? await input.clone().text() : init?.body)) as { title: string; weekNumber: number }
       activeWeekRequests += 1
       maxActiveWeekRequests = Math.max(maxActiveWeekRequests, activeWeekRequests)
+      weekBodies.push(body)
       weekNumbers.push(body.weekNumber)
       await new Promise((resolve) => setTimeout(resolve, 1))
       activeWeekRequests -= 1
       return envelope({
         displayOrder: body.weekNumber,
         materials: [],
-        releaseAt: body.releaseAt,
-        status: 'SCHEDULED',
+        releaseAt: null,
+        status: 'PUBLISHED',
         title: body.title,
         weekId: body.weekNumber,
         weekNumber: body.weekNumber,
@@ -222,6 +224,7 @@ function stubClassroomCreationApi() {
 
   return {
     getMaxActiveWeekRequests: () => maxActiveWeekRequests,
+    weekBodies,
     weekNumbers,
   }
 }
@@ -306,6 +309,7 @@ describe('instructor pages', () => {
 
     await screen.findByText('15개 주차와 강의실을 만들었습니다.')
     expect(requests.weekNumbers).toEqual(Array.from({ length: 15 }, (_, index) => index + 1))
+    expect(requests.weekBodies.every((body) => !('releaseAt' in body))).toBe(true)
     expect(requests.getMaxActiveWeekRequests()).toBe(1)
   })
 

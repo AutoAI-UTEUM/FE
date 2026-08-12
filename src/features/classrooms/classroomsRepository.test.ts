@@ -44,6 +44,23 @@ describe('classrooms repository', () => {
     })
   })
 
+  it('normalizes classroom weeks by display order for every role', async () => {
+    const request = vi.fn().mockResolvedValue({
+      data: {
+        items: [
+          { displayOrder: 2, materials: [], status: 'PUBLISHED', title: '두 번째', weekId: 102, weekNumber: 1 },
+          { displayOrder: 1, materials: [], status: 'SCHEDULED', title: '첫 번째', weekId: 101, weekNumber: 8 },
+        ],
+      },
+    })
+    const repository = createClassroomsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.listWeeks('12')).resolves.toMatchObject([
+      { displayOrder: 1, title: '첫 번째', weekNumber: 8 },
+      { displayOrder: 2, title: '두 번째', weekNumber: 1 },
+    ])
+  })
+
   it('maps legacy notices to global and sends week and reservation fields', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ data: { items: [{ classroomId: 12, content: '내용', createdAt: '2026-08-01', noticeId: 7, publishedAt: '2026-08-01', title: '공지', updatedAt: '2026-08-01' }] } })

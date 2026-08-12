@@ -4,3 +4,4 @@ export {
 } from './classroomsRepository'
 export type { Classroom, ClassroomAnalytics, ClassroomColor, ClassroomMaterial, ClassroomNotice, ClassroomNoticeInput, ClassroomStudent, ClassroomStudentSort, ClassroomWeek, ClassroomWeekStatus, CreateClassroomInput, JoinRequest, JoinRequestStatus, UpdateClassroomInput } from './classroomsRepository'
 export { getRememberedClassroomId, rememberClassroomId } from './classroomContextStorage'
+export { formatClassroomWeekPeriod } from './classroomWeekPeriod'

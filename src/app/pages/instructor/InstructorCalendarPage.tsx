@@ -530,7 +530,7 @@ function ListView({
         예정된 일정이 없습니다
       </h2>
       <p className="mt-1.5 type-body text-stone-500">
-        자료 공개와 공지 일정이 등록되면 날짜순으로 표시됩니다.
+        공지와 개인 일정이 등록되면 날짜순으로 표시됩니다.
       </p>
     </section>
   )
@@ -777,8 +777,6 @@ function getWeekendDateClassName(
 
 function getEventChipClassName(kind: CalendarEventKind): string {
   switch (kind) {
-    case 'MATERIAL':
-      return 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
     case 'NOTICE':
       return 'bg-amber-50 text-amber-800 hover:bg-amber-100'
     case 'PERSONAL':
@@ -788,8 +786,6 @@ function getEventChipClassName(kind: CalendarEventKind): string {
 
 function getEventDotClassName(kind: CalendarEventKind): string {
   switch (kind) {
-    case 'MATERIAL':
-      return 'bg-emerald-600'
     case 'NOTICE':
       return 'bg-amber-500'
     case 'PERSONAL':
