@@ -148,6 +148,22 @@ export async function handleApiFixtureRequest(
     return apiSuccess(paged([]))
   }
 
+  if (request.method === 'GET' && path === '/api/classrooms/12') {
+    return apiSuccess({
+      classroomId: 12,
+      color: 'BLUE',
+      endDate: '2026-08-16',
+      instructorName: '강의자',
+      learnerCount: 1,
+      name: '자료구조',
+      pendingRequestCount: 0,
+      progressRate: 0,
+      startDate: '2026-08-03',
+      status: 'ACTIVE',
+      weekCount: 2,
+    })
+  }
+
   if (request.method === 'GET' && path === '/api/classrooms/12/weeks') {
     return apiSuccess({
       items: [
@@ -182,7 +198,7 @@ export async function handleApiFixtureRequest(
           weekId: 92,
           weekNumber: 2,
         },
-      ],
+      ].reverse(),
     })
   }
 

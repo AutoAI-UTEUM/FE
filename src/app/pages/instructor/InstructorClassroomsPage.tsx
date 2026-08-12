@@ -316,7 +316,6 @@ export function InstructorClassroomsPage() {
               for (let index = 0; index < weekCount; index += 1) {
                 try {
                   await repository.createWeek(created.id, {
-                    releaseAt: toReleaseAt(draft.startDate, index),
                     title: `${index + 1}주차`,
                     weekNumber: index + 1,
                   })
@@ -792,7 +791,7 @@ function CreateClassroomDialog({
         <p className="mt-2 min-h-5 type-caption text-stone-500">
           {endDate
             ? `${endDate}까지 · ${weekCount}개 주차가 자동 생성됩니다.`
-            : '시작일을 선택하면 종료일과 주차 공개일을 계산합니다.'}
+            : '시작일을 선택하면 종료일과 주차 수를 계산합니다.'}
         </p>
         <label className="mt-4 block type-body font-semibold">
           설명 <span className="font-normal text-stone-400">(선택)</span>
@@ -821,11 +820,4 @@ function getEndDate(startDate: string, weekCount: number): string {
   const date = new Date(`${startDate}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() + weekCount * 7 - 1)
   return date.toISOString().slice(0, 10)
-}
-
-function toReleaseAt(startDate: string, weekIndex: number): string {
-  const date = new Date(`${startDate}T00:00:00`)
-  date.setDate(date.getDate() + weekIndex * 7)
-  date.setHours(0, 0, 0, 0)
-  return date.toISOString()
 }

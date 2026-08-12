@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AuthenticatedRequest } from '../auth'
 
-export type CalendarEventKind = 'MATERIAL' | 'NOTICE' | 'PERSONAL'
+export type CalendarEventKind = 'NOTICE' | 'PERSONAL'
 
 export interface CalendarEvent {
   backendId: string
@@ -60,7 +60,9 @@ export function createCalendarRepository(request: AuthenticatedRequest) {
         `/api/users/me/schedule?${query}`,
         { signal },
       )
-      return data.items.map(mapSchedule)
+      return data.items
+        .filter((item) => getScheduleKind(item) !== 'WEEK_RELEASE')
+        .map(mapSchedule)
     },
     async create(input: CreateCalendarEventInput) {
       const { data } = await request<PersonalScheduleDto>('/api/users/me/schedule', {
@@ -171,8 +173,6 @@ export function useCalendarEvents(
 
 export function getCalendarEventKindLabel(kind: CalendarEventKind): string {
   switch (kind) {
-    case 'MATERIAL':
-      return '자료 공개'
     case 'NOTICE':
       return '공지'
     case 'PERSONAL':
@@ -190,12 +190,9 @@ function notifyCalendarChanged(detail: { event?: CalendarEvent; eventId?: string
 
 function mapSchedule(value: ScheduleDto): CalendarEvent {
   const startsAt = value.startsAt ?? value.dateTime ?? ''
-  const apiKind = value.kind ?? value.type ?? 'PERSONAL'
-  const kind: CalendarEventKind = apiKind === 'NOTICE_PUBLISH'
+  const kind: CalendarEventKind = getScheduleKind(value) === 'NOTICE_PUBLISH'
     ? 'NOTICE'
-    : apiKind === 'WEEK_RELEASE'
-      ? 'MATERIAL'
-      : 'PERSONAL'
+    : 'PERSONAL'
   return {
     backendId: String(value.scheduleId),
     createdAt: startsAt,
@@ -209,6 +206,10 @@ function mapSchedule(value: ScheduleDto): CalendarEvent {
       ? value.title
       : `${value.classroomName} · ${value.title}`,
   }
+}
+
+function getScheduleKind(value: ScheduleDto): NonNullable<ScheduleDto['kind']> {
+  return value.kind ?? value.type ?? 'PERSONAL'
 }
 
 function mapPersonalSchedule(value: PersonalScheduleDto): CalendarEvent {

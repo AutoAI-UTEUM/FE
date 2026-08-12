@@ -18,6 +18,42 @@ describe('classroomContentModel', () => {
     expect(getGlobalClassroomContent(items, 'all').map((item) => item.kind)).toEqual(['exam', 'notice'])
     expect(filterClassroomContent(items, null, 'notice').map((item) => item.kind)).toEqual([])
   })
+
+  it('sorts all week content by course order before its timestamp', () => {
+    const firstWeek: ClassroomWeek = {
+      ...weekFixture,
+      displayOrder: 1,
+      id: '1',
+      materials: [{
+        id: '11',
+        status: 'READY',
+        title: '최근 업로드.pdf',
+        uploadedAt: '2026-08-10T00:00:00Z',
+      }],
+      title: '첫 번째 주차',
+      weekNumber: 1,
+    }
+    const thirdWeek: ClassroomWeek = {
+      ...weekFixture,
+      displayOrder: 3,
+      id: '3',
+      materials: [{
+        id: '13',
+        status: 'READY',
+        title: '이전 업로드.pdf',
+        uploadedAt: '2026-08-01T00:00:00Z',
+      }],
+      title: '세 번째 주차',
+      weekNumber: 3,
+    }
+
+    const items = buildClassroomContent([firstWeek, thirdWeek], [], [])
+
+    expect(filterClassroomContent(items, null, 'all').map((item) => item.id)).toEqual([
+      'material-11',
+      'material-13',
+    ])
+  })
 })
 
 const weekFixture: ClassroomWeek = {

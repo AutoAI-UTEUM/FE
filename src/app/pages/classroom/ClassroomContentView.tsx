@@ -1,7 +1,7 @@
 import { Bell, BookOpen, ClipboardList, FileText, MoreHorizontal, RefreshCw, Trash2, Upload } from 'lucide-react'
 import type { DragEvent } from 'react'
 
-import type { ClassroomWeek } from '../../../features/classrooms'
+import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
 import { Badge, Button, EmptyState } from '../../../shared/ui'
 import type { ClassroomContentFilter, ClassroomContentItem } from './classroomContentModel'
 
@@ -18,7 +18,7 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
     <nav aria-label="강의실 주차" className="flex-1 space-y-0.5 p-1.5">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
       {weeks.map((week, index) => {
-        const period = formatWeekPeriod(startDate, endDate, index + 1)
+        const period = formatClassroomWeekPeriod(startDate, endDate, index + 1)
         return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={weekRailButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><strong className="min-w-0 truncate text-left type-caption">{week.title}</strong>{period ? <span className="text-left type-micro tabular-nums text-stone-400">{period}</span> : <span />}</button>
       })}
       {weeks.length === 0 ? <p className="px-3 py-8 text-center type-control text-stone-400">등록된 주차 없음</p> : null}
@@ -70,7 +70,7 @@ export function ClassroomContentPanel({
   const title = selectedWeekNumber === null ? '전체 콘텐츠' : selectedWeek?.title ?? ''
   const period = selectedWeekNumber === null || !selectedWeek
     ? ''
-    : formatWeekPeriod(startDate, endDate, selectedWeek.displayOrder)
+    : formatClassroomWeekPeriod(startDate, endDate, selectedWeek.displayOrder)
 
   function dragOver(event: DragEvent<HTMLElement>) {
     if (!canManage || selectedWeekNumber === null) return
@@ -157,31 +157,4 @@ function railButtonClass(selected: boolean): string {
 
 function weekRailButtonClass(selected: boolean): string {
   return `grid h-8 w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md px-2 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
-}
-
-function formatWeekPeriod(startDate: string, endDate: string, weekNumber: number): string {
-  const courseStart = parseLocalDate(startDate)
-  const courseEnd = parseLocalDate(endDate)
-  if (!courseStart || !courseEnd || weekNumber < 1) return ''
-
-  const weekStart = addDays(courseStart, (weekNumber - 1) * 7)
-  if (weekStart > courseEnd) return ''
-  const calculatedEnd = addDays(weekStart, 6)
-  const weekEnd = calculatedEnd > courseEnd ? courseEnd : calculatedEnd
-  return `${formatCompactDate(weekStart)} - ${formatCompactDate(weekEnd)}`
-}
-
-function parseLocalDate(value: string): Date | null {
-  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
-  if (!year || !month || !day) return null
-  const date = new Date(year, month - 1, day)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
-}
-
-function formatCompactDate(date: Date): string {
-  return `${date.getMonth() + 1}.${date.getDate()}`
 }

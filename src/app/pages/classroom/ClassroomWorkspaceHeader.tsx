@@ -7,7 +7,6 @@ import type { Classroom } from '../../../features/classrooms'
 import { PageHeader } from '../../../shared/ui'
 import {
   classroomAnalyticsPath,
-  classroomDetailPath,
   classroomEditPath,
 } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
@@ -37,11 +36,10 @@ export function ClassroomWorkspaceHeader({
   const { user } = useAuth()
   const tabs = isInstructorRole(user?.role)
     ? [
-        { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
         { id: 'learning' as const, label: '학습 현황·리포트', to: classroomAnalyticsPath(classroom.id) },
         { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
       ]
-    : [{ id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) }]
+    : []
 
   useEffect(() => {
     if (!root) workspaceShell?.syncClassroom(classroom)
@@ -72,7 +70,7 @@ export function ClassroomWorkspaceHeader({
           {titleAccessory || titleAccessorySlotRef ? <div className="contents" ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
         </>}
       />
-      {showTabs ? <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
+      {showTabs && tabs.length > 0 ? <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
         {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? 'page' : undefined} className={activeTab === tab.id ? 'relative flex shrink-0 items-center type-body font-bold text-stone-950 after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-brand-600' : 'relative flex shrink-0 items-center type-body font-medium text-stone-500 hover:text-stone-900'} key={tab.id} preventScrollReset to={tab.to}>{tab.label}</Link>)}
       </nav> : null}
     </header>

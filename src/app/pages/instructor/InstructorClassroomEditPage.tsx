@@ -204,21 +204,8 @@ export function InstructorClassroomEditPage() {
           : {}),
         ...(startDate !== classroom.startDate ? { startDate } : {}),
         ...(nextEndDate !== classroom.endDate ? { endDate: nextEndDate } : {}),
-        ...(startDate !== classroom.startDate ? { shiftWeekReleaseDates: true } : {}),
       }
       const isRangeExpanding = new Date(`${nextEndDate}T00:00:00Z`) > new Date(`${classroom.endDate}T00:00:00Z`)
-      const originalWeekOrder = [...weeks]
-        .sort((left, right) => left.displayOrder - right.displayOrder)
-        .map((week) => week.weekNumber)
-      const existingDraftOrder = weekOrder.filter((weekNumber) => weekByNumber.has(weekNumber))
-      const orderChanged = existingDraftOrder.some(
-        (weekNumber, index) => weekNumber !== originalWeekOrder[index],
-      )
-      const scheduleChanged = startDate !== classroom.startDate || orderChanged
-      const positionByWeekNumber = new Map(
-        weekOrder.map((weekNumber, index) => [weekNumber, index]),
-      )
-
       // The server validates new weeks against the current classroom date range.
       if (isRangeExpanding && Object.keys(classroomChanges).length > 0) {
         await repository.update(classroomId, classroomChanges)
@@ -227,18 +214,14 @@ export function InstructorClassroomEditPage() {
       for (let weekNumber = 1; weekNumber <= weekCount; weekNumber += 1) {
         const existingWeek = weekByNumber.get(weekNumber)
         const nextTitle = weekTitles[weekNumber]?.trim() || `${weekNumber}주차`
-        const weekIndex = positionByWeekNumber.get(weekNumber) ?? weekNumber - 1
-        const nextReleaseAt = toReleaseAt(startDate, weekIndex)
         if (!existingWeek) {
           await repository.createWeek(classroomId, {
-            releaseAt: nextReleaseAt,
             title: nextTitle,
             weekNumber,
           })
-        } else if (existingWeek.title !== nextTitle || scheduleChanged) {
+        } else if (existingWeek.title !== nextTitle) {
           await repository.updateWeek(classroomId, weekNumber, {
-            ...(scheduleChanged ? { releaseAt: nextReleaseAt } : {}),
-            ...(existingWeek.title !== nextTitle ? { title: nextTitle } : {}),
+            title: nextTitle,
           })
         }
       }
@@ -547,11 +530,4 @@ function getEndDate(startDate: string, weekCount: number): string {
   const date = new Date(`${startDate}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() + weekCount * 7 - 1)
   return date.toISOString().slice(0, 10)
-}
-
-function toReleaseAt(startDate: string, weekIndex: number): string {
-  const date = new Date(`${startDate}T00:00:00`)
-  date.setDate(date.getDate() + weekIndex * 7)
-  date.setHours(0, 0, 0, 0)
-  return date.toISOString()
 }

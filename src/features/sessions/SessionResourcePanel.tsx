@@ -16,7 +16,6 @@ export interface SessionResourceWeek {
   id: string
   materials: SessionResourceMaterial[]
   title: string
-  weekNumber: number
 }
 
 interface SessionResourcePanelProps {
@@ -39,7 +38,7 @@ export function SessionResourcePanel({
   weeks,
 }: SessionResourcePanelProps) {
   return (
-    <aside className="hidden h-full min-h-0 w-[240px] shrink-0 flex-col overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-stone-50/60 p-3 xl:flex">
+    <aside className="hidden h-full min-h-0 w-[240px] shrink-0 flex-col overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-stone-50/60 p-3 [scrollbar-gutter:stable] xl:flex">
       <div className="flex items-center gap-1">
         <Link
           className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 type-control text-stone-500 hover:bg-white hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
@@ -59,20 +58,26 @@ export function SessionResourcePanel({
         </button>
       </div>
 
-      <div className="mt-3.5 grid gap-3">
-        {weeks.map((week) => (
-          <section key={week.id}>
-            <div className="flex items-baseline gap-1.5 px-2 py-1">
-              <h2 className="type-caption font-bold text-stone-700">
-                {week.weekNumber}주차
-              </h2>
-              <p className="min-w-0 truncate type-micro text-stone-400">
+      <div className="mt-3.5 grid min-w-0 w-full max-w-full gap-3">
+        {weeks.map((week, index) => (
+          <section
+            className="min-w-0 w-full max-w-full overflow-hidden"
+            key={week.id}
+          >
+            <div className="grid min-w-0 w-full max-w-full grid-cols-[40px_minmax(0,1fr)] items-baseline gap-1.5 overflow-hidden px-2 py-1">
+              <span className="whitespace-nowrap type-caption font-bold tabular-nums text-stone-700">
+                {index + 1}주차
+              </span>
+              <h2
+                className="min-w-0 truncate type-caption font-bold text-stone-700"
+                title={week.title}
+              >
                 {week.title}
-              </p>
+              </h2>
             </div>
-            <ul className="grid gap-0.5">
+            <ul className="grid min-w-0 w-full max-w-full gap-0.5">
               {week.materials.map((material) => (
-                <li key={material.id}>
+                <li className="min-w-0 w-full max-w-full" key={material.id}>
                   <ResourceRow
                     isActive={material.id === activeMaterialId}
                     isMuted={material.status !== 'READY'}
@@ -80,9 +85,9 @@ export function SessionResourcePanel({
                     title={material.title}
                   />
                   {material.quizzes.length > 0 ? (
-                    <ul className="ml-8 grid gap-0.5 border-l border-stone-200 pl-1.5">
+                    <ul className="ml-8 grid min-w-0 max-w-full gap-0.5 overflow-hidden border-l border-stone-200 pl-1.5">
                       {material.quizzes.map((quiz) => (
-                        <li key={quiz.quizId}>
+                        <li className="min-w-0 w-full max-w-full" key={quiz.quizId}>
                           <QuizRow onOpen={() => onOpenQuiz(quiz.quizId)} quiz={quiz} />
                         </li>
                       ))}
@@ -113,7 +118,7 @@ function QuizRow({
 }) {
   return (
     <button
-      className="flex min-h-8 w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-left type-caption text-stone-500 hover:bg-white hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      className="flex min-h-8 min-w-0 w-full max-w-full items-start gap-1.5 overflow-hidden rounded-md px-2 py-1.5 text-left type-caption text-stone-500 hover:bg-white hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       onClick={onOpen}
       type="button"
     >
@@ -139,7 +144,7 @@ function ResourceRow({
   return (
     <Link
       className={cx(
-        'flex min-h-9.5 items-center gap-2 rounded-lg px-2 py-2 type-control',
+        'flex min-h-9.5 min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-2 type-control',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         isActive
           ? 'bg-white font-semibold text-stone-900 shadow-sm'
@@ -159,7 +164,12 @@ function ResourceRow({
       >
         {getMaterialKind(title)}
       </span>
-      <span className="min-w-0 flex-1 break-words leading-5">{title}</span>
+      <span
+        className="block min-w-0 max-w-full flex-1 overflow-hidden text-ellipsis whitespace-nowrap leading-5"
+        title={title}
+      >
+        {title}
+      </span>
     </Link>
   )
 }
