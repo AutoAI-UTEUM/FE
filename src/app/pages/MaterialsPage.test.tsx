@@ -58,7 +58,9 @@ describe('MaterialsPage', () => {
     expect(screen.getByText('처리 중')).toBeInTheDocument()
     expect(screen.getByText('처리 실패')).toBeInTheDocument()
     expect(
-      screen.getByText('파일 업로드는 완료됐지만 PDF 분석에 실패했습니다.'),
+      screen.getByText(
+        '파일 업로드는 완료됐지만 PDF 분석에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+      ),
     ).toBeInTheDocument()
     expect(screen.getByText('진행 중인 학습 세션이 있습니다.')).toBeInTheDocument()
   })
@@ -195,7 +197,7 @@ describe('MaterialsPage', () => {
   })
 
   it(
-    'lets the user confirm an extensionless title before uploading',
+    'uses the full file name as the editable default title',
     async () => {
       renderMaterialsPage()
       await screen.findByText('시험 대비 요약.pdf')
@@ -208,18 +210,15 @@ describe('MaterialsPage', () => {
         },
       })
 
-      expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('')
-      expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled()
+      expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('uploaded.pdf')
+      expect(screen.getByRole('button', { name: '업로드' })).toBeEnabled()
 
-      fireEvent.change(screen.getByRole('textbox', { name: '자료 제목' }), {
-        target: { value: '최적화 강의' },
-      })
       fireEvent.click(screen.getByRole('button', { name: '업로드' }))
 
       expect(
         await screen.findByRole(
           'heading',
-          { name: '최적화 강의' },
+          { name: 'uploaded.pdf' },
           { timeout: 10_000 },
         ),
       ).toBeInTheDocument()
@@ -230,7 +229,7 @@ describe('MaterialsPage', () => {
     15_000,
   )
 
-  it('keeps the title empty after file selection and rejects an empty title', async () => {
+  it('keeps the file extension in the default title and rejects an empty title', async () => {
     renderMaterialsPage()
     await screen.findByText('시험 대비 요약.pdf')
 
@@ -242,8 +241,8 @@ describe('MaterialsPage', () => {
 
     const titleInput = screen.getByRole('textbox', { name: '자료 제목' })
     const uploadButton = screen.getByRole('button', { name: '업로드' })
-    expect(titleInput).toHaveValue('')
-    expect(uploadButton).toBeDisabled()
+    expect(titleInput).toHaveValue('LECTURE.PDF')
+    expect(uploadButton).toBeEnabled()
 
     fireEvent.change(titleInput, { target: { value: '직접 입력한 제목' } })
     expect(uploadButton).toBeEnabled()

@@ -137,7 +137,7 @@ export function MaterialsPage() {
 
     setSelectedFile(file)
     setSelectedFileName(file.name)
-    setMaterialTitle('')
+    setMaterialTitle(file.name)
   }
 
   async function submitUpload(event: FormEvent<HTMLFormElement>) {

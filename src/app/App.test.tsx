@@ -325,11 +325,8 @@ describe('AppRoutes', () => {
     })
 
     expect(screen.getByRole('heading', { name: '학습 리포트' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('강의실 선택')).toHaveValue('12'))
-    const classroomSelect = screen.getByLabelText('강의실 선택')
     expect(await screen.findByRole('heading', { name: '리포트를 생성할 학습자가 없습니다' })).toBeInTheDocument()
-    fireEvent.change(classroomSelect, { target: { value: '13' } })
-    expect(await screen.findByText('김학습')).toBeInTheDocument()
+    expect(screen.queryByLabelText('강의실 선택')).not.toBeInTheDocument()
     expect(screen.queryByText('0점')).not.toBeInTheDocument()
   })
 

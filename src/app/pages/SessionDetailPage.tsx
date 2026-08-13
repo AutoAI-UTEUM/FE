@@ -380,7 +380,10 @@ export function SessionDetailPage() {
       : current)
   }
 
-  async function handlePageMove(nextPage: number): Promise<boolean> {
+  async function handlePageMove(
+    nextPage: number,
+    suppressUiActions = false,
+  ): Promise<boolean> {
     if (isActionPending) return false
     const nextSafePage = movePage(nextPage, totalPages)
     setIsActionPending(true)
@@ -394,12 +397,17 @@ export function SessionDetailPage() {
       setCurrentPage(result.currentPage)
       setSession((current) =>
         current
-          ? withPagePromptFallback({
+          ? (suppressUiActions ? {
+              ...current,
+              currentPage: result.currentPage,
+              pageStatus: result.pageStatus ?? 'NOT_EXPLAINED',
+              uiActions: [],
+            } : withPagePromptFallback({
               ...current,
               currentPage: result.currentPage,
               pageStatus: result.pageStatus ?? 'NOT_EXPLAINED',
               uiActions: result.uiActions,
-            })
+            }))
           : current,
       )
       return true
@@ -411,13 +419,23 @@ export function SessionDetailPage() {
     }
   }
 
-  async function handleExplainNextPage() {
-    if (currentPage >= totalPages) {
-      setError('마지막 페이지입니다.')
+  async function handlePageMoveWithAutoExplain(nextPage: number) {
+    const nextSafePage = movePage(nextPage, totalPages)
+    const shouldExplain = nextSafePage > currentPage
+
+    if (nextSafePage === currentPage) {
+      if (nextPage > currentPage) setError('마지막 페이지입니다.')
       return
     }
-    const moved = await handlePageMove(currentPage + 1)
-    if (moved) await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
+
+    const moved = await handlePageMove(nextSafePage, shouldExplain)
+    if (moved && shouldExplain) {
+      await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
+    }
+  }
+
+  async function handleExplainNextPage() {
+    await handlePageMoveWithAutoExplain(currentPage + 1)
   }
 
   function showNextPageConfirmation() {
@@ -496,7 +514,7 @@ export function SessionDetailPage() {
     }
     switch (event) {
       case 'MOVE_NEXT_PAGE':
-        await handlePageMove(currentPage + 1)
+        await handlePageMoveWithAutoExplain(currentPage + 1)
         return
       case 'EXPLAIN_CURRENT_PAGE':
         await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
@@ -670,7 +688,7 @@ export function SessionDetailPage() {
                 fileError={materialFileError}
                 isPending={isActionPending}
                 materialTitle={activeSession.materialTitle}
-                onMovePage={handlePageMove}
+                onMovePage={handlePageMoveWithAutoExplain}
                 onOpenResources={isResourcePanelOpen
                   ? undefined
                   : () => setIsResourcePanelOpen(true)}

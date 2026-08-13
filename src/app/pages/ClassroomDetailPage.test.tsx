@@ -159,8 +159,8 @@ describe('ClassroomDetailPage instructor materials', () => {
 
     expect(screen.getByRole('dialog', { name: '강의자료 업로드' })).toBeInTheDocument()
     const titleInput = screen.getByRole('textbox', { name: '자료 제목' })
-    expect(titleInput).toHaveValue('')
-    expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled()
+    expect(titleInput).toHaveValue('lecture.pdf')
+    expect(screen.getByRole('button', { name: '업로드' })).toBeEnabled()
     fireEvent.change(titleInput, { target: { value: 'lecture' } })
     fireEvent.click(screen.getByRole('button', { name: '업로드' }))
 
