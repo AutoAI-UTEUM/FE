@@ -102,7 +102,7 @@ describe('SessionDetailPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('automatically explains a page after forward navigation', async () => {
+  it('moves forward without automatically explaining the page', async () => {
     renderSessionDetail()
 
     expect(
@@ -118,10 +118,9 @@ describe('SessionDetailPage', () => {
         screen.getByRole('progressbar', { name: '학습 진행률 2 / 5쪽' }),
       ).toBeInTheDocument(),
     )
-    expect(
-      await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('현재 페이지를 설명할까요?')).not.toBeInTheDocument()
+    expect(await screen.findByText('현재 페이지를 설명할까요?')).toBeInTheDocument()
+    expect(screen.queryByText('이 페이지는 핵심 개념의 정의를 다룹니다.')).not.toBeInTheDocument()
+    expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '목차' }))
     fireEvent.click(screen.getByRole('button', { name: '4쪽으로 이동' }))
     await waitFor(() =>
@@ -178,15 +177,38 @@ describe('SessionDetailPage', () => {
     expect(
       await screen.findByText('어떤 유형의 퀴즈를 풀까요?'),
     ).toBeInTheDocument()
+    expect(screen.getByText('(응시 중에는 학습 내용을 볼 수 없습니다.)')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '객관식' }))
     expect(await screen.findByRole('button', { name: 'PDF로 돌아가기' })).toBeInTheDocument()
     expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('질문')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'PDF로 돌아가기' }))
     expect(
       await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '퀴즈 계속 풀기' }))
+    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
+  })
+
+  it('restores AI chat immediately after the active quiz is submitted', async () => {
+    renderSessionDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: '네' }))
+    await screen.findByText('퀴즈를 진행할까요?')
+    fireEvent.click(screen.getByRole('button', { name: '네' }))
+    fireEvent.click(await screen.findByRole('button', { name: '객관식' }))
+
+    fireEvent.click(await screen.findByLabelText('개념의 정의를 먼저 확인한다.'))
+    fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
+    fireEvent.click(screen.getByLabelText('이해가 낮은 페이지를 다시 읽는다.'))
+    fireEvent.click(screen.getByRole('button', { name: '제출' }))
+
+    expect(await screen.findByLabelText('질문')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).not.toBeInTheDocument()
   })
 
   it('automatically restores a quiz when the session state is QUIZ_READY', async () => {
@@ -268,6 +290,9 @@ describe('SessionDetailPage', () => {
     expect(within(quizInfo).getByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
     expect(screen.getByText('새 개념을 학습할 때 가장 먼저 확인할 정보는 무엇인가요?')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 채팅' }))
+    expect(screen.getByLabelText('질문')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).not.toBeInTheDocument()
   })
 
   it('dismisses the widget when the no/WAIT branch is chosen', async () => {
@@ -292,12 +317,13 @@ describe('SessionDetailPage', () => {
     expect(await screen.findByText('다음 페이지로 이동할까요?')).toBeInTheDocument()
     expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })).toBeInTheDocument()
+    const explanationCount = screen.getAllByText('이 페이지는 핵심 개념의 정의를 다룹니다.').length
 
     fireEvent.click(screen.getByRole('button', { name: '네' }))
     expect(await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
-    expect(screen.queryByText('현재 페이지를 설명할까요?')).not.toBeInTheDocument()
-    expect(await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.')).toBeInTheDocument()
-    expect(await screen.findByText('퀴즈를 진행할까요?')).toBeInTheDocument()
+    expect(await screen.findByText('현재 페이지를 설명할까요?')).toBeInTheDocument()
+    expect(screen.getAllByText('이 페이지는 핵심 개념의 정의를 다룹니다.')).toHaveLength(explanationCount)
+    expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
   })
 
   it('routes an explicit typed explanation command through the learning event', async () => {

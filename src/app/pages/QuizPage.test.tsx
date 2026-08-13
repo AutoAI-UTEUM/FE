@@ -51,11 +51,15 @@ describe('QuizPage', () => {
 
   it('validates an empty answer from an API quiz', async () => {
     renderQuizPage()
-    await screen.findByLabelText('퀴즈 정보')
+    await screen.findByText('문항 1 / 2')
+
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
 
     fireEvent.click(screen.getByRole('button', { name: '제출' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('답안을 입력하세요.')
+    expect(screen.getByText('문항 1 / 2')).toBeInTheDocument()
   })
 
   it('locks duplicate submit after the submit API succeeds', async () => {
@@ -64,20 +68,48 @@ describe('QuizPage', () => {
     await answerAllQuestions()
     fireEvent.click(screen.getByRole('button', { name: '제출' }))
 
-    expect(
-      await screen.findByRole('button', { name: '제출 완료' }),
-    ).toBeDisabled()
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '제출 완료' })).not.toBeInTheDocument()
     expect(screen.getByText('문항 1 / 2')).toBeInTheDocument()
-    expect(screen.getByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+  })
+
+  it('shows a spinning evaluation state while the quiz is being graded', async () => {
+    const currentFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    let resolveSubmission: (() => void) | undefined
+    const submissionPending = new Promise<void>((resolve) => {
+      resolveSubmission = resolve
+    })
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'POST' && new URL(request.url).pathname === '/api/quizzes/50/submit') {
+        await submissionPending
+      }
+      if (!currentFetch) throw new Error('API fixture fetch is not installed.')
+      return currentFetch(input, init)
+    })
+    renderQuizPage()
+
+    await answerAllQuestions()
+    fireEvent.click(screen.getByRole('button', { name: '제출' }))
+
+    const evaluatingButton = await screen.findByRole('button', { name: '평가 중' })
+    expect(evaluatingButton).toBeDisabled()
+    expect(evaluatingButton.querySelector('.animate-spin')).toBeInTheDocument()
+
+    resolveSubmission?.()
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '제출 완료' })).not.toBeInTheDocument()
   })
 
   it('shows progress across API questions', async () => {
     renderQuizPage()
 
     expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
 
     expect(screen.getByText('문항 2 / 2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '제출' })).toBeInTheDocument()
   })
 
   it('renders the diagnosis action returned by quiz submission', async () => {

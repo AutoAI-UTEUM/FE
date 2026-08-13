@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDate, formatDateTime, formatFileSize } from './format'
+import {
+  formatDate,
+  formatDateTime,
+  formatFileSize,
+  formatRelativeActivityDate,
+} from './format'
 
 describe('format helpers', () => {
   it('formats ISO strings as Korean dates', () => {
@@ -20,5 +25,14 @@ describe('format helpers', () => {
     expect(formatFileSize(512)).toBe('512B')
     expect(formatFileSize(2048)).toBe('2KB')
     expect(formatFileSize(12_480_000)).toBe('11.9MB')
+  })
+
+  it('formats recent activity by Korean calendar date', () => {
+    const now = new Date('2026-08-13T09:00:00+09:00')
+
+    expect(formatRelativeActivityDate('2026-08-13T01:00:00+09:00', now)).toBe('오늘')
+    expect(formatRelativeActivityDate('2026-08-12T23:00:00+09:00', now)).toBe('어제')
+    expect(formatRelativeActivityDate('2026-08-10T23:30:00+09:00', now)).toBe('3일 전')
+    expect(formatRelativeActivityDate(undefined, now)).toBe('기록 없음')
   })
 })

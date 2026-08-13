@@ -1,4 +1,4 @@
-import { CircleCheckBig, CircleHelp, CircleX, ChevronLeft, ChevronRight, Send, TriangleAlert } from 'lucide-react'
+import { CircleCheckBig, CircleHelp, CircleX, ChevronLeft, ChevronRight, LoaderCircle, Send, TriangleAlert } from 'lucide-react'
 import {
   useEffect,
   useMemo,
@@ -19,7 +19,6 @@ import {
   type PublicQuizQuestion,
   type PublicQuizResult,
   type QuizAnswers,
-  type QuizKind,
 } from '../../features/quiz'
 import {
   Button,
@@ -32,13 +31,6 @@ import {
 import type { SessionQuizSummary } from '../../features/sessions'
 import { diagnosisPath, routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-
-const quizKindLabels: Record<QuizKind, string> = {
-  ESSAY: '서술형',
-  MCQ: '객관식',
-  OX: 'OX',
-  SHORT: '단답형',
-}
 
 export function QuizPage() {
   return <QuizWorkspace />
@@ -81,6 +73,7 @@ export function QuizWorkspace({
   const diagnosisEntry = result?.diagnosisEntry
   const isReviewMode = reviewSummary?.submitted === true
   const isReadOnly = isSubmitted || isReviewMode
+  const isLastQuestion = currentQuestionIndex === questions.length - 1
   const resultSummary = isReviewMode ? reviewSummary : result
   const currentFeedback = result?.feedback.find(
     (candidate) => candidate.questionId === question?.id,
@@ -220,14 +213,14 @@ export function QuizWorkspace({
     <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
       <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-start gap-4">
-            <h2 className="min-w-0 type-dialog-title font-bold text-stone-950" id={`quiz-question-${question.id}`}>
-              {question.prompt}
-            </h2>
-            <span className="w-full whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
+          <div className="flex justify-end">
+            <span className="whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
               문항 {currentQuestionIndex + 1} / {questions.length}
             </span>
           </div>
+          <h2 className="mt-3 min-w-0 type-dialog-title font-bold text-stone-950" id={`quiz-question-${question.id}`}>
+            {question.prompt}
+          </h2>
           <QuestionInput
             disabled={isReadOnly}
             labelId={`quiz-question-${question.id}`}
@@ -251,24 +244,20 @@ export function QuizWorkspace({
           ) : null}
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div aria-label="퀴즈 정보" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 type-caption text-stone-600">
-              <strong className="font-semibold text-stone-800">{quizKindLabels[question.kind]}</strong>
-              {resultSummary ? (
-                <>
-                  <span aria-hidden="true" className="text-stone-300">·</span>
-                  <strong className={resultSummary.passed === false
-                    ? 'font-semibold text-amber-700'
-                    : resultSummary.passed === true
-                      ? 'font-semibold text-emerald-700'
-                      : 'font-semibold text-stone-700'}>
-                    {resultSummary.score === undefined
-                      ? '채점 완료'
-                      : `점수 ${resultSummary.score}${resultSummary.maxScore === undefined ? '' : ` / ${resultSummary.maxScore}`}`}
-                    {resultSummary.passed === undefined ? '' : resultSummary.passed ? ' · 통과' : ' · 보완 필요'}
-                  </strong>
-                </>
-              ) : null}
-            </div>
+            {resultSummary ? (
+              <div aria-label="퀴즈 정보" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 type-caption text-stone-600">
+                <strong className={resultSummary.passed === false
+                  ? 'font-semibold text-amber-700'
+                  : resultSummary.passed === true
+                    ? 'font-semibold text-emerald-700'
+                    : 'font-semibold text-stone-700'}>
+                  {resultSummary.score === undefined
+                    ? '채점 완료'
+                    : `점수 ${resultSummary.score}${resultSummary.maxScore === undefined ? '' : ` / ${resultSummary.maxScore}`}`}
+                  {resultSummary.passed === undefined ? '' : resultSummary.passed ? ' · 통과' : ' · 보완 필요'}
+                </strong>
+              </div>
+            ) : <div />}
             <div className="flex flex-wrap items-center justify-end gap-2">
               {result && shouldShowDiagnosisEntry(result) && diagnosisEntry ? (
                 embedded ? (
@@ -296,10 +285,12 @@ export function QuizWorkspace({
                   </ButtonLink>
                 )
               ) : null}
-              {!isReviewMode ? (
+              {!isReviewMode && isLastQuestion ? (
                 <Button disabled={isSubmitted || isSubmitting} size="sm" type="submit">
-                  <Send aria-hidden="true" size={14} />
-                  {isSubmitting ? '제출 중' : isSubmitted ? '제출 완료' : '제출'}
+                  {isSubmitting
+                    ? <LoaderCircle aria-hidden="true" className="animate-spin" size={14} />
+                    : <Send aria-hidden="true" size={14} />}
+                  {isSubmitting ? '평가 중' : isSubmitted ? '제출 완료' : '제출'}
                 </Button>
               ) : null}
               {resultSummary && !embedded ? (

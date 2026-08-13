@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, LockKeyhole } from 'lucide-react'
 
 import { useAuth } from '../../features/auth'
 import {
@@ -88,6 +88,7 @@ export function SessionDetailPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [embeddedQuizId, setEmbeddedQuizId] = useState<string | null>(null)
   const [embeddedQuizReviewSummary, setEmbeddedQuizReviewSummary] = useState<SessionQuizSummary>()
+  const [lockedQuizId, setLockedQuizId] = useState<string | null>(null)
   const [sessionQuizzes, setSessionQuizzes] = useState<SessionQuizSummary[]>([])
   const [sessionQuizzesError, setSessionQuizzesError] = useState<string | null>(null)
   const [isLoadingSessionQuizzes, setIsLoadingSessionQuizzes] = useState(false)
@@ -198,6 +199,7 @@ export function SessionDetailPage() {
     ) {
       autoOpenedQuizIdRef.current = activeQuizId
       setEmbeddedQuizReviewSummary(undefined)
+      setLockedQuizId(activeQuizId)
       setEmbeddedQuizId(activeQuizId)
     }
   }, [session?.activeQuizId, session?.pageStatus])
@@ -419,23 +421,26 @@ export function SessionDetailPage() {
     }
   }
 
-  async function handlePageMoveWithAutoExplain(nextPage: number) {
+  async function handlePageNavigation(nextPage: number) {
     const nextSafePage = movePage(nextPage, totalPages)
-    const shouldExplain = nextSafePage > currentPage
 
     if (nextSafePage === currentPage) {
       if (nextPage > currentPage) setError('마지막 페이지입니다.')
       return
     }
 
-    const moved = await handlePageMove(nextSafePage, shouldExplain)
-    if (moved && shouldExplain) {
-      await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
-    }
+    await handlePageMove(nextSafePage)
   }
 
   async function handleExplainNextPage() {
-    await handlePageMoveWithAutoExplain(currentPage + 1)
+    const nextPage = movePage(currentPage + 1, totalPages)
+    if (nextPage === currentPage) {
+      setError('마지막 페이지입니다.')
+      return
+    }
+
+    const moved = await handlePageMove(nextPage, true)
+    if (moved) await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
   }
 
   function showNextPageConfirmation() {
@@ -514,7 +519,7 @@ export function SessionDetailPage() {
     }
     switch (event) {
       case 'MOVE_NEXT_PAGE':
-        await handlePageMoveWithAutoExplain(currentPage + 1)
+        await handlePageNavigation(currentPage + 1)
         return
       case 'EXPLAIN_CURRENT_PAGE':
         await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
@@ -554,6 +559,7 @@ export function SessionDetailPage() {
     if (result.activeQuizId) {
       autoOpenedQuizIdRef.current = result.activeQuizId
       setEmbeddedQuizReviewSummary(undefined)
+      setLockedQuizId(result.activeQuizId)
       setEmbeddedQuizId(result.activeQuizId)
       setResourceReloadKey((key) => key + 1)
     }
@@ -580,6 +586,7 @@ export function SessionDetailPage() {
   function handleOpenQuizHistory(quizId: string) {
     const summary = sessionQuizzes.find((quiz) => quiz.quizId === quizId)
     setEmbeddedQuizReviewSummary(summary?.submitted ? summary : undefined)
+    if (!summary?.submitted) setLockedQuizId(quizId)
     setEmbeddedQuizId(quizId)
   }
 
@@ -676,7 +683,10 @@ export function SessionDetailPage() {
                   setEmbeddedQuizId(null)
                   setEmbeddedQuizReviewSummary(undefined)
                 }}
-                onSubmitted={() => void refreshLearningProgress()}
+                onSubmitted={() => {
+                  setLockedQuizId(null)
+                  void refreshLearningProgress()
+                }}
                 quizId={embeddedQuizId}
                 reviewSummary={embeddedQuizReviewSummary}
               />
@@ -688,7 +698,7 @@ export function SessionDetailPage() {
                 fileError={materialFileError}
                 isPending={isActionPending}
                 materialTitle={activeSession.materialTitle}
-                onMovePage={handlePageMoveWithAutoExplain}
+                onMovePage={handlePageNavigation}
                 onOpenResources={isResourcePanelOpen
                   ? undefined
                   : () => setIsResourcePanelOpen(true)}
@@ -716,7 +726,15 @@ export function SessionDetailPage() {
             <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
           </div>
 
-          <ChatPanel
+          {lockedQuizId ? (
+            <QuizChatLockPanel
+              isQuizVisible={embeddedQuizId === lockedQuizId}
+              onResume={() => {
+                setEmbeddedQuizReviewSummary(undefined)
+                setEmbeddedQuizId(lockedQuizId)
+              }}
+            />
+          ) : <ChatPanel
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"
@@ -726,6 +744,9 @@ export function SessionDetailPage() {
                   <div>
                     <p className="type-body font-semibold text-stone-900">
                       어떤 유형의 퀴즈를 풀까요?
+                    </p>
+                    <p className="mt-1 type-caption text-stone-500">
+                      (응시 중에는 학습 내용을 볼 수 없습니다.)
                     </p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {QUIZ_TYPE_OPTIONS.map((option) => (
@@ -801,10 +822,46 @@ export function SessionDetailPage() {
             quizzesError={sessionQuizzesError}
             isLoadingQuizzes={isLoadingSessionQuizzes}
             sessionId={activeSession.id}
-          />
+          />}
         </div>
       </section>
     </div>
+  )
+}
+
+function QuizChatLockPanel({
+  isQuizVisible,
+  onResume,
+}: {
+  isQuizVisible: boolean
+  onResume: () => void
+}) {
+  return (
+    <section
+      aria-label="퀴즈 응시 중 채팅 잠금"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-stone-200 bg-white"
+    >
+      <div className="flex h-13 shrink-0 items-center border-b border-stone-200 px-4">
+        <h2 className="type-control font-semibold text-stone-700">AI 채팅</h2>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+        <span className="flex size-11 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+          <LockKeyhole aria-hidden="true" size={20} />
+        </span>
+        <h3 className="mt-4 type-section-title font-bold text-stone-950">퀴즈 응시 중</h3>
+        <p className="mt-2 max-w-xs type-body leading-6 text-stone-500">
+          공정한 학습 확인을 위해 제출 전에는 AI 채팅을 볼 수 없습니다.
+        </p>
+        <p className="mt-1 type-caption text-stone-400">
+          퀴즈를 제출하면 대화 내용과 입력창이 다시 표시됩니다.
+        </p>
+        {!isQuizVisible ? (
+          <Button className="mt-5" onClick={onResume} type="button" variant="secondary">
+            퀴즈 계속 풀기
+          </Button>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
