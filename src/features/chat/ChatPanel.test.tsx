@@ -60,13 +60,16 @@ describe('ChatPanel', () => {
     expect(action.closest('[aria-label="AI 진행 안내"]')).toBeInTheDocument()
   })
 
-  it('validates empty questions before sending a turn', async () => {
-    render(<ChatHarness repository={createRepository()} />)
-    await screen.findByLabelText('질문')
+  it('ignores empty questions without showing an error or sending a turn', async () => {
+    const repository = createRepository()
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
 
     fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('질문을 입력하세요.')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(repository.submitTurn).not.toHaveBeenCalled()
   })
 
   it('loads server history and renders the completed turn response', async () => {
@@ -249,7 +252,7 @@ describe('ChatPanel', () => {
     expect(screen.queryByText('이전 답변')).not.toBeInTheDocument()
   })
 
-  it('routes the explain quick action through the learning event callback', async () => {
+  it('routes both page explanation quick actions through the learning event callback', async () => {
     const onExplainCurrentPage = vi.fn()
     const repository = createRepository({
       listMessages: vi.fn().mockResolvedValue([{
@@ -266,10 +269,31 @@ describe('ChatPanel', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: '쉽게 설명해줘' }))
+    fireEvent.click(await screen.findByRole('button', { name: '페이지 설명' }))
+    fireEvent.click(screen.getByRole('button', { name: '쉽게 설명해줘' }))
 
-    expect(onExplainCurrentPage).toHaveBeenCalledOnce()
+    expect(onExplainCurrentPage).toHaveBeenCalledTimes(2)
     expect(repository.submitTurn).not.toHaveBeenCalled()
+  })
+
+  it('restores the chat log to the latest message after visiting my quizzes', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(640)
+    const repository = createRepository({
+      listMessages: vi.fn().mockResolvedValue([{
+        content: '가장 최근 답변',
+        createdAt: '2026-08-13T00:00:00Z',
+        id: 'latest',
+        senderType: 'AI',
+      }]),
+    })
+    render(<ChatHarness repository={repository} />)
+
+    const initialLog = await screen.findByRole('log')
+    initialLog.scrollTop = 0
+    fireEvent.click(screen.getByRole('tab', { name: '내 퀴즈' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 채팅' }))
+
+    expect(screen.getByRole('log')).toHaveProperty('scrollTop', 640)
   })
 
   it('renders assistant messages as markdown but keeps user text literal', async () => {

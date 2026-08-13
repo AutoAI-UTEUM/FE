@@ -12,6 +12,7 @@ import {
 } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
+import { formatRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { Button, ButtonLink, EmptyState } from '../../../shared/ui'
 import { classroomStudentReportsPath } from '../../routes'
@@ -151,7 +152,7 @@ function StudentLearningTable({ classroomId, className, students }: { classroomI
               </div>
               <StudentProgress value={student.averageProgressRate} />
               <span className="type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
-              <span className="type-control text-stone-600">{formatRelativeActivity(student.lastActiveAt)}</span>
+              <span className="type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
               <ButtonLink className="justify-self-center" size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary">리포트</ButtonLink>
             </article>
           ))}
@@ -185,14 +186,6 @@ function clampPercentage(value: number): number {
 
 function getActivityTime(student: ClassroomStudent): number {
   return new Date(student.lastActiveAt ?? student.joinedAt).getTime()
-}
-
-function formatRelativeActivity(value?: string): string {
-  if (!value) return '기록 없음'
-  const difference = Date.now() - new Date(value).getTime()
-  if (difference < 60 * 60 * 1000) return '오늘'
-  if (difference < 2 * 24 * 60 * 60 * 1000) return '어제'
-  return `${Math.max(2, Math.floor(difference / (24 * 60 * 60 * 1000)))}일 전`
 }
 
 function getInitial(name: string): string {

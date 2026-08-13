@@ -217,8 +217,7 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: '통합 관리' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '입장 요청' })).toHaveAttribute('href', '/entrance-requests')
     expect(screen.queryByRole('link', { name: '자료' })).not.toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: '초대 코드' })).toBeEnabled()
-    expect(screen.getByRole('option', { name: '자연어처리 개론' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('강의실 선택')).not.toBeInTheDocument()
   })
 
   it('keeps the classroom workspace header mounted while changing week content', async () => {

@@ -88,9 +88,9 @@ export function AppRoutes() {
             />
             <Route
               path={routes.entranceRequests}
-              element={<LegacyClassroomRouteRedirect destination="entrance-requests" />}
+              element={<EntranceRequestsPage />}
             />
-            <Route path={routes.classroomEntranceRequests} element={<EntranceRequestsPage />} />
+            <Route path={routes.classroomEntranceRequests} element={<Navigate to={routes.entranceRequests} replace />} />
             <Route path={routes.classroomReports} element={<InstructorReportsPage />} />
             <Route path={routes.classroomStudentReports} element={<InstructorStudentReportsPage />} />
             <Route path={routes.classroomReportDetail} element={<InstructorReportDetailPage />} />

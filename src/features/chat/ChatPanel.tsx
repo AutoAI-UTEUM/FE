@@ -58,6 +58,7 @@ interface ChatPanelProps {
 
 /** 시안 4d의 빠른 액션 칩 */
 const QUICK_ACTIONS = [
+  { kind: 'explain', label: '페이지 설명' },
   { kind: 'note', label: '노트에 저장' },
   { kind: 'quiz', label: '퀴즈 내줘' },
   { kind: 'prompt', label: '쉽게 설명해줘' },
@@ -118,6 +119,12 @@ export function ChatPanel({
   }, [chat.messages.length, chat.isTurnPending, conversationAction])
 
   useLayoutEffect(() => {
+    if (tab !== 'chat') return
+    const log = logRef.current
+    if (log) log.scrollTop = log.scrollHeight
+  }, [tab])
+
+  useLayoutEffect(() => {
     const input = questionInputRef.current
     if (!input) return
 
@@ -131,10 +138,7 @@ export function ChatPanel({
 
   async function sendQuestion(text: string) {
     const trimmedQuestion = text.trim()
-    if (!trimmedQuestion) {
-      setError('질문을 입력하세요.')
-      return
-    }
+    if (!trimmedQuestion) return
 
     if (chat.isTurnPending) return
 
@@ -220,6 +224,10 @@ export function ChatPanel({
   }
 
   function handleQuickAction(kind: (typeof QUICK_ACTIONS)[number]['kind']) {
+    if (kind === 'explain') {
+      onExplainCurrentPage?.()
+      return
+    }
     if (kind === 'quiz') {
       onRequestQuiz?.()
       return
