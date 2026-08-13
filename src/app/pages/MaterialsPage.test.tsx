@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -129,6 +130,40 @@ describe('MaterialsPage', () => {
     expect(screen.getByText('시험 대비 요약.pdf')).toBeInTheDocument()
   })
 
+  it('renames an existing material', async () => {
+    let renameBody: unknown
+    let renameContentType: string | null = null
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'PATCH' && url.pathname === '/api/materials/11') {
+        renameContentType = request.headers.get('Content-Type')
+        return request.json().then((body) => {
+          renameBody = body
+          return apiSuccess({
+            createdAt: '2026-07-23T00:00:00Z',
+            materialId: 11,
+            processingStatus: 'PROCESSING',
+            title: '직접 정한 자료명',
+          })
+        })
+      }
+      return undefined
+    })
+    renderMaterialsPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '강의 노트 5주차.pdf 이름 변경' }))
+    const dialog = screen.getByRole('dialog', { name: '자료 이름 변경' })
+    const titleInput = within(dialog).getByRole('textbox', { name: '자료 제목' })
+    expect(titleInput).toHaveValue('강의 노트 5주차.pdf')
+    fireEvent.change(titleInput, { target: { value: '직접 정한 자료명' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '변경사항 저장' }))
+
+    expect(await screen.findByRole('heading', { name: '직접 정한 자료명' })).toBeInTheDocument()
+    expect(renameBody).toEqual({ title: '직접 정한 자료명' })
+    expect(renameContentType).toBe('application/json')
+    expect(screen.getByText('자료 이름을 변경했습니다.')).toBeInTheDocument()
+  })
+
   it('rejects non-PDF uploads before making an API request', () => {
     renderMaterialsPage()
 
@@ -173,8 +208,8 @@ describe('MaterialsPage', () => {
         },
       })
 
-      expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('uploaded')
-      expect(screen.queryByRole('heading', { name: 'uploaded' })).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('')
+      expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled()
 
       fireEvent.change(screen.getByRole('textbox', { name: '자료 제목' }), {
         target: { value: '최적화 강의' },
@@ -195,7 +230,7 @@ describe('MaterialsPage', () => {
     15_000,
   )
 
-  it('removes an uppercase PDF extension and rejects an empty title', async () => {
+  it('keeps the title empty after file selection and rejects an empty title', async () => {
     renderMaterialsPage()
     await screen.findByText('시험 대비 요약.pdf')
 
@@ -207,9 +242,11 @@ describe('MaterialsPage', () => {
 
     const titleInput = screen.getByRole('textbox', { name: '자료 제목' })
     const uploadButton = screen.getByRole('button', { name: '업로드' })
-    expect(titleInput).toHaveValue('LECTURE')
-    expect(uploadButton).toBeEnabled()
+    expect(titleInput).toHaveValue('')
+    expect(uploadButton).toBeDisabled()
 
+    fireEvent.change(titleInput, { target: { value: '직접 입력한 제목' } })
+    expect(uploadButton).toBeEnabled()
     fireEvent.change(titleInput, { target: { value: '   ' } })
     expect(uploadButton).toBeDisabled()
   })
@@ -235,6 +272,10 @@ describe('MaterialsPage', () => {
       target: {
         files: [new File(['pdf'], 'lecture.pdf', { type: 'application/pdf' })],
       },
+    })
+
+    fireEvent.change(screen.getByRole('textbox', { name: '자료 제목' }), {
+      target: { value: 'lecture' },
     })
 
     const form = screen.getByRole('textbox', { name: '자료 제목' }).closest('form')

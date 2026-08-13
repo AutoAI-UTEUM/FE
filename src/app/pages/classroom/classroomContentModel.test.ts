@@ -19,7 +19,7 @@ describe('classroomContentModel', () => {
     expect(filterClassroomContent(items, null, 'notice').map((item) => item.kind)).toEqual([])
   })
 
-  it('sorts all week content by course order before its timestamp', () => {
+  it('sorts all week content by fixed week number before its timestamp', () => {
     const firstWeek: ClassroomWeek = {
       ...weekFixture,
       displayOrder: 1,

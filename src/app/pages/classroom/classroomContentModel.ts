@@ -14,7 +14,7 @@ export function buildClassroomContent(
   exams: Exam[],
 ): ClassroomContentItem[] {
   const weekOrderByNumber = new Map(
-    weeks.map((week) => [week.weekNumber, week.displayOrder]),
+    weeks.map((week) => [week.weekNumber, week.weekNumber]),
   )
 
   return [
@@ -25,7 +25,7 @@ export function buildClassroomContent(
       source: material,
       title: material.title,
       weekNumber: week.weekNumber,
-      weekOrder: week.displayOrder,
+      weekOrder: week.weekNumber,
     }))),
     ...notices.map((notice): ClassroomContentItem => ({
       id: `notice-${notice.id}`,

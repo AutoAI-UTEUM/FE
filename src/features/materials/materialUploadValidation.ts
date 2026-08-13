@@ -1,10 +1,6 @@
 export const MAX_MATERIAL_UPLOAD_BYTES = 45 * 1024 * 1024
 export const MAX_MATERIAL_TITLE_LENGTH = 255
 
-export function getDefaultMaterialTitle(fileName: string): string {
-  return fileName.replace(/\.pdf$/i, '').trim()
-}
-
 export function validateMaterialTitle(title: string): string | null {
   const normalizedTitle = title.trim()
 

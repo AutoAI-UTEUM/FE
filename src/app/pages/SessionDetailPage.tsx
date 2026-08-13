@@ -265,9 +265,7 @@ export function SessionDetailPage() {
 
         if (controller.signal.aborted) return
         const orderedWeeks = [...context.weeks].sort(
-          (left, right) =>
-            left.displayOrder - right.displayOrder
-            || left.weekNumber - right.weekNumber,
+          (left, right) => left.weekNumber - right.weekNumber,
         )
         setResourceWeeks(orderedWeeks.map((week) => ({
           id: week.id,

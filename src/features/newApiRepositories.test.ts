@@ -78,18 +78,8 @@ describe('2026-08-04 API additions', () => {
     ])
   })
 
-  it('connects classroom analytics, week order, and student management', async () => {
-    const week = {
-      averageProgressRate: 21,
-      displayOrder: 1,
-      materials: [],
-      status: 'BREAK',
-      title: '휴강',
-      weekId: 91,
-      weekNumber: 1,
-    }
+  it('connects classroom analytics and student management', async () => {
     const request = vi.fn()
-      .mockResolvedValueOnce(success({ items: [week] }))
       .mockResolvedValueOnce(success({
         aiQuestionCountLast7Days: 11,
         averageProgressRate: 42,
@@ -106,15 +96,13 @@ describe('2026-08-04 API additions', () => {
       .mockResolvedValueOnce(success(null))
     const repository = createClassroomsRepository(request as AuthenticatedRequest)
 
-    await repository.reorderWeeks('12', ['91'])
     await expect(repository.getAnalytics('12')).resolves.toMatchObject({ materials: [{ id: '10' }], questionsByPage: [{ materialId: '10' }] })
     await expect(repository.listStudents('12', { query: '학습', sort: 'LOW_PROGRESS' })).resolves.toMatchObject([{ id: '7', name: '학습자' }])
     await repository.removeStudent('12', '7')
 
-    expect(request).toHaveBeenNthCalledWith(1, '/api/classrooms/12/weeks/reorder', { body: { orderedWeekIds: [91] }, method: 'PATCH' })
-    expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/analytics', { signal: undefined })
-    expect(request).toHaveBeenNthCalledWith(3, '/api/classrooms/12/students?page=0&size=100&q=%ED%95%99%EC%8A%B5&sort=LOW_PROGRESS', { signal: undefined })
-    expect(request).toHaveBeenNthCalledWith(4, '/api/classrooms/12/students/7', { method: 'DELETE' })
+    expect(request).toHaveBeenNthCalledWith(1, '/api/classrooms/12/analytics', { signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/students?page=0&size=100&q=%ED%95%99%EC%8A%B5&sort=LOW_PROGRESS', { signal: undefined })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/classrooms/12/students/7', { method: 'DELETE' })
   })
 
   it('sends the expanded classroom date update contract', async () => {

@@ -33,6 +33,11 @@ export interface MaterialsRepository {
   ) => Promise<Blob>
   list: (signal?: AbortSignal) => Promise<StudyMaterial[]>
   refreshStatuses: (signal?: AbortSignal) => Promise<StudyMaterial[]>
+  rename: (
+    materialId: string,
+    title: string,
+    signal?: AbortSignal,
+  ) => Promise<StudyMaterial>
   upload: (
     file: File,
     options: {
@@ -98,6 +103,17 @@ export function createMaterialsRepository(
     },
     async refreshStatuses(signal) {
       return requestMaterials(request, signal)
+    },
+    async rename(materialId, title, signal) {
+      const { data } = await request<MaterialDto>(
+        `/api/materials/${encodeURIComponent(materialId)}`,
+        {
+          body: { title: title.trim() },
+          method: 'PATCH',
+          signal,
+        },
+      )
+      return mapMaterial(data)
     },
     async upload(file, options) {
       const formData = new FormData()

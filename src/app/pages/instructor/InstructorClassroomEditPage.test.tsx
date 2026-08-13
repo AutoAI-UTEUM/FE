@@ -95,14 +95,14 @@ describe('InstructorClassroomEditPage', () => {
     expect(
       screen.getByRole('heading', { name: '주차 구성' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '주차 추가' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '주차 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '주차 수 줄이기' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '주차 수 늘리기' })).not.toBeInTheDocument()
     expect(screen.queryByText(/6점 핸들을 끌어/)).not.toBeInTheDocument()
     expect(screen.queryByText('전체 15주')).not.toBeInTheDocument()
     expect(screen.getByDisplayValue('자료구조')).toBeInTheDocument()
-    expect(screen.getByLabelText('1주차 이름')).toHaveValue('1주차')
-    expect(screen.getByLabelText('15주차 이름')).toBeInTheDocument()
+    expect(screen.getByLabelText('1주차 항목')).toHaveTextContent('1주차')
+    expect(screen.getByLabelText('15주차 항목')).toHaveTextContent('15주차')
     expect(screen.getByText('7QK4-MZ2A')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '학습 현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
     expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
@@ -125,12 +125,9 @@ describe('InstructorClassroomEditPage', () => {
     expect(screen.queryByRole('button', { name: '1주차 예약' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '1주차 비공개' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '1주차 휴강' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '1주차 삭제' })).toBeInTheDocument()
-
-    const dataTransfer = { effectAllowed: 'none', setData: vi.fn() }
-    fireEvent.dragStart(screen.getByRole('button', { name: '1주차 순서 이동' }), { dataTransfer })
-    fireEvent.dragEnter(screen.getByLabelText('2주차 항목'), { dataTransfer })
-    expect(screen.getByLabelText('2주차 이름')).toHaveValue('1주차')
+    expect(screen.queryByRole('button', { name: '1주차 삭제' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '1주차 순서 이동' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '1주차 이름' })).toHaveValue('1주차')
     expect(screen.queryByRole('button', { name: '위로 이동' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '아래로 이동' })).not.toBeInTheDocument()
 
@@ -151,25 +148,17 @@ describe('InstructorClassroomEditPage', () => {
     await waitFor(() => expect(permanentDeleteBodies).toEqual([{ confirmName: '자료구조' }]))
   })
 
-  it('saves changed week titles through the week update API', async () => {
-    const requests: Array<{ method: string; pathname: string }> = []
+  it('saves changed week names only after the settings form is submitted', async () => {
+    const weekUpdateBodies: unknown[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = new URL(
-        input instanceof Request ? input.url : String(input),
-        'http://localhost',
-      )
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
       const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
-      requests.push({ method, pathname: url.pathname })
-
-      if (url.pathname === '/api/classrooms/12' && method === 'GET') {
-        return success({ ...classroomFixture, weekCount: 1 })
-      }
+      if (url.pathname === '/api/classrooms/12') return success(classroomFixture)
       if (url.pathname === '/api/classrooms/12/weeks' && method === 'GET') {
         return success({
           items: [{
             displayOrder: 1,
             materials: [],
-            releaseAt: '2026-08-03T00:00:00Z',
             status: 'PUBLISHED',
             title: '1주차',
             weekId: 101,
@@ -177,97 +166,19 @@ describe('InstructorClassroomEditPage', () => {
           }],
         })
       }
-      if (url.pathname === '/api/classrooms/12/students') {
-        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
-      }
-      if (url.pathname === '/api/classrooms/12/invite-code') {
-        return success({ inviteCode: '7QK4-MZ2A' })
-      }
       if (url.pathname === '/api/classrooms/12/weeks/1' && method === 'PATCH') {
-        return success({ displayOrder: 1, materials: [], status: 'PUBLISHED', title: '연결 리스트', weekId: 101, weekNumber: 1 })
-      }
-      if (url.pathname === '/api/classrooms/12/weeks/reorder' && method === 'PATCH') {
-        return success({ items: [{ displayOrder: 1, materials: [], status: 'PUBLISHED', title: '연결 리스트', weekId: 101, weekNumber: 1 }] })
-      }
-      if (url.pathname === '/api/classrooms/12' && method === 'PATCH') {
-        return success({ ...classroomFixture, weekCount: 1 })
-      }
-      return new Response(null, { status: 404 })
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/classrooms/12/edit']}>
-        <AuthProvider initialUser={{ email: 'instructor@example.com', id: 7, name: '강의자', role: 'INSTRUCTOR' }}>
-          <ToastProvider>
-            <Routes>
-              <Route path="/classrooms/:classroomId/edit" element={<InstructorClassroomEditPage />} />
-              <Route path="/classrooms/:classroomId" element={<p>강의실 주차 페이지</p>} />
-            </Routes>
-          </ToastProvider>
-        </AuthProvider>
-      </MemoryRouter>,
-    )
-
-    fireEvent.change(await screen.findByLabelText('1주차 이름'), {
-      target: { value: '연결 리스트' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
-
-    await waitFor(() => {
-      expect(requests).toContainEqual({ method: 'PATCH', pathname: '/api/classrooms/12/weeks/1' })
-    })
-    expect(requests).not.toContainEqual({ method: 'PATCH', pathname: '/api/classrooms/12' })
-    expect(await screen.findByText('강의실 주차 페이지')).toBeInTheDocument()
-  })
-
-  it('keeps reordered weeks as a draft until the save button is pressed', async () => {
-    const writes: Array<{ body: Record<string, unknown>; method: string; pathname: string }> = []
-    const firstWeek = {
-      displayOrder: 1,
-      materials: [],
-      releaseAt: '2026-08-02T15:00:00Z',
-      status: 'PUBLISHED',
-      title: '기초',
-      weekId: 101,
-      weekNumber: 1,
-    }
-    const secondWeek = {
-      displayOrder: 2,
-      materials: [],
-      releaseAt: '2026-08-09T15:00:00Z',
-      status: 'SCHEDULED',
-      title: '심화',
-      weekId: 102,
-      weekNumber: 2,
-    }
-
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
-      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
-      if (method !== 'GET') {
-        const body = input instanceof Request
-          ? await input.clone().json() as Record<string, unknown>
-          : JSON.parse(String(init?.body)) as Record<string, unknown>
-        writes.push({ body, method, pathname: url.pathname })
-      }
-
-      if (url.pathname === '/api/classrooms/12' && method === 'GET') {
-        return success({ ...classroomFixture, endDate: '2026-08-16', weekCount: 2 })
-      }
-      if (url.pathname === '/api/classrooms/12/weeks' && method === 'GET') {
-        return success({ items: [firstWeek, secondWeek] })
-      }
-      if (url.pathname === '/api/classrooms/12/invite-code') {
-        return success({ inviteCode: '7QK4-MZ2A' })
-      }
-      if (url.pathname === '/api/classrooms/12/weeks/reorder' && method === 'PATCH') {
+        const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body))
+        weekUpdateBodies.push(body)
         return success({
-          items: [
-            { ...secondWeek, displayOrder: 1 },
-            { ...firstWeek, displayOrder: 2 },
-          ],
+          displayOrder: 1,
+          materials: [],
+          status: 'PUBLISHED',
+          title: body.title,
+          weekId: 101,
+          weekNumber: 1,
         })
       }
+      if (url.pathname === '/api/classrooms/12/invite-code') return success({ inviteCode: '7QK4-MZ2A' })
       return new Response(null, { status: 404 })
     })
 
@@ -277,94 +188,20 @@ describe('InstructorClassroomEditPage', () => {
           <ToastProvider>
             <Routes>
               <Route path="/classrooms/:classroomId/edit" element={<InstructorClassroomEditPage />} />
-              <Route path="/classrooms/:classroomId" element={<p>강의실 주차 페이지</p>} />
+              <Route path="/classrooms/:classroomId" element={<p>강의실</p>} />
             </Routes>
           </ToastProvider>
         </AuthProvider>
       </MemoryRouter>,
     )
 
-    const dataTransfer = { effectAllowed: 'none', setData: vi.fn() }
-    fireEvent.dragStart(await screen.findByRole('button', { name: '1주차 순서 이동' }), { dataTransfer })
-    const secondWeekRow = screen.getByLabelText('2주차 항목')
-    fireEvent.dragEnter(secondWeekRow, { dataTransfer })
-    fireEvent.drop(secondWeekRow, { dataTransfer })
-
-    expect(writes).toEqual([])
-    expect(screen.queryByText('주차 순서를 변경했습니다.')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('1주차 이름')).toHaveValue('심화')
+    const weekTitleInput = await screen.findByRole('textbox', { name: '1주차 이름' })
+    fireEvent.change(weekTitleInput, { target: { value: '오리엔테이션' } })
+    expect(weekUpdateBodies).toEqual([])
 
     fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
 
-    await waitFor(() => expect(writes.some((write) => write.pathname.endsWith('/weeks/reorder'))).toBe(true))
-    const weekWrites = writes.filter((write) => /\/weeks\/\d+$/.test(write.pathname))
-    expect(weekWrites).toHaveLength(0)
-    expect(await screen.findByText('강의실 주차 페이지')).toBeInTheDocument()
-  })
-
-  it('expands the classroom period before creating an added week', async () => {
-    const writes: Array<{ body: Record<string, unknown>; method: string; pathname: string }> = []
-    let weekCreated = false
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
-      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
-      if (method !== 'GET') {
-        const body = input instanceof Request
-          ? await input.clone().json() as Record<string, unknown>
-          : JSON.parse(String(init?.body)) as Record<string, unknown>
-        writes.push({ body, method, pathname: url.pathname })
-      }
-      const firstWeek = {
-        displayOrder: 1, materials: [], status: 'PUBLISHED', title: '1주차', weekId: 101, weekNumber: 1,
-      }
-      const secondWeek = {
-        displayOrder: 2, materials: [], status: 'SCHEDULED', title: '2주차', weekId: 102, weekNumber: 2,
-      }
-
-      if (url.pathname === '/api/classrooms/12' && method === 'GET') {
-        return success({ ...classroomFixture, endDate: '2026-08-09', weekCount: 1 })
-      }
-      if (url.pathname === '/api/classrooms/12' && method === 'PATCH') {
-        return success({ ...classroomFixture, endDate: '2026-08-16', weekCount: 2 })
-      }
-      if (url.pathname === '/api/classrooms/12/weeks' && method === 'GET') {
-        return success({ items: weekCreated ? [firstWeek, secondWeek] : [firstWeek] })
-      }
-      if (url.pathname === '/api/classrooms/12/weeks' && method === 'POST') {
-        weekCreated = true
-        return success(secondWeek)
-      }
-      if (url.pathname === '/api/classrooms/12/students') {
-        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
-      }
-      if (url.pathname === '/api/classrooms/12/invite-code') {
-        return success({ inviteCode: '7QK4-MZ2A' })
-      }
-      return new Response(null, { status: 404 })
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/classrooms/12/edit']}>
-        <AuthProvider initialUser={{ email: 'instructor@example.com', id: 7, name: '강의자', role: 'INSTRUCTOR' }}>
-          <ToastProvider>
-            <Routes>
-              <Route path="/classrooms/:classroomId/edit" element={<InstructorClassroomEditPage />} />
-            </Routes>
-          </ToastProvider>
-        </AuthProvider>
-      </MemoryRouter>,
-    )
-
-    fireEvent.click(await screen.findByRole('button', { name: '주차 추가' }))
-    fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
-
-    await waitFor(() => expect(writes).toHaveLength(2))
-    expect(writes[0]).toEqual({
-      body: { endDate: '2026-08-16' },
-      method: 'PATCH',
-      pathname: '/api/classrooms/12',
-    })
-    expect(writes[1]).toMatchObject({ method: 'POST', pathname: '/api/classrooms/12/weeks' })
+    await waitFor(() => expect(weekUpdateBodies).toEqual([{ title: '오리엔테이션' }]))
   })
 
   it('disables completion when the classroom is already completed', async () => {

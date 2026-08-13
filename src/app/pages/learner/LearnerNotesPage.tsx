@@ -1,4 +1,4 @@
-import { FileText, Pencil, Search, Trash2, X } from 'lucide-react'
+import { ChevronDown, FileText, Pencil, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { useAuth } from '../../../features/auth'
@@ -25,6 +25,32 @@ interface LearnerNoteItem {
   session: LearningSession
 }
 
+interface NotePreview {
+  body: string
+  title: string
+}
+
+function getNotePreview(content: string): NotePreview {
+  const lines = content.split(/\r?\n/)
+  const titleLineIndex = lines.findIndex((line) => line.trim())
+  if (titleLineIndex < 0) return { body: '', title: '제목 없는 노트' }
+
+  const titleLine = lines[titleLineIndex].trim()
+  const title = titleLine
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/\s+#+$/, '')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/[*_~`]/g, '')
+    .trim()
+
+  return {
+    body: [...lines.slice(0, titleLineIndex), ...lines.slice(titleLineIndex + 1)]
+      .join('\n')
+      .trim(),
+    title: title || '제목 없는 노트',
+  }
+}
+
 export function LearnerNotesPage() {
   usePageTitle('내 노트')
   const { apiRequest } = useAuth()
@@ -41,6 +67,9 @@ export function LearnerNotesPage() {
   const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -144,6 +173,15 @@ export function LearnerNotesPage() {
     }
   }
 
+  function toggleNote(noteId: string) {
+    setExpandedNoteIds((current) => {
+      const next = new Set(current)
+      if (next.has(noteId)) next.delete(noteId)
+      else next.add(noteId)
+      return next
+    })
+  }
+
   return (
     <PageContainer>
       <PageHeader
@@ -202,47 +240,46 @@ export function LearnerNotesPage() {
 
       {!error && filteredItems.length > 0 ? (
         <section aria-label="저장한 노트" className="grid gap-3 lg:grid-cols-2">
-          {filteredItems.map(({ note, session }) => (
-            <article
-              className="flex min-h-48 flex-col rounded-lg border border-stone-200 bg-white p-5"
-              key={note.id}
-            >
-              <div className="flex items-center gap-2 type-micro">
-                <span className="rounded-full bg-brand-50 px-2 py-1 font-semibold text-brand-700">
-                  {session.materialTitle}
-                </span>
-                {note.pageNumber ? (
-                  <span className="text-stone-400">{note.pageNumber}쪽</span>
-                ) : null}
-                <span className="ml-auto rounded-full bg-stone-100 px-2 py-1 font-semibold text-stone-500">
-                  {note.sourceMessageId ? 'AI 답변' : '내 메모'}
-                </span>
-              </div>
-              {editingId === note.id ? (
-                <textarea
-                  aria-label="노트 내용 수정"
-                  autoFocus
-                  className="mt-4 min-h-24 w-full resize-none rounded-lg border border-stone-300 p-3 type-body leading-6 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
-                  onChange={(event) => setEditingContent(event.target.value)}
-                  value={editingContent}
-                />
-              ) : (
-                <MarkdownContent
-                  className="mt-4 max-h-32 text-stone-700"
-                  content={note.content}
-                />
-              )}
-              <div className="mt-auto flex items-center gap-2 pt-4">
-                <ButtonLink
-                  size="sm"
-                  to={sessionDetailPath(session.id)}
-                  variant="secondary"
-                >
-                  <FileText aria-hidden="true" size={13} />
-                  자료로 이동
-                </ButtonLink>
-                <div className="ml-auto flex gap-1">
-                  {editingId === note.id ? (
+          {filteredItems.map(({ note, session }) => {
+            const preview = getNotePreview(note.content)
+            const isExpanded = expandedNoteIds.has(note.id)
+            const isEditing = editingId === note.id
+            const contentId = `note-content-${note.id}`
+
+            return (
+              <article
+                className="min-w-0 rounded-lg border border-stone-200 bg-white"
+                key={note.id}
+              >
+                <div className="flex flex-wrap items-center gap-2 border-b border-stone-100 px-4 py-3">
+                  <div className="mr-auto min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p
+                        className="min-w-0 truncate type-control font-bold text-stone-900"
+                        title={session.materialTitle}
+                      >
+                        {session.materialTitle}
+                      </p>
+                      {note.pageNumber ? (
+                        <span className="shrink-0 type-micro text-stone-400">
+                          {note.pageNumber}페이지
+                        </span>
+                      ) : null}
+                    </div>
+                    {!note.sourceMessageId ? (
+                      <p className="mt-0.5 type-micro text-stone-400">내 메모</p>
+                    ) : null}
+                  </div>
+                  <ButtonLink
+                    className="!min-h-7 !gap-1 !rounded-md !px-2 !py-1 type-micro"
+                    size="sm"
+                    to={sessionDetailPath(session.id)}
+                    variant="secondary"
+                  >
+                    <FileText aria-hidden="true" size={12} />
+                    자료로 이동
+                  </ButtonLink>
+                  {isEditing ? (
                     <>
                       <Button
                         onClick={() => setEditingId(null)}
@@ -283,9 +320,53 @@ export function LearnerNotesPage() {
                     </>
                   )}
                 </div>
-              </div>
-            </article>
-          ))}
+
+                {isEditing ? (
+                  <div className="p-4">
+                    <textarea
+                      aria-label="노트 내용 수정"
+                      autoFocus
+                      className="min-h-40 w-full resize-y rounded-lg border border-stone-300 p-3 type-body leading-6 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+                      onChange={(event) => setEditingContent(event.target.value)}
+                      value={editingContent}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      aria-controls={contentId}
+                      aria-expanded={isExpanded}
+                      aria-label={`${preview.title} 노트 ${
+                        isExpanded ? '접기' : '펼치기'
+                      }`}
+                      className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-stone-50"
+                      onClick={() => toggleNote(note.id)}
+                      type="button"
+                    >
+                      <span className="min-w-0 flex-1 truncate type-body font-bold text-stone-900">
+                        {preview.title}
+                      </span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={`shrink-0 text-stone-400 transition-transform ${
+                          isExpanded ? 'rotate-180' : ''
+                        }`}
+                        size={16}
+                      />
+                    </button>
+                    <div id={contentId}>
+                      {isExpanded && preview.body ? (
+                        <MarkdownContent
+                          className="border-t border-stone-100 px-4 py-4 text-stone-700"
+                          content={preview.body}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              </article>
+            )
+          })}
         </section>
       ) : null}
     </PageContainer>

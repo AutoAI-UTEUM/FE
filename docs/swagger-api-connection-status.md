@@ -71,7 +71,6 @@
 `GET /api/classrooms/{id}/invite-code`, `POST /api/classroom-join-requests`,
 `GET /api/classrooms/{id}/join-requests`, 개별 `approve`·`reject`,
 `GET/POST /api/classrooms/{id}/weeks`,
-`PATCH /api/classrooms/{id}/weeks/reorder`,
 `PATCH /api/classrooms/{id}/weeks/{weekId}/status`,
 `GET /api/classrooms/{id}/students`의 검색·정렬·학습 지표,
 `DELETE /api/classrooms/{id}/students/{studentId}`,
