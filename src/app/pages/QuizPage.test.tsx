@@ -67,6 +67,7 @@ describe('QuizPage', () => {
     expect(
       await screen.findByRole('button', { name: '제출 완료' }),
     ).toBeDisabled()
+    expect(screen.getByText('문항 1 / 2')).toBeInTheDocument()
     expect(screen.getByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
   })
 
@@ -87,12 +88,13 @@ describe('QuizPage', () => {
 
     expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
     let questionResult = screen.getByRole('region', { name: '현재 문항 채점 결과' })
+    expect(within(questionResult).getByText('정답')).toBeInTheDocument()
+    expect(within(questionResult).getByText('내 답안')).toBeInTheDocument()
+    expect(within(questionResult).getByText('50 / 50')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
+    questionResult = screen.getByRole('region', { name: '현재 문항 채점 결과' })
     expect(within(questionResult).getByText('오답')).toBeInTheDocument()
     expect(within(questionResult).getByText('0 / 50')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '이전 문항' }))
-    questionResult = screen.getByRole('region', { name: '현재 문항 채점 결과' })
-    expect(within(questionResult).getByText('정답')).toBeInTheDocument()
-    expect(within(questionResult).getByText('50 / 50')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '진단으로 이어가기' }),
     ).toHaveAttribute('href', '/sessions/100/diagnosis/42')

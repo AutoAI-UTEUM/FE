@@ -149,6 +149,7 @@ export function QuizWorkspace({
       const nextResult = await repository.submit(quiz, answers)
       setResult(nextResult)
       setIsSubmitted(true)
+      setCurrentQuestionIndex(0)
       setError(null)
       onSubmitted?.(nextResult)
     } catch (requestError) {
@@ -371,16 +372,18 @@ function QuestionResultDetails({
   return (
     <section className={`mt-5 rounded-lg border px-4 py-4 ${tone.panel}`} aria-label="현재 문항 채점 결과">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className={`inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 type-caption font-bold ${tone.badge}`}>
-          <VerdictIcon verdict={verdict} />{tone.label}
-        </span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <span className={`inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 type-caption font-bold ${tone.badge}`}>
+            <VerdictIcon verdict={verdict} />{tone.label}
+          </span>
+          <span className="min-w-0 type-control text-stone-900">
+            <strong className="font-semibold text-stone-500">내 답안 </strong>
+            <span className="break-words">{formatSubmittedAnswer(question, answer)}</span>
+          </span>
+        </div>
         <strong className="type-control text-stone-900">{formatItemScore(feedback?.score, feedback?.maxScore)}</strong>
       </div>
       <dl className="mt-3 grid gap-2 type-control">
-        <div className="min-w-0">
-          <dt className="inline font-semibold text-stone-500">내 답안 </dt>
-          <dd className="inline break-words text-stone-900">{formatSubmittedAnswer(question, answer)}</dd>
-        </div>
         {correctAnswer ? (
           <div className="min-w-0">
             <dt className="inline font-semibold text-stone-500">정답·기준 답안 </dt>

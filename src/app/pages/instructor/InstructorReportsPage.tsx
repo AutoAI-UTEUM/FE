@@ -47,7 +47,6 @@ const reportsEnabled = isApiCapabilityEnabled('reports')
 export function InstructorReportsPage() {
   usePageTitle('학습 리포트')
   const { classroomId = '' } = useParams()
-  const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
   const classroomsRepository = useMemo(
@@ -84,13 +83,12 @@ export function InstructorReportsPage() {
   }, [classroomId, repository])
 
   const selectedClassroom = classrooms.find((classroom) => classroom.id === classroomId)
-  const classroomSelector = <label><span className="sr-only">강의실 선택</span><select className="h-9 min-w-40 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600" onChange={(event) => { setIsLoading(true); setError(null); navigate(classroomReportsPath(event.target.value), { replace: true }) }} value={classroomId}>{classrooms.length === 0 ? <option value="">강의실 없음</option> : classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
   const headerActions = classroomId ? <ButtonLink to={classroomReportCriteriaPath(classroomId)} variant="secondary"><Settings2 size={14} />평가 기준</ButtonLink> : undefined
 
   return <PageContainer>
     {selectedClassroom
-      ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="reports" classroom={selectedClassroom} titleAccessory={classroomSelector} />
-      : <PageHeader actions={headerActions} title="학습 리포트" titleAccessory={classroomSelector} />}
+      ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="reports" classroom={selectedClassroom} />
+      : <PageHeader actions={headerActions} title="학습 리포트" />}
     {!reportsEnabled ? <ReportsUnavailableState /> : null}
     {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
     {reportsEnabled && error ? <ErrorState description={error} title="학습자 목록을 불러오지 못했습니다" /> : null}

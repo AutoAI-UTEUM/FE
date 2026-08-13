@@ -62,7 +62,7 @@ describe('ChatPanel', () => {
 
   it('validates empty questions before sending a turn', async () => {
     render(<ChatHarness repository={createRepository()} />)
-    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+    await screen.findByLabelText('질문')
 
     fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
 
@@ -119,7 +119,7 @@ describe('ChatPanel', () => {
         repository={repository}
       />,
     )
-    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+    await screen.findByLabelText('질문')
     const input = screen.getByLabelText('질문')
 
     fireEvent.change(input, { target: { value: '첫 줄' } })
@@ -136,7 +136,7 @@ describe('ChatPanel', () => {
   it('attaches page context without rendering an attachment status chip', async () => {
     const repository = createRepository()
     render(<ChatHarness currentPage={3} repository={repository} />)
-    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+    await screen.findByLabelText('질문')
 
     expect(screen.queryByText('현재 페이지 첨부됨 · 3쪽')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('질문'), {
@@ -160,7 +160,7 @@ describe('ChatPanel', () => {
     const onExplainNextPage = vi.fn()
     const repository = createRepository()
     render(<ChatHarness onExplainNextPage={onExplainNextPage} repository={repository} />)
-    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+    await screen.findByLabelText('질문')
 
     fireEvent.change(screen.getByLabelText('질문'), {
       target: { value: '다음 페이지를 설명해 주세요.' },
@@ -184,7 +184,7 @@ describe('ChatPanel', () => {
       ),
     })
     render(<ChatHarness repository={repository} />)
-    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+    await screen.findByLabelText('질문')
 
     fireEvent.change(screen.getByLabelText('질문'), {
       target: { value: '핵심 개념을 알려 주세요.' },
@@ -203,7 +203,7 @@ describe('ChatPanel', () => {
       .mockResolvedValueOnce({ messages: [], uiActions: [] })
     const repository = createRepository({ submitTurn })
     render(<ChatHarness repository={repository} />)
-    await screen.findByText('보고 있는 페이지를 함께 읽고 답변해요')
+    await screen.findByLabelText('질문')
 
     fireEvent.change(screen.getByLabelText('질문'), {
       target: { value: '핵심 개념을 알려 주세요.' },

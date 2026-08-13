@@ -70,7 +70,7 @@ describe('SessionDetailPage', () => {
     expect(screen.getByRole('button', { name: '자료 목록' })).toBeInTheDocument()
   })
 
-  it('reflects the page confirmed by a chat turn in the visible viewer', async () => {
+  it('moves and explains the next page from a typed navigation command', async () => {
     renderSessionDetail()
 
     await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
@@ -80,6 +80,9 @@ describe('SessionDetailPage', () => {
 
     expect(
       await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.'),
     ).toBeInTheDocument()
   })
 
@@ -99,7 +102,7 @@ describe('SessionDetailPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('updates pages only after the page API succeeds', async () => {
+  it('automatically explains a page after forward navigation', async () => {
     renderSessionDetail()
 
     expect(
@@ -116,8 +119,9 @@ describe('SessionDetailPage', () => {
       ).toBeInTheDocument(),
     )
     expect(
-      await screen.findByText('현재 페이지를 설명할까요?'),
+      await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.'),
     ).toBeInTheDocument()
+    expect(screen.queryByText('현재 페이지를 설명할까요?')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '목차' }))
     fireEvent.click(screen.getByRole('button', { name: '4쪽으로 이동' }))
     await waitFor(() =>
@@ -291,9 +295,8 @@ describe('SessionDetailPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '네' }))
     expect(await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
-    expect(await screen.findByText('현재 페이지를 설명할까요?')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '네' }))
+    expect(screen.queryByText('현재 페이지를 설명할까요?')).not.toBeInTheDocument()
+    expect(await screen.findByText('이 페이지는 핵심 개념의 정의를 다룹니다.')).toBeInTheDocument()
     expect(await screen.findByText('퀴즈를 진행할까요?')).toBeInTheDocument()
   })
 

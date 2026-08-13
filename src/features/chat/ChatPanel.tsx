@@ -377,10 +377,6 @@ export function ChatPanel({
         ref={logRef}
         role="log"
       >
-        <p className="justify-self-center text-center type-caption text-stone-400">
-          보고 있는 페이지를 함께 읽고 답변해요
-        </p>
-
         {chat.isLoadingHistory ? (
           <p className="type-body font-medium text-stone-500" role="status">
             이전 메시지를 불러오는 중입니다.
@@ -624,6 +620,7 @@ function isExplainNextPageCommand(value: string): boolean {
     .replace(/\s+/g, ' ')
     .trim()
   return /다음\s*(페이지|쪽|장)(로|으로|를|을|의|에|에서)?\s*(넘어가서\s*)?(내용(을|를)?\s*)?(쉽게\s*)?(설명|해설|요약)(해\s*줘|해\s*주세요|해줘|해주세요|해)?/u.test(normalized)
+    || /다음\s*(페이지|쪽|장)(로|으로)?\s*(이동|넘어가|넘겨)(해\s*줘|해\s*주세요|줘|주세요|)?/u.test(normalized)
 }
 
 function PanelTab({

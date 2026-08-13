@@ -180,7 +180,7 @@ export function ClassroomDetailPage() {
     try {
       const material = await materialsRepository.upload(file, { classroomId, title, weekNumber })
       const uploadMessage = material.status === 'FAILED'
-        ? getMaterialFailureMessage(material.failureReason)
+        ? `${getMaterialFailureMessage(material.failureReason)}${material.traceId ? ` 문의 코드 ${material.traceId}` : ''}`
         : '자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.'
       showToast(uploadMessage, material.status === 'FAILED' ? 'danger' : 'success')
       if (material.status === 'PROCESSING') setPendingMaterialId(material.id)
@@ -366,7 +366,7 @@ function UploadMaterialDialog({ initialFile, initialWeekNumber, isUploading, onC
   const orderedWeeks = useMemo(() => [...weeks].sort((left, right) => left.weekNumber - right.weekNumber), [weeks])
   const [weekNumber, setWeekNumber] = useState(initialWeekNumber ?? orderedWeeks[0]?.weekNumber ?? 1)
   const [file, setFile] = useState<File | null>(initialFile ?? null)
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(initialFile?.name ?? '')
   const fileError = file ? validateMaterialUpload(file) : null
   const titleError = validateMaterialTitle(title)
   async function submit(event: FormEvent) {
@@ -375,7 +375,7 @@ function UploadMaterialDialog({ initialFile, initialWeekNumber, isUploading, onC
   }
   function selectFile(nextFile: File | null) {
     setFile(nextFile)
-    setTitle('')
+    setTitle(nextFile?.name ?? '')
   }
   return <div aria-label="강의자료 업로드" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">강의자료 업로드</h2><button aria-label="강의자료 업로드 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><span className="mt-1 type-caption text-stone-400">PDF · 최대 45MB</span><span className="mt-1 type-caption text-stone-500">PPT/PPTX는 PDF로 변환 후 업로드해 주세요.</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} type="file" /></label>{fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}<label className="mt-4 block type-control font-semibold">자료 제목<input aria-invalid={Boolean(titleError)} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={MAX_MATERIAL_TITLE_LENGTH} onChange={(event) => setTitle(event.target.value)} placeholder="자료 제목을 입력하세요." value={title} /></label>{titleError && file ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{titleError}</p> : null}<div className="mt-5 flex justify-end gap-2"><Button onClick={onClose} variant="secondary">취소</Button><Button disabled={!file || Boolean(fileError) || Boolean(titleError) || isUploading} type="submit">{isUploading ? '업로드 중' : '업로드'}</Button></div></form></div>
 }
