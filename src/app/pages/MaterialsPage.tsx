@@ -1,6 +1,7 @@
 import {
   ArrowUpRight,
   FileText,
+  Pencil,
   RefreshCw,
   Trash2,
   Upload,
@@ -18,10 +19,10 @@ import {
 
 import {
   createMaterialsRepository,
-  getDefaultMaterialTitle,
   getMaterialFailureMessage,
   getMaterialStatusLabel,
   MAX_MATERIAL_TITLE_LENGTH,
+  RenameMaterialDialog,
   validateMaterialUpload,
   validateMaterialTitle,
   type MaterialStatus,
@@ -62,6 +63,7 @@ export function MaterialsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
   const [materialTitle, setMaterialTitle] = useState('')
+  const [renamingMaterial, setRenamingMaterial] = useState<StudyMaterial | null>(null)
   const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(
     null,
   )
@@ -135,7 +137,7 @@ export function MaterialsPage() {
 
     setSelectedFile(file)
     setSelectedFileName(file.name)
-    setMaterialTitle(getDefaultMaterialTitle(file.name))
+    setMaterialTitle('')
   }
 
   async function submitUpload(event: FormEvent<HTMLFormElement>) {
@@ -204,6 +206,20 @@ export function MaterialsPage() {
       }
     } finally {
       setDeletingMaterialId(null)
+    }
+  }
+
+  async function handleRename(title: string): Promise<boolean> {
+    if (!renamingMaterial) return false
+    try {
+      const renamed = await repository.rename(renamingMaterial.id, title)
+      materialMutationVersionRef.current += 1
+      setMaterials((current) => current.map((item) => item.id === renamed.id ? { ...item, title: renamed.title } : item))
+      showToast('자료 이름을 변경했습니다.', 'success')
+      return true
+    } catch (error) {
+      showToast(getRequestErrorMessage(error), 'danger')
+      return false
     }
   }
 
@@ -409,6 +425,15 @@ export function MaterialsPage() {
                   PDF 열기
                 </ButtonLink>
                 <Button
+                  aria-label={`${material.title} 이름 변경`}
+                  onClick={() => setRenamingMaterial(material)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Pencil aria-hidden="true" size={15} />
+                </Button>
+                <Button
                   aria-label={`${material.title} 삭제`}
                   disabled={deletingMaterialId === material.id}
                   onClick={() => void handleDelete(material)}
@@ -424,6 +449,13 @@ export function MaterialsPage() {
         </div>
         )}
       </section>
+      {renamingMaterial ? (
+        <RenameMaterialDialog
+          initialTitle={renamingMaterial.title}
+          onClose={() => setRenamingMaterial(null)}
+          onSave={handleRename}
+        />
+      ) : null}
     </PageContainer>
   )
 }

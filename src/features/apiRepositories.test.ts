@@ -43,6 +43,14 @@ describe('remote feature repositories', () => {
           title: '새 자료.pdf',
         }),
       )
+      .mockResolvedValueOnce(
+        success({
+          createdAt: '2026-07-27T00:00:00Z',
+          materialId: 11,
+          processingStatus: 'PROCESSING',
+          title: '변경한 자료',
+        }),
+      )
     const repository = createMaterialsRepository(request as AuthenticatedRequest)
 
     await expect(repository.list()).resolves.toMatchObject([
@@ -66,6 +74,16 @@ describe('remote feature repositories', () => {
     expect(uploadOptions.method).toBe('POST')
     expect(uploadOptions.body.get('file')).toBe(file)
     expect(uploadOptions.body.get('title')).toBe('새 자료')
+
+    await expect(repository.rename('11', ' 변경한 자료 ')).resolves.toMatchObject({
+      id: '11',
+      title: '변경한 자료',
+    })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/materials/11', {
+      body: { title: '변경한 자료' },
+      method: 'PATCH',
+      signal: undefined,
+    })
   })
 
   it('loads authenticated PDF files as binary data', async () => {

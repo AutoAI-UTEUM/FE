@@ -165,16 +165,14 @@ DELETE /api/classrooms/{classroomId}/permanent
 ## P0. 주차 상시 노출 정책으로 변경
 
 FE에서는 주차의 `PRIVATE`, `SCHEDULED`, `PUBLISHED`, `BREAK` 상태 변경 UI와
-예약 공개 시각 입력을 제거했다. 신규 주차 생성 요청은 `releaseAt`을 생략하며,
-주차 순서 변경만 아래 API로 저장한다.
-
-```http
-PATCH /api/classrooms/{classroomId}/weeks/reorder
-```
+예약 공개 시각 입력을 제거했다. 2026-08-13부터 주차 추가·삭제·재정렬 UI를
+제거했으며, `displayOrder`를 사용하지 않고 `weekNumber ASC`로 고정 표시한다.
+주차 이름만 설정 화면에서 수정할 수 있고 저장 버튼을 눌렀을 때 반영한다.
+`PATCH /api/classrooms/{classroomId}/weeks/reorder`는 FE에서 호출하지 않는다.
 
 2026-08-12 BE `develop`은 학습자 `GET /api/classrooms/{classroomId}/weeks`에도 상태와
 관계없이 전체 주차와 연결 자료를 반환하도록 변경됐다. FE는 역할과 관계없이 이
-응답을 `displayOrder ASC`로 정렬하며 `PRIVATE`, `SCHEDULED` 주차의 자료도 별도
+응답을 `weekNumber ASC`로 정렬하며 `PRIVATE`, `SCHEDULED` 주차의 자료도 별도
 필터 없이 표시한다.
 
 - 자료 상세·파일·세션 생성 권한에서 주차 상태와 `releaseAt` 조건 제거 완료 여부를

@@ -20,6 +20,7 @@ describe('ClassroomDetailPage instructor materials', () => {
       title: FormDataEntryValue | null
       weekNumber: FormDataEntryValue | null
     } | null = null
+    let renamedTitle: string | null = null
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(
         input instanceof Request ? input.url : String(input),
@@ -77,6 +78,17 @@ describe('ClassroomDetailPage instructor materials', () => {
           title: 'lecture.pdf',
         })
       }
+      if (url.pathname === '/api/materials/91' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as { title: string }
+        renamedTitle = body.title
+        return success({
+          createdAt: '2026-08-02T00:00:00Z',
+          materialId: 91,
+          pageCount: 12,
+          processingStatus: 'READY',
+          title: body.title,
+        })
+      }
       return new Response(null, { status: 404 })
     })
 
@@ -128,7 +140,13 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('button', { name: '공지 추가' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '시험 추가' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '자료 추가' }))
-    expect(screen.getByRole('dialog', { name: '강의자료 업로드' })).toBeInTheDocument()
+    const uploadDialog = screen.getByRole('dialog', { name: '강의자료 업로드' })
+    const weekSelect = within(uploadDialog).getByRole('combobox', { name: '주차 선택' })
+    expect([...weekSelect.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      '1주차 · 자료구조 기초',
+      '2주차 · 심화',
+    ])
+    expect(weekSelect).toHaveValue('1')
     fireEvent.click(screen.getByRole('button', { name: '강의자료 업로드 닫기' }))
     expect(screen.queryByRole('button', { name: '주차 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
@@ -140,7 +158,10 @@ describe('ClassroomDetailPage instructor materials', () => {
     fireEvent.drop(contentRegion, { dataTransfer: { files: [file] } })
 
     expect(screen.getByRole('dialog', { name: '강의자료 업로드' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('lecture')
+    const titleInput = screen.getByRole('textbox', { name: '자료 제목' })
+    expect(titleInput).toHaveValue('')
+    expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled()
+    fireEvent.change(titleInput, { target: { value: 'lecture' } })
     fireEvent.click(screen.getByRole('button', { name: '업로드' }))
 
     await waitFor(() => expect(uploadedValues).not.toBeNull())
@@ -154,9 +175,21 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(within(contentRegion).getByText('PDF')).toBeInTheDocument()
     expect(within(contentRegion).queryByText('자료', { exact: true })).not.toBeInTheDocument()
     expect(screen.getByText('자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.')).toBeInTheDocument()
+    expect(screen.getByText('자료 처리가 완료되었습니다. 바로 학습할 수 있습니다.')).toBeInTheDocument()
     expect(screen.queryByText(/열람 가능/)).not.toBeInTheDocument()
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
     expect(screen.queryByRole('region', { name: '전체 콘텐츠' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '이름 변경' }))
+    const renameDialog = screen.getByRole('dialog', { name: '자료 이름 변경' })
+    fireEvent.change(within(renameDialog).getByRole('textbox', { name: '자료 제목' }), {
+      target: { value: '최적화 강의' },
+    })
+    fireEvent.click(within(renameDialog).getByRole('button', { name: '변경사항 저장' }))
+
+    await waitFor(() => expect(renamedTitle).toBe('최적화 강의'))
+    expect(await screen.findByRole('button', { name: '최적화 강의' })).toBeInTheDocument()
+    expect(screen.getByText('자료 이름을 변경했습니다.')).toBeInTheDocument()
   })
 
   it('keeps completed classroom materials read-only and available for viewing', async () => {
@@ -283,7 +316,7 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
   })
 
-  it('uses the same backend week titles and display order for learners', async () => {
+  it('uses backend week titles in fixed week number order for learners', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = new URL(
         input instanceof Request ? input.url : String(input),

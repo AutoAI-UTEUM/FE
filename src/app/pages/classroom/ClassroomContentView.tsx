@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ClipboardList, MoreHorizontal, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { Bell, BookOpen, ClipboardList, MoreHorizontal, RefreshCw, Upload } from 'lucide-react'
 import type { DragEvent } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
@@ -17,8 +17,8 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
   return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white">
     <nav aria-label="강의실 주차" className="flex-1 space-y-0.5 p-1.5">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
-      {weeks.map((week, index) => {
-        const period = formatClassroomWeekPeriod(startDate, endDate, index + 1)
+      {weeks.map((week) => {
+        const period = formatClassroomWeekPeriod(startDate, endDate, week.weekNumber)
         return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={weekRailButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><strong className="min-w-0 truncate text-left type-caption">{week.title}</strong>{period ? <span className="text-left type-micro tabular-nums text-stone-400">{period}</span> : <span />}</button>
       })}
       {weeks.length === 0 ? <p className="px-3 py-8 text-center type-control text-stone-400">등록된 주차 없음</p> : null}
@@ -40,6 +40,7 @@ export function ClassroomContentPanel({
   onFilter,
   onItem,
   onRemoveMaterial,
+  onRenameMaterial,
   onRetry,
   openingMaterialId,
   selectedWeek,
@@ -60,6 +61,7 @@ export function ClassroomContentPanel({
   onFilter: (filter: ClassroomContentFilter) => void
   onItem: (item: ClassroomContentItem) => void
   onRemoveMaterial: (weekNumber: number, materialId: string, title: string) => Promise<void>
+  onRenameMaterial: (material: { id: string; title: string }) => void
   onRetry: (key: ResourceKey) => void
   openingMaterialId: string | null
   selectedWeek?: ClassroomWeek
@@ -70,7 +72,7 @@ export function ClassroomContentPanel({
   const title = selectedWeekNumber === null ? '전체 콘텐츠' : selectedWeek?.title ?? ''
   const period = selectedWeekNumber === null || !selectedWeek
     ? ''
-    : formatClassroomWeekPeriod(startDate, endDate, selectedWeek.displayOrder)
+    : formatClassroomWeekPeriod(startDate, endDate, selectedWeek.weekNumber)
 
   function dragOver(event: DragEvent<HTMLElement>) {
     if (!canManage || selectedWeekNumber === null) return
@@ -100,19 +102,20 @@ export function ClassroomContentPanel({
 
     {Object.entries(errors).map(([key, message]) => message ? <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3" key={key}><p className="type-control text-rose-800">{resourceLabel(key as ResourceKey)}을 불러오지 못했습니다. {message}</p><Button onClick={() => onRetry(key as ResourceKey)} size="sm" variant="secondary"><RefreshCw size={13} />재시도</Button></div> : null)}
 
-    {globalItems.length > 0 ? <details className="border-y border-stone-200 py-2" open><summary className="flex min-h-10 cursor-pointer list-none items-center px-1"><span className="type-body font-bold text-stone-900">전체 항목</span></summary><div className="space-y-2 pt-2">{globalItems.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} openingMaterialId={openingMaterialId} />)}</div></details> : null}
+    {globalItems.length > 0 ? <details className="border-y border-stone-200 py-2" open><summary className="flex min-h-10 cursor-pointer list-none items-center px-1"><span className="type-body font-bold text-stone-900">전체 항목</span></summary><div className="space-y-2 pt-2">{globalItems.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div></details> : null}
 
     <section aria-label={title} className={`space-y-2 rounded-lg transition ${draggingWeek === selectedWeekNumber && selectedWeekNumber !== null ? 'ring-2 ring-brand-100' : ''}`}>
-      {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} openingMaterialId={openingMaterialId} />) : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
+      {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />) : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
     </section>
   </div>
 }
 
-function ContentRow({ canManage, item, onItem, onRemoveMaterial, openingMaterialId }: {
+function ContentRow({ canManage, item, onItem, onRemoveMaterial, onRenameMaterial, openingMaterialId }: {
   canManage: boolean
   item: ClassroomContentItem
   onItem: (item: ClassroomContentItem) => void
   onRemoveMaterial: (weekNumber: number, materialId: string, title: string) => Promise<void>
+  onRenameMaterial: (material: { id: string; title: string }) => void
   openingMaterialId: string | null
 }) {
   const values = item.kind === 'material' ? null : contentType(item)
@@ -122,8 +125,7 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, openingMaterial
       : values ? <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${values.iconClass}`}><values.Icon size={16} /></span> : null}
     <button className="min-w-0 flex-1 text-left" disabled={item.kind === 'material' && item.source.status !== 'READY'} onClick={() => onItem(item)} type="button"><span className="flex flex-wrap items-center gap-2"><strong className="break-words type-body font-bold text-stone-950">{displayTitle(item.title)}</strong>{values ? <Badge tone={values.tone}>{values.label}</Badge> : null}{item.kind === 'notice' ? <Badge tone={item.source.published ? 'success' : 'warning'}>{item.source.published ? '게시됨' : '예약'}</Badge> : null}{item.kind === 'exam' ? <Badge tone={item.source.status === 'PUBLISHED' ? 'success' : item.source.status === 'CLOSED' ? 'warning' : 'neutral'}>{item.source.status === 'PUBLISHED' ? '공개' : item.source.status === 'CLOSED' ? '종료' : '초안'}</Badge> : null}</span></button>
     {item.kind === 'material' && openingMaterialId === item.source.id ? <span className="type-caption text-brand-700">PDF 여는 중</span> : null}
-    {canManage && item.kind === 'material' ? <button aria-label={`${item.title} 제거`} className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700" onClick={() => void onRemoveMaterial(item.weekNumber, item.source.id, item.title)} type="button"><Trash2 size={14} /></button> : null}
-    <MoreHorizontal className="shrink-0 text-stone-300" size={16} />
+    {canManage && item.kind === 'material' ? <details className="relative shrink-0"><summary aria-label={`${item.title} 작업 메뉴`} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"><MoreHorizontal size={16} /></summary><div className="absolute top-9 right-0 z-20 w-28 rounded-lg border border-stone-200 bg-white p-1 shadow-lg"><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => onRenameMaterial({ id: item.source.id, title: item.title })} type="button">이름 변경</button><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => void onRemoveMaterial(item.weekNumber, item.source.id, item.title)} type="button">주차에서 제거</button></div></details> : <MoreHorizontal className="shrink-0 text-stone-300" size={16} />}
   </div>
 }
 

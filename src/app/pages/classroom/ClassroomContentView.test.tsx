@@ -25,7 +25,7 @@ const reorderedWeeks = [
 afterEach(cleanup)
 
 describe('ClassroomContentView week periods', () => {
-  it('keeps periods aligned with the displayed week order after reordering', () => {
+  it('keeps periods aligned with the fixed week number', () => {
     render(
       <ClassroomContentRail
         endDate="2026-08-16"
@@ -37,11 +37,11 @@ describe('ClassroomContentView week periods', () => {
     )
 
     const navigation = screen.getByRole('navigation', { name: '강의실 주차' })
-    expect(within(navigation).getByText('심화').closest('button')).toHaveTextContent('8.3 - 8.9')
-    expect(within(navigation).getByText('기초').closest('button')).toHaveTextContent('8.10 - 8.16')
+    expect(within(navigation).getByText('심화').closest('button')).toHaveTextContent('8.10 - 8.16')
+    expect(within(navigation).getByText('기초').closest('button')).toHaveTextContent('8.3 - 8.9')
   })
 
-  it('uses display order for the selected content period', () => {
+  it('uses the fixed week number for the selected content period', () => {
     render(
       <ClassroomContentPanel
         canManage={false}
@@ -57,6 +57,7 @@ describe('ClassroomContentView week periods', () => {
         onFilter={vi.fn()}
         onItem={vi.fn()}
         onRemoveMaterial={vi.fn()}
+        onRenameMaterial={vi.fn()}
         onRetry={vi.fn()}
         openingMaterialId={null}
         selectedWeek={reorderedWeeks[0]}
@@ -66,6 +67,6 @@ describe('ClassroomContentView week periods', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { name: '심화' }).parentElement).toHaveTextContent('8.3 - 8.9')
+    expect(screen.getByRole('heading', { name: '심화' }).parentElement).toHaveTextContent('8.10 - 8.16')
   })
 })

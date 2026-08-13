@@ -255,17 +255,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       const { data } = await request<{ items: WeekDto[] }>(`/api/classrooms/${encodeURIComponent(id)}/weeks`, { signal })
       return data.items
         .map(mapWeek)
-        .sort((left, right) =>
-          left.displayOrder - right.displayOrder
-          || left.weekNumber - right.weekNumber,
-        )
-    },
-    async reorderWeeks(id: string, orderedWeekIds: string[]) {
-      const { data } = await request<{ items: WeekDto[] }>(
-        `/api/classrooms/${encodeURIComponent(id)}/weeks/reorder`,
-        { body: { orderedWeekIds: orderedWeekIds.map(Number) }, method: 'PATCH' },
-      )
-      return data.items.map(mapWeek)
+        .sort((left, right) => left.weekNumber - right.weekNumber)
     },
     async getAnalytics(id: string, signal?: AbortSignal) {
       const { data } = await request<ClassroomAnalyticsDto>(
@@ -306,13 +296,13 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       const { data } = await request<{ inviteCode: string }>(`/api/classrooms/${encodeURIComponent(id)}/invite-code/regenerate`, { method: 'POST' })
       return data.inviteCode
     },
-    async updateWeek(id: string, weekNumber: number, input: { title?: string }) {
-      const body: Record<string, unknown> = {}
-      if (input.title !== undefined) body.title = input.title
-      const { data } = await request<WeekDto>(`/api/classrooms/${encodeURIComponent(id)}/weeks/${weekNumber}`, { body, method: 'PATCH' })
+    async updateWeek(id: string, weekNumber: number, input: { title: string }) {
+      const { data } = await request<WeekDto>(
+        `/api/classrooms/${encodeURIComponent(id)}/weeks/${weekNumber}`,
+        { body: { title: input.title }, method: 'PATCH' },
+      )
       return mapWeek(data)
     },
-    async deleteWeek(id: string, weekNumber: number) { await request(`/api/classrooms/${encodeURIComponent(id)}/weeks/${weekNumber}`, { method: 'DELETE' }) },
     async attachMaterial(id: string, weekNumber: number, materialId: string) { await request(`/api/classrooms/${encodeURIComponent(id)}/weeks/${weekNumber}/materials/${encodeURIComponent(materialId)}`, { method: 'POST' }) },
     async detachMaterial(id: string, weekNumber: number, materialId: string) { await request(`/api/classrooms/${encodeURIComponent(id)}/weeks/${weekNumber}/materials/${encodeURIComponent(materialId)}`, { method: 'DELETE' }) },
     async listNotices(id: string, signal?: AbortSignal) {

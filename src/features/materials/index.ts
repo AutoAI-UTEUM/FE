@@ -1,7 +1,7 @@
 export { getMaterialStatusLabel } from './materialStatus'
 export { getMaterialFailureMessage } from './materialFailure'
+export { RenameMaterialDialog } from './RenameMaterialDialog'
 export {
-  getDefaultMaterialTitle,
   MAX_MATERIAL_UPLOAD_BYTES,
   MAX_MATERIAL_TITLE_LENGTH,
   validateMaterialUpload,

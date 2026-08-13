@@ -44,7 +44,7 @@ describe('classrooms repository', () => {
     })
   })
 
-  it('normalizes classroom weeks by display order for every role', async () => {
+  it('normalizes classroom weeks by their fixed week number for every role', async () => {
     const request = vi.fn().mockResolvedValue({
       data: {
         items: [
@@ -56,9 +56,23 @@ describe('classrooms repository', () => {
     const repository = createClassroomsRepository(request as AuthenticatedRequest)
 
     await expect(repository.listWeeks('12')).resolves.toMatchObject([
-      { displayOrder: 1, title: '첫 번째', weekNumber: 8 },
       { displayOrder: 2, title: '두 번째', weekNumber: 1 },
+      { displayOrder: 1, title: '첫 번째', weekNumber: 8 },
     ])
+  })
+
+  it('updates only a week title without changing its order', async () => {
+    const request = vi.fn().mockResolvedValue({
+      data: { displayOrder: 1, materials: [], status: 'PUBLISHED', title: '오리엔테이션', weekId: 101, weekNumber: 1 },
+    })
+    const repository = createClassroomsRepository(request as AuthenticatedRequest)
+
+    await repository.updateWeek('12', 1, { title: '오리엔테이션' })
+
+    expect(request).toHaveBeenCalledWith('/api/classrooms/12/weeks/1', {
+      body: { title: '오리엔테이션' },
+      method: 'PATCH',
+    })
   })
 
   it('maps legacy notices to global and sends week and reservation fields', async () => {

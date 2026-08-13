@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -31,14 +31,30 @@ describe('learner collection pages', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('renders saved note markdown and LaTeX', async () => {
+  it('shows only the note title until its body is expanded', async () => {
     mockLearnerCollectionApi({
       noteContent: '# 공식\n\n피타고라스 정리는 $a^2 + b^2 = c^2$입니다.',
     })
     const { container } = renderPage(<LearnerNotesPage />)
 
-    expect(await screen.findByRole('heading', { name: '공식' })).toBeInTheDocument()
+    const toggle = await screen.findByRole('button', { name: '공식 노트 펼치기' })
+    expect(screen.getByText('시험 대비 요약.pdf')).toBeInTheDocument()
+    expect(screen.getByText('1페이지')).toBeInTheDocument()
+    expect(screen.queryByText('AI 답변')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /자료로 이동/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '노트 수정' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '노트 삭제' })).toBeInTheDocument()
+    expect(screen.queryByText(/피타고라스 정리는/)).not.toBeInTheDocument()
+    expect(container.querySelector('.katex')).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
+
+    expect(screen.getByText(/피타고라스 정리는/)).toBeInTheDocument()
     expect(container.querySelector('.katex')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '공식 노트 접기' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
   })
 
   it('collects quizzes from learning sessions', async () => {
