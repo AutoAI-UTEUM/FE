@@ -16,6 +16,7 @@ import { ExamsPage } from './pages/ExamsPage'
 import { InstructorCalendarPage } from './pages/instructor/InstructorCalendarPage'
 import { InstructorClassroomEditPage } from './pages/instructor/InstructorClassroomEditPage'
 import { InstructorLearningStatusPage } from './pages/instructor/InstructorLearningStatusPage'
+import { InstructorReportDetailPage, InstructorStudentReportsPage } from './pages/instructor/InstructorReportsPage'
 import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
 import { LoginPage } from './pages/LoginPage'
 import { LearnerNotesPage } from './pages/learner/LearnerNotesPage'
@@ -92,8 +93,8 @@ export function AppRoutes() {
             />
             <Route path={routes.classroomEntranceRequests} element={<Navigate to={routes.entranceRequests} replace />} />
             <Route path={routes.classroomReports} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
-            <Route path={routes.classroomStudentReports} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
-            <Route path={routes.classroomReportDetail} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
+            <Route path={routes.classroomStudentReports} element={<InstructorStudentReportsPage />} />
+            <Route path={routes.classroomReportDetail} element={<InstructorReportDetailPage />} />
             <Route path={routes.classroomReportCriteria} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />

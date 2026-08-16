@@ -61,6 +61,22 @@ export function classroomAnalyticsPath(classroomId: string | number): string {
   return `/classrooms/${encodeURIComponent(String(classroomId))}/analytics`
 }
 
+export function classroomReportsPath(classroomId: string | number): string {
+  return `/classrooms/${encodeURIComponent(String(classroomId))}/reports`
+}
+
+export function classroomStudentReportsPath(classroomId: string | number, studentId: string | number): string {
+  return `/classrooms/${encodeURIComponent(String(classroomId))}/students/${encodeURIComponent(String(studentId))}/reports`
+}
+
+export function classroomReportDetailPath(classroomId: string | number, studentId: string | number, reportId: string | number): string {
+  return `${classroomStudentReportsPath(classroomId, studentId)}/${encodeURIComponent(String(reportId))}`
+}
+
+export function classroomReportCriteriaPath(classroomId: string | number): string {
+  return `/classrooms/${encodeURIComponent(String(classroomId))}/report-criteria`
+}
+
 export function classroomAnnouncementsPath(classroomId: string | number): string {
   return `/classrooms/${encodeURIComponent(String(classroomId))}/announcements`
 }
