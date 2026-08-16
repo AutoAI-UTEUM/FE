@@ -5,21 +5,17 @@ import {
   Check,
   ChevronsLeft,
   ChevronsRight,
-  CircleHelp,
   ClipboardCheck,
   FileCheck2,
   LayoutGrid,
   LogOut,
-  Monitor,
-  Moon,
   NotebookPen,
   Settings,
-  Sun,
   UserPlus,
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Link,
   NavLink,
@@ -29,7 +25,6 @@ import {
 } from 'react-router-dom'
 
 import { getRoleLabel, isInstructorRole, useAuth } from '../../features/auth'
-import { createFeedbackRepository, type FeedbackCategory } from '../../features/feedback'
 import {
   createClassroomsRepository,
   JOIN_REQUESTS_CHANGED_EVENT,
@@ -41,11 +36,9 @@ import {
   type CalendarEvent,
 } from '../../features/calendar'
 import { cx } from '../../shared/lib/cx'
-import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime } from '../../shared/lib/format'
-import { useTheme, type ThemeMode } from '../../shared/theme'
-import { useToast } from '../../shared/ui'
 import { classroomDetailPath, routes } from '../routes'
+import { SettingsContent } from '../pages/SettingsPage'
 
 const learnerNavigation: Array<{
   icon: LucideIcon
@@ -61,8 +54,6 @@ const learnerNavigation: Array<{
 
 export function AppLayout() {
   const { apiRequest, logout, user } = useAuth()
-  const { mode, setMode } = useTheme()
-  const { show: showToast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
@@ -79,7 +70,7 @@ export function AppLayout() {
   const mobileMenuContainerRef = useRef<HTMLDivElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
   const [sidebarClassrooms, setSidebarClassrooms] = useState<Classroom[]>([])
   const [notificationReferenceTime, setNotificationReferenceTime] = useState(
@@ -212,12 +203,12 @@ export function AppLayout() {
 
   function openSettings() {
     setIsMenuOpen(false)
-    navigate(routes.settings)
+    setIsSettingsOpen(true)
   }
 
   const profileMenu = (
     <div
-      className="w-60 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
+      className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
       role="menu"
     >
       <div className="flex items-center gap-2.5 border-b border-stone-100 px-2.5 py-2.5">
@@ -242,44 +233,6 @@ export function AppLayout() {
         <Settings aria-hidden="true" size={15} />
         설정
       </button>
-      <button
-        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-        onClick={() => { setIsMenuOpen(false); setIsFeedbackOpen(true) }}
-        role="menuitem"
-        type="button"
-      >
-        <CircleHelp aria-hidden="true" size={15} />
-        도움말 · 피드백
-      </button>
-      <div className="flex h-10 items-center gap-2.5 px-2.5 type-control font-medium text-stone-700">
-        <Monitor aria-hidden="true" size={15} />
-        <span>화면 모드</span>
-        <div
-          aria-label="화면 모드"
-          className="ml-auto inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5"
-          role="group"
-        >
-          {themeOptions.map((option) => (
-            <button
-              aria-label={option.label}
-              aria-pressed={mode === option.value}
-              className={cx(
-                'flex size-6 items-center justify-center rounded-md text-stone-400',
-                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600',
-                mode === option.value
-                  ? 'bg-white text-stone-900 shadow-sm dark:bg-stone-300'
-                  : 'hover:text-stone-700',
-              )}
-              key={option.value}
-              onClick={() => setMode(option.value)}
-              title={option.label}
-              type="button"
-            >
-              <option.icon aria-hidden="true" size={13} />
-            </button>
-          ))}
-        </div>
-      </div>
       <div className="mx-2 my-1 h-px bg-stone-100" />
       <button
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-rose-700 hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
@@ -303,7 +256,7 @@ export function AppLayout() {
       <aside
         className={cx(
           'relative z-40 flex border-b border-stone-200 bg-stone-100 px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4',
-          isCollapsed ? 'lg:w-14 lg:px-2' : 'lg:w-50 lg:px-3',
+          isCollapsed ? 'lg:w-14 lg:px-2' : 'lg:w-52 lg:px-2.5',
         )}
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 lg:block lg:flex-none">
@@ -466,7 +419,7 @@ export function AppLayout() {
             {user?.name?.slice(0, 1) ?? '?'}
           </button>
           {isMenuOpen ? (
-            <div className="absolute top-[calc(100%+8px)] right-0 z-30 lg:hidden">
+            <div className="absolute top-[calc(100%+8px)] right-0 z-30 w-60 lg:hidden">
               {profileMenu}
             </div>
           ) : null}
@@ -504,8 +457,8 @@ export function AppLayout() {
               className={cx(
                 'absolute z-30 hidden lg:block',
                 isCollapsed
-                  ? 'bottom-0 left-[calc(100%+8px)]'
-                  : 'bottom-[calc(100%+8px)] left-0',
+                  ? 'bottom-0 left-[calc(100%+8px)] w-60'
+                  : 'bottom-[calc(100%+8px)] left-0 w-full',
               )}
             >
               {profileMenu}
@@ -532,7 +485,38 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
-      {isFeedbackOpen ? <FeedbackDialog onClose={() => setIsFeedbackOpen(false)} onSubmit={async (input) => { try { await createFeedbackRepository(apiRequest).create({ ...input, pageUrl: window.location.href }); setIsFeedbackOpen(false); showToast('피드백을 보냈습니다.', 'success') } catch (error) { showToast(getRequestErrorMessage(error), 'danger') } }} /> : null}
+      {isSettingsOpen ? <SettingsDialog onClose={() => setIsSettingsOpen(false)} /> : null}
+    </div>
+  )
+}
+
+function SettingsDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      aria-labelledby="settings-dialog-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      role="dialog"
+    >
+      <section className="min-h-[464px] w-full max-w-[600px] rounded-xl border border-stone-200 bg-white p-5 shadow-2xl sm:p-6">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2 className="type-dialog-title font-bold text-stone-950" id="settings-dialog-title">
+            설정
+          </h2>
+          <button
+            aria-label="설정 닫기"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            onClick={onClose}
+            type="button"
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
+        <SettingsContent />
+      </section>
     </div>
   )
 }
@@ -658,23 +642,4 @@ function classroomDotClassName(color: Classroom['color']): string {
     PURPLE: 'bg-violet-500',
     RED: 'bg-rose-500',
   }[color]
-}
-
-
-const themeOptions: Array<{
-  icon: LucideIcon
-  label: string
-  value: ThemeMode
-}> = [
-  { icon: Sun, label: '라이트 모드', value: 'light' },
-  { icon: Moon, label: '다크 모드', value: 'dark' },
-  { icon: Monitor, label: '시스템 설정', value: 'system' },
-]
-
-function FeedbackDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (input: { category: FeedbackCategory; message: string }) => Promise<void> }) {
-  const [category, setCategory] = useState<FeedbackCategory>('GENERAL')
-  const [message, setMessage] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!message.trim() || isSubmitting) return; setIsSubmitting(true); await onSubmit({ category, message: message.trim() }).finally(() => setIsSubmitting(false)) }
-  return <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4" role="dialog"><form className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl" onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold text-stone-950">도움말 · 피드백</h2><button aria-label="닫기" className="p-2 text-stone-400" onClick={onClose} type="button"><X size={16} /></button></div><label className="mt-5 block type-body font-semibold text-stone-800">분류<select className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3" onChange={(event) => setCategory(event.target.value as FeedbackCategory)} value={category}><option value="GENERAL">일반 문의</option><option value="BUG">오류 신고</option><option value="FEATURE_REQUEST">기능 제안</option></select></label><label className="mt-4 block type-body font-semibold text-stone-800">내용<textarea autoFocus className="mt-1 min-h-36 w-full resize-none rounded-lg border border-stone-300 px-3 py-3" maxLength={2000} onChange={(event) => setMessage(event.target.value)} value={message} /></label><div className="mt-5 flex justify-end gap-2"><button className="h-10 rounded-lg px-4 type-body font-semibold text-stone-600 hover:bg-stone-100" onClick={onClose} type="button">취소</button><button className="h-10 rounded-lg bg-brand-600 px-4 type-body font-semibold text-white disabled:bg-stone-300" disabled={!message.trim() || isSubmitting} type="submit">{isSubmitting ? '전송 중' : '보내기'}</button></div></form></div>
 }
