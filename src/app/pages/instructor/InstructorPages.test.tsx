@@ -121,7 +121,10 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
       lastUpdatedAt: '2026-08-04T06:00:00Z',
       learnerCount: 42,
       materials: [],
-      questionsByPage: [],
+      questionsByPage: [
+        { materialId: 10, pageNumber: 3, questionCount: 8 },
+        { materialId: 10, pageNumber: 7, questionCount: 4 },
+      ],
     })
     if (url.includes('/invite-code')) return envelope({ inviteCode: '7QK4-MZ2A' })
     if (url.includes('/students')) return envelope({
@@ -145,6 +148,7 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
       return envelope({
         items: [
           {
+            averageProgressRate: 38,
             classroomId: 12,
             color: 'BLUE',
             endDate: '2026-11-15',
@@ -152,7 +156,7 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
             learnerCount: 42,
             name: '자료구조',
             pendingRequestCount: 0,
-            progressRate: 38,
+            progressRate: 0,
             startDate: '2026-08-03',
             status,
             weekCount: 15,
@@ -361,9 +365,10 @@ describe('instructor pages', () => {
     expect(regenerateButton).toHaveClass('type-compact-action')
     expect(copyButton.querySelector('svg')).not.toBeInTheDocument()
     expect(regenerateButton.querySelector('svg')).not.toBeInTheDocument()
+    expect(screen.getByText('38%')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '자료 관리' })).toHaveAttribute('href', '/classrooms/12')
     expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/classrooms/12/settings')
-    expect(screen.getByRole('link', { name: '학습 현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
+    expect(screen.getByRole('link', { name: '학습현황·리포트' })).toHaveAttribute('href', '/classrooms/12/analytics')
 
     fetchMock.mockRestore()
   })
@@ -376,7 +381,7 @@ describe('instructor pages', () => {
 
     expect(screen.getByRole('link', { name: '보관된 자료 보기' })).toHaveAttribute('href', '/classrooms/12')
     expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/classrooms/12/settings')
-    expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '학습현황·리포트' })).not.toBeInTheDocument()
 
     fetchMock.mockRestore()
   })
@@ -478,14 +483,14 @@ describe('instructor pages', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '연도와 월 선택' }))
     fireEvent.change(screen.getByLabelText('연도 선택'), {
-      target: { value: '2026' },
+      target: { value: '2027' },
     })
     fireEvent.click(screen.getByRole('button', { name: '8월' }))
 
-    const saturday = screen.getByLabelText('2026년 8월 15일 토요일 일정 0개')
-    const sunday = screen.getByLabelText('2026년 8월 16일 일요일 일정 0개')
-    expect(within(saturday).getByText('15')).toHaveClass('text-sky-700')
-    expect(within(sunday).getByText('16')).toHaveClass('text-rose-600')
+    const saturday = screen.getByLabelText('2027년 8월 14일 토요일 일정 0개')
+    const sunday = screen.getByLabelText('2027년 8월 15일 일요일 일정 0개')
+    expect(within(saturday).getByText('14')).toHaveClass('text-sky-700')
+    expect(within(sunday).getByText('15')).toHaveClass('text-rose-600')
   })
 
   it('adds and removes a calendar schedule through the personal schedule API', async () => {
@@ -540,15 +545,19 @@ describe('instructor pages', () => {
       ['/classrooms/12/analytics'],
     )
 
-    expect(await screen.findByRole('link', { name: '학습 현황' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getAllByRole('link', { name: '리포트' }).some((link) => link.getAttribute('href') === '/classrooms/12/reports')).toBe(true)
+    expect(await screen.findByRole('link', { name: '학습현황·리포트' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
     expect(await screen.findByText('최근 7일 AI 질문')).toBeInTheDocument()
     expect(screen.getByText('6건')).toBeInTheDocument()
     expect(screen.queryByLabelText('학습 현황 요약')).not.toBeInTheDocument()
     expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
+    expect(screen.getByText('p.3')).toBeInTheDocument()
+    expect(screen.getByText('질문 8건')).toBeInTheDocument()
+    expect(screen.getByLabelText('3쪽 질문 8건').firstElementChild).toHaveStyle({ width: '100%' })
+    expect(screen.getByLabelText('7쪽 질문 4건').firstElementChild).toHaveStyle({ width: '50%' })
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
+    expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(460px,1.35fr)]')
     expect(screen.getByText('64%')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: '리포트' }).some((link) => link.getAttribute('href') === '/classrooms/12/students/9/reports')).toBe(true)
     expect(
       screen.queryByRole('button', { name: '리마인더 보내기' }),
     ).not.toBeInTheDocument()

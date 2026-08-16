@@ -22,6 +22,23 @@ describe('classrooms repository', () => {
     }))
   })
 
+  it('uses averageProgressRate for classroom progress when provided', async () => {
+    const request = vi.fn().mockResolvedValue({
+      data: {
+        items: [{ ...classroomDto, averageProgressRate: 47, progressRate: 0 }],
+        page: 0,
+        size: 20,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+    const repository = createClassroomsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.list()).resolves.toEqual([
+      expect.objectContaining({ progressRate: 47 }),
+    ])
+  })
+
   it('sends only public partial-update fields', async () => {
     const request = vi.fn().mockResolvedValue({ data: classroomDto })
     const repository = createClassroomsRepository(request as AuthenticatedRequest)

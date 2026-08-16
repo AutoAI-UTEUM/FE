@@ -124,6 +124,26 @@ describe('remote feature repositories', () => {
     })
   })
 
+  it('loads material overview using the material-scoped endpoint', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      content: '## 목차\n\n- 핵심 개념',
+      materialId: 10,
+      status: 'READY',
+      updatedAt: '2026-08-15T00:00:00Z',
+    }))
+    const repository = createMaterialsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getOverview('10')).resolves.toEqual({
+      content: '## 목차\n\n- 핵심 개념',
+      materialId: '10',
+      status: 'READY',
+      updatedAt: '2026-08-15T00:00:00Z',
+    })
+    expect(request).toHaveBeenCalledWith('/api/materials/10/overview', {
+      signal: undefined,
+    })
+  })
+
   it('parses session SSE content events', async () => {
     const encoder = new TextEncoder()
     const rawRequest = vi.fn().mockResolvedValue(

@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { RequireAuth, RequireInstructor } from '../features/auth'
 import { AppLayout } from './layouts/AppLayout'
-import { LegacyClassroomRouteRedirect, LegacyClassroomSettingsRedirect, LegacyExamDetailRedirect, LegacyReportDetailRedirect } from './LegacyRouteRedirects'
+import { LegacyClassroomRouteRedirect, LegacyClassroomSettingsRedirect, LegacyExamDetailRedirect } from './LegacyRouteRedirects'
 import { AuthLayout } from './layouts/AuthLayout'
 import { AuthCallbackPage, ResetPasswordPage } from './pages/AuthCapabilityPages'
 import { ClassroomsPage } from './pages/ClassroomsPage'
@@ -12,11 +12,11 @@ import { DiagnosisPage } from './pages/DiagnosisPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { EntranceRequestsPage } from './pages/EntranceRequestsPage'
 import { ExamDetailPage } from './pages/ExamDetailPage'
+import { ExamsPage } from './pages/ExamsPage'
 import { InstructorCalendarPage } from './pages/instructor/InstructorCalendarPage'
 import { InstructorClassroomEditPage } from './pages/instructor/InstructorClassroomEditPage'
 import { InstructorLearningStatusPage } from './pages/instructor/InstructorLearningStatusPage'
 import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
-import { InstructorReportCriteriaPage, InstructorReportDetailPage, InstructorReportsPage, InstructorStudentReportsPage } from './pages/instructor/InstructorReportsPage'
 import { LoginPage } from './pages/LoginPage'
 import { LearnerNotesPage } from './pages/learner/LearnerNotesPage'
 import { LearnerReviewQuizzesPage } from './pages/learner/LearnerReviewQuizzesPage'
@@ -63,7 +63,7 @@ export function AppRoutes() {
           <Route path={routes.classroomCalendar} element={<InstructorCalendarPage />} />
           <Route path={routes.notes} element={<LearnerNotesPage />} />
           <Route path={routes.reviewQuizzes} element={<LearnerReviewQuizzesPage />} />
-          <Route path={routes.exams} element={<LegacyClassroomRouteRedirect destination="exams" />} />
+          <Route path={routes.exams} element={<ExamsPage />} />
           <Route path={routes.examDetail} element={<LegacyExamDetailRedirect />} />
           <Route path={routes.classroomExamDetail} element={<ExamDetailPage />} />
           <Route path={routes.classroomDetail} element={<ClassroomWorkspaceLayout />}>
@@ -91,11 +91,10 @@ export function AppRoutes() {
               element={<EntranceRequestsPage />}
             />
             <Route path={routes.classroomEntranceRequests} element={<Navigate to={routes.entranceRequests} replace />} />
-            <Route path={routes.classroomReports} element={<InstructorReportsPage />} />
-            <Route path={routes.classroomStudentReports} element={<InstructorStudentReportsPage />} />
-            <Route path={routes.classroomReportDetail} element={<InstructorReportDetailPage />} />
-            <Route path={routes.classroomReportCriteria} element={<InstructorReportCriteriaPage />} />
-            <Route path={routes.legacyReportDetail} element={<LegacyReportDetailRedirect />} />
+            <Route path={routes.classroomReports} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
+            <Route path={routes.classroomStudentReports} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
+            <Route path={routes.classroomReportDetail} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
+            <Route path={routes.classroomReportCriteria} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedRequest } from '../auth'
+import type { MaterialOverview } from '../materials'
 import type { SessionsRepository, SessionTurnResult } from '../sessions'
 import { ChatPanel } from './ChatPanel'
 import { useSessionChat } from './useSessionChat'
@@ -15,6 +16,7 @@ afterEach(() => {
 function ChatHarness({
   conversationAction,
   currentPage,
+  materialOverview,
   onExplainCurrentPage,
   onExplainNextPage,
   onTurnCompleted,
@@ -24,6 +26,7 @@ function ChatHarness({
 }: {
   conversationAction?: ReactNode
   currentPage?: number
+  materialOverview?: MaterialOverview | null
   onExplainCurrentPage?: () => void
   onExplainNextPage?: () => void
   onTurnCompleted?: (result: SessionTurnResult) => void
@@ -37,6 +40,7 @@ function ChatHarness({
       chat={chat}
       conversationAction={conversationAction}
       currentPage={currentPage}
+      materialOverview={materialOverview}
       onExplainCurrentPage={onExplainCurrentPage}
       onExplainNextPage={onExplainNextPage}
       onTurnCompleted={onTurnCompleted}
@@ -47,6 +51,62 @@ function ChatHarness({
 }
 
 describe('ChatPanel', () => {
+  it('adds the overview tab first while keeping AI chat selected by default', async () => {
+    render(<ChatHarness repository={createRepository()} />)
+
+    expect(await screen.findByLabelText('질문')).toBeInTheDocument()
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      '개요',
+      'AI 채팅',
+      '내 퀴즈',
+      '내 노트',
+    ])
+    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: '개요' })).toHaveAttribute('aria-selected', 'false')
+
+    fireEvent.click(screen.getByRole('tab', { name: '개요' }))
+
+    expect(screen.getByText('개요를 준비 중입니다.')).toBeInTheDocument()
+    expect(screen.getByText('생성이 완료되면 자료의 목차와 흐름이 여기에 표시됩니다.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('질문')).not.toBeInTheDocument()
+  })
+
+  it('renders material overview markdown when overview content is provided', async () => {
+    render(
+      <ChatHarness
+        materialOverview={{
+          content: '## 목차\n\n- **기초 개념**\n- 문제 풀이 흐름',
+          materialId: '10',
+          status: 'READY',
+          updatedAt: '2026-08-15T00:00:00Z',
+        }}
+        repository={createRepository()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('tab', { name: '개요' }))
+
+    expect(screen.getByRole('heading', { name: '목차' })).toBeInTheDocument()
+    expect(screen.getByRole('list')).toBeInTheDocument()
+    const emphasizedText = screen.getByText('기초 개념')
+    expect(emphasizedText.tagName).toBe('STRONG')
+    expect(screen.queryByText(/\*\*기초 개념\*\*/)).not.toBeInTheDocument()
+  })
+
+  it('shows a general failure message for failed material overview generation', async () => {
+    render(
+      <ChatHarness
+        materialOverview={{ materialId: '10', status: 'FAILED' }}
+        repository={createRepository()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('tab', { name: '개요' }))
+
+    expect(screen.getByText('개요를 생성하지 못했습니다.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /다시 시도/ })).not.toBeInTheDocument()
+  })
+
   it('renders learning decisions inside the conversation log', async () => {
     render(
       <ChatHarness

@@ -6,7 +6,7 @@ export { apiFailure, apiSuccess } from './apiFixtures'
 
 type ApiFixtureOverride = (
   request: Request,
-) => Response | Promise<Response> | undefined
+) => Response | Promise<Response | undefined> | undefined
 
 export function installApiFixtureServer(override?: ApiFixtureOverride) {
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')

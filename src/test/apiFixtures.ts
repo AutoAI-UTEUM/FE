@@ -141,6 +141,22 @@ export async function handleApiFixtureRequest(
     })
   }
 
+  if (request.method === 'GET' && path === '/api/users/me/preferences') {
+    return apiSuccess({
+      aiAnswerStyle: 'NORMAL',
+      newMaterialNotification: true,
+      studyReminder: false,
+    })
+  }
+
+  if (request.method === 'PATCH' && path === '/api/users/me/preferences') {
+    return apiSuccess(await readJson(request))
+  }
+
+  if (request.method === 'POST' && path === '/api/feedback') {
+    return apiSuccess({ createdAt: '2026-08-15T00:00:00Z', feedbackId: 1 })
+  }
+
   if (
     request.method === 'GET' &&
     path === '/api/classrooms?page=0&size=100&sort=RECENT'
@@ -248,6 +264,19 @@ export async function handleApiFixtureRequest(
 
   if (request.method === 'GET' && path === '/api/materials?page=0&size=20') {
     return apiSuccess(paged(materialListFixture))
+  }
+
+  if (
+    request.method === 'GET' &&
+    /^\/api\/materials\/\d+\/overview$/.test(path)
+  ) {
+    const materialId = Number(path.match(/^\/api\/materials\/(\d+)\/overview$/)?.[1] ?? 0)
+    return apiSuccess({
+      content: null,
+      materialId,
+      status: 'PENDING',
+      updatedAt: null,
+    })
   }
 
   if (request.method === 'POST' && path === '/api/materials') {

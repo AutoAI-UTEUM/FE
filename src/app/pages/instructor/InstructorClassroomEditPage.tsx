@@ -232,7 +232,7 @@ export function InstructorClassroomEditPage() {
             <section className="flex min-h-14 shrink-0 flex-wrap items-center gap-3 rounded-lg border border-rose-200 bg-rose-50/30 px-4 py-2.5">
               <h2 className="type-caption font-bold text-rose-700">위험 구역</h2>
               <p className="min-w-0 flex-1 type-micro leading-5 text-stone-500">
-                운영 종료는 기록을 보존합니다. 영구 삭제는 강의실 운영 데이터와 리포트·시험을 복구할 수 없게 제거합니다.
+                운영 종료는 기록을 보존합니다. 영구 삭제는 강의실 운영 데이터와 시험을 복구할 수 없게 제거합니다.
               </p>
               <Button
                 disabled={classroom.status === 'COMPLETED'}
@@ -289,7 +289,7 @@ export function InstructorClassroomEditPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="type-dialog-title font-bold text-stone-950" id="delete-classroom-title">강의실 영구 삭제</h2>
-                <p className="mt-2 type-caption leading-5 text-stone-500">강의실과 시험·리포트 등 소속 데이터가 영구 삭제됩니다. 학생 개인 학습 기록 (자료·세션·진도)은 유지됩니다.</p>
+                <p className="mt-2 type-caption leading-5 text-stone-500">강의실과 시험 등 소속 데이터가 영구 삭제됩니다. 학생 개인 학습 기록 (자료·세션·진도)은 유지됩니다.</p>
               </div>
               <button aria-label="강의실 삭제 닫기" className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700" disabled={isDeleting} onClick={closeDeleteDialog} type="button"><X aria-hidden="true" size={16} /></button>
             </div>

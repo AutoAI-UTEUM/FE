@@ -144,6 +144,21 @@ describe('SessionDetailPage', () => {
     expect(separator).not.toHaveAttribute('aria-valuenow')
   })
 
+  it('keeps AI chat as the default right panel tab and exposes the overview panel', async () => {
+    renderSessionDetail()
+
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+
+    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: '개요' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByLabelText('질문')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: '개요' }))
+
+    expect(screen.getByText('개요를 준비 중입니다.')).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: 'PDF와 AI 채팅 너비 조절' })).toBeInTheDocument()
+  })
+
   it('renders a session 404 state', async () => {
     renderSessionDetail('/sessions/999')
 

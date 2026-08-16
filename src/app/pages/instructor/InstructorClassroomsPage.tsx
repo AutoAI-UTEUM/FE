@@ -443,7 +443,7 @@ function ClassroomCard({
             className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50"
             to={learningStatusPath(classroom.id)}
           >
-            학습 현황
+            학습현황·리포트
           </Link>
         ) : null}
         <Link

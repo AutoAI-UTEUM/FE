@@ -69,6 +69,7 @@ describe('AppRoutes', () => {
       'lg:px-12',
       'lg:py-5',
     )
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
     expect(
       screen.getByRole('heading', { name: '내 강의실' }),
     ).toBeInTheDocument()
@@ -90,22 +91,31 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
   })
 
-  it('opens the settings page from the profile menu', async () => {
+  it('opens the settings dialog from the profile menu', async () => {
     renderRoute('/')
 
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
     fireEvent.click(profileTrigger)
+    expect(screen.queryByRole('group', { name: '화면 모드' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: '도움말 · 피드백' })).not.toBeInTheDocument()
     const [settingsMenuItem] = screen.getAllByRole('menuitem', { name: '설정' })
     fireEvent.click(settingsMenuItem)
 
-    expect(
-      await screen.findByRole('heading', { name: '설정' }),
-    ).toBeInTheDocument()
+    const settingsDialog = await screen.findByRole('dialog', { name: '설정' })
+    expect(settingsDialog).toBeInTheDocument()
+    expect(settingsDialog.firstElementChild).toHaveClass('min-h-[464px]')
+    expect(settingsDialog.firstElementChild).not.toHaveClass('h-[66dvh]', 'max-h-[66dvh]', 'overflow-y-auto')
+    expect(within(settingsDialog).getByRole('button', { name: '피드백' })).toBeInTheDocument()
+    fireEvent.click(within(settingsDialog).getByRole('button', { name: '화면 모드' }))
+    expect(within(settingsDialog).getByRole('button', { name: '라이트 모드' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '회원 탈퇴' }))
     expect(
       screen.getByRole('button', { name: '회원 탈퇴 실행' }),
     ).toBeInTheDocument()
+
+    fireEvent.click(settingsDialog)
+    expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
   })
 
   it('shows learner study menus and keeps instructor management menus out', () => {
@@ -209,6 +219,7 @@ describe('AppRoutes', () => {
     expect(
       screen.getByRole('heading', { name: '입장 요청' }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
     expect(screen.getByRole('link', { name: '강의실' })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: '자연어처리 개론' })).toHaveAttribute('href', '/classrooms/12')
     expect(screen.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
@@ -262,117 +273,6 @@ describe('AppRoutes', () => {
 
     expect(within(filterGroup).getByRole('button', { name: '공지' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBe(heading)
-  })
-
-  it('loads the instructor report screen from the deployed backend contract', async () => {
-    installApiFixtureServer((request) => {
-      const url = new URL(request.url)
-      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
-        return apiSuccess({
-          items: [
-            {
-              classroomId: 12,
-              color: 'BLUE',
-              endDate: '2026-11-15',
-              instructorName: '강의자',
-              learnerCount: 1,
-              name: '자료구조',
-              pendingRequestCount: 0,
-              progressRate: 30,
-              startDate: '2026-08-03',
-              status: 'ACTIVE',
-              weekCount: 15,
-            },
-            {
-              classroomId: 13,
-              color: 'GREEN',
-              endDate: '2026-11-15',
-              instructorName: '강의자',
-              learnerCount: 1,
-              name: '알고리즘',
-              pendingRequestCount: 0,
-              progressRate: 20,
-              startDate: '2026-08-03',
-              status: 'ACTIVE',
-              weekCount: 15,
-            },
-          ],
-          page: 0,
-          size: 100,
-          totalElements: 2,
-          totalPages: 1,
-        })
-      }
-      if (request.method === 'GET' && url.pathname === '/api/classrooms/12/students') {
-        return apiSuccess({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
-      }
-      if (request.method === 'GET' && url.pathname === '/api/classrooms/13/students') {
-        return apiSuccess({
-          items: [{ affiliation: '컴퓨터공학과', email: 'kim@example.com', name: '김학습', studentId: 31 }],
-          page: 0,
-          size: 100,
-          totalElements: 1,
-          totalPages: 1,
-        })
-      }
-      return undefined
-    })
-    renderRoute('/classrooms/12/reports', {
-      email: 'instructor@example.com',
-      name: '강의자',
-      role: 'INSTRUCTOR',
-    })
-
-    expect(screen.getByRole('heading', { name: '학습 리포트' })).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: '리포트를 생성할 학습자가 없습니다' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('강의실 선택')).not.toBeInTheDocument()
-    expect(screen.queryByText('0점')).not.toBeInTheDocument()
-  })
-
-  it('does not present insufficient report data as a score or definitive stage', async () => {
-    installApiFixtureServer((request) => {
-      const url = new URL(request.url)
-      if (request.method === 'GET' && url.pathname === '/api/reports/55') {
-        return apiSuccess({
-          classroomId: 12,
-          criteria: [{
-            criterionKey: 'concept_understanding',
-            criterionName: '개념 이해도',
-            evidenceIds: ['e-1'],
-            narrative: '판단할 기록이 더 필요합니다.',
-            score: null,
-            status: 'INSUFFICIENT_DATA',
-            trend: 'STABLE',
-          }],
-          evidence: [{
-            evidenceId: 'e-1',
-            occurredAt: '2026-08-05T00:00:00Z',
-            publicLabel: '1주차 질문 기록',
-            sourceType: 'QA_QUESTION',
-          }],
-          overallScore: null,
-          overallStage: '보완 필요',
-          reportId: 55,
-          status: 'COMPLETED',
-          studentId: 31,
-          studentName: '김학습',
-        })
-      }
-      return undefined
-    })
-
-    renderRoute('/classrooms/12/students/31/reports/55', {
-      email: 'instructor@example.com',
-      name: '강의자',
-      role: 'INSTRUCTOR',
-    })
-
-    expect(await screen.findAllByText('관찰 데이터 축적 중')).toHaveLength(2)
-    expect(screen.getAllByText('데이터 부족')).toHaveLength(3)
-    expect(screen.queryByText('0점')).not.toBeInTheDocument()
-    expect(screen.queryByText('보완 필요')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('근거 1개'))
-    expect(screen.getByText(/학습 질문/)).toBeInTheDocument()
   })
 
   it('shows upcoming calendar schedules in the notification panel', async () => {

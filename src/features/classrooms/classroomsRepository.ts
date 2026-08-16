@@ -124,6 +124,7 @@ export interface JoinRequest {
 }
 
 interface ClassroomDto {
+  averageProgressRate?: number
   classroomId: number
   color: ClassroomColor
   currentWeek?: number
@@ -337,7 +338,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
 }
 
 function mapClassroom(value: ClassroomDto): Classroom {
-  return { ...value, id: String(value.classroomId), learnerCount: value.learnerCount ?? 0, materialCount: value.materialCount ?? 0, pendingRequestCount: value.pendingRequestCount ?? 0, progressRate: value.progressRate ?? 0 }
+  return { ...value, id: String(value.classroomId), learnerCount: value.learnerCount ?? 0, materialCount: value.materialCount ?? 0, pendingRequestCount: value.pendingRequestCount ?? 0, progressRate: value.averageProgressRate ?? value.progressRate ?? 0 }
 }
 
 function mapWeek(value: WeekDto): ClassroomWeek {

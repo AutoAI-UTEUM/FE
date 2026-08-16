@@ -5,6 +5,8 @@ import type {
 } from '../auth'
 import type {
   MaterialFailureReason,
+  MaterialOverview,
+  MaterialOverviewStatus,
   MaterialStatus,
   StudyMaterial,
 } from './materialTypes'
@@ -21,6 +23,13 @@ interface MaterialDto {
   traceId?: string | null
 }
 
+interface MaterialOverviewDto {
+  content?: string | null
+  materialId: number | string
+  status: MaterialOverviewStatus
+  updatedAt?: string | null
+}
+
 export interface MaterialsRepository {
   delete: (materialId: string, signal?: AbortSignal) => Promise<void>
   getById: (
@@ -31,6 +40,10 @@ export interface MaterialsRepository {
     materialId: string,
     signal?: AbortSignal,
   ) => Promise<Blob>
+  getOverview: (
+    materialId: string,
+    signal?: AbortSignal,
+  ) => Promise<MaterialOverview | null>
   list: (signal?: AbortSignal) => Promise<StudyMaterial[]>
   refreshStatuses: (signal?: AbortSignal) => Promise<StudyMaterial[]>
   rename: (
@@ -98,6 +111,20 @@ export function createMaterialsRepository(
       }
       return response.blob()
     },
+    async getOverview(materialId, signal) {
+      try {
+        const { data } = await request<MaterialOverviewDto>(
+          `/api/materials/${encodeURIComponent(materialId)}/overview`,
+          { signal },
+        )
+        return mapMaterialOverview(data)
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 404) {
+          return null
+        }
+        throw error
+      }
+    },
     async list(signal) {
       return requestMaterials(request, signal)
     },
@@ -159,5 +186,14 @@ function mapMaterial(material: MaterialDto): StudyMaterial {
     status: material.processingStatus,
     title: material.title,
     traceId: material.traceId ?? undefined,
+  }
+}
+
+function mapMaterialOverview(overview: MaterialOverviewDto): MaterialOverview {
+  return {
+    content: overview.content ?? undefined,
+    materialId: String(overview.materialId),
+    status: overview.status,
+    updatedAt: overview.updatedAt ?? undefined,
   }
 }

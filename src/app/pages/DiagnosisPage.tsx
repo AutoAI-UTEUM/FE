@@ -18,6 +18,7 @@ import {
   ButtonLink,
   ErrorState,
   LoadingState,
+  MarkdownContent,
   PageContainer,
   PageHeader,
 } from '../../shared/ui'
@@ -220,9 +221,7 @@ export function DiagnosisPage() {
             <CheckCircle2 aria-hidden="true" className="mt-0.5 text-emerald-700" size={19} />
             <div>
               <h2 className="type-section-title font-bold text-emerald-950">{correction.title}</h2>
-              <p className="mt-1 type-body leading-6 text-emerald-900">
-                {correction.summary}
-              </p>
+              <MarkdownContent className="mt-1 text-emerald-900" content={correction.summary} />
             </div>
           </div>
           {correction.focusAreas.length > 0 ? (

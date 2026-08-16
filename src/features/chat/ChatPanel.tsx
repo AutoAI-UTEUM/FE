@@ -25,6 +25,7 @@ import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime, formatTime } from '../../shared/lib/format'
 import { Button, MarkdownContent } from '../../shared/ui'
 import type { AuthenticatedRequest } from '../auth'
+import type { MaterialOverview } from '../materials'
 import { createNotesRepository, type Note } from '../notes'
 import type { SessionQuizSummary, SessionTurnResult } from '../sessions'
 import type { ChatMessage } from './chatTypes'
@@ -50,11 +51,14 @@ interface ChatPanelProps {
   quizzes?: SessionQuizSummary[]
   quizzesError?: string | null
   isLoadingQuizzes?: boolean
+  materialOverview?: MaterialOverview | null
   onOpenQuiz?: (quizId: string) => void
   onReloadQuizzes?: () => void
   request?: AuthenticatedRequest
   sessionId: string
 }
+
+type ChatPanelTab = 'overview' | 'chat' | 'notes' | 'quizzes'
 
 /** 시안 4d의 빠른 액션 칩 */
 const QUICK_ACTIONS = [
@@ -86,12 +90,13 @@ export function ChatPanel({
   quizzes = [],
   quizzesError = null,
   isLoadingQuizzes = false,
+  materialOverview = null,
   request,
   sessionId,
 }: ChatPanelProps) {
   const [question, setQuestion] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'chat' | 'notes' | 'quizzes'>('chat')
+  const [tab, setTab] = useState<ChatPanelTab>('chat')
   const [notes, setNotes] = useState<Note[]>([])
   const [notesError, setNotesError] = useState<string | null>(null)
   const [hiddenMessageCount, setHiddenMessageCount] = useState(0)
@@ -329,6 +334,11 @@ export function ChatPanel({
       <div className="flex h-13 shrink-0 items-center border-b border-stone-200 px-3">
         <div className="flex h-full min-w-0 flex-1 overflow-x-auto" role="tablist">
           <PanelTab
+            isActive={tab === 'overview'}
+            label="개요"
+            onSelect={() => setTab('overview')}
+          />
+          <PanelTab
             isActive={tab === 'chat'}
             label="AI 채팅"
             onSelect={() => setTab('chat')}
@@ -363,7 +373,9 @@ export function ChatPanel({
         </div>
       </div>
 
-      {tab === 'quizzes' ? (
+      {tab === 'overview' ? (
+        <OverviewPanel overview={materialOverview} />
+      ) : tab === 'quizzes' ? (
         <QuizzesPanel
           error={quizzesError}
           isLoading={isLoadingQuizzes}
@@ -507,6 +519,55 @@ export function ChatPanel({
         </>
       )}
     </section>
+  )
+}
+
+function OverviewPanel({
+  overview,
+}: {
+  overview: MaterialOverview | null
+}) {
+  const content = overview?.content?.trim()
+
+  if (overview?.status === 'FAILED') {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+        <XCircle aria-hidden="true" className="text-stone-300" size={27} />
+        <p className="type-body font-semibold text-stone-500">
+          개요를 생성하지 못했습니다.
+        </p>
+        <p className="type-caption leading-5 text-stone-400">
+          자료를 직접 확인하거나 AI 채팅으로 필요한 내용을 질문해 주세요.
+        </p>
+      </div>
+    )
+  }
+
+  if (overview?.status !== 'READY' || !content) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+        <FileText aria-hidden="true" className="text-stone-300" size={27} />
+        <p className="type-body font-semibold text-stone-500">
+          개요를 준비 중입니다.
+        </p>
+        <p className="type-caption leading-5 text-stone-400">
+          생성이 완료되면 자료의 목차와 흐름이 여기에 표시됩니다.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <article className="rounded-xl border border-stone-200 bg-white px-3.5 py-3">
+        {overview?.updatedAt ? (
+          <p className="mb-2 type-micro text-stone-400">
+            마지막 업데이트 {formatDateTime(overview.updatedAt)}
+          </p>
+        ) : null}
+        <MarkdownContent content={content} />
+      </article>
+    </div>
   )
 }
 
