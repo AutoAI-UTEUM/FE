@@ -1,4 +1,4 @@
-import { BarChart3, FileQuestion, Users } from 'lucide-react'
+import { BarChart3, FileQuestion, FileText, Users } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
@@ -14,7 +14,8 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
 import { formatRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, EmptyState } from '../../../shared/ui'
+import { Button, ButtonLink, EmptyState } from '../../../shared/ui'
+import { classroomStudentReportsPath } from '../../routes'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
@@ -70,7 +71,7 @@ export function InstructorLearningStatusPage() {
       <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(460px,1.35fr)]">
         <MaterialAnalyticsPanel analytics={analytics} />
         <QuestionAnalyticsPanel analytics={analytics} />
-        <StudentLearningTable students={students} />
+        <StudentLearningTable classroomId={classroom.id} students={students} />
       </section>
     </ClassroomWorkspaceContainer>
   )
@@ -131,7 +132,7 @@ function QuestionAnalyticsPanel({ analytics, className }: { analytics: Classroom
   )
 }
 
-function StudentLearningTable({ className, students }: { className?: string; students: ClassroomStudent[] }) {
+function StudentLearningTable({ classroomId, className, students }: { classroomId: string; className?: string; students: ClassroomStudent[] }) {
   const orderedStudents = [...students].sort((left, right) => getActivityTime(right) - getActivityTime(left))
 
   return (
@@ -140,14 +141,14 @@ function StudentLearningTable({ className, students }: { className?: string; stu
         <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
       </div>
       <div className="overflow-x-auto">
-        <div className="min-w-[560px]">
-          <div className="grid min-h-10 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
-            <span>이름</span><span>평균 진도율</span><span>최근 7일 AI 질문</span><span>최근 학습</span>
+        <div className="min-w-[680px]">
+          <div className="grid min-h-10 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px_86px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+            <span>이름</span><span>평균 진도율</span><span>최근 7일 AI 질문</span><span>최근 학습</span><span className="text-center">리포트</span>
           </div>
           {orderedStudents.length === 0 ? (
             <div className="flex min-h-40 items-center justify-center type-body text-stone-400">표시할 수강생이 없습니다.</div>
           ) : orderedStudents.map((student) => (
-            <article className="grid min-h-14 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px] items-center gap-3 border-b border-stone-100 px-5 last:border-0" key={student.id}>
+            <article className="grid min-h-14 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px_86px] items-center gap-3 border-b border-stone-100 px-5 last:border-0" key={student.id}>
               <div className="flex min-w-0 items-center gap-3">
                 <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
                 <div className="min-w-0"><strong className="block truncate type-control text-stone-900">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></div>
@@ -155,6 +156,7 @@ function StudentLearningTable({ className, students }: { className?: string; stu
               <StudentProgress value={student.averageProgressRate} />
               <span className="type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
               <span className="type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
+              <ButtonLink aria-label={`${student.name} 리포트`} size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary"><FileText aria-hidden="true" size={14} />리포트</ButtonLink>
             </article>
           ))}
         </div>

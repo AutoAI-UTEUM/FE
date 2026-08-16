@@ -275,6 +275,63 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBe(heading)
   })
 
+  it('opens a student report without restoring the insufficient-data banner', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/reports/55') {
+        return apiSuccess({
+          classroomId: 12,
+          criteria: [{
+            criterionKey: 'concept_understanding',
+            criterionName: '개념 이해도',
+            evidenceIds: [],
+            narrative: '판단할 기록이 더 필요합니다.',
+            score: null,
+            status: 'INSUFFICIENT_DATA',
+            trend: 'STABLE',
+          }],
+          evidence: [],
+          overallScore: null,
+          reportId: 55,
+          status: 'COMPLETED',
+          studentId: 31,
+          studentName: '김학습',
+        })
+      }
+      return undefined
+    })
+
+    renderRoute('/classrooms/12/students/31/reports/55', {
+      email: 'instructor@example.com',
+      name: '강의자',
+      role: 'INSTRUCTOR',
+    })
+
+    expect(await screen.findByRole('heading', { name: '김학습 리포트' })).toBeInTheDocument()
+    expect(screen.getAllByText('관찰 데이터 축적 중')).toHaveLength(1)
+    expect(screen.queryByText('근거가 부족한 항목은 점수로 환산하지 않습니다. 추가 학습 기록이 쌓인 뒤 리포트를 다시 생성해 주세요.')).not.toBeInTheDocument()
+  })
+
+  it('opens the student report history from the classroom analytics table', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms/12/students/31/reports') {
+        return apiSuccess({ activeGeneration: null, items: [] })
+      }
+      return undefined
+    })
+
+    renderRoute('/classrooms/12/students/31/reports', {
+      email: 'instructor@example.com',
+      name: '강의자',
+      role: 'INSTRUCTOR',
+    })
+
+    expect(screen.getByRole('heading', { name: '학생 리포트' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '새 리포트 생성' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '저장된 버전' })).toBeInTheDocument()
+  })
+
   it('shows upcoming calendar schedules in the notification panel', async () => {
     renderRoute('/calendar', {
       email: 'instructor@example.com',
