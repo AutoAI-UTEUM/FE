@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -107,6 +107,22 @@ describe('shared ui', () => {
 
     expect(container.querySelector('h1')).toHaveTextContent('공지 안내')
     expect(container.querySelector('textarea')).not.toBeInTheDocument()
+  })
+
+  it('inserts headings from the markdown editor toolbar', () => {
+    const onChange = vi.fn()
+    const { container } = render(<MarkdownEditor onChange={onChange} value="노트 제목" />)
+
+    fireEvent.click(within(container).getByRole('button', { name: '제목 1' }))
+
+    expect(onChange).toHaveBeenCalledWith('# 노트 제목')
+  })
+
+  it('renders note toggle blocks without enabling raw html', () => {
+    render(<MarkdownContent content={':::toggle 추가 설명\n**세부 내용**\n:::'} />)
+
+    expect(screen.getByText('추가 설명').closest('summary')).toBeInTheDocument()
+    expect(screen.getByText('세부 내용').tagName).toBe('STRONG')
   })
 
   it('renders strong emphasis when AI wraps Korean text and quotes together', () => {

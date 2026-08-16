@@ -1,4 +1,15 @@
-import { Bold, Eye, Italic, Link, List, ListOrdered, Pencil } from 'lucide-react'
+import {
+  Bold,
+  ChevronDownSquare,
+  Eye,
+  Italic,
+  Link,
+  List,
+  ListOrdered,
+  Minus,
+  Pencil,
+  type LucideIcon,
+} from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import { cx } from '../lib/cx'
@@ -60,13 +71,58 @@ export function MarkdownEditor({
     window.requestAnimationFrame(() => textarea.focus())
   }
 
+  function applyHeading(level: 1 | 2 | 3) {
+    const textarea = textareaRef.current
+    if (!textarea || disabled) return
+    const start = textarea.selectionStart
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+    const lineEndIndex = value.indexOf('\n', start)
+    const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex
+    const currentLine = value.slice(lineStart, lineEnd).replace(/^#{1,6}\s*/, '') || '제목'
+    const nextLine = `${'#'.repeat(level)} ${currentLine}`
+    onChange(`${value.slice(0, lineStart)}${nextLine}${value.slice(lineEnd)}`)
+    window.requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(lineStart + level + 1, lineStart + nextLine.length)
+    })
+  }
+
+  function insertBlock(block: string, selectionOffset = block.length) {
+    const textarea = textareaRef.current
+    if (!textarea || disabled) return
+    const start = textarea.selectionStart
+    const needsLeadingBreak = start > 0 && value[start - 1] !== '\n'
+    const insertion = `${needsLeadingBreak ? '\n' : ''}${block}`
+    const next = `${value.slice(0, start)}${insertion}${value.slice(textarea.selectionEnd)}`
+    onChange(next)
+    window.requestAnimationFrame(() => {
+      const cursor = start + (needsLeadingBreak ? 1 : 0) + selectionOffset
+      textarea.focus()
+      textarea.setSelectionRange(cursor, cursor)
+    })
+  }
+
+  function insertToggleBlock() {
+    const textarea = textareaRef.current
+    if (!textarea || disabled) return
+    const selected = value.slice(textarea.selectionStart, textarea.selectionEnd).trim() || '토글 내용'
+    const block = `:::toggle 토글 제목\n${selected}\n:::\n`
+    insertBlock(block, ':::toggle '.length)
+  }
+
   return (
     <div className={cx('flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-300 bg-white focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100', className)}>
       <div className="flex min-h-10 flex-wrap items-center gap-1 border-b border-stone-200 bg-stone-50 px-2">
+        <TextFormatButton disabled={disabled || mode === 'preview'} label="제목 1" onClick={() => applyHeading(1)}>H1</TextFormatButton>
+        <TextFormatButton disabled={disabled || mode === 'preview'} label="제목 2" onClick={() => applyHeading(2)}>H2</TextFormatButton>
+        <TextFormatButton disabled={disabled || mode === 'preview'} label="제목 3" onClick={() => applyHeading(3)}>H3</TextFormatButton>
+        <span aria-hidden="true" className="mx-1 h-5 w-px bg-stone-200" />
         <FormatButton disabled={disabled || mode === 'preview'} icon={Bold} label="굵게" onClick={() => applyInlineFormat({ fallback: '굵은 텍스트', prefix: '**', suffix: '**' })} />
         <FormatButton disabled={disabled || mode === 'preview'} icon={Italic} label="기울임" onClick={() => applyInlineFormat({ fallback: '기울임 텍스트', prefix: '_', suffix: '_' })} />
         <FormatButton disabled={disabled || mode === 'preview'} icon={List} label="글머리 목록" onClick={() => applyLinePrefix('- ')} />
         <FormatButton disabled={disabled || mode === 'preview'} icon={ListOrdered} label="번호 목록" onClick={() => applyLinePrefix('1. ')} />
+        <FormatButton disabled={disabled || mode === 'preview'} icon={ChevronDownSquare} label="토글" onClick={insertToggleBlock} />
+        <FormatButton disabled={disabled || mode === 'preview'} icon={Minus} label="구분선" onClick={() => insertBlock('\n---\n')} />
         <FormatButton disabled={disabled || mode === 'preview'} icon={Link} label="링크" onClick={() => applyInlineFormat({ fallback: '링크 제목', prefix: '[', suffix: '](https://)' })} />
         <div className="ml-auto flex items-center rounded-md border border-stone-200 bg-white p-0.5" role="group" aria-label="본문 보기 방식">
           <ModeButton active={mode === 'edit'} icon={Pencil} label="편집" onClick={() => setMode('edit')} />
@@ -93,10 +149,14 @@ export function MarkdownEditor({
   )
 }
 
-function FormatButton({ disabled, icon: Icon, label, onClick }: { disabled: boolean; icon: typeof Bold; label: string; onClick: () => void }) {
+function FormatButton({ disabled, icon: Icon, label, onClick }: { disabled: boolean; icon: LucideIcon; label: string; onClick: () => void }) {
   return <button aria-label={label} className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClick} title={label} type="button"><Icon aria-hidden="true" size={14} /></button>
 }
 
-function ModeButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: typeof Eye; label: string; onClick: () => void }) {
+function TextFormatButton({ children, disabled, label, onClick }: { children: string; disabled: boolean; label: string; onClick: () => void }) {
+  return <button aria-label={label} className="flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 type-caption font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClick} title={label} type="button">{children}</button>
+}
+
+function ModeButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: LucideIcon; label: string; onClick: () => void }) {
   return <button aria-pressed={active} className={cx('flex h-7 items-center gap-1.5 rounded px-2 type-caption font-semibold', active ? 'bg-stone-900 text-white' : 'text-stone-500 hover:bg-stone-50')} onClick={onClick} type="button"><Icon aria-hidden="true" size={13} />{label}</button>
 }

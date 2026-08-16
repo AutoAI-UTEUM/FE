@@ -12,6 +12,10 @@ interface MarkdownContentProps {
   isStreaming?: boolean
 }
 
+type MarkdownSegment =
+  | { content: string; kind: 'markdown' }
+  | { content: string; kind: 'toggle'; title: string }
+
 const markdownCodePattern = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
 
 function isLikelyUndelimitedLatex(expression: string): boolean {
@@ -115,6 +119,8 @@ function normalizeMarkdownLatex(content: string, isStreaming: boolean): string {
 }
 
 export function MarkdownContent({ className, content, isStreaming = false }: MarkdownContentProps) {
+  const segments = parseToggleBlocks(content)
+
   return (
     <div
       className={cx(
@@ -136,12 +142,63 @@ export function MarkdownContent({ className, content, isStreaming = false }: Mar
         className,
       )}
     >
-      <Markdown
-        rehypePlugins={[rehypeKatex]}
-        remarkPlugins={[remarkGfm, remarkMath]}
-      >
-        {normalizeMarkdownLatex(content, isStreaming)}
-      </Markdown>
+      {segments.map((segment, index) => segment.kind === 'toggle' ? (
+        <details className="my-2 rounded-lg border border-stone-200 bg-white dark:bg-stone-50" key={`${segment.kind}-${index}`}>
+          <summary className="cursor-pointer list-none px-3 py-2 type-control font-bold text-stone-900 marker:hidden">
+            {segment.title}
+          </summary>
+          <MarkdownContent className="border-t border-stone-100 px-3 py-2 text-stone-800" content={segment.content} isStreaming={isStreaming} />
+        </details>
+      ) : (
+        <Markdown
+          key={`${segment.kind}-${index}`}
+          rehypePlugins={[rehypeKatex]}
+          remarkPlugins={[remarkGfm, remarkMath]}
+        >
+          {normalizeMarkdownLatex(segment.content, isStreaming)}
+        </Markdown>
+      ))}
     </div>
   )
+}
+
+function parseToggleBlocks(content: string): MarkdownSegment[] {
+  const lines = content.split(/\r?\n/)
+  const segments: MarkdownSegment[] = []
+  let buffer: string[] = []
+  let index = 0
+
+  function flushMarkdown() {
+    const value = buffer.join('\n')
+    if (value) segments.push({ content: value, kind: 'markdown' })
+    buffer = []
+  }
+
+  while (index < lines.length) {
+    const toggleMatch = /^:::\s*toggle(?:\s+(.+?))?\s*$/.exec(lines[index])
+    if (!toggleMatch) {
+      buffer.push(lines[index])
+      index += 1
+      continue
+    }
+
+    const title = toggleMatch[1]?.trim() || '토글'
+    const toggleLines: string[] = []
+    index += 1
+    while (index < lines.length && !/^:::\s*$/.test(lines[index])) {
+      toggleLines.push(lines[index])
+      index += 1
+    }
+
+    if (index < lines.length) {
+      flushMarkdown()
+      segments.push({ content: toggleLines.join('\n').trim(), kind: 'toggle', title })
+      index += 1
+    } else {
+      buffer.push(`:::toggle ${title}`, ...toggleLines)
+    }
+  }
+
+  flushMarkdown()
+  return segments.length > 0 ? segments : [{ content, kind: 'markdown' }]
 }

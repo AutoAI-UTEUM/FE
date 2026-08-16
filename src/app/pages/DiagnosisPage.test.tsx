@@ -3,11 +3,35 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
-import { installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { DiagnosisPage } from './DiagnosisPage'
 
 beforeEach(() => {
-  installApiFixtureServer()
+  installApiFixtureServer(async (request) => {
+    const url = new URL(request.url)
+    if (request.method !== 'POST' || url.pathname !== '/api/sessions/100/turns') {
+      return undefined
+    }
+
+    const body = await request.clone().json() as { eventType?: string }
+    if (body.eventType !== 'DIAGNOSIS_ANSWER_SUBMITTED') {
+      return undefined
+    }
+
+    return apiSuccess({
+      messages: [
+        {
+          content: '## 오개념 교정\n**개념 정의**와 적용 사례를 분리해서 정리해 보세요.',
+          createdAt: '2026-07-27T00:00:00Z',
+          messageId: 501,
+          messageType: 'REPAIR',
+          senderType: 'AI',
+        },
+      ],
+      state: {},
+      uiActions: [],
+    })
+  })
 })
 
 afterEach(() => {
@@ -73,8 +97,13 @@ describe('DiagnosisPage', () => {
       await screen.findByRole('heading', { name: '교정 메시지' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('개념 정의와 적용 사례를 분리해서 정리해 보세요.'),
+      screen.getByRole('heading', { name: '오개념 교정' }),
     ).toBeInTheDocument()
+    const emphasizedConcept = screen.getByText('개념 정의')
+    expect(emphasizedConcept.tagName).toBe('STRONG')
+    expect(
+      screen.queryByText(/\*\*개념 정의\*\*/),
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '일반 질문으로 이어가기' }),
     ).toHaveAttribute('href', '/sessions/100')
