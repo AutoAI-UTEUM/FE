@@ -12,7 +12,7 @@ import {
 } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { ChatPanel, useSessionChat } from '../../features/chat'
-import { createMaterialsRepository } from '../../features/materials'
+import { createMaterialsRepository, type MaterialOverview } from '../../features/materials'
 import type { QuizKind } from '../../features/quiz'
 import {
   createSessionsRepository,
@@ -96,6 +96,7 @@ export function SessionDetailPage() {
   const [resourceReloadKey, setResourceReloadKey] = useState(0)
   const [materialFile, setMaterialFile] = useState<Blob | null | undefined>()
   const [materialFileError, setMaterialFileError] = useState<string | null>(null)
+  const [materialOverview, setMaterialOverview] = useState<MaterialOverview | null>(null)
   const [chatPanelWidth, setChatPanelWidth] = useState<number | null>(null)
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
   const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
@@ -184,6 +185,38 @@ export function SessionDetailPage() {
     }
 
     void loadMaterialFile()
+    return () => controller.abort()
+  }, [materialsRepository, session?.materialId])
+
+  useEffect(() => {
+    const materialId = session?.materialId
+    const controller = new AbortController()
+
+    const loadMaterialOverview = async () => {
+      await Promise.resolve()
+      if (controller.signal.aborted) return
+
+      if (!materialId) {
+        setMaterialOverview(null)
+        return
+      }
+
+      setMaterialOverview(null)
+      try {
+        setMaterialOverview(
+          await materialsRepository.getOverview(materialId, controller.signal),
+        )
+      } catch {
+        if (!controller.signal.aborted) {
+          setMaterialOverview({
+            materialId,
+            status: 'FAILED',
+          })
+        }
+      }
+    }
+
+    void loadMaterialOverview()
     return () => controller.abort()
   }, [materialsRepository, session?.materialId])
 
@@ -738,6 +771,7 @@ export function SessionDetailPage() {
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"
+            materialOverview={materialOverview}
             conversationAction={hasConversationAction ? (
               <div className="grid gap-2">
                 {isSelectingQuizType ? (

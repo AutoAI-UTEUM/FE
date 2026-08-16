@@ -1,4 +1,5 @@
 export type MaterialStatus = 'PROCESSING' | 'READY' | 'FAILED'
+export type MaterialOverviewStatus = 'PENDING' | 'READY' | 'FAILED'
 export type MaterialFailureReason =
   | 'UNSUPPORTED_FORMAT'
   | 'ENCRYPTED_PDF'
@@ -18,4 +19,11 @@ export interface StudyMaterial {
   status: MaterialStatus
   title: string
   traceId?: string
+}
+
+export interface MaterialOverview {
+  content?: string
+  materialId: string
+  status: MaterialOverviewStatus
+  updatedAt?: string
 }

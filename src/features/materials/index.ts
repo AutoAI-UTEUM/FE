@@ -7,7 +7,13 @@ export {
   validateMaterialUpload,
   validateMaterialTitle,
 } from './materialUploadValidation'
-export type { MaterialFailureReason, MaterialStatus, StudyMaterial } from './materialTypes'
+export type {
+  MaterialFailureReason,
+  MaterialOverview,
+  MaterialOverviewStatus,
+  MaterialStatus,
+  StudyMaterial,
+} from './materialTypes'
 export {
   createMaterialsRepository,
   type MaterialsRepository,
