@@ -8,9 +8,7 @@ import {
   rememberClassroomId,
 } from '../features/classrooms'
 import { createExamsRepository } from '../features/exams'
-import { createReportsRepository } from '../features/reports'
 import { getRequestErrorMessage } from '../shared/api'
-import { isApiCapabilityEnabled } from '../shared/config/capabilities'
 import { ButtonLink, ErrorState, LoadingState } from '../shared/ui'
 import {
   classroomAnalyticsPath,
@@ -19,7 +17,6 @@ import {
   classroomEntranceRequestsPath,
   classroomExamDetailPath,
   classroomExamsPath,
-  classroomReportDetailPath,
   routes,
 } from './routes'
 
@@ -93,39 +90,6 @@ export function LegacyExamDetailRedirect() {
   if (error) return <ErrorState action={<ButtonLink to={routes.classrooms}>내 강의실로</ButtonLink>} description={error} title="시험 경로를 복원하지 못했습니다" />
   if (!classroomId) return <LoadingState message="시험이 속한 강의실을 확인하는 중입니다." />
   return <Navigate replace to={classroomExamDetailPath(classroomId, examId)} />
-}
-
-export function LegacyReportDetailRedirect() {
-  const { apiRequest } = useAuth()
-  const { reportId = '' } = useParams()
-  const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
-  const [target, setTarget] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!reportId || !isApiCapabilityEnabled('reports')) return
-    const controller = new AbortController()
-    repository.getReport(reportId, controller.signal)
-      .then((report) => {
-        if (!report.classroomId || !report.studentId) {
-          throw new Error('리포트의 강의실 또는 학습자 정보가 없습니다.')
-        }
-        rememberClassroomId(report.classroomId)
-        setTarget(classroomReportDetailPath(report.classroomId, report.studentId, report.reportId))
-      })
-      .catch((requestError) => {
-        if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
-      })
-    return () => controller.abort()
-  }, [reportId, repository])
-
-  if (!isApiCapabilityEnabled('reports')) {
-    return <ErrorState action={<ButtonLink to={routes.classrooms}>내 강의실로</ButtonLink>} description="현재 빌드에서 리포트 기능이 비활성화되어 기존 링크를 복원할 수 없습니다." title="리포트 기능 비활성화" />
-  }
-  if (!reportId) return <Navigate replace to={routes.classrooms} />
-  if (error) return <ErrorState action={<ButtonLink to={routes.classrooms}>내 강의실로</ButtonLink>} description={error} title="리포트 경로를 복원하지 못했습니다" />
-  if (!target) return <LoadingState message="리포트가 속한 강의실을 확인하는 중입니다." />
-  return <Navigate replace to={target} />
 }
 
 function getDestinationPath(destination: ClassroomDestination, classroomId: string): string {

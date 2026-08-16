@@ -19,7 +19,6 @@ export const routes = {
   classroomStudentReports: '/classrooms/:classroomId/students/:studentId/reports',
   classroomReportDetail: '/classrooms/:classroomId/students/:studentId/reports/:reportId',
   classroomReportCriteria: '/classrooms/:classroomId/report-criteria',
-  legacyReportDetail: '/reports/:reportId',
   legacyClassroomEdit: '/classrooms/:classroomId/edit',
   calendar: '/calendar',
   notes: '/notes',
@@ -76,22 +75,6 @@ export function classroomExamDetailPath(classroomId: string | number, examId: st
 
 export function classroomEntranceRequestsPath(classroomId: string | number): string {
   return `/classrooms/${encodeURIComponent(String(classroomId))}/entrance-requests`
-}
-
-export function classroomReportsPath(classroomId: string | number): string {
-  return `/classrooms/${encodeURIComponent(String(classroomId))}/reports`
-}
-
-export function classroomStudentReportsPath(classroomId: string | number, studentId: string | number): string {
-  return `/classrooms/${encodeURIComponent(String(classroomId))}/students/${encodeURIComponent(String(studentId))}/reports`
-}
-
-export function classroomReportDetailPath(classroomId: string | number, studentId: string | number, reportId: string | number): string {
-  return `${classroomStudentReportsPath(classroomId, studentId)}/${encodeURIComponent(String(reportId))}`
-}
-
-export function classroomReportCriteriaPath(classroomId: string | number): string {
-  return `/classrooms/${encodeURIComponent(String(classroomId))}/report-criteria`
 }
 
 export function materialViewerPath(materialId: string | number): string {

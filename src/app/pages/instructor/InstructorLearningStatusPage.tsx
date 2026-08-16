@@ -14,8 +14,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
 import { formatRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, ButtonLink, EmptyState } from '../../../shared/ui'
-import { classroomStudentReportsPath } from '../../routes'
+import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
@@ -68,10 +67,10 @@ export function InstructorLearningStatusPage() {
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader activeTab="learning" classroom={classroom} />
 
-      <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-12 xl:grid-rows-[minmax(16rem,0.9fr)_minmax(20rem,1.1fr)]">
-        <MaterialAnalyticsPanel analytics={analytics} className="xl:col-span-7" />
-        <QuestionAnalyticsPanel analytics={analytics} className="xl:col-span-5" />
-        <StudentLearningTable classroomId={classroom.id} className="xl:col-span-12" students={students} />
+      <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(460px,1.35fr)]">
+        <MaterialAnalyticsPanel analytics={analytics} />
+        <QuestionAnalyticsPanel analytics={analytics} />
+        <StudentLearningTable students={students} />
       </section>
     </ClassroomWorkspaceContainer>
   )
@@ -113,14 +112,18 @@ function QuestionAnalyticsPanel({ analytics, className }: { analytics: Classroom
 
   const maximum = Math.max(...questions.map((item) => item.questionCount), 1)
   return (
-    <article className={cx('flex h-full min-h-64 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
+    <article className={cx('h-full overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
       <div className="border-b border-stone-100 px-5 py-4"><h2 className="type-body font-bold text-stone-900">페이지별 질문 수</h2></div>
-      <div className="flex flex-1 items-end justify-around gap-3 px-5 pt-8 pb-4">
+      <div className="divide-y divide-stone-100">
         {questions.map((item) => (
-          <div className="flex h-40 min-w-0 flex-1 flex-col items-center justify-end" key={`${item.materialId}-${item.pageNumber}`}>
-            <strong className="mb-2 type-caption text-brand-700">{item.questionCount}</strong>
-            <div aria-label={`${item.pageNumber}쪽 질문 ${item.questionCount}건`} className="w-full max-w-8 rounded-t-md bg-brand-200" style={{ height: `${Math.max(12, item.questionCount / maximum * 100)}%` }} />
-            <span className="mt-2 type-caption text-stone-500">p.{item.pageNumber}</span>
+          <div className="px-5 py-3.5" key={`${item.materialId}-${item.pageNumber}`}>
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <strong className="type-control text-stone-900">p.{item.pageNumber}</strong>
+              <span className="shrink-0 type-caption text-stone-500">질문 {item.questionCount}건</span>
+            </div>
+            <div aria-label={`${item.pageNumber}쪽 질문 ${item.questionCount}건`} className="h-1.5 overflow-hidden rounded-full bg-stone-100">
+              <span className="block h-full rounded-full bg-brand-600" style={{ width: `${item.questionCount / maximum * 100}%` }} />
+            </div>
           </div>
         ))}
       </div>
@@ -128,24 +131,23 @@ function QuestionAnalyticsPanel({ analytics, className }: { analytics: Classroom
   )
 }
 
-function StudentLearningTable({ classroomId, className, students }: { classroomId: string; className?: string; students: ClassroomStudent[] }) {
+function StudentLearningTable({ className, students }: { className?: string; students: ClassroomStudent[] }) {
   const orderedStudents = [...students].sort((left, right) => getActivityTime(right) - getActivityTime(left))
 
   return (
     <section aria-label="수강생별 학습 현황" className={cx('h-full overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
       <div className="flex items-center justify-between gap-4 border-b border-stone-100 px-5 py-4">
         <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
-        <p className="type-caption text-stone-400">리포트는 서버에 기록된 학습 데이터를 기준으로 생성됩니다.</p>
       </div>
       <div className="overflow-x-auto">
-        <div className="min-w-[820px]">
-          <div className="grid min-h-10 grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_120px_120px_100px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
-            <span>이름</span><span>평균 진도율</span><span>최근 7일 AI 질문</span><span>최근 학습</span><span className="text-center">리포트</span>
+        <div className="min-w-[560px]">
+          <div className="grid min-h-10 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+            <span>이름</span><span>평균 진도율</span><span>최근 7일 AI 질문</span><span>최근 학습</span>
           </div>
           {orderedStudents.length === 0 ? (
             <div className="flex min-h-40 items-center justify-center type-body text-stone-400">표시할 수강생이 없습니다.</div>
           ) : orderedStudents.map((student) => (
-            <article className="grid min-h-14 grid-cols-[minmax(240px,1.4fr)_minmax(180px,1fr)_120px_120px_100px] items-center gap-4 border-b border-stone-100 px-5 last:border-0" key={student.id}>
+            <article className="grid min-h-14 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px] items-center gap-3 border-b border-stone-100 px-5 last:border-0" key={student.id}>
               <div className="flex min-w-0 items-center gap-3">
                 <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
                 <div className="min-w-0"><strong className="block truncate type-control text-stone-900">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></div>
@@ -153,7 +155,6 @@ function StudentLearningTable({ classroomId, className, students }: { classroomI
               <StudentProgress value={student.averageProgressRate} />
               <span className="type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
               <span className="type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
-              <ButtonLink className="justify-self-center" size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary">리포트</ButtonLink>
             </article>
           ))}
         </div>
