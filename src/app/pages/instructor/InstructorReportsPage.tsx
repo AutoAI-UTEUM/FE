@@ -5,6 +5,7 @@ import {
   BarChart3,
   ChevronRight,
   FileSearch,
+  LoaderCircle,
   Plus,
   Settings2,
 } from 'lucide-react'
@@ -207,17 +208,18 @@ export function InstructorStudentReportsPage() {
     void createReport()
   }
 
+  const isReportGenerating = isCreating || Boolean(activeReport && isReportPending(activeReport))
+
   return <PageContainer>
     <PageHeader actions={<ButtonLink to={classroomReportsPath(classroomId)} variant="secondary">학습자 목록</ButtonLink>} title="학생 리포트" />
     {!reportsEnabled ? <ReportsUnavailableState /> : null}
     {reportsEnabled && isLoading ? <LoadingState message="리포트 정보를 불러오는 중입니다." /> : null}
     {reportsEnabled && !isLoading ? <>
       <section className="rounded-lg border border-stone-200 bg-white p-5" aria-labelledby="report-scope-title">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="type-section-title font-bold text-stone-950" id="report-scope-title">분석 범위</h2><p className="mt-1 type-caption text-stone-500">전체 학습 기간 또는 한 주차를 선택합니다.</p></div><Button disabled={isCreating || (scopeType === 'WEEK' && selectedWeek === null)} onClick={startNewGeneration}><BarChart3 size={15} />{isCreating ? '생성 중' : '새 리포트 생성'}</Button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="type-section-title font-bold text-stone-950" id="report-scope-title">분석 범위</h2><p className="mt-1 type-caption text-stone-500">전체 학습 기간 또는 한 주차를 선택합니다.</p></div><Button aria-busy={isReportGenerating} disabled={isReportGenerating || (scopeType === 'WEEK' && selectedWeek === null)} onClick={startNewGeneration}>{isReportGenerating ? <LoaderCircle aria-hidden="true" className="animate-spin" size={15} /> : <BarChart3 aria-hidden="true" size={15} />}{isReportGenerating ? '리포트 생성 중' : '새 리포트 생성'}</Button></div>
         <div className="mt-4 inline-flex rounded-lg border border-stone-200 bg-stone-50 p-1" role="radiogroup" aria-label="분석 범위"><ScopeButton active={scopeType === 'FULL'} label="전체 기간" onClick={() => setScopeType('FULL')} /><ScopeButton active={scopeType === 'WEEK'} label="주차 선택" onClick={() => setScopeType('WEEK')} /></div>
         {scopeType === 'WEEK' ? <label className="mt-4 block max-w-sm type-control font-semibold text-stone-700" htmlFor="report-week-select">분석 주차<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body font-normal text-stone-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400" disabled={weeks.length === 0} id="report-week-select" onChange={(event) => setSelectedWeek(event.target.value ? Number(event.target.value) : null)} value={selectedWeek ?? ''}><option value="">{weeks.length === 0 ? '선택 가능한 주차가 없습니다' : '주차를 선택하세요'}</option>{weeks.map((week) => <option key={week.weekNumber} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label> : null}
       </section>
-      {activeReport && isReportPending(activeReport) ? <section className="rounded-lg border border-brand-200 bg-brand-50 px-5 py-4" role="status"><p className="type-body font-semibold text-brand-900">학습 기록을 분석하고 있습니다.</p><p className="mt-1 type-caption text-brand-700">창을 닫아도 서버 작업은 계속됩니다. 완료 상태를 주기적으로 확인합니다.</p></section> : null}
       {activeReport?.status === 'FAILED' ? <ErrorState action={<Button onClick={startNewGeneration}>다시 생성</Button>} description={activeReport.failureMessage ?? '리포트 생성에 실패했습니다.'} title="리포트를 생성하지 못했습니다" /> : null}
       {isDelayed ? <ErrorState action={<Button onClick={() => { setIsDelayed(false); setIsCreating(true); setActiveReport((current) => current ? { ...current, status: 'PROCESSING' } : current) }} variant="secondary">상태 다시 확인</Button>} description="서버 작업은 계속될 수 있습니다. 새 작업을 만들지 않고 현재 작업 상태를 다시 확인합니다." title="리포트 생성이 지연되고 있습니다" /> : null}
       {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}
@@ -368,7 +370,7 @@ function TrendDirectionIcon({ trend }: { trend: string }) {
 
 function CriterionResultCard({ evidence, result }: { evidence: StudentReport['evidence']; result: ReportCriterionResult }) {
   const isInsufficient = result.status === 'INSUFFICIENT_DATA' || result.score === null
-  return <article className="rounded-lg border border-stone-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="type-body font-bold text-stone-900">{result.criterionName || result.criterionKey}</h3><p className="mt-1 type-caption text-stone-500">{getTrendLabel(result.trend)}</p></div>{isInsufficient ? <Badge tone="neutral">데이터 부족</Badge> : <strong className="type-dialog-title text-brand-700">{result.score}점</strong>}</div>{!isInsufficient ? <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100"><span className="block h-full rounded-full bg-brand-600" style={{ width: `${result.score}%` }} /></div> : null}<p className="mt-3 type-control leading-5 text-stone-600">{result.narrative}</p><EvidenceDetails evidence={evidence} evidenceIds={result.evidenceIds} /></article>
+  return <article className="rounded-lg border border-stone-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="type-body font-bold text-stone-900">{getCriterionTitle(result)}</h3><p className="mt-1 type-caption text-stone-500">{getTrendLabel(result.trend)}</p></div>{isInsufficient ? <Badge tone="neutral">데이터 부족</Badge> : <strong className="type-dialog-title text-brand-700">{result.score}점</strong>}</div>{!isInsufficient ? <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100"><span className="block h-full rounded-full bg-brand-600" style={{ width: `${result.score}%` }} /></div> : null}<p className="mt-3 type-control leading-5 text-stone-600">{result.narrative}</p><EvidenceDetails evidence={evidence} evidenceIds={result.evidenceIds} /></article>
 }
 
 function StatementSection({ evidence, items, title }: { evidence: StudentReport['evidence']; items: ReportStatement[]; title: string }) {
@@ -378,11 +380,52 @@ function StatementSection({ evidence, items, title }: { evidence: StudentReport[
 function EvidenceDetails({ evidence, evidenceIds }: { evidence: StudentReport['evidence']; evidenceIds: string[] }) {
   const matches = evidence.filter((item) => evidenceIds.includes(item.evidenceId))
   if (matches.length === 0) return null
-  return <details className="mt-3"><summary className="cursor-pointer type-caption font-semibold text-brand-700">근거 {matches.length}개</summary><ul className="mt-2 space-y-2">{matches.map((item) => <li className="rounded-md bg-stone-50 px-3 py-2 type-caption leading-5 text-stone-600" key={item.evidenceId}><strong className="text-stone-800">{item.label}</strong><span className="ml-2 text-stone-400">{getEvidenceSourceLabel(item.sourceType)} · {formatDateTime(item.occurredAt)}</span><p>{item.fact}</p></li>)}</ul></details>
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer type-caption font-semibold text-brand-700">근거 {matches.length}개</summary>
+      <ul className="mt-2 space-y-2">
+        {matches.map((item) => (
+          <li className="rounded-md bg-stone-50 px-3 py-2 type-caption leading-5 text-stone-600" key={item.evidenceId}>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <strong className="text-stone-800">{item.label}</strong>
+              <span className="text-stone-400">{formatDateTime(item.occurredAt)}</span>
+            </div>
+            {item.metrics?.length ? (
+              <dl className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                {item.metrics.map((metric, index) => (
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-stone-200 bg-white px-2.5 py-1.5" key={`${metric.label}-${index}`}>
+                    <dt className="text-stone-500">{metric.label}</dt>
+                    <dd className="font-semibold text-stone-900">{metric.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : item.fact ? <p className="mt-1">{item.fact}</p> : null}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
 }
 
 function isReportPending(report: StudentReport): boolean { return report.status === 'PENDING' || report.status === 'PROCESSING' }
 function createRequestId(): string { return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `report-${Date.now()}` }
 function createCriterionKey(name: string): string { return `custom_${name.trim().toLowerCase().replace(/[^a-z0-9가-힣]+/g, '_').replace(/^_|_$/g, '')}_${Date.now().toString(36)}`.slice(0, 50) }
 function getTrendLabel(trend?: string | null): string { if (!trend) return '추세 정보 없음'; const values: Record<string, string> = { DECLINING: '하락', DOWN: '하락', FLAT: '유지', IMPROVING: '상승', STABLE: '유지', UP: '상승' }; return values[trend.toUpperCase()] ?? trend }
-function getEvidenceSourceLabel(sourceType: string): string { const values: Record<string, string> = { DIAGNOSIS: '오답 진단', EXAM_SUBMISSION: '별도 시험', MEMORY: '학습자 메모리', QA_QUESTION: '학습 질문', QUIZ_SUBMISSION: '통합학습 퀴즈', SESSION: '학습 세션' }; return values[sourceType.toUpperCase()] ?? sourceType }
+
+const criterionTitles: Record<string, string> = {
+  application_transfer: '응용 및 전이력',
+  class_participation: '수업 참여도',
+  concept_understanding: '개념 이해도',
+  error_reflection: '오답 성찰력',
+  growth_flow: '성장 흐름',
+  growth_trend: '성장 흐름',
+  learning_persistence: '학습 지속성',
+  problem_solving: '문제 해결력',
+  question_specificity: '질문 구체성',
+  quiz_exam_accuracy: '퀴즈 및 시험 정확도',
+}
+
+function getCriterionTitle(result: ReportCriterionResult): string {
+  const normalizedKey = result.criterionKey.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return criterionTitles[normalizedKey] ?? (result.criterionName || result.criterionKey)
+}

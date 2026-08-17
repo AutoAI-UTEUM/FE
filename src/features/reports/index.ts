@@ -5,6 +5,7 @@ export type {
   ReportCriterionResult,
   ReportCriterionStatus,
   ReportEvidence,
+  ReportEvidenceMetric,
   ReportGenerationStatus,
   ReportScope,
   ReportStatement,

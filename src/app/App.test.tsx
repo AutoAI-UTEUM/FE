@@ -7,6 +7,7 @@ import {
   AuthProvider,
   type AuthUser,
 } from '../features/auth'
+import { CLASSROOMS_CHANGED_EVENT } from '../features/classrooms'
 import { ToastProvider } from '../shared/ui'
 import {
   apiFailure,
@@ -168,6 +169,52 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('button', { name: '알림 0개' })).toBeInTheDocument()
   })
 
+  it('refreshes the sidebar when the classroom list changes', async () => {
+    let isDeleted = false
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
+        return apiSuccess({
+          items: isDeleted ? [] : [{
+            classroomId: 12,
+            color: 'BLUE',
+            description: '강의자 강의실',
+            endDate: '2026-11-15',
+            instructorName: '강의자',
+            learnerCount: 20,
+            name: '삭제할 강의실',
+            pendingRequestCount: 0,
+            progressRate: 30,
+            startDate: '2026-08-03',
+            status: 'ACTIVE',
+            weekCount: 15,
+          }],
+          page: 0,
+          size: 100,
+          totalElements: isDeleted ? 0 : 1,
+          totalPages: isDeleted ? 0 : 1,
+        })
+      }
+      return undefined
+    })
+
+    renderRoute('/', {
+      email: 'instructor@example.com',
+      name: '강의자',
+      role: 'INSTRUCTOR',
+    })
+
+    const sidebar = screen.getByRole('complementary')
+    expect(await within(sidebar).findByRole('link', { name: '삭제할 강의실' })).toBeInTheDocument()
+
+    isDeleted = true
+    window.dispatchEvent(new Event(CLASSROOMS_CHANGED_EVENT))
+
+    await waitFor(() => {
+      expect(within(sidebar).queryByRole('link', { name: '삭제할 강의실' })).not.toBeInTheDocument()
+    })
+  })
+
   it('shows an access error for learners on instructor-only routes', () => {
     renderRoute('/classrooms/12/entrance-requests')
 
@@ -275,7 +322,7 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBe(heading)
   })
 
-  it('opens a student report without restoring the insufficient-data banner', async () => {
+  it('localizes report criteria and hides evidence source codes', async () => {
     installApiFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/reports/55') {
@@ -283,14 +330,24 @@ describe('AppRoutes', () => {
           classroomId: 12,
           criteria: [{
             criterionKey: 'concept_understanding',
-            criterionName: '개념 이해도',
-            evidenceIds: [],
+            criterionName: 'Concept Understanding',
+            evidenceIds: ['evidence-1'],
             narrative: '판단할 기록이 더 필요합니다.',
             score: null,
             status: 'INSUFFICIENT_DATA',
             trend: 'STABLE',
           }],
-          evidence: [],
+          evidence: [{
+            evidenceId: 'evidence-1',
+            metrics: [
+              { label: '평균 점수', value: '25.69점' },
+              { label: '강점 문항', value: '3개' },
+              { label: '보완 문항', value: '5개' },
+            ],
+            occurredAt: '2026-08-05T08:41:00Z',
+            publicLabel: '퀴즈 평가 결과',
+            sourceType: 'QUIZ_ASSESSMENT',
+          }],
           overallScore: null,
           reportId: 55,
           status: 'COMPLETED',
@@ -309,6 +366,16 @@ describe('AppRoutes', () => {
 
     expect(await screen.findByRole('heading', { name: '김학습 리포트' })).toBeInTheDocument()
     expect(screen.getAllByText('관찰 데이터 축적 중')).toHaveLength(1)
+    expect(screen.getByRole('heading', { name: '개념 이해도' })).toBeInTheDocument()
+    expect(screen.queryByText('Concept Understanding')).not.toBeInTheDocument()
+    expect(screen.getByText('퀴즈 평가 결과')).toBeInTheDocument()
+    expect(screen.getByText('평균 점수')).toBeInTheDocument()
+    expect(screen.getByText('25.69점')).toBeInTheDocument()
+    expect(screen.getByText('강점 문항')).toBeInTheDocument()
+    expect(screen.getByText('3개')).toBeInTheDocument()
+    expect(screen.getByText('보완 문항')).toBeInTheDocument()
+    expect(screen.getByText('5개')).toBeInTheDocument()
+    expect(screen.queryByText('QUIZ_ASSESSMENT')).not.toBeInTheDocument()
     expect(screen.queryByText('근거가 부족한 항목은 점수로 환산하지 않습니다. 추가 학습 기록이 쌓인 뒤 리포트를 다시 생성해 주세요.')).not.toBeInTheDocument()
   })
 
@@ -317,6 +384,15 @@ describe('AppRoutes', () => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/classrooms/12/students/31/reports') {
         return apiSuccess({ activeGeneration: null, items: [] })
+      }
+      if (request.method === 'POST' && url.pathname === '/api/classrooms/12/students/31/reports') {
+        return apiSuccess({
+          classroomId: 12,
+          pollAfterSeconds: 10,
+          reportId: 77,
+          status: 'PENDING',
+          studentId: 31,
+        }, 202)
       }
       return undefined
     })
@@ -330,6 +406,14 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('heading', { name: '학생 리포트' })).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '새 리포트 생성' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '저장된 버전' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '새 리포트 생성' }))
+
+    const generatingButton = await screen.findByRole('button', { name: '리포트 생성 중' })
+    expect(generatingButton).toBeDisabled()
+    expect(generatingButton).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByText('학습 기록을 분석하고 있습니다.')).not.toBeInTheDocument()
+    expect(screen.queryByText('창을 닫아도 서버 작업은 계속됩니다. 완료 상태를 주기적으로 확인합니다.')).not.toBeInTheDocument()
   })
 
   it('shows upcoming calendar schedules in the notification panel', async () => {

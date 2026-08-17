@@ -16,10 +16,16 @@ export interface ReportStudent {
 
 export interface ReportEvidence {
   evidenceId: string
-  fact: string
+  fact?: string
   label: string
+  metrics?: ReportEvidenceMetric[]
   occurredAt: string
   sourceType: string
+}
+
+export interface ReportEvidenceMetric {
+  label: string
+  value: string
 }
 
 export interface ReportCriterionResult {
@@ -103,6 +109,7 @@ interface ReportEvidenceDto {
   evidenceId: string
   fact?: string
   label?: string
+  metrics?: ReportEvidenceMetric[]
   occurredAt: string
   publicLabel?: string
   sourceType: string
@@ -242,7 +249,6 @@ function mapReport(
     })),
     evidence: (value.evidence ?? []).map((item) => ({
       ...item,
-      fact: item.fact ?? item.publicLabel ?? '',
       label: item.label ?? item.publicLabel ?? item.sourceType,
     })),
     failureMessage: value.failureMessage ?? value.failureCode,
