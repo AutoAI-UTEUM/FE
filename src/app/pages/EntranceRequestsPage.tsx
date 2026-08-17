@@ -294,5 +294,5 @@ export function EntranceRequestsPage() {
 }
 
 function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-selected={active} className={cx('h-8 rounded-md px-3 type-caption font-semibold', active ? 'bg-stone-900 text-white' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
+  return <button aria-selected={active} className={cx('h-8 rounded-md px-3 type-caption font-semibold', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
 }

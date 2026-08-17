@@ -327,7 +327,7 @@ function SegmentedControl({
           className={cx(
             'h-8 min-w-10 rounded-md px-2.5 type-caption font-semibold',
             value === option
-              ? 'bg-stone-900 text-white'
+              ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950'
               : 'text-stone-500 hover:bg-stone-100 hover:text-stone-900',
           )}
           key={option}
