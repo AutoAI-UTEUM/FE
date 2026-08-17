@@ -141,6 +141,8 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('button', { name: '시험 추가' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '자료 추가' }))
     const uploadDialog = screen.getByRole('dialog', { name: '강의자료 업로드' })
+    expect(within(uploadDialog).queryByText('PDF · 최대 45MB')).not.toBeInTheDocument()
+    expect(within(uploadDialog).queryByText('PPT/PPTX는 PDF로 변환 후 업로드해 주세요.')).not.toBeInTheDocument()
     const weekSelect = within(uploadDialog).getByRole('combobox', { name: '주차 선택' })
     expect([...weekSelect.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
       '1주차 · 자료구조 기초',
