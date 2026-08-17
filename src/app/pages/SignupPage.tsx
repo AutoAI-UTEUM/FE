@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronUp,
   Check,
   Eye,
   EyeOff,
@@ -11,7 +10,6 @@ import {
 } from 'lucide-react'
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -33,9 +31,7 @@ import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
 const initialValues: SignupFormValues = {
-  affiliation: '',
   email: '',
-  learningEmailOptIn: false,
   name: '',
   password: '',
   role: 'LEARNER',
@@ -71,14 +67,6 @@ const roleOptions: Array<{
   },
 ]
 
-const AFFILIATIONS = [
-  { name: '서울대학교', type: '대학교' },
-  { name: '서울과학기술대학교', type: '대학교' },
-  { name: '서울시립대학교', type: '대학교' },
-  { name: '연세대학교', type: '대학교' },
-  { name: '고려대학교', type: '대학교' },
-]
-
 export function SignupPage() {
   usePageTitle('회원가입')
   const { checkEmailAvailability, signup } = useAuth()
@@ -97,36 +85,9 @@ export function SignupPage() {
   >(null)
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     useState(false)
-  const [affiliation, setAffiliation] = useState('')
-  const [isAffiliationOpen, setIsAffiliationOpen] = useState(false)
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false)
-  const [acceptsLearningEmails, setAcceptsLearningEmails] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
-  const affiliationContainerRef = useRef<HTMLDivElement | null>(null)
   const emailAvailabilitySupportedRef = useRef(true)
-
-  const filteredAffiliations = useMemo(() => {
-    const query = affiliation.trim().toLowerCase()
-    if (!query) return AFFILIATIONS.slice(0, 3)
-    return AFFILIATIONS.filter((item) =>
-      item.name.toLowerCase().includes(query),
-    ).slice(0, 3)
-  }, [affiliation])
-
-  useEffect(() => {
-    if (!isAffiliationOpen) return
-
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      if (
-        !affiliationContainerRef.current?.contains(event.target as Node)
-      ) {
-        setIsAffiliationOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', closeOnOutsidePress)
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePress)
-  }, [isAffiliationOpen])
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
@@ -207,11 +168,7 @@ export function SignupPage() {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await signup({
-        ...values,
-        affiliation,
-        learningEmailOptIn: acceptsLearningEmails,
-      })
+      await signup(values)
       navigate(routes.classrooms, { replace: true })
     } catch (error) {
       const formErrors = mapAuthErrorToFormErrors(error)
@@ -562,82 +519,6 @@ export function SignupPage() {
           </div>
         </div>
 
-        <div className="relative" ref={affiliationContainerRef}>
-          <label
-            className="type-control font-semibold text-stone-800"
-            htmlFor="signup-affiliation"
-          >
-            소속{' '}
-            <span className="font-normal text-stone-400">(선택)</span>
-          </label>
-          <div className="relative mt-1">
-            <input
-              aria-autocomplete="list"
-              aria-controls="affiliation-options"
-              aria-expanded={isAffiliationOpen}
-              autoComplete="organization"
-              className={fieldClassName(false, 'pr-10')}
-              id="signup-affiliation"
-              onChange={(event) => {
-                setAffiliation(event.target.value)
-                setIsAffiliationOpen(true)
-              }}
-              onFocus={() => setIsAffiliationOpen(true)}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') setIsAffiliationOpen(false)
-              }}
-              placeholder="학교 · 기관"
-              role="combobox"
-              value={affiliation}
-            />
-            <ChevronUp
-              aria-hidden="true"
-              className={[
-                'pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-stone-400 transition-transform',
-                isAffiliationOpen ? '' : 'rotate-180',
-              ].join(' ')}
-              size={15}
-            />
-          </div>
-
-          {isAffiliationOpen ? (
-            <div
-              className="absolute top-[calc(100%+5px)] right-0 left-0 z-20 overflow-hidden rounded-lg border border-stone-200 bg-white p-1 shadow-lg"
-              id="affiliation-options"
-              role="listbox"
-            >
-              {filteredAffiliations.map((item, index) => (
-                <button
-                  className={[
-                    'flex h-9 w-full items-center rounded-md px-3 text-left type-control text-stone-700 hover:bg-stone-50',
-                    index === 0 ? 'bg-stone-100 font-semibold text-stone-900' : '',
-                  ].join(' ')}
-                  key={item.name}
-                  onClick={() => {
-                    setAffiliation(item.name)
-                    setIsAffiliationOpen(false)
-                  }}
-                  role="option"
-                  type="button"
-                >
-                  {item.name}
-                  <span className="ml-auto type-micro font-normal text-stone-400">
-                    {item.type}
-                  </span>
-                </button>
-              ))}
-              <div className="mx-2 my-1 h-px bg-stone-100" />
-              <button
-                className="flex h-9 w-full items-center rounded-md px-3 text-left type-control font-semibold text-brand-700 hover:bg-brand-50"
-                onClick={() => setIsAffiliationOpen(false)}
-                type="button"
-              >
-                + “{affiliation.trim() || '소속'}” 직접 입력
-              </button>
-            </div>
-          ) : null}
-        </div>
-
         <div className="grid gap-2 pt-1">
           <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
             <input
@@ -653,15 +534,6 @@ export function SignupPage() {
               이용약관 및 개인정보 처리방침 동의{' '}
               <span className="font-semibold text-rose-600">*</span>
             </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
-            <input
-              checked={acceptsLearningEmails}
-              className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"
-              onChange={(event) => setAcceptsLearningEmails(event.target.checked)}
-              type="checkbox"
-            />
-            학습 소식 이메일 수신 (선택)
           </label>
           {termsError ? (
             <p className="type-caption font-medium text-rose-700" role="alert">
