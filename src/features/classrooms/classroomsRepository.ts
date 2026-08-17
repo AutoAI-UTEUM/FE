@@ -8,6 +8,7 @@ export type ClassroomWeekStatus = 'PRIVATE' | 'SCHEDULED' | 'PUBLISHED' | 'BREAK
 export type ClassroomStudentSort = 'RECENT_ACTIVITY' | 'NAME' | 'LOW_PROGRESS'
 
 export const JOIN_REQUESTS_CHANGED_EVENT = 'edupilot:join-requests-changed'
+export const CLASSROOMS_CHANGED_EVENT = 'edupilot:classrooms-changed'
 
 export interface Classroom {
   color: ClassroomColor

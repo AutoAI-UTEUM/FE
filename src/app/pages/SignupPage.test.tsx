@@ -72,7 +72,7 @@ describe('SignupPage', () => {
     expect(screen.getByText('필수 약관에 동의해 주세요.')).toBeInTheDocument()
   })
 
-  it('shows password strength and selects an affiliation suggestion', () => {
+  it('shows password strength without optional profile fields', () => {
     renderSignup()
 
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
@@ -95,14 +95,8 @@ describe('SignupPage', () => {
       'password',
     )
 
-    fireEvent.change(screen.getByRole('combobox', { name: /소속/ }), {
-      target: { value: '서울' },
-    })
-    fireEvent.click(screen.getByRole('option', { name: /서울대학교/ }))
-
-    expect(screen.getByRole('combobox', { name: /소속/ })).toHaveValue(
-      '서울대학교',
-    )
+    expect(screen.queryByLabelText(/소속/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /학습 소식 이메일 수신/ })).not.toBeInTheDocument()
   })
 
   it('signs up, auto-logs-in, and redirects to classrooms', async () => {
@@ -136,13 +130,14 @@ describe('SignupPage', () => {
       .mock.calls.find(([input]) =>
         String(input).endsWith('/api/auth/signup'),
       )
-    expect(JSON.parse(String(signupCall?.[1]?.body))).toMatchObject({
+    const signupBody = JSON.parse(String(signupCall?.[1]?.body))
+    expect(signupBody).toMatchObject({
       email: 'new@example.com',
+      learningEmailOptIn: false,
       role: 'INSTRUCTOR',
     })
-    expect(JSON.parse(String(signupCall?.[1]?.body))).not.toHaveProperty(
-      'confirmPassword',
-    )
+    expect(signupBody).not.toHaveProperty('affiliation')
+    expect(signupBody).not.toHaveProperty('confirmPassword')
   })
 
   it('blocks signup when the passwords do not match', () => {

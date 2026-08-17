@@ -34,7 +34,7 @@ export function SessionResourcePanel({
       <div className="flex justify-end">
         <button
           aria-label="자료 목록 닫기"
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
           onClick={onClose}
           title="자료 목록 닫기"
           type="button"
@@ -104,8 +104,8 @@ function ResourceRow({
         isActive
           ? 'bg-white font-semibold text-stone-900 shadow-sm'
           : isMuted
-            ? 'text-stone-400 hover:bg-white'
-            : 'text-stone-600 hover:bg-white hover:text-stone-900',
+            ? 'text-stone-400 hover:bg-white dark:hover:bg-stone-100'
+            : 'text-stone-600 hover:bg-white hover:text-stone-900 dark:hover:bg-stone-100',
       )}
       to={to}
     >

@@ -1,4 +1,5 @@
 export {
+  CLASSROOMS_CHANGED_EVENT,
   createClassroomsRepository,
   JOIN_REQUESTS_CHANGED_EVENT,
 } from './classroomsRepository'

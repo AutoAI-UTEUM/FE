@@ -623,7 +623,7 @@ function QuizzesPanel({
         return (
           <button
             aria-label={`${quiz.title} ${submitted ? '결과 및 문제 보기' : '퀴즈 이어 풀기'}`}
-            className="rounded-xl border border-stone-200 bg-white p-3.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-default disabled:hover:border-stone-200 disabled:hover:bg-white"
+            className="rounded-xl border border-stone-200 bg-white p-3.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-default disabled:hover:border-stone-200 disabled:hover:bg-white dark:disabled:hover:bg-stone-50"
             disabled={!onOpen}
             key={quiz.quizId}
             onClick={() => onOpen?.(quiz.quizId)}

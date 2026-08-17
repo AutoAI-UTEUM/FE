@@ -60,6 +60,7 @@ describe('ClassroomContentView week periods', () => {
         onRenameMaterial={vi.fn()}
         onRetry={vi.fn()}
         openingMaterialId={null}
+        processingMaterialTitle={null}
         selectedWeek={reorderedWeeks[0]}
         selectedWeekNumber={2}
         setDragging={vi.fn()}
@@ -68,5 +69,37 @@ describe('ClassroomContentView week periods', () => {
     )
 
     expect(screen.getByRole('heading', { name: '심화' }).parentElement).toHaveTextContent('8.10 - 8.16')
+  })
+
+  it('shows an upload processing row in place of the empty state', () => {
+    render(
+      <ClassroomContentPanel
+        canManage
+        draggingWeek={null}
+        endDate="2026-08-16"
+        errors={{}}
+        filter="material"
+        globalItems={[]}
+        isUploading={false}
+        items={[]}
+        onAdd={vi.fn()}
+        onDrop={vi.fn()}
+        onFilter={vi.fn()}
+        onItem={vi.fn()}
+        onRemoveMaterial={vi.fn()}
+        onRenameMaterial={vi.fn()}
+        onRetry={vi.fn()}
+        openingMaterialId={null}
+        processingMaterialTitle="lecture.pdf"
+        selectedWeek={reorderedWeeks[0]}
+        selectedWeekNumber={2}
+        setDragging={vi.fn()}
+        startDate="2026-08-03"
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent('강의자료를 처리하는 중입니다')
+    expect(screen.getByRole('status')).toHaveTextContent('lecture · 완료되면 목록에 표시됩니다.')
+    expect(screen.queryByRole('heading', { name: '항목 없음' })).not.toBeInTheDocument()
   })
 })

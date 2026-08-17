@@ -150,13 +150,13 @@ export function MarkdownEditor({
 }
 
 function FormatButton({ disabled, icon: Icon, label, onClick }: { disabled: boolean; icon: LucideIcon; label: string; onClick: () => void }) {
-  return <button aria-label={label} className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClick} title={label} type="button"><Icon aria-hidden="true" size={14} /></button>
+  return <button aria-label={label} className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-stone-100" disabled={disabled} onClick={onClick} title={label} type="button"><Icon aria-hidden="true" size={14} /></button>
 }
 
 function TextFormatButton({ children, disabled, label, onClick }: { children: string; disabled: boolean; label: string; onClick: () => void }) {
-  return <button aria-label={label} className="flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 type-caption font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40" disabled={disabled} onClick={onClick} title={label} type="button">{children}</button>
+  return <button aria-label={label} className="flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 type-caption font-bold text-stone-500 hover:bg-white hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-stone-100" disabled={disabled} onClick={onClick} title={label} type="button">{children}</button>
 }
 
 function ModeButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: LucideIcon; label: string; onClick: () => void }) {
-  return <button aria-pressed={active} className={cx('flex h-7 items-center gap-1.5 rounded px-2 type-caption font-semibold', active ? 'bg-stone-900 text-white' : 'text-stone-500 hover:bg-stone-50')} onClick={onClick} type="button"><Icon aria-hidden="true" size={13} />{label}</button>
+  return <button aria-pressed={active} className={cx('flex h-7 items-center gap-1.5 rounded px-2 type-caption font-semibold', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-50')} onClick={onClick} type="button"><Icon aria-hidden="true" size={13} />{label}</button>
 }

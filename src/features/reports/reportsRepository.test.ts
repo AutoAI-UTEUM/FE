@@ -49,7 +49,13 @@ describe('reports repository', () => {
           status: 'INSUFFICIENT_DATA',
           trend: 'STABLE',
         }],
-        evidence: [{ evidenceId: 'e-1', occurredAt: '2026-08-04T00:00:00Z', publicLabel: '퀴즈 3회', sourceType: 'QUIZ_SUBMISSION' }],
+        evidence: [{
+          evidenceId: 'e-1',
+          metrics: [{ label: '시도 회차', value: '3회' }],
+          occurredAt: '2026-08-04T00:00:00Z',
+          publicLabel: '퀴즈 3회',
+          sourceType: 'QUIZ_SUBMISSION',
+        }],
         overallScore: null,
         overallStage: '보완 필요',
         reportId: 'report-2',
@@ -65,7 +71,11 @@ describe('reports repository', () => {
     expect(report.overallScore).toBeNull()
     expect(report.criterionResults[0]?.score).toBeNull()
     expect(report.criterionResults[0]?.criterionName).toBe('quiz_accuracy')
-    expect(report.evidence[0]).toEqual(expect.objectContaining({ fact: '퀴즈 3회', label: '퀴즈 3회' }))
+    expect(report.evidence[0]).toEqual(expect.objectContaining({
+      label: '퀴즈 3회',
+      metrics: [{ label: '시도 회차', value: '3회' }],
+    }))
+    expect(report.evidence[0]).not.toHaveProperty('fact')
     expect(report.stage).toBe('보완 필요')
     expect(report.trend).toBe('DECLINING')
     expect(request).toHaveBeenCalledWith('/api/reports/report-2', { signal: undefined })

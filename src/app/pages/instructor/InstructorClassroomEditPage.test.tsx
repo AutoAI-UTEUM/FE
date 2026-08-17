@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import { AuthProvider } from '../../../features/auth'
+import { CLASSROOMS_CHANGED_EVENT } from '../../../features/classrooms'
 import { ToastProvider } from '../../../shared/ui'
 import { InstructorClassroomEditPage } from './InstructorClassroomEditPage'
 
@@ -14,6 +15,9 @@ afterEach(() => {
 describe('InstructorClassroomEditPage', () => {
   it('renders the design sections with API-backed classroom data', async () => {
     const permanentDeleteBodies: unknown[] = []
+    const classroomChanged = new Promise<Event>((resolve) => {
+      window.addEventListener(CLASSROOMS_CHANGED_EVENT, resolve, { once: true })
+    })
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(
         input instanceof Request ? input.url : String(input),
@@ -146,6 +150,7 @@ describe('InstructorClassroomEditPage', () => {
     expect(deleteButton).toBeEnabled()
     fireEvent.click(deleteButton)
     await waitFor(() => expect(permanentDeleteBodies).toEqual([{ confirmName: '자료구조' }]))
+    await expect(classroomChanged).resolves.toHaveProperty('type', CLASSROOMS_CHANGED_EVENT)
   })
 
   it('saves changed week names only after the settings form is submitted', async () => {

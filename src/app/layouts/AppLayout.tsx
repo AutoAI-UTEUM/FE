@@ -26,6 +26,7 @@ import {
 
 import { getRoleLabel, isInstructorRole, useAuth } from '../../features/auth'
 import {
+  CLASSROOMS_CHANGED_EVENT,
   createClassroomsRepository,
   JOIN_REQUESTS_CHANGED_EVENT,
   type Classroom,
@@ -136,9 +137,11 @@ export function AppLayout() {
     }
 
     refresh()
+    window.addEventListener(CLASSROOMS_CHANGED_EVENT, refresh)
     window.addEventListener(JOIN_REQUESTS_CHANGED_EVENT, refresh)
     return () => {
       cancelled = true
+      window.removeEventListener(CLASSROOMS_CHANGED_EVENT, refresh)
       window.removeEventListener(JOIN_REQUESTS_CHANGED_EVENT, refresh)
     }
   }, [classroomsRepository, isInstructor])
@@ -293,7 +296,7 @@ export function AppLayout() {
                   aria-expanded={isNotificationsOpen}
                   aria-haspopup="dialog"
                   aria-label={`알림 ${upcomingEvents.length}개`}
-                  className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                  className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
                   onClick={() => {
                     setIsNotificationsOpen((open) => !open)
                     setIsMenuOpen(false)
@@ -332,7 +335,7 @@ export function AppLayout() {
               </div>
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
-                className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex"
+                className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100 lg:flex"
                 onClick={() =>
                   setSidebarPreference({
                     isCollapsed: !isCollapsed,
@@ -389,7 +392,7 @@ export function AppLayout() {
                     {sidebarClassrooms.map((classroom) => (
                       <NavLink
                         className={({ isActive }) => cx(
-                          'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800',
+                          'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800 dark:hover:bg-stone-100',
                           isActive && 'bg-brand-50 text-brand-700',
                         )}
                         key={classroom.id}
@@ -434,7 +437,7 @@ export function AppLayout() {
             aria-haspopup="menu"
             aria-label="프로필 메뉴"
             className={cx(
-              'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-t border-transparent p-1.5 text-left hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+              'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-t border-transparent p-1.5 text-left hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100',
               isCollapsed && 'justify-center p-1',
             )}
             onClick={() => setIsMenuOpen((open) => !open)}
@@ -623,7 +626,7 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     isActive
       ? 'bg-white font-semibold text-stone-900 shadow-sm dark:bg-stone-200'
-      : 'font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800',
+      : 'font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800 dark:hover:bg-stone-100',
   )
 }
 

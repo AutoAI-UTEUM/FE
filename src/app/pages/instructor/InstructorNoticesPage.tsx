@@ -117,7 +117,7 @@ export function InstructorNoticesPage() {
         <aside className="flex min-h-0 flex-col border-b border-stone-200 bg-stone-50/60 lg:border-r lg:border-b-0">
           <div className="flex min-h-12 items-center justify-between border-b border-stone-200 px-4">
             <h2 className="type-body font-bold text-stone-900">공지 목록</h2>
-            <button aria-label="새 공지" className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-brand-700 disabled:cursor-not-allowed disabled:text-stone-300" disabled={isReadOnly} onClick={startNewNotice} title="새 공지" type="button"><Plus aria-hidden="true" size={16} /></button>
+            <button aria-label="새 공지" className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-brand-700 disabled:cursor-not-allowed disabled:text-stone-300 dark:hover:bg-stone-100" disabled={isReadOnly} onClick={startNewNotice} title="새 공지" type="button"><Plus aria-hidden="true" size={16} /></button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto py-2">
@@ -126,7 +126,7 @@ export function InstructorNoticesPage() {
                 <h3 className="px-4 py-1.5 type-caption font-bold text-stone-400" id={`notice-group-${group.weekNumber ?? 'other'}`}>{group.label}</h3>
                 <div className="space-y-1 px-2">
                   {group.notices.map((notice) => (
-                    <button aria-pressed={selectedNoticeId === notice.id} className={`w-full rounded-md px-3 py-2.5 text-left ${selectedNoticeId === notice.id ? 'bg-white shadow-sm ring-1 ring-stone-200' : 'hover:bg-white/80'}`} key={notice.id} onClick={() => setSelectedNoticeId(notice.id)} type="button">
+                    <button aria-pressed={selectedNoticeId === notice.id} className={`w-full rounded-md px-3 py-2.5 text-left ${selectedNoticeId === notice.id ? 'bg-white shadow-sm ring-1 ring-stone-200 dark:bg-stone-100' : 'hover:bg-white/80 dark:hover:bg-stone-100'}`} key={notice.id} onClick={() => setSelectedNoticeId(notice.id)} type="button">
                       <strong className="block truncate type-control text-stone-900">{notice.title}</strong>
                       <time className="mt-1 block type-caption text-stone-400">{formatNoticeDate(notice.publishedAt)}</time>
                     </button>

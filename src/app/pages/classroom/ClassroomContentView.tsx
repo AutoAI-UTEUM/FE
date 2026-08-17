@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ClipboardList, MoreHorizontal, RefreshCw, Upload } from 'lucide-react'
+import { Bell, BookOpen, ClipboardList, LoaderCircle, MoreHorizontal, RefreshCw, Upload } from 'lucide-react'
 import type { DragEvent } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
@@ -43,6 +43,7 @@ export function ClassroomContentPanel({
   onRenameMaterial,
   onRetry,
   openingMaterialId,
+  processingMaterialTitle,
   selectedWeek,
   selectedWeekNumber,
   setDragging,
@@ -64,6 +65,7 @@ export function ClassroomContentPanel({
   onRenameMaterial: (material: { id: string; title: string }) => void
   onRetry: (key: ResourceKey) => void
   openingMaterialId: string | null
+  processingMaterialTitle: string | null
   selectedWeek?: ClassroomWeek
   selectedWeekNumber: number | null
   setDragging: (weekNumber: number | null) => void
@@ -105,7 +107,8 @@ export function ClassroomContentPanel({
     {globalItems.length > 0 ? <details className="border-y border-stone-200 py-2" open><summary className="flex min-h-10 cursor-pointer list-none items-center px-1"><span className="type-body font-bold text-stone-900">전체 항목</span></summary><div className="space-y-2 pt-2">{globalItems.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div></details> : null}
 
     <section aria-label={title} className={`space-y-2 rounded-lg transition ${draggingWeek === selectedWeekNumber && selectedWeekNumber !== null ? 'ring-2 ring-brand-100' : ''}`}>
-      {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />) : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
+      {processingMaterialTitle ? <div className="flex min-h-14 items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-2.5" role="status"><LoaderCircle aria-hidden="true" className="shrink-0 animate-spin text-brand-700" size={18} /><div className="min-w-0"><p className="type-body font-bold text-brand-900">강의자료를 처리하는 중입니다</p><p className="truncate type-caption text-brand-700">{displayTitle(processingMaterialTitle)} · 완료되면 목록에 표시됩니다.</p></div></div> : null}
+      {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />) : processingMaterialTitle ? null : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
     </section>
   </div>
 }

@@ -8,6 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
 import {
+  CLASSROOMS_CHANGED_EVENT,
   createClassroomsRepository,
   rememberClassroomId,
   type Classroom,
@@ -165,6 +166,7 @@ export function InstructorClassroomEditPage() {
     setIsDeleting(true)
     try {
       await repository.deletePermanently(classroom.id, deleteConfirmation)
+      window.dispatchEvent(new Event(CLASSROOMS_CHANGED_EVENT))
       showToast('강의실을 영구 삭제했습니다.', 'success')
       navigate(routes.classrooms, { replace: true })
     } catch (requestError) {

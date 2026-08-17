@@ -163,7 +163,7 @@ export function ClassroomStudentsPage() {
 }
 
 function FilterButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
-  return <button className={active ? 'h-9 rounded-lg bg-stone-950 px-3 type-caption font-bold text-white' : 'h-9 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600 hover:bg-stone-50'} onClick={onClick} type="button">{children}</button>
+  return <button className={active ? 'h-9 rounded-lg bg-stone-950 px-3 type-caption font-bold text-white dark:bg-stone-200 dark:text-stone-950' : 'h-9 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600 hover:bg-stone-50'} onClick={onClick} type="button">{children}</button>
 }
 
 function isInactiveStudent(student: ClassroomStudent): boolean {

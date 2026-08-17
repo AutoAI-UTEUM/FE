@@ -307,7 +307,7 @@ function PageNavigation({
   totalPages: number
 }) {
   return (
-    <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1 rounded-lg border border-stone-200 bg-white/95 p-1 shadow-lg backdrop-blur-sm">
+    <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1 rounded-lg border border-stone-200 bg-white/95 p-1 shadow-lg backdrop-blur-sm dark:bg-stone-100/95">
       <ToolbarButton
         disabled={isPending || currentPage <= 1}
         icon={ChevronLeft}
