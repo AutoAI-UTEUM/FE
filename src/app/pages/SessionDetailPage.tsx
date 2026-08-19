@@ -59,6 +59,7 @@ const DEFAULT_CHAT_PANEL_WIDTH = 660
 const MIN_CHAT_PANEL_WIDTH = 360
 const MIN_PDF_PANEL_WIDTH = 360
 const PANEL_RESIZER_WIDTH = 6
+const OVERVIEW_POLL_INTERVAL_MS = 15_000
 
 export function SessionDetailPage() {
   usePageTitle('학습 공간')
@@ -191,21 +192,29 @@ export function SessionDetailPage() {
   useEffect(() => {
     const materialId = session?.materialId
     const controller = new AbortController()
+    let pollTimeoutId: number | undefined
 
-    const loadMaterialOverview = async () => {
+    const loadMaterialOverview = async (reset = false) => {
       await Promise.resolve()
       if (controller.signal.aborted) return
+
+      if (reset) setMaterialOverview(null)
 
       if (!materialId) {
         setMaterialOverview(null)
         return
       }
 
-      setMaterialOverview(null)
       try {
-        setMaterialOverview(
-          await materialsRepository.getOverview(materialId, controller.signal),
-        )
+        const overview = await materialsRepository.getOverview(materialId, controller.signal)
+        if (controller.signal.aborted) return
+        setMaterialOverview(overview)
+        if (overview?.status === 'PENDING') {
+          pollTimeoutId = window.setTimeout(
+            () => void loadMaterialOverview(),
+            OVERVIEW_POLL_INTERVAL_MS,
+          )
+        }
       } catch {
         if (!controller.signal.aborted) {
           setMaterialOverview({
@@ -216,8 +225,11 @@ export function SessionDetailPage() {
       }
     }
 
-    void loadMaterialOverview()
-    return () => controller.abort()
+    void loadMaterialOverview(true)
+    return () => {
+      controller.abort()
+      if (pollTimeoutId !== undefined) window.clearTimeout(pollTimeoutId)
+    }
   }, [materialsRepository, session?.materialId])
 
   useEffect(() => {
@@ -849,6 +861,7 @@ export function SessionDetailPage() {
             onExplainCurrentPage={() => handleEvent('EXPLAIN_CURRENT_PAGE')}
             onExplainNextPage={handleExplainNextPage}
             onOpenQuiz={handleOpenQuizHistory}
+            onOverviewPageSelect={(pageNumber) => void handlePageNavigation(pageNumber)}
             onRequestQuiz={() => setIsSelectingQuizType(true)}
             onReloadQuizzes={() => setResourceReloadKey((key) => key + 1)}
             onTurnCompleted={applyTurnResult}

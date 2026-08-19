@@ -10,7 +10,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
-import { installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { rememberClassroomId } from '../../features/classrooms'
 import { SessionDetailPage } from './SessionDetailPage'
 
@@ -157,6 +157,30 @@ describe('SessionDetailPage', () => {
 
     expect(screen.getByText('개요를 준비 중입니다.')).toBeInTheDocument()
     expect(screen.getByRole('separator', { name: 'PDF와 AI 채팅 너비 조절' })).toBeInTheDocument()
+  })
+
+  it('moves the PDF to the start page selected from the material overview', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/materials/10/overview') {
+        return apiSuccess({
+          content: '## 목차\n\n- 핵심 개념 p.4–5',
+          materialId: 10,
+          status: 'READY',
+          updatedAt: '2026-08-19T00:00:00Z',
+        })
+      }
+      return undefined
+    })
+    renderSessionDetail()
+
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    fireEvent.click(screen.getByRole('tab', { name: '개요' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'p.4–5' }))
+
+    expect(
+      await screen.findByRole('progressbar', { name: '학습 진행률 4 / 5쪽' }),
+    ).toBeInTheDocument()
   })
 
   it('renders a session 404 state', async () => {

@@ -71,6 +71,6 @@ export function ClassroomWorkspaceLayout() {
 
 function getActiveTab(pathname: string): ClassroomWorkspaceTab {
   if (pathname.endsWith('/analytics') || pathname.endsWith('/students')) return 'learning'
-  if (pathname.endsWith('/settings')) return 'settings'
+  if (pathname.endsWith('/settings') || pathname.endsWith('/report-criteria')) return 'settings'
   return 'course'
 }

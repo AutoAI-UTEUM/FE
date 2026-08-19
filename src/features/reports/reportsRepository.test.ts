@@ -123,4 +123,35 @@ describe('reports repository', () => {
       method: 'POST',
     })
   })
+
+  it('starts report criteria generation and reads its status', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ data: null })
+      .mockResolvedValueOnce({
+        data: {
+          message: '강의별 평가 지표를 생성하고 있습니다.',
+          registeredCount: 0,
+          status: 'RUNNING',
+        },
+      })
+    const repository = createReportsRepository(request as AuthenticatedRequest)
+
+    await repository.generateCriteria('12')
+    await expect(repository.getCriteriaGeneration('12')).resolves.toEqual({
+      message: '강의별 평가 지표를 생성하고 있습니다.',
+      registeredCount: 0,
+      status: 'RUNNING',
+    })
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      '/api/classrooms/12/report-criteria/generate',
+      { method: 'POST' },
+    )
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      '/api/classrooms/12/report-criteria/generation',
+      { signal: undefined },
+    )
+  })
 })

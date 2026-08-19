@@ -109,6 +109,7 @@ describe('InstructorClassroomEditPage', () => {
     expect(screen.getByLabelText('15주차 항목')).toHaveTextContent('15주차')
     expect(screen.getByText('7QK4-MZ2A')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '학습현황·리포트' })).toHaveAttribute('href', '/classrooms/12/analytics')
+    expect(screen.getByRole('link', { name: '평가 지표' })).toHaveAttribute('href', '/classrooms/12/report-criteria')
     expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
     const basicSection = screen.getByRole('heading', { name: '기본 정보' }).closest('section')
     const dangerSection = screen.getByRole('heading', { name: '위험 구역' }).closest('section')

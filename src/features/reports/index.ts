@@ -1,6 +1,8 @@
 export { createReportsRepository } from './reportsRepository'
 export type {
   CreateReportInput,
+  ReportCriteriaGeneration,
+  ReportCriteriaGenerationStatus,
   ReportCriterion,
   ReportCriterionResult,
   ReportCriterionStatus,

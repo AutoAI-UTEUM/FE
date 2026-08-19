@@ -75,7 +75,7 @@ function stubApi(removed: string[] = [], requested: string[] = []) {
     if (url.pathname === '/api/classrooms/12/notices') return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     if (url.pathname === '/api/classrooms/12/students' && method === 'GET') return success({
       items: [
-        { affiliation: '서울대학교', aiQuestionCountLast7Days: 4, averageProgressRate: 62, email: 'learner@example.com', joinedAt: '2026-08-02T01:00:00Z', lastActiveAt: '2026-08-11T08:00:00Z', name: '김학습', status: 'ACTIVE', studentId: 9 },
+        { affiliation: '서울대학교', aiQuestionCountLast7Days: 4, averageProgressRate: 62, email: 'learner@example.com', joinedAt: '2026-08-02T01:00:00Z', lastActiveAt: new Date().toISOString(), name: '김학습', status: 'ACTIVE', studentId: 9 },
         { affiliation: 'KAIST', aiQuestionCountLast7Days: 0, averageProgressRate: 12, email: 'inactive@example.com', joinedAt: '2026-07-10T01:00:00Z', lastActiveAt: '2026-07-20T08:00:00Z', name: '박미활동', status: 'ACTIVE', studentId: 10 },
       ],
       page: 0,

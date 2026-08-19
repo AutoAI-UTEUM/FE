@@ -16,7 +16,7 @@ import { ExamsPage } from './pages/ExamsPage'
 import { InstructorCalendarPage } from './pages/instructor/InstructorCalendarPage'
 import { InstructorClassroomEditPage } from './pages/instructor/InstructorClassroomEditPage'
 import { InstructorLearningStatusPage } from './pages/instructor/InstructorLearningStatusPage'
-import { InstructorReportDetailPage, InstructorStudentReportsPage } from './pages/instructor/InstructorReportsPage'
+import { InstructorReportCriteriaPage, InstructorReportDetailPage, InstructorStudentReportsPage } from './pages/instructor/InstructorReportsPage'
 import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
 import { LoginPage } from './pages/LoginPage'
 import { LearnerNotesPage } from './pages/learner/LearnerNotesPage'
@@ -74,6 +74,7 @@ export function AppRoutes() {
               <Route path="students" element={<Navigate to="../analytics" replace />} />
               <Route path="settings" element={<InstructorClassroomEditPage />} />
               <Route path="analytics" element={<InstructorLearningStatusPage />} />
+              <Route path="report-criteria" element={<InstructorReportCriteriaPage />} />
               <Route path="announcements" element={<ClassroomContentLegacyRedirect filter="notice" />} />
             </Route>
           </Route>
@@ -95,7 +96,6 @@ export function AppRoutes() {
             <Route path={routes.classroomReports} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
             <Route path={routes.classroomStudentReports} element={<InstructorStudentReportsPage />} />
             <Route path={routes.classroomReportDetail} element={<InstructorReportDetailPage />} />
-            <Route path={routes.classroomReportCriteria} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>
