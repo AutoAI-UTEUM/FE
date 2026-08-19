@@ -52,6 +52,7 @@ interface ChatPanelProps {
   quizzesError?: string | null
   isLoadingQuizzes?: boolean
   materialOverview?: MaterialOverview | null
+  onOverviewPageSelect?: (pageNumber: number) => void
   onOpenQuiz?: (quizId: string) => void
   onReloadQuizzes?: () => void
   request?: AuthenticatedRequest
@@ -84,6 +85,7 @@ export function ChatPanel({
   onExplainCurrentPage,
   onExplainNextPage,
   onOpenQuiz,
+  onOverviewPageSelect,
   onRequestQuiz,
   onReloadQuizzes,
   onTurnCompleted,
@@ -374,7 +376,7 @@ export function ChatPanel({
       </div>
 
       {tab === 'overview' ? (
-        <OverviewPanel overview={materialOverview} />
+        <OverviewPanel onPageSelect={onOverviewPageSelect} overview={materialOverview} />
       ) : tab === 'quizzes' ? (
         <QuizzesPanel
           error={quizzesError}
@@ -523,8 +525,10 @@ export function ChatPanel({
 }
 
 function OverviewPanel({
+  onPageSelect,
   overview,
 }: {
+  onPageSelect?: (pageNumber: number) => void
   overview: MaterialOverview | null
 }) {
   const content = overview?.content?.trim()
@@ -565,7 +569,7 @@ function OverviewPanel({
             마지막 업데이트 {formatDateTime(overview.updatedAt)}
           </p>
         ) : null}
-        <MarkdownContent content={content} />
+        <MarkdownContent content={content} onPageReferenceClick={onPageSelect} />
       </article>
     </div>
   )

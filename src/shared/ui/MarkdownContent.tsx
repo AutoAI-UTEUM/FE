@@ -10,6 +10,7 @@ interface MarkdownContentProps {
   className?: string
   content: string
   isStreaming?: boolean
+  onPageReferenceClick?: (pageNumber: number) => void
 }
 
 type MarkdownSegment =
@@ -118,7 +119,12 @@ function normalizeMarkdownLatex(content: string, isStreaming: boolean): string {
     .join('')
 }
 
-export function MarkdownContent({ className, content, isStreaming = false }: MarkdownContentProps) {
+export function MarkdownContent({
+  className,
+  content,
+  isStreaming = false,
+  onPageReferenceClick,
+}: MarkdownContentProps) {
   const segments = parseToggleBlocks(content)
 
   return (
@@ -147,19 +153,62 @@ export function MarkdownContent({ className, content, isStreaming = false }: Mar
           <summary className="cursor-pointer list-none px-3 py-2 type-control font-bold text-stone-900 marker:hidden">
             {segment.title}
           </summary>
-          <MarkdownContent className="border-t border-stone-100 px-3 py-2 text-stone-800" content={segment.content} isStreaming={isStreaming} />
+          <MarkdownContent className="border-t border-stone-100 px-3 py-2 text-stone-800" content={segment.content} isStreaming={isStreaming} onPageReferenceClick={onPageReferenceClick} />
         </details>
       ) : (
         <Markdown
+          components={onPageReferenceClick ? {
+            a: ({ children, href }) => {
+              const pageNumber = getOverviewPageNumber(href)
+              return pageNumber === null ? (
+                <a href={href}>{children}</a>
+              ) : (
+                <button
+                  className="inline cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-brand-600 underline dark:text-brand-400"
+                  onClick={() => onPageReferenceClick(pageNumber)}
+                  title={`${pageNumber}쪽으로 이동`}
+                  type="button"
+                >
+                  {children}
+                </button>
+              )
+            },
+          } : undefined}
           key={`${segment.kind}-${index}`}
           rehypePlugins={[rehypeKatex]}
           remarkPlugins={[remarkGfm, remarkMath]}
         >
-          {normalizeMarkdownLatex(segment.content, isStreaming)}
+          {linkOverviewPageReferences(
+            normalizeMarkdownLatex(segment.content, isStreaming),
+            Boolean(onPageReferenceClick),
+          )}
         </Markdown>
       ))}
     </div>
   )
+}
+
+const overviewPageReferencePattern = /(?<![\w[])p\.\s*(\d+)(?:\s*[–—-]\s*\d+)?/gi
+const overviewPageHrefPattern = /^#edupilot-page-(\d+)$/
+
+function linkOverviewPageReferences(content: string, enabled: boolean): string {
+  if (!enabled) return content
+  return content
+    .split(markdownCodePattern)
+    .map((segment, index) => index % 2 === 1
+      ? segment
+      : segment.replace(
+          overviewPageReferencePattern,
+          (reference, pageNumber: string) => `[${reference}](#edupilot-page-${pageNumber})`,
+        ))
+    .join('')
+}
+
+function getOverviewPageNumber(href?: string): number | null {
+  const match = overviewPageHrefPattern.exec(href ?? '')
+  if (!match) return null
+  const pageNumber = Number(match[1])
+  return Number.isSafeInteger(pageNumber) && pageNumber > 0 ? pageNumber : null
 }
 
 function parseToggleBlocks(content: string): MarkdownSegment[] {

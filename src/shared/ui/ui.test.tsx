@@ -139,4 +139,21 @@ describe('shared ui', () => {
     expect(screen.getByText('응답을 작성하는 중')).toBeInTheDocument()
     expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument()
   })
+
+  it('turns overview page ranges into page navigation controls', () => {
+    const onPageReferenceClick = vi.fn()
+    render(
+      <MarkdownContent
+        content={'- 기초 개념 p.4–11\n- 심화 개념 p.12-15\n- `코드 p.20-21`'}
+        onPageReferenceClick={onPageReferenceClick}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'p.4–11' }))
+    fireEvent.click(screen.getByRole('button', { name: 'p.12-15' }))
+
+    expect(onPageReferenceClick).toHaveBeenNthCalledWith(1, 4)
+    expect(onPageReferenceClick).toHaveBeenNthCalledWith(2, 12)
+    expect(screen.queryByRole('button', { name: 'p.20-21' })).not.toBeInTheDocument()
+  })
 })

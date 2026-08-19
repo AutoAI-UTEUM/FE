@@ -19,6 +19,7 @@ function ChatHarness({
   materialOverview,
   onExplainCurrentPage,
   onExplainNextPage,
+  onOverviewPageSelect,
   onTurnCompleted,
   request,
   repository,
@@ -29,6 +30,7 @@ function ChatHarness({
   materialOverview?: MaterialOverview | null
   onExplainCurrentPage?: () => void
   onExplainNextPage?: () => void
+  onOverviewPageSelect?: (pageNumber: number) => void
   onTurnCompleted?: (result: SessionTurnResult) => void
   request?: AuthenticatedRequest
   repository: SessionsRepository
@@ -43,6 +45,7 @@ function ChatHarness({
       materialOverview={materialOverview}
       onExplainCurrentPage={onExplainCurrentPage}
       onExplainNextPage={onExplainNextPage}
+      onOverviewPageSelect={onOverviewPageSelect}
       onTurnCompleted={onTurnCompleted}
       request={request}
       sessionId={sessionId}
@@ -72,14 +75,16 @@ describe('ChatPanel', () => {
   })
 
   it('renders material overview markdown when overview content is provided', async () => {
+    const onOverviewPageSelect = vi.fn()
     render(
       <ChatHarness
         materialOverview={{
-          content: '## 목차\n\n- **기초 개념**\n- 문제 풀이 흐름',
+          content: '## 목차\n\n- **기초 개념** p.4–11\n- 문제 풀이 흐름',
           materialId: '10',
           status: 'READY',
           updatedAt: '2026-08-15T00:00:00Z',
         }}
+        onOverviewPageSelect={onOverviewPageSelect}
         repository={createRepository()}
       />,
     )
@@ -91,6 +96,8 @@ describe('ChatPanel', () => {
     const emphasizedText = screen.getByText('기초 개념')
     expect(emphasizedText.tagName).toBe('STRONG')
     expect(screen.queryByText(/\*\*기초 개념\*\*/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'p.4–11' }))
+    expect(onOverviewPageSelect).toHaveBeenCalledWith(4)
   })
 
   it('shows a general failure message for failed material overview generation', async () => {
