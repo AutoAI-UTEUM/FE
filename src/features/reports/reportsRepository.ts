@@ -2,6 +2,7 @@ import type { PagedResponse } from '../../shared/api'
 import type { AuthenticatedRequest } from '../auth'
 
 export type ReportGenerationStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+export type ReportCriteriaGenerationStatus = 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 export type ReportCriterionStatus = 'ASSESSED' | 'INSUFFICIENT_DATA'
 export type ReportScope =
   | { type: 'FULL' }
@@ -80,6 +81,12 @@ export interface ReportCriterion {
   sourceTypes: string[]
   version: string
   weight: number
+}
+
+export interface ReportCriteriaGeneration {
+  message: string
+  registeredCount: number
+  status: ReportCriteriaGenerationStatus
 }
 
 export interface CreateReportInput {
@@ -225,6 +232,19 @@ export function createReportsRepository(request: AuthenticatedRequest) {
         { body: mapCriterionInput(input), method: 'PATCH' },
       )
       return mapCriterion(data)
+    },
+    async generateCriteria(classroomId: string) {
+      await request<unknown>(
+        `/api/classrooms/${encodeURIComponent(classroomId)}/report-criteria/generate`,
+        { method: 'POST' },
+      )
+    },
+    async getCriteriaGeneration(classroomId: string, signal?: AbortSignal) {
+      const { data } = await request<ReportCriteriaGeneration>(
+        `/api/classrooms/${encodeURIComponent(classroomId)}/report-criteria/generation`,
+        { signal },
+      )
+      return data
     },
   }
 }

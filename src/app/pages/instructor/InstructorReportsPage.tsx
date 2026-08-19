@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Plus,
   Settings2,
+  Sparkles,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -21,6 +22,7 @@ import {
 } from '../../../features/classrooms'
 import {
   createReportsRepository,
+  type ReportCriteriaGeneration,
   type ReportCriterion,
   type ReportCriterionResult,
   type ReportGenerationStatus,
@@ -44,6 +46,8 @@ import {
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
 const reportsEnabled = isApiCapabilityEnabled('reports')
+const CUSTOM_CRITERIA_LIMIT = 11
+const CRITERIA_GENERATION_POLL_INTERVAL_MS = 2_500
 
 export function InstructorReportsPage() {
   usePageTitle('학습 리포트')
@@ -286,21 +290,137 @@ export function InstructorReportCriteriaPage() {
   const [rubric, setRubric] = useState('')
   const [isLoading, setIsLoading] = useState(reportsEnabled)
   const [isSaving, setIsSaving] = useState(false)
+  const [isStartingGeneration, setIsStartingGeneration] = useState(false)
+  const [generation, setGeneration] = useState<ReportCriteriaGeneration | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const generationStatusRef = useRef<ReportCriteriaGeneration['status']>('IDLE')
   const activeCustomCriterionCount = criteria.filter((item) => item.active && !item.builtin).length
+
+  const loadCriteria = useCallback(
+    async (signal?: AbortSignal) => {
+      const nextCriteria = await repository.listCriteria(classroomId, signal)
+      if (!signal?.aborted) setCriteria(nextCriteria)
+    },
+    [classroomId, repository],
+  )
 
   useEffect(() => {
     if (!classroomId || !reportsEnabled) return
     rememberClassroomId(classroomId)
-    repository.listCriteria(classroomId)
-      .then(setCriteria)
-      .catch((requestError) => setError(getRequestErrorMessage(requestError)))
-      .finally(() => setIsLoading(false))
+    const controller = new AbortController()
+    Promise.all([
+      repository.listCriteria(classroomId, controller.signal),
+      repository.getCriteriaGeneration(classroomId, controller.signal),
+    ])
+      .then(([nextCriteria, nextGeneration]) => {
+        if (controller.signal.aborted) return
+        setCriteria(nextCriteria)
+        generationStatusRef.current = nextGeneration.status
+        setGeneration(nextGeneration)
+        if (nextGeneration.status === 'FAILED') {
+          setError(nextGeneration.message || '지표를 생성하지 못했습니다. 다시 시도해 주세요.')
+        }
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false)
+      })
+    return () => controller.abort()
   }, [classroomId, repository])
+
+  const fetchCriteriaGeneration = useCallback(
+    (signal: AbortSignal) => repository.getCriteriaGeneration(classroomId, signal),
+    [classroomId, repository],
+  )
+  const handleGenerationResult = useCallback((nextGeneration: ReportCriteriaGeneration) => {
+    const previousStatus = generationStatusRef.current
+    generationStatusRef.current = nextGeneration.status
+    setGeneration(nextGeneration)
+
+    if (nextGeneration.status === 'FAILED') {
+      setError(nextGeneration.message || '지표를 생성하지 못했습니다. 다시 시도해 주세요.')
+      return
+    }
+    if (
+      previousStatus === 'RUNNING'
+      && (nextGeneration.status === 'COMPLETED' || nextGeneration.status === 'IDLE')
+    ) {
+      void loadCriteria().catch((requestError) => setError(getRequestErrorMessage(requestError)))
+      if (nextGeneration.status === 'COMPLETED') {
+        const countMessage = nextGeneration.registeredCount > 0
+          ? ` 평가 지표 ${nextGeneration.registeredCount}개가 추가되었습니다.`
+          : ''
+        show(`지표 생성을 완료했습니다.${countMessage}`, 'success')
+      }
+    }
+  }, [loadCriteria, show])
+  const handleGenerationPollingError = useCallback((requestError: unknown) => {
+    const message = getRequestErrorMessage(requestError)
+    generationStatusRef.current = 'FAILED'
+    setGeneration({
+      message,
+      registeredCount: 0,
+      status: 'FAILED',
+    })
+    setError(message)
+  }, [])
+  const handleGenerationPollingDelay = useCallback(() => {
+    generationStatusRef.current = 'IDLE'
+    setGeneration({ message: '', registeredCount: 0, status: 'IDLE' })
+    setError('생성 상태 확인이 지연되고 있습니다. 지표 목록을 다시 확인했습니다.')
+    void loadCriteria().catch((requestError) => setError(getRequestErrorMessage(requestError)))
+  }, [loadCriteria])
+  const getGenerationPollingDelay = useCallback(
+    () => CRITERIA_GENERATION_POLL_INTERVAL_MS,
+    [],
+  )
+  const isGenerationRunning = useCallback(
+    (value: ReportCriteriaGeneration) => value.status === 'RUNNING',
+    [],
+  )
+
+  useAsyncJobPolling({
+    enabled: generation?.status === 'RUNNING',
+    fetchNext: fetchCriteriaGeneration,
+    getDelayMs: getGenerationPollingDelay,
+    initialDelayMs: CRITERIA_GENERATION_POLL_INTERVAL_MS,
+    isPending: isGenerationRunning,
+    maxDurationMs: 180_000,
+    onDelayed: handleGenerationPollingDelay,
+    onError: handleGenerationPollingError,
+    onResult: handleGenerationResult,
+  })
+
+  async function generateCriteria() {
+    if (!classroomId || isStartingGeneration || generation?.status === 'RUNNING') return
+    setIsStartingGeneration(true)
+    setError(null)
+    try {
+      await repository.generateCriteria(classroomId)
+      const runningGeneration: ReportCriteriaGeneration = {
+        message: '',
+        registeredCount: 0,
+        status: 'RUNNING',
+      }
+      generationStatusRef.current = 'RUNNING'
+      setGeneration(runningGeneration)
+    } catch (requestError) {
+      if (requestError instanceof ApiClientError && requestError.status === 409) {
+        generationStatusRef.current = 'RUNNING'
+        setGeneration({ message: '', registeredCount: 0, status: 'RUNNING' })
+      } else {
+        setError(getCriteriaGenerationErrorMessage(requestError))
+      }
+    } finally {
+      setIsStartingGeneration(false)
+    }
+  }
 
   async function createCriterion(event: FormEvent) {
     event.preventDefault()
-    if (!name.trim() || !description.trim() || !rubric.trim() || isSaving || activeCustomCriterionCount >= 20) return
+    if (!name.trim() || !description.trim() || !rubric.trim() || isSaving || activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT) return
     setIsSaving(true)
     try {
       const created = await repository.createCriterion(classroomId, {
@@ -332,16 +452,29 @@ export function InstructorReportCriteriaPage() {
     } catch (requestError) { setError(getRequestErrorMessage(requestError)) }
   }
 
+  const isGenerating = isStartingGeneration || generation?.status === 'RUNNING'
+
   return <PageContainer>
-    <PageHeader actions={<ButtonLink to={classroomReportsPath(classroomId)} variant="secondary">리포트</ButtonLink>} title="평가 기준" />
+    <PageHeader actions={<><Button disabled={isGenerating} onClick={() => void generateCriteria()} variant="secondary">{isGenerating ? <LoaderCircle className="animate-spin" size={14} /> : <Sparkles size={14} />}{isGenerating ? '생성 중' : '지표 생성'}</Button><ButtonLink to={classroomReportsPath(classroomId)} variant="secondary">리포트</ButtonLink></>} title="평가 기준" />
     {!reportsEnabled ? <ReportsUnavailableState /> : null}
     {reportsEnabled && isLoading ? <LoadingState message="평가 기준을 불러오는 중입니다." /> : null}
     {reportsEnabled && !isLoading ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="overflow-hidden rounded-lg border border-stone-200 bg-white"><div className="border-b border-stone-200 bg-stone-50 px-5 py-3"><h2 className="type-body font-bold">활성 커스텀 기준 {activeCustomCriterionCount}/20</h2></div>{criteria.length === 0 ? <EmptyState description="기본 평가 기준은 서버 정책에 따라 제공되며 강의실별 기준을 추가할 수 있습니다." title="추가 평가 기준이 없습니다" /> : criteria.map((criterion) => <div className="flex items-start gap-4 border-b border-stone-100 px-5 py-4 last:border-0" key={criterion.id ?? `builtin-${criterion.key}`}><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><strong className="type-body">{criterion.name}</strong><Badge tone={criterion.active ? 'success' : 'neutral'}>{criterion.active ? '사용 중' : '비활성'}</Badge>{criterion.builtin ? <Badge tone="neutral">기본</Badge> : null}</div><p className="mt-1 type-caption leading-5 text-stone-500">{criterion.description}</p><p className="mt-2 type-micro text-stone-400">최소 근거 {criterion.minimumEvidence}개 · 버전 {criterion.version || '-'}</p></div>{criterion.builtin ? null : <Button onClick={() => void toggleCriterion(criterion)} size="sm" variant="secondary">{criterion.active ? '비활성화' : '활성화'}</Button>}</div>)}</section>
-      <form className="h-fit rounded-lg border border-stone-200 bg-white p-5" onSubmit={createCriterion}><div className="flex items-center gap-2"><Plus size={16} /><h2 className="type-section-title font-bold">기준 추가</h2></div><label className="mt-4 block type-control font-semibold">이름<input className="mt-1 h-10 w-full rounded-lg border border-stone-300 px-3 type-body" maxLength={60} onChange={(event) => setName(event.target.value)} value={name} /></label><label className="mt-4 block type-control font-semibold">설명<textarea className="mt-1 min-h-20 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setDescription(event.target.value)} value={description} /></label><label className="mt-4 block type-control font-semibold">평가 기준<textarea className="mt-1 min-h-28 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setRubric(event.target.value)} value={rubric} /></label><Button className="mt-4 w-full" disabled={!name.trim() || !description.trim() || !rubric.trim() || isSaving || activeCustomCriterionCount >= 20} type="submit">{isSaving ? '저장 중' : '기준 추가'}</Button>{activeCustomCriterionCount >= 20 ? <p className="mt-2 type-caption text-amber-700">활성 커스텀 평가 기준은 최대 20개입니다.</p> : null}</form>
+      <section className="overflow-hidden rounded-lg border border-stone-200 bg-white"><div className="border-b border-stone-200 bg-stone-50 px-5 py-3"><h2 className="type-body font-bold">활성 커스텀 기준 {activeCustomCriterionCount}/{CUSTOM_CRITERIA_LIMIT}</h2></div>{criteria.length === 0 ? <EmptyState description="기본 평가 기준은 서버 정책에 따라 제공되며 강의실별 기준을 추가할 수 있습니다." title="추가 평가 기준이 없습니다" /> : criteria.map((criterion) => <div className="flex items-start gap-4 border-b border-stone-100 px-5 py-4 last:border-0" key={criterion.id ?? `builtin-${criterion.key}`}><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><strong className="type-body">{criterion.name}</strong><Badge tone={criterion.active ? 'success' : 'neutral'}>{criterion.active ? '사용 중' : '비활성'}</Badge>{criterion.builtin ? <Badge tone="neutral">기본</Badge> : null}</div><p className="mt-1 type-caption leading-5 text-stone-500">{criterion.description}</p><p className="mt-2 type-micro text-stone-400">최소 근거 {criterion.minimumEvidence}개 · 버전 {criterion.version || '-'}</p></div>{criterion.builtin ? null : <Button onClick={() => void toggleCriterion(criterion)} size="sm" variant="secondary">{criterion.active ? '비활성화' : '활성화'}</Button>}</div>)}</section>
+      <form className="h-fit rounded-lg border border-stone-200 bg-white p-5" onSubmit={createCriterion}><div className="flex items-center gap-2"><Plus size={16} /><h2 className="type-section-title font-bold">기준 추가</h2></div><label className="mt-4 block type-control font-semibold">이름<input className="mt-1 h-10 w-full rounded-lg border border-stone-300 px-3 type-body" maxLength={60} onChange={(event) => setName(event.target.value)} value={name} /></label><label className="mt-4 block type-control font-semibold">설명<textarea className="mt-1 min-h-20 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setDescription(event.target.value)} value={description} /></label><label className="mt-4 block type-control font-semibold">평가 기준<textarea className="mt-1 min-h-28 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setRubric(event.target.value)} value={rubric} /></label><Button className="mt-4 w-full" disabled={!name.trim() || !description.trim() || !rubric.trim() || isSaving || activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT} type="submit">{isSaving ? '저장 중' : '기준 추가'}</Button>{activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT ? <p className="mt-2 type-caption text-amber-700">활성 커스텀 평가 기준은 최대 {CUSTOM_CRITERIA_LIMIT}개입니다.</p> : null}</form>
     </div> : null}
     {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}
   </PageContainer>
+}
+
+function getCriteriaGenerationErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiClientError) || error.status !== 400) {
+    return getRequestErrorMessage(error)
+  }
+  const errorContext = `${error.code} ${error.message}`.toLowerCase()
+  const isCapacityError = /limit|max|capacity|quota|상한|최대|여유|정리/.test(errorContext)
+  return isCapacityError
+    ? '기존 지표를 정리한 후 다시 시도해 주세요.'
+    : '자료 개요가 준비된 후 이용할 수 있어요.'
 }
 
 function ReportsUnavailableState() {

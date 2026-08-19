@@ -1,5 +1,6 @@
 import {
   Archive,
+  Settings2,
   Trash2,
   X,
 } from 'lucide-react'
@@ -18,10 +19,11 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import {
   Button,
+  ButtonLink,
   EmptyState,
   useToast,
 } from '../../../shared/ui'
-import { classroomDetailPath, routes } from '../../routes'
+import { classroomDetailPath, classroomReportCriteriaPath, routes } from '../../routes'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
@@ -206,7 +208,7 @@ export function InstructorClassroomEditPage() {
   return (
     <ClassroomWorkspaceContainer className="xl:h-[calc(100dvh-2.5rem)] xl:min-h-0 xl:overflow-hidden">
       <ClassroomWorkspaceHeader
-        actions={<><Button onClick={() => navigate(classroomDetailPath(classroom.id))} variant="secondary">되돌리기</Button><Button disabled={!name.trim() || !startDate || hasInvalidWeekTitle || isSaving} form="classroom-edit-form" type="submit">{isSaving ? '저장 중' : '변경사항 저장'}</Button></>}
+        actions={<><ButtonLink to={classroomReportCriteriaPath(classroom.id)} variant="secondary"><Settings2 aria-hidden="true" size={14} />평가 지표</ButtonLink><Button onClick={() => navigate(classroomDetailPath(classroom.id))} variant="secondary">되돌리기</Button><Button disabled={!name.trim() || !startDate || hasInvalidWeekTitle || isSaving} form="classroom-edit-form" type="submit">{isSaving ? '저장 중' : '변경사항 저장'}</Button></>}
         activeTab="settings"
         classroom={classroom}
       />
