@@ -294,8 +294,8 @@ export function QuizWorkspace({
                 </Button>
               ) : null}
               {resultSummary && !embedded ? (
-                <ButtonLink size="sm" to={routes.sessions} variant="secondary">
-                  세션으로 돌아가기
+                <ButtonLink size="sm" to={routes.classrooms} variant="secondary">
+                  강의실로 돌아가기
                 </ButtonLink>
               ) : null}
               <div className="ml-1 flex gap-1.5">
@@ -491,7 +491,7 @@ function getBackAction(embedded: boolean, onBackToPdf?: () => void) {
       PDF로 돌아가기
     </Button>
   ) : (
-    <ButtonLink to={routes.sessions}>세션 목록으로</ButtonLink>
+    <ButtonLink to={routes.classrooms}>강의실로</ButtonLink>
   )
 }
 

@@ -37,8 +37,6 @@ interface ChatPanelProps {
   /** 서버 결정·퀴즈 유형 선택을 대화 로그의 AI 메시지로 표시한다. */
   conversationAction?: ReactNode
   currentPage?: number
-  /** 세션 완료처럼 대화 전체에 적용되는 명령 (채팅 헤더 우측) */
-  headerAction?: ReactNode
   /** 현재 페이지 설명을 일반 QA가 아닌 학습 진행 이벤트로 요청한다. */
   onExplainCurrentPage?: (message?: string) => Promise<void> | void
   /** 다음 페이지로 이동한 뒤 해당 페이지 설명을 학습 진행 이벤트로 요청한다. */
@@ -81,7 +79,6 @@ export function ChatPanel({
   chat,
   className,
   conversationAction,
-  headerAction,
   onExplainCurrentPage,
   onExplainNextPage,
   onOpenQuiz,
@@ -101,8 +98,6 @@ export function ChatPanel({
   const [tab, setTab] = useState<ChatPanelTab>('chat')
   const [notes, setNotes] = useState<Note[]>([])
   const [notesError, setNotesError] = useState<string | null>(null)
-  const [hiddenMessageCount, setHiddenMessageCount] = useState(0)
-  const [isStartingConversation, setIsStartingConversation] = useState(false)
   const [messageActionStatus, setMessageActionStatus] = useState('')
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -277,20 +272,6 @@ export function ChatPanel({
     }
   }
 
-  async function startNewConversation() {
-    if (isStartingConversation || chat.isTurnPending) return
-    setIsStartingConversation(true)
-    try {
-      await chat.startNewConversation()
-      setHiddenMessageCount(0)
-      setError(null)
-    } catch (requestError) {
-      setError(getChatErrorMessage(requestError))
-    } finally {
-      setIsStartingConversation(false)
-    }
-  }
-
   async function removeNote(id: string) {
     if (!notesRepository) { setNotes((current) => current.filter((note) => note.id !== id)); return }
     try { await notesRepository.delete(id); setNotes((current) => current.filter((note) => note.id !== id)); setNotesError(null) }
@@ -321,7 +302,7 @@ export function ChatPanel({
     }
   }
 
-  const visibleMessages = chat.messages.slice(hiddenMessageCount)
+  const visibleMessages = chat.messages
   const hasAssistantReply = visibleMessages.some(
     (message) => message.role === 'assistant',
   )
@@ -359,20 +340,6 @@ export function ChatPanel({
           />
         </div>
         <span className="sr-only">세션 {sessionId}</span>
-        <div className="ml-2 flex shrink-0 items-center gap-1.5">
-          {headerAction}
-          {tab === 'chat' ? <button
-            aria-label={isStartingConversation ? '새 대화 시작 중' : '대화 새로 시작'}
-            className="flex items-center gap-1.5 px-2 py-1 type-caption text-stone-400 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-            disabled={isStartingConversation || chat.isTurnPending}
-            onClick={() => void startNewConversation()}
-            title="새 대화를 시작합니다. 이전 대화는 서버에 보관됩니다."
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" size={13} />
-            <span className="hidden 2xl:inline">{isStartingConversation ? '시작 중' : '대화 새로 시작'}</span>
-          </button> : null}
-        </div>
       </div>
 
       {tab === 'overview' ? (
@@ -442,7 +409,7 @@ export function ChatPanel({
             className="mr-auto max-w-[90%] animate-pulse rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5"
             role="status"
           >
-            <p className="type-body leading-6 text-stone-500">
+            <p className="type-chat-body text-stone-500">
               {chat.streamNotice ?? '답변을 작성하는 중입니다…'}
             </p>
           </div>
@@ -452,7 +419,7 @@ export function ChatPanel({
           <div className="flex flex-col items-start gap-1">
             <article
               aria-label="AI 진행 안내"
-              className="max-w-[90%] rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5 text-stone-900"
+              className="max-w-[90%] rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5 type-chat-body text-stone-900"
             >
               {conversationAction}
             </article>
@@ -489,7 +456,7 @@ export function ChatPanel({
           </label>
           <textarea
             aria-invalid={error ? true : undefined}
-            className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1.5 type-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
+            className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
             disabled={chat.isTurnPending}
             id="chat-question"
             onChange={(event) => {
@@ -607,11 +574,11 @@ function QuizzesPanel({
 
   if (quizzes.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <ListChecks aria-hidden="true" className="text-stone-300" size={27} />
-        <p className="type-body font-semibold text-stone-500">생성된 퀴즈가 없습니다.</p>
-        <p className="type-caption text-stone-400">학습 중 퀴즈를 만들면 여기에 기록됩니다.</p>
-      </div>
+      <PanelEmptyState
+        description="학습 중 퀴즈를 만들면 여기에 기록됩니다."
+        icon={<ListChecks aria-hidden="true" size={28} />}
+        title="생성된 퀴즈가 없습니다."
+      />
     )
   }
 
@@ -711,7 +678,7 @@ function PanelTab({
     <button
       aria-selected={isActive}
       className={cx(
-        'flex h-full items-center gap-1.5 border-b-2 px-2.5 type-control',
+        'flex h-full items-center gap-1.5 border-b-2 px-2.5 type-section-title',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         isActive
           ? 'border-brand-600 font-semibold text-brand-700'
@@ -742,16 +709,12 @@ function NotesPanel({
 }) {
   if (notes.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <NotebookPen aria-hidden="true" className="text-stone-300" size={26} />
-        {error ? <p className="type-caption font-medium text-rose-700" role="alert">{error}</p> : null}
-        <p className="type-body font-semibold text-stone-500">
-          저장한 노트가 없습니다.
-        </p>
-        <p className="type-caption text-stone-400">
-          AI 답변의 &lsquo;노트에 저장&rsquo;을 눌러 정리해 보세요.
-        </p>
-      </div>
+      <PanelEmptyState
+        description="AI 답변의 '노트에 저장'을 눌러 정리해 보세요."
+        error={error}
+        icon={<NotebookPen aria-hidden="true" size={28} />}
+        title="저장한 노트가 없습니다."
+      />
     )
   }
 
@@ -785,6 +748,37 @@ function NotesPanel({
   )
 }
 
+function PanelEmptyState({
+  description,
+  error,
+  icon,
+  title,
+}: {
+  description: string
+  error?: string | null
+  icon: ReactNode
+  title: string
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
+      <div className="grid w-full max-w-sm grid-rows-[28px_24px_minmax(48px,auto)] justify-items-center gap-3">
+        <span className="flex h-7 items-center justify-center text-stone-300">
+          {icon}
+        </span>
+        <p className="type-section-title font-semibold text-stone-500">{title}</p>
+        <div className="min-h-12">
+          {error ? (
+            <p className="mb-1 type-section-title font-medium text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <p className="type-section-title text-stone-400">{description}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MessageBubble({
   message,
   onCopy,
@@ -805,7 +799,7 @@ function MessageBubble({
       <div className="flex flex-col items-end gap-1">
         <article className="max-w-[85%] rounded-xl rounded-br-[4px] bg-brand-600 px-3.5 py-2.5 text-white">
           <span className="sr-only">내 질문</span>
-          <p className="break-words type-body leading-6">{message.content}</p>
+          <p className="break-words type-chat-body">{message.content}</p>
         </article>
         <div className="flex items-center justify-end gap-1">
           {message.status === 'failed' ? <span className="mr-1 type-caption font-semibold text-rose-700">전송 실패</span> : null}
@@ -821,7 +815,7 @@ function MessageBubble({
     <div className="flex min-w-0 w-full flex-col items-start gap-1">
       <article className="w-full min-w-0 rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5 text-stone-900">
         <span className="sr-only">AI 답변</span>
-        <MarkdownContent content={message.content} isStreaming={message.status === 'streaming'} />
+        <MarkdownContent content={message.content} isStreaming={message.status === 'streaming'} typography="chat" />
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {message.pageNumber ? (
             <p className="inline-flex items-center gap-1.5 rounded-md border border-stone-200 bg-white px-2 py-1 type-caption font-semibold text-brand-700">

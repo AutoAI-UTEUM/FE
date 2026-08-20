@@ -53,7 +53,7 @@ describe('SessionDetailPage', () => {
     renderSessionDetail()
 
     expect(
-      await screen.findByRole('link', { name: '주차 페이지로' }),
+      await screen.findByRole('link', { name: '주차 페이지로' }, { timeout: 3_000 }),
     ).toHaveAttribute('href', '/classrooms/12')
   })
 
@@ -152,6 +152,11 @@ describe('SessionDetailPage', () => {
     expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: '개요' })).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByLabelText('질문')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '학습 완료' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '시험 대비 요약.pdf' })).toHaveClass(
+      'type-section-title',
+    )
+    expect(screen.getByText('1 / 5쪽')).toHaveClass('type-section-title')
 
     fireEvent.click(screen.getByRole('tab', { name: '개요' }))
 

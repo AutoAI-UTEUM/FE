@@ -114,11 +114,10 @@ OAuth 콜백은 현재 refresh HttpOnly cookie 정책을 유지해야 한다.
 BE 집계 로직 점검 대상으로 처리한다. `qa_threads`의 강의실 연결 자료 범위와 USER 메시지
 생성 시각이 최근 7일 집계에 포함되는지 확인이 필요하다.
 
-## P1. 알림 전달
+## 연결 완료: 인앱 알림
 
-환경설정의 `newMaterialNotification`, `studyReminder` 저장 API는 연결돼 있지만,
-새 자료 알림과 "3일 이상 미접속 시 이메일"을 실제로 전달하는 공개 계약은 없다.
-이메일 또는 인앱 알림 수단을 확정한 뒤 다음 기능이 필요하다.
+사이드바 알림 패널은 캘린더 일정과 localStorage 읽음 상태를 사용하지 않고 다음
+서버 인앱 알림 API를 사용한다.
 
 ```http
 GET    /api/users/me/notifications
@@ -126,8 +125,12 @@ PATCH  /api/users/me/notifications/{notificationId}/read
 DELETE /api/users/me/notifications/{notificationId}
 ```
 
-서버 내부에서는 새 자료 게시와 미접속 조건을 환경설정에 따라 발송하는 작업이
-필요하다. 비밀번호 재설정도 이메일을 사용한다면 같은 발송 인프라로 묶는다.
+`MATERIAL_UPLOADED`, `NOTICE_PUBLISHED`, `JOIN_REQUEST_RECEIVED`,
+`JOIN_REQUEST_PROCESSED`를 표시하고 서버 `readAt`을 미읽음 기준으로 사용한다.
+알림의 `link`는 자료·공지·입장 요청 화면으로 연결하며 항목별 삭제도 지원한다.
+
+`studyReminder`의 "3일 이상 미접속 시 이메일" 전달과 비밀번호 재설정 이메일은
+공개 계약이 아직 없으므로 별도 BE 작업이 필요하다.
 
 ## 연결 완료: 캘린더 개인 일정
 

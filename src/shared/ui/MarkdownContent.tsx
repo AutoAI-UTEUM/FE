@@ -11,6 +11,7 @@ interface MarkdownContentProps {
   content: string
   isStreaming?: boolean
   onPageReferenceClick?: (pageNumber: number) => void
+  typography?: 'body' | 'chat'
 }
 
 type MarkdownSegment =
@@ -124,19 +125,23 @@ export function MarkdownContent({
   content,
   isStreaming = false,
   onPageReferenceClick,
+  typography = 'body',
 }: MarkdownContentProps) {
   const segments = parseToggleBlocks(content)
 
   return (
     <div
       className={cx(
-        'min-w-0 overflow-x-auto break-words type-body leading-6 text-inherit',
+        'min-w-0 overflow-x-auto break-words text-inherit',
+        typography === 'chat' ? 'type-chat-body' : 'type-body leading-6',
         '[&_.katex-display]:my-3 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden',
         '[&_a]:text-brand-600 [&_a]:underline dark:[&_a]:text-brand-400',
         '[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-stone-300 [&_blockquote]:pl-3 dark:[&_blockquote]:text-stone-800',
         '[&_code]:rounded [&_code]:bg-white [&_code]:px-1 [&_code]:py-0.5 [&_code]:type-control dark:[&_code]:bg-stone-100 dark:[&_code]:text-stone-900',
-        '[&_h1]:mt-2 [&_h1]:type-section-title [&_h1]:font-bold',
-        '[&_h2]:mt-2 [&_h2]:type-body [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:font-bold',
+        '[&_h1]:mt-2 [&_h1]:font-bold',
+        typography === 'chat' ? '[&_h1]:type-dialog-title' : '[&_h1]:type-section-title',
+        '[&_h2]:mt-2 [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:font-bold',
+        typography === 'body' ? '[&_h2]:type-body' : null,
         '[&_hr]:my-3 [&_hr]:border-stone-200 [&_li]:my-0.5',
         '[&_ol]:list-decimal [&_ol]:pl-5 [&_p+p]:mt-2',
         '[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-white [&_pre]:p-2 dark:[&_pre]:bg-stone-100 dark:[&_pre]:text-stone-900',
@@ -153,7 +158,7 @@ export function MarkdownContent({
           <summary className="cursor-pointer list-none px-3 py-2 type-control font-bold text-stone-900 marker:hidden">
             {segment.title}
           </summary>
-          <MarkdownContent className="border-t border-stone-100 px-3 py-2 text-stone-800" content={segment.content} isStreaming={isStreaming} onPageReferenceClick={onPageReferenceClick} />
+          <MarkdownContent className="border-t border-stone-100 px-3 py-2 text-stone-800" content={segment.content} isStreaming={isStreaming} onPageReferenceClick={onPageReferenceClick} typography={typography} />
         </details>
       ) : (
         <Markdown

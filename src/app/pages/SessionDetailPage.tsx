@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, LockKeyhole } from 'lucide-react'
+import { LockKeyhole } from 'lucide-react'
 
 import { useAuth } from '../../features/auth'
 import {
@@ -368,7 +368,7 @@ export function SessionDetailPage() {
       <ErrorState
         title="세션을 찾을 수 없습니다."
         description="세션 식별자가 없습니다."
-        action={<ButtonLink to={routes.sessions}>세션 목록으로</ButtonLink>}
+        action={<ButtonLink to={routes.classrooms}>강의실로</ButtonLink>}
       />
     )
   }
@@ -395,7 +395,7 @@ export function SessionDetailPage() {
               다시 시도
             </Button>
           ) : (
-            <ButtonLink to={routes.sessions}>세션 목록으로</ButtonLink>
+            <ButtonLink to={routes.classrooms}>강의실로</ButtonLink>
           )
         }
       />
@@ -580,7 +580,7 @@ export function SessionDetailPage() {
         setError(null)
         try {
           await sessionsRepository.complete(activeSession.id)
-          navigate(routes.sessions)
+          navigate(weekPagePath)
         } catch (requestError) {
           setError(getRequestErrorMessage(requestError))
         } finally {
@@ -788,7 +788,7 @@ export function SessionDetailPage() {
               <div className="grid gap-2">
                 {isSelectingQuizType ? (
                   <div>
-                    <p className="type-body font-semibold text-stone-900">
+                    <p className="type-chat-body font-semibold text-stone-900">
                       어떤 유형의 퀴즈를 풀까요?
                     </p>
                     <p className="mt-1 type-caption text-stone-500">
@@ -842,22 +842,6 @@ export function SessionDetailPage() {
               </div>
             ) : undefined}
             currentPage={currentPage}
-            headerAction={activeSession.status === 'ACTIVE' ? (
-              <Button
-                disabled={isActionPending || chat.isTurnPending}
-                onClick={() => {
-                  if (window.confirm('학습을 완료 처리할까요?')) {
-                    void handleEvent('COMPLETE_SESSION')
-                  }
-                }}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                <CheckCircle2 aria-hidden="true" size={13} />
-                학습 완료
-              </Button>
-            ) : undefined}
             onExplainCurrentPage={() => handleEvent('EXPLAIN_CURRENT_PAGE')}
             onExplainNextPage={handleExplainNextPage}
             onOpenQuiz={handleOpenQuizHistory}
