@@ -11,6 +11,7 @@ import {
   LogOut,
   NotebookPen,
   Settings,
+  Trash2,
   UserPlus,
   X,
   type LucideIcon,
@@ -32,13 +33,18 @@ import {
   type Classroom,
 } from '../../features/classrooms'
 import {
-  getCalendarEventKindLabel,
-  useCalendarEvents,
-  type CalendarEvent,
-} from '../../features/calendar'
+  createNotificationsRepository,
+  type AppNotification,
+  type AppNotificationType,
+} from '../../features/notifications'
 import { cx } from '../../shared/lib/cx'
 import { formatDateTime } from '../../shared/lib/format'
-import { classroomDetailPath, routes } from '../routes'
+import {
+  classroomAnnouncementsPath,
+  classroomDetailPath,
+  materialViewerPath,
+  routes,
+} from '../routes'
 import { SettingsContent } from '../pages/SettingsPage'
 
 const learnerNavigation: Array<{
@@ -74,34 +80,23 @@ export function AppLayout() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
   const [sidebarClassrooms, setSidebarClassrooms] = useState<Classroom[]>([])
-  const [notificationReferenceTime, setNotificationReferenceTime] = useState(
-    () => Date.now(),
-  )
-  const notificationStorageKey = `edupilot:read-calendar-events:${user?.id ?? user?.email ?? 'anonymous'}`
-  const [readNotificationIdsByUser, setReadNotificationIdsByUser] = useState<Record<string, string[]>>({})
-  const readNotificationIds = useMemo(
-    () => readNotificationIdsByUser[notificationStorageKey] ?? readNotificationIdsFromStorage(notificationStorageKey),
-    [notificationStorageKey, readNotificationIdsByUser],
-  )
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true)
+  const [notificationReloadKey, setNotificationReloadKey] = useState(0)
   const roleLabel = getRoleLabel(user?.role)
   const isInstructor = isInstructorRole(user?.role)
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
     [apiRequest],
   )
-  const { events: calendarEvents } = useCalendarEvents(
-    user?.id ?? user?.email,
-    apiRequest,
+  const notificationsRepository = useMemo(
+    () => createNotificationsRepository(apiRequest),
+    [apiRequest],
   )
-  const upcomingEvents = useMemo(() => {
-    return calendarEvents
-      .filter(
-        (event) =>
-          new Date(event.startsAt).getTime() >= notificationReferenceTime &&
-          !readNotificationIds.includes(event.id),
-      )
-      .slice(0, 5)
-  }, [calendarEvents, notificationReferenceTime, readNotificationIds])
+  const unreadNotificationCount = notifications.filter(
+    (notification) => !notification.readAt,
+  ).length
   const primaryNavigation = useMemo(() => isInstructor
     ? instructorNavigation
     : learnerNavigation, [isInstructor])
@@ -191,12 +186,64 @@ export function AppLayout() {
   }, [isNotificationsOpen])
 
   useEffect(() => {
-    const intervalId = window.setInterval(
-      () => setNotificationReferenceTime(Date.now()),
-      60_000,
+    const controller = new AbortController()
+    notificationsRepository.list(controller.signal)
+      .then((items) => {
+        setNotifications(items)
+        setNotificationsError(null)
+      })
+      .catch((requestError: unknown) => {
+        if (!controller.signal.aborted) {
+          setNotificationsError(
+            requestError instanceof Error
+              ? requestError.message
+              : '알림을 불러오지 못했습니다.',
+          )
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingNotifications(false)
+      })
+    return () => controller.abort()
+  }, [notificationReloadKey, notificationsRepository])
+
+  async function markAllNotificationsRead() {
+    const unread = notifications.filter((notification) => !notification.readAt)
+    if (unread.length === 0) return
+    const readAt = new Date().toISOString()
+    setNotifications((current) => current.map((notification) =>
+      notification.readAt ? notification : { ...notification, readAt }))
+    const results = await Promise.allSettled(
+      unread.map((notification) => notificationsRepository.markRead(notification.id)),
     )
-    return () => window.clearInterval(intervalId)
-  }, [])
+    if (results.some((result) => result.status === 'rejected')) {
+      setNotificationReloadKey((key) => key + 1)
+    }
+  }
+
+  function openNotification(notification: AppNotification) {
+    setIsNotificationsOpen(false)
+    if (!notification.readAt) {
+      const readAt = new Date().toISOString()
+      setNotifications((current) => current.map((item) =>
+        item.id === notification.id ? { ...item, readAt } : item))
+      void notificationsRepository.markRead(notification.id).catch(() => {
+        setNotificationReloadKey((key) => key + 1)
+      })
+    }
+    navigate(getNotificationPath(notification))
+  }
+
+  async function deleteNotification(notificationId: string) {
+    const previous = notifications
+    setNotifications((current) => current.filter((item) => item.id !== notificationId))
+    try {
+      await notificationsRepository.delete(notificationId)
+    } catch {
+      setNotifications(previous)
+      setNotificationsError('알림을 삭제하지 못했습니다.')
+    }
+  }
 
   async function handleLogout() {
     setIsMenuOpen(false)
@@ -295,40 +342,38 @@ export function AppLayout() {
                 <button
                   aria-expanded={isNotificationsOpen}
                   aria-haspopup="dialog"
-                  aria-label={`알림 ${upcomingEvents.length}개`}
+                  aria-label={`알림 ${unreadNotificationCount}개`}
                   className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
                   onClick={() => {
+                    if (!isNotificationsOpen) {
+                      setIsLoadingNotifications(true)
+                      setNotificationReloadKey((key) => key + 1)
+                    }
                     setIsNotificationsOpen((open) => !open)
                     setIsMenuOpen(false)
                   }}
-                  title="예정 알림"
+                  title="알림"
                   type="button"
                 >
                   <Bell aria-hidden="true" size={15} />
-                  {upcomingEvents.length > 0 ? (
+                  {unreadNotificationCount > 0 ? (
                     <span className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 type-micro font-bold leading-4 text-white">
-                      {upcomingEvents.length > 9 ? '9+' : upcomingEvents.length}
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
                     </span>
                   ) : null}
                 </button>
                 {isNotificationsOpen ? (
                   <NotificationPanel
-                    events={upcomingEvents}
+                    error={notificationsError}
                     isCollapsed={isCollapsed}
-                    onMarkRead={() => {
-                      const nextIds = [...new Set([
-                        ...readNotificationIds,
-                        ...upcomingEvents.map((event) => event.id),
-                      ])]
-                      setReadNotificationIdsByUser((current) => ({
-                        ...current,
-                        [notificationStorageKey]: nextIds,
-                      }))
-                      window.localStorage.setItem(notificationStorageKey, JSON.stringify(nextIds))
-                    }}
-                    onOpenCalendar={() => {
-                      setIsNotificationsOpen(false)
-                      navigate(routes.calendar)
+                    isLoading={isLoadingNotifications}
+                    notifications={notifications}
+                    onDelete={(notificationId) => void deleteNotification(notificationId)}
+                    onMarkRead={() => void markAllNotificationsRead()}
+                    onOpen={openNotification}
+                    onRetry={() => {
+                      setIsLoadingNotifications(true)
+                      setNotificationReloadKey((key) => key + 1)
                     }}
                   />
                 ) : null}
@@ -525,21 +570,33 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 }
 
 function NotificationPanel({
-  events,
+  error,
   isCollapsed,
+  isLoading,
+  notifications,
+  onDelete,
   onMarkRead,
-  onOpenCalendar,
+  onOpen,
+  onRetry,
   placement = 'header',
 }: {
-  events: CalendarEvent[]
+  error: string | null
   isCollapsed: boolean
+  isLoading: boolean
+  notifications: AppNotification[]
+  onDelete: (notificationId: string) => void
   onMarkRead: () => void
-  onOpenCalendar: () => void
+  onOpen: (notification: AppNotification) => void
+  onRetry: () => void
   placement?: 'footer' | 'header'
 }) {
+  const hasUnreadNotifications = notifications.some(
+    (notification) => !notification.readAt,
+  )
+
   return (
     <div
-      aria-label="예정 알림"
+      aria-label="알림"
       className={cx(
         'isolate absolute z-[60] w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xl ring-1 ring-stone-950/5 dark:bg-[#26272c]',
         placement === 'footer'
@@ -552,57 +609,89 @@ function NotificationPanel({
       role="dialog"
     >
       <div className="flex h-12 items-center justify-between border-b border-stone-100 px-4">
-        <h2 className="type-body font-bold text-stone-900">예정 알림</h2>
-        <div className="flex items-center gap-1">
+        <h2 className="type-body font-bold text-stone-900">알림</h2>
+        <button
+          className="inline-flex h-7 items-center gap-1 rounded-md px-2 type-micro font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-800 disabled:cursor-default disabled:opacity-40"
+          disabled={isLoading || !hasUnreadNotifications}
+          onClick={onMarkRead}
+          type="button"
+        >
+          <Check aria-hidden="true" size={12} />
+          모두 읽음
+        </button>
+      </div>
+      {isLoading && notifications.length === 0 ? (
+        <div className="flex min-h-32 items-center justify-center px-5 text-center">
+          <p className="type-body text-stone-500" role="status">알림을 불러오는 중입니다.</p>
+        </div>
+      ) : error && notifications.length === 0 ? (
+        <div className="flex min-h-32 flex-col items-center justify-center gap-2 px-5 text-center">
+          <p className="type-body font-medium text-rose-700" role="alert">{error}</p>
           <button
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 type-micro font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-800 disabled:cursor-default disabled:opacity-40"
-            disabled={events.length === 0}
-            onClick={onMarkRead}
+            className="type-control font-semibold text-brand-700 hover:text-brand-900"
+            onClick={onRetry}
             type="button"
           >
-            <Check aria-hidden="true" size={12} />
-            읽음 처리
-          </button>
-          <button
-            aria-label="캘린더 열기"
-            className="inline-flex size-7 items-center justify-center rounded-md text-brand-700 hover:bg-brand-50 hover:text-brand-900"
-            onClick={onOpenCalendar}
-            title="캘린더 열기"
-            type="button"
-          >
-            <CalendarDays aria-hidden="true" size={14} />
+            다시 시도
           </button>
         </div>
-      </div>
-      {events.length > 0 ? (
+      ) : notifications.length > 0 ? (
         <div className="max-h-80 overflow-y-auto py-1.5">
-          {events.map((event) => (
-            <button
-              className="flex min-h-16 w-full items-start gap-3 px-4 py-3 text-left hover:bg-stone-50"
-              key={event.id}
-              onClick={onOpenCalendar}
-              type="button"
+          {error ? (
+            <p className="px-4 py-2 type-micro font-medium text-rose-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {notifications.map((notification) => (
+            <div
+              className={cx(
+                'group flex min-h-20 items-start gap-3 px-4 py-3 hover:bg-stone-50',
+                !notification.readAt && 'bg-brand-50/40',
+              )}
+              key={notification.id}
             >
-              <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
-                <CalendarDays aria-hidden="true" size={14} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <strong className="block truncate type-control font-semibold text-stone-900">
-                  {event.title}
-                </strong>
-                <span className="mt-0.5 block type-micro text-stone-400">
-                  {event.hasTime === false ? new Date(event.startsAt).toLocaleDateString('ko-KR') : formatDateTime(event.startsAt)} ·{' '}
-                  {getCalendarEventKindLabel(event.kind)}
+              <button
+                className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                onClick={() => onOpen(notification)}
+                type="button"
+              >
+                <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+                  <NotificationIcon type={notification.type} />
                 </span>
-              </span>
-            </button>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <strong className="block min-w-0 flex-1 truncate type-control font-semibold text-stone-900">
+                      {notification.title}
+                    </strong>
+                    {!notification.readAt ? (
+                      <span aria-label="읽지 않음" className="size-1.5 shrink-0 rounded-full bg-brand-600" />
+                    ) : null}
+                  </span>
+                  <span className="mt-0.5 line-clamp-2 block type-caption text-stone-500">
+                    {notification.body}
+                  </span>
+                  <span className="mt-1 block type-micro text-stone-400">
+                    {formatDateTime(notification.createdAt)}
+                  </span>
+                </span>
+              </button>
+              <button
+                aria-label={`${notification.title} 알림 삭제`}
+                className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-stone-400 opacity-0 hover:bg-stone-100 hover:text-stone-700 focus:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 group-hover:opacity-100"
+                onClick={() => onDelete(notification.id)}
+                title="알림 삭제"
+                type="button"
+              >
+                <Trash2 aria-hidden="true" size={13} />
+              </button>
+            </div>
           ))}
         </div>
       ) : (
         <div className="flex min-h-32 flex-col items-center justify-center px-5 text-center">
           <Bell aria-hidden="true" className="text-stone-300" size={20} />
           <p className="mt-2 type-body font-semibold text-stone-700">
-            예정된 알림이 없습니다
+            새로운 알림이 없습니다
           </p>
         </div>
       )}
@@ -610,12 +699,35 @@ function NotificationPanel({
   )
 }
 
-function readNotificationIdsFromStorage(storageKey: string): string[] {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]') as unknown
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-  } catch {
-    return []
+function NotificationIcon({ type }: { type: AppNotificationType }) {
+  switch (type) {
+    case 'MATERIAL_UPLOADED':
+      return <BookOpenCheck aria-hidden="true" size={14} />
+    case 'NOTICE_PUBLISHED':
+      return <Bell aria-hidden="true" size={14} />
+    case 'JOIN_REQUEST_RECEIVED':
+    case 'JOIN_REQUEST_PROCESSED':
+      return <UserPlus aria-hidden="true" size={14} />
+  }
+}
+
+function getNotificationPath(notification: AppNotification): string {
+  const { classroomId, materialId } = notification.link
+  switch (notification.type) {
+    case 'MATERIAL_UPLOADED':
+      return materialId
+        ? materialViewerPath(materialId)
+        : classroomId
+          ? classroomDetailPath(classroomId)
+          : routes.classrooms
+    case 'NOTICE_PUBLISHED':
+      return classroomId
+        ? classroomAnnouncementsPath(classroomId)
+        : routes.classrooms
+    case 'JOIN_REQUEST_RECEIVED':
+      return routes.entranceRequests
+    case 'JOIN_REQUEST_PROCESSED':
+      return routes.classrooms
   }
 }
 

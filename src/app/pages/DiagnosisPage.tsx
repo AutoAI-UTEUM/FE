@@ -22,7 +22,7 @@ import {
   PageContainer,
   PageHeader,
 } from '../../shared/ui'
-import { sessionDetailPath } from '../routes'
+import { routes, sessionDetailPath } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
 const QUIZ_TYPE_OPTIONS: Array<{ kind: QuizKind; label: string }> = [
@@ -126,7 +126,7 @@ export function DiagnosisPage() {
       <ErrorState
         title="진행 중인 진단을 찾을 수 없습니다."
         description="진단 또는 세션 식별자가 없습니다."
-        action={<ButtonLink to="/sessions">세션 목록으로</ButtonLink>}
+        action={<ButtonLink to={routes.classrooms}>강의실로</ButtonLink>}
       />
     )
   }

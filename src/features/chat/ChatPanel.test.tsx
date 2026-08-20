@@ -64,14 +64,37 @@ describe('ChatPanel', () => {
       '내 퀴즈',
       '내 노트',
     ])
+    screen.getAllByRole('tab').forEach((tab) => {
+      expect(tab).toHaveClass('type-section-title')
+    })
     expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: '개요' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.queryByRole('button', { name: '대화 새로 시작' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: '개요' }))
 
     expect(screen.getByText('개요를 준비 중입니다.')).toBeInTheDocument()
     expect(screen.getByText('생성이 완료되면 자료의 목차와 흐름이 여기에 표시됩니다.')).toBeInTheDocument()
     expect(screen.queryByLabelText('질문')).not.toBeInTheDocument()
+  })
+
+  it('uses the same 16px layout for quiz and note empty states', async () => {
+    render(<ChatHarness repository={createRepository()} />)
+    await screen.findByLabelText('질문')
+
+    fireEvent.click(screen.getByRole('tab', { name: '내 퀴즈' }))
+    const quizTitle = screen.getByText('생성된 퀴즈가 없습니다.')
+    const quizDescription = screen.getByText('학습 중 퀴즈를 만들면 여기에 기록됩니다.')
+    expect(quizTitle).toHaveClass('type-section-title')
+    expect(quizDescription).toHaveClass('type-section-title')
+    const quizLayoutClassName = quizTitle.parentElement?.className
+
+    fireEvent.click(screen.getByRole('tab', { name: '내 노트' }))
+    const noteTitle = screen.getByText('저장한 노트가 없습니다.')
+    const noteDescription = screen.getByText("AI 답변의 '노트에 저장'을 눌러 정리해 보세요.")
+    expect(noteTitle).toHaveClass('type-section-title')
+    expect(noteDescription).toHaveClass('type-section-title')
+    expect(noteTitle.parentElement?.className).toBe(quizLayoutClassName)
   })
 
   it('renders material overview markdown when overview content is provided', async () => {
@@ -306,19 +329,6 @@ describe('ChatPanel', () => {
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
   })
 
-  it('starts a server-side conversation before clearing the visible chat', async () => {
-    const repository = createRepository({
-      listMessages: vi.fn().mockResolvedValue([{ content: '이전 답변', createdAt: '2026-08-03T00:00:00Z', id: '1', senderType: 'AI' }]),
-    })
-    render(<ChatHarness repository={repository} />)
-    expect(await screen.findByText('이전 답변')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '대화 새로 시작' }))
-
-    await waitFor(() => expect(repository.startNewConversation).toHaveBeenCalledWith('100'))
-    expect(screen.queryByText('이전 답변')).not.toBeInTheDocument()
-  })
-
   it('routes both page explanation quick actions through the learning event callback', async () => {
     const onExplainCurrentPage = vi.fn()
     const repository = createRepository({
@@ -384,8 +394,10 @@ describe('ChatPanel', () => {
 
     const strong = await screen.findByText('핵심')
     expect(strong.tagName).toBe('STRONG')
+    expect(strong.closest('.type-chat-body')).toBeInTheDocument()
     expect(screen.getByRole('list')).toBeInTheDocument()
-    expect(screen.getByText('*별표*는 그대로 보여야 합니다.')).toBeInTheDocument()
+    expect(screen.getByText('*별표*는 그대로 보여야 합니다.')).toHaveClass('type-chat-body')
+    expect(screen.getByLabelText('질문')).toHaveClass('type-chat-body')
   })
 
   it('renders inline and display LaTeX in assistant messages', async () => {

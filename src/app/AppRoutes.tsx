@@ -26,7 +26,6 @@ import { MaterialsPage } from './pages/MaterialsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { QuizPage } from './pages/QuizPage'
 import { SessionDetailPage } from './pages/SessionDetailPage'
-import { SessionsPage } from './pages/SessionsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SignupPage } from './pages/SignupPage'
 import { routes } from './routes'
@@ -55,7 +54,7 @@ export function AppRoutes() {
           <Route path={routes.classrooms} element={<ClassroomsPage />} />
           <Route path={routes.materials} element={<MaterialsPage />} />
           <Route path={routes.materialViewer} element={<MaterialViewerRedirectPage />} />
-          <Route path={routes.sessions} element={<SessionsPage />} />
+          <Route path={routes.sessions} element={<Navigate to={routes.classrooms} replace />} />
           <Route path={routes.sessionDetail} element={<SessionDetailPage />} />
           <Route path={routes.quizDetail} element={<QuizPage />} />
           <Route path={routes.diagnosis} element={<DiagnosisPage />} />

@@ -2,11 +2,11 @@
 
 ## 기준
 
-- 확인일: 2026-08-11
+- 확인일: 2026-08-20
 - Swagger UI: <https://edu-pilot.duckdns.org/swagger-ui/index.html>
 - OpenAPI JSON: <https://edu-pilot.duckdns.org/v3/api-docs>
 - BE 문서: `AutoAI-EduPilot/BE` `develop`의 `docs/api-spec.md`
-- Swagger operation: 91개
+- Swagger operation: 100개
 
 `화면 연결`은 실제 페이지나 hook에서 사용자가 호출할 수 있는 상태를 뜻한다.
 `repository 준비`는 계약과 mapper가 구현됐지만 현재 화면에 직접 조작 UI가 없는
@@ -14,6 +14,11 @@
 
 ## 이번 반영
 
+- 인앱 알림: `GET /api/users/me/notifications`를 사이드바 알림 패널에 연결하고,
+  서버 `readAt` 기준 미읽음 배지와 개별·전체 읽음 처리를 제공한다.
+  `PATCH /api/users/me/notifications/{notificationId}/read`와
+  `DELETE /api/users/me/notifications/{notificationId}`도 연결했으며, 알림 유형별
+  `link`를 자료·공지·입장 요청 화면 경로로 변환한다.
 - 수강생 목록: `GET /api/classrooms/{id}/students`의 `q`와
   `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`를 연결했다. 이름 검색과 정렬은 서버에서
   수행하며 `averageProgressRate`, `aiQuestionCountLast7Days`를 수강생 표와 CSV에
@@ -29,8 +34,6 @@
   재확인 모달에 연결했다. 현재 강의실 이름을 정확히 입력해야 요청할 수 있다.
 - 배포 Swagger에 추가된 리포트·학습현황·수강생 관리·개인 일정·주차 상태/순서
   API가 실제 화면과 repository에 연결된 상태임을 재검증했다.
-- 학습 대화: `POST /api/sessions/{sessionId}/conversations`를 사용해 서버 대화
-  컨텍스트를 새로 시작
 - 별도 시험: 강사 초안 생성·조회·수정·삭제·공개·종료·제출 현황과 학습자
   목록·응시·결과 조회를 역할별 화면에 연결. DRAFT 시험의 `AI 초안으로 시작`은
   생성 범위와 문항 구성을 받아 편집기에 불러오며 검토 후 저장해야 반영된다.
@@ -62,6 +65,7 @@
 `POST /api/auth/logout`, `GET /api/auth/email-availability`,
 `GET/PATCH/DELETE /api/users/me`, `GET/POST/DELETE /api/users/me/avatar`,
 `GET/PATCH /api/users/me/preferences`,
+`GET/PATCH/DELETE /api/users/me/notifications/...`,
 `GET/POST/PATCH/DELETE /api/users/me/schedule/...`
 
 ### 강의실
@@ -117,6 +121,7 @@
 - `GET /api/materials/{materialId}/notes`: 자료 단위 노트 목록 UI 없음
 - `GET /api/users/me/memory?materialId={materialId}`: 자료별 학습 메모리 UI 없음
 - `GET /api/exams/{examId}/submissions/{submissionId}`: 강의자 제출 상세 UI 없음
+- `POST /api/sessions/{sessionId}/conversations`: 새 대화 시작 UI 없음
 
 아래 API는 화면에서 일부만 사용한다.
 
@@ -127,7 +132,7 @@
 
 ## 계약 메모
 
-- 배포 Swagger와 BE `develop` 명세는 사용자·강의실·노트·피드백·별도 시험
+- 배포 Swagger와 BE `develop` 명세는 사용자·알림·강의실·노트·피드백·별도 시험
   범위에서 일치한다. 시험 목록과 역할별 상세 응답은 Swagger가 generic object로
   표시하므로 구체 필드는 `api-spec.md` 계약을 기준으로 매핑한다.
 - AI 문항 초안의 `sourcePageNumber`는 실제 PDF 페이지가 아니라 사용된 컨텍스트

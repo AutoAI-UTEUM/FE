@@ -153,6 +153,35 @@ export async function handleApiFixtureRequest(
     return apiSuccess(await readJson(request))
   }
 
+  if (
+    request.method === 'GET' &&
+    path === '/api/users/me/notifications?page=0&size=20'
+  ) {
+    return apiSuccess(paged([]))
+  }
+
+  if (
+    request.method === 'PATCH' &&
+    /^\/api\/users\/me\/notifications\/\d+\/read$/.test(path)
+  ) {
+    return apiSuccess({
+      body: '확인할 알림입니다.',
+      createdAt: '2026-08-20T00:00:00Z',
+      link: {},
+      notificationId: Number(path.split('/')[5]),
+      readAt: '2026-08-20T00:01:00Z',
+      title: '알림',
+      type: 'NOTICE_PUBLISHED',
+    })
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    /^\/api\/users\/me\/notifications\/\d+$/.test(path)
+  ) {
+    return apiSuccess(null)
+  }
+
   if (request.method === 'POST' && path === '/api/feedback') {
     return apiSuccess({ createdAt: '2026-08-15T00:00:00Z', feedbackId: 1 })
   }

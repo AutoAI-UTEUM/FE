@@ -51,6 +51,26 @@
   line-height: 1.375rem;
 }
 
+/* 학습 채팅은 작은 화면의 밀도를 유지하고 넓은 데스크톱에서 읽기 크기를 확보한다. */
+.type-chat-body {
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+
+@media (min-width: 768px) {
+  .type-chat-body {
+    font-size: 0.9375rem;
+    line-height: 1.5rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .type-chat-body {
+    font-size: 1rem;
+    line-height: 1.625rem;
+  }
+}
+
 @utility type-control {
   font-size: 0.8125rem;
   line-height: 1.25rem;

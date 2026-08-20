@@ -92,6 +92,17 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
   })
 
+  it('redirects the removed session list route to classrooms', async () => {
+    renderRoute('/sessions')
+
+    expect(
+      await screen.findByRole('heading', { name: '내 강의실' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: '학습 세션' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('opens the settings dialog from the profile menu', async () => {
     renderRoute('/')
 
@@ -416,37 +427,65 @@ describe('AppRoutes', () => {
     expect(screen.queryByText('창을 닫아도 서버 작업은 계속됩니다. 완료 상태를 주기적으로 확인합니다.')).not.toBeInTheDocument()
   })
 
-  it('shows upcoming calendar schedules in the notification panel', async () => {
-    renderRoute('/calendar', {
+  it('shows server notifications and persists read and delete actions', async () => {
+    const notification = {
+      body: '3주차 공지를 확인해 주세요.',
+      createdAt: '2026-08-20T03:00:00Z',
+      link: { classroomId: 12, noticeId: 70 },
+      notificationId: 100,
+      readAt: null as string | null,
+      title: '중간고사 안내',
+      type: 'NOTICE_PUBLISHED',
+    }
+    const requests: string[] = []
+    installApiFixtureServer(async (request) => {
+      const url = new URL(request.url)
+      if (!url.pathname.startsWith('/api/users/me/notifications')) return undefined
+      requests.push(`${request.method} ${url.pathname}`)
+      if (request.method === 'GET') {
+        return apiSuccess({
+          items: [notification],
+          page: 0,
+          size: 20,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      if (request.method === 'PATCH') {
+        notification.readAt = '2026-08-20T03:01:00Z'
+        return apiSuccess(notification)
+      }
+      if (request.method === 'DELETE') return apiSuccess(null)
+      return undefined
+    })
+
+    renderRoute('/', {
       email: 'instructor@example.com',
       id: 7,
       name: '강의자',
       role: 'INSTRUCTOR',
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '일정 추가' }))
-    fireEvent.change(screen.getByLabelText('일정 이름'), {
-      target: { value: '자료 공개 확인' },
-    })
-    fireEvent.change(screen.getByLabelText('날짜와 시간'), {
-      target: { value: '2099-08-03T09:00' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '추가' }))
-
     fireEvent.click(await screen.findByRole('button', { name: '알림 1개' }))
-    const notificationPanel = screen.getByRole('dialog', { name: '예정 알림' })
+    const notificationPanel = screen.getByRole('dialog', { name: '알림' })
     expect(notificationPanel).toBeInTheDocument()
-    expect(notificationPanel).toHaveTextContent('자료 공개 확인')
-    expect(
-      screen.getByRole('button', { name: '캘린더 열기' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '캘린더 열기' })).not.toHaveTextContent('캘린더 열기')
+    expect(notificationPanel).toHaveTextContent('중간고사 안내')
+    expect(notificationPanel).toHaveTextContent('3주차 공지를 확인해 주세요.')
+    expect(screen.getByLabelText('읽지 않음')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '읽음 처리' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '모두 읽음' })).toBeEnabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '모두 읽음' }))
 
-    expect(notificationPanel).toHaveTextContent('예정된 알림이 없습니다')
-    expect(screen.getByRole('button', { name: '알림 0개' })).toBeInTheDocument()
-    expect(window.localStorage.getItem('edupilot:read-calendar-events:7')).not.toBeNull()
+    expect(await screen.findByRole('button', { name: '알림 0개' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('읽지 않음')).not.toBeInTheDocument()
+    expect(requests).toContain('PATCH /api/users/me/notifications/100/read')
+
+    fireEvent.click(screen.getByRole('button', { name: '중간고사 안내 알림 삭제' }))
+
+    expect(await screen.findByText('새로운 알림이 없습니다')).toBeInTheDocument()
+    expect(requests).toContain('DELETE /api/users/me/notifications/100')
   })
 
   it('renders the not found route for unknown paths', () => {

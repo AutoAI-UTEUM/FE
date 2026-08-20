@@ -149,10 +149,10 @@ export function SessionPageViewer({
             <ChevronLeft aria-hidden="true" size={16} />
           </Link>
         ) : null}
-        <h2 className="hidden min-w-0 truncate type-body font-semibold text-stone-950 sm:block">
+        <h2 className="hidden min-w-0 truncate type-section-title font-semibold text-stone-950 sm:block">
           {materialTitle ?? '학습 자료'}
         </h2>
-        <span className="shrink-0 type-caption text-stone-400">
+        <span className="shrink-0 type-section-title text-stone-400">
           {currentPage} / {totalPages}쪽
         </span>
         <div
