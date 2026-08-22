@@ -1,5 +1,6 @@
 import { useContext, useEffect, type ReactNode, type Ref } from 'react'
 import { createPortal } from 'react-dom'
+import { CalendarRange, KeyRound, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../../features/auth'
@@ -14,12 +15,51 @@ import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext
 
 export type ClassroomWorkspaceTab = 'course' | 'learning' | 'settings'
 
+export function ClassroomHeaderInfoBar({
+  classroom,
+  inviteCodeDisabled = false,
+  onInviteCodeClick,
+  showInviteCode = false,
+}: {
+  classroom: Classroom
+  inviteCodeDisabled?: boolean
+  onInviteCodeClick?: () => void
+  showInviteCode?: boolean
+}) {
+  return (
+    <div aria-label="강의실 정보" className="flex min-h-10 max-w-full items-stretch overflow-hidden rounded-lg border border-stone-200 bg-white text-stone-600" role="group">
+      <span className="flex min-w-0 items-center gap-1.5 px-3 type-control">
+        <CalendarRange aria-hidden="true" className="shrink-0 text-stone-400" size={14} />
+        <span className="truncate">{formatClassroomPeriod(classroom.startDate, classroom.endDate)}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1.5 border-l border-stone-200 px-3 type-control">
+        <Users aria-hidden="true" className="text-stone-400" size={14} />
+        수강생 {classroom.learnerCount}명
+      </span>
+      {showInviteCode ? (
+        <button
+          aria-label={`초대 코드 ${classroom.inviteCode ?? '확인'} 복사`}
+          className="flex shrink-0 items-center gap-1.5 border-l border-stone-200 px-3 type-control font-semibold text-stone-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
+          disabled={inviteCodeDisabled}
+          onClick={onInviteCodeClick}
+          title="초대 코드 복사"
+          type="button"
+        >
+          <KeyRound aria-hidden="true" size={14} />
+          <span className="font-mono">{classroom.inviteCode ?? '초대 코드'}</span>
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 export function ClassroomWorkspaceHeader({
   actionSlotRef,
   actions,
   activeTab,
   classroom,
   root = false,
+  showClassroomSummary = true,
   showTabs = true,
   titleAccessory,
   titleAccessorySlotRef,
@@ -29,6 +69,7 @@ export function ClassroomWorkspaceHeader({
   activeTab: ClassroomWorkspaceTab
   classroom: Classroom
   root?: boolean
+  showClassroomSummary?: boolean
   showTabs?: boolean
   titleAccessory?: ReactNode
   titleAccessorySlotRef?: Ref<HTMLDivElement>
@@ -61,14 +102,14 @@ export function ClassroomWorkspaceHeader({
   }
 
   return (
-    <header>
+    <header className="shrink-0">
       <PageHeader
         actions={actions || actionSlotRef ? <div className="contents" ref={actionSlotRef}>{actions}</div> : undefined}
         title={classroom.name}
         titleAccessory={<>
-          <p className="type-control text-stone-500">
-            {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · {classroom.weekCount}주차 · 수강생 {classroom.learnerCount}명
-          </p>
+          {showClassroomSummary ? <p className="type-control text-stone-500">
+            {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · 수강생 {classroom.learnerCount}명
+          </p> : null}
           {titleAccessory || titleAccessorySlotRef ? <div className="contents" ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
         </>}
       />

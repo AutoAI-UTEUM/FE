@@ -131,16 +131,53 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(within(weekNavigation).queryByText('2', { exact: true })).not.toBeInTheDocument()
     expect(within(weekNavigation).getByText('8.3 - 8.9')).toBeInTheDocument()
     expect(within(weekNavigation).getByText('8.10 - 8.16')).toBeInTheDocument()
-    expect(screen.getByText('2026. 8. 3. - 2026. 11. 15. · 15주차 · 수강생 42명')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '전체 콘텐츠' })).toBeInTheDocument()
+    const classroomInfo = screen.getByRole('group', { name: '강의실 정보' })
+    expect(classroomInfo).toHaveTextContent('2026. 8. 3. - 2026. 11. 15.')
+    expect(classroomInfo).toHaveTextContent('수강생 42명')
+    expect(within(classroomInfo).getByRole('button', { name: '초대 코드 7QK4-MZ2A 복사' })).toBeInTheDocument()
+    expect(screen.queryByText(/15주차/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '전체 콘텐츠' })).not.toBeInTheDocument()
     expect(screen.getAllByText('8.3 - 8.9')).toHaveLength(1)
-    expect(screen.getByRole('region', { name: '강의실 통합 콘텐츠' })).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)]')
-    expect(screen.getByRole('group', { name: '콘텐츠 유형 필터' })).toBeInTheDocument()
+    const classroomContent = screen.getByRole('region', { name: '강의실 통합 콘텐츠' })
+    expect(classroomContent).toHaveClass(
+      'lg:min-h-0',
+      'lg:flex-1',
+      'lg:grid-cols-[220px_minmax(0,1fr)]',
+      'lg:grid-rows-[minmax(0,1fr)]',
+      'lg:items-stretch',
+    )
+    expect(classroomContent.parentElement).toHaveClass('lg:overflow-hidden')
+    const contentFilters = screen.getByRole('group', { name: '콘텐츠 유형 필터' })
+    const addItemButtons = screen.getByRole('group', { name: '새 항목 유형' })
+    expect(contentFilters.parentElement).toBe(addItemButtons.parentElement)
+    expect(contentFilters.parentElement).toHaveClass('sm:flex-row', 'sm:justify-between')
+    expect(screen.getByRole('button', { name: '수업' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '자료' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '새 항목 추가' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '자료 업로드' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '공지 추가' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '시험 추가' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '자료 추가' }))
-    const uploadDialog = screen.getByRole('dialog', { name: '강의자료 업로드' })
+
+    fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
+    const resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
+    const resourceFile = new File(['document'], '수업 참고자료.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(within(resourceDialog).getByLabelText('업로드할 자료 파일'), {
+      target: { files: [resourceFile] },
+    })
+    expect(within(resourceDialog).getByRole('textbox', { name: '자료 제목' })).toHaveValue('수업 참고자료')
+    fireEvent.click(within(resourceDialog).getByRole('button', { name: '자료 확인' }))
+
+    expect(screen.getByRole('heading', { name: '수업 참고자료' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '문서 자료 뷰어' })).toHaveTextContent('수업 참고자료.docx')
+    expect(screen.getByRole('complementary', { name: '자료 질문' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '자료 질문 입력' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '자료 질문 보내기' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '콘텐츠 목록으로 돌아가기' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
+    const uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
     expect(within(uploadDialog).queryByText('PDF · 최대 45MB')).not.toBeInTheDocument()
     expect(within(uploadDialog).queryByText('PPT/PPTX는 PDF로 변환 후 업로드해 주세요.')).not.toBeInTheDocument()
     const weekSelect = within(uploadDialog).getByRole('combobox', { name: '주차 선택' })
@@ -149,7 +186,7 @@ describe('ClassroomDetailPage instructor materials', () => {
       '2주차 · 심화',
     ])
     expect(weekSelect).toHaveValue('1')
-    fireEvent.click(screen.getByRole('button', { name: '강의자료 업로드 닫기' }))
+    fireEvent.click(screen.getByRole('button', { name: '수업 생성 닫기' }))
     expect(screen.queryByRole('button', { name: '주차 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
 
@@ -159,12 +196,12 @@ describe('ClassroomDetailPage instructor materials', () => {
     fireEvent.dragEnter(contentRegion, { dataTransfer: { files: [file] } })
     fireEvent.drop(contentRegion, { dataTransfer: { files: [file] } })
 
-    expect(screen.getByRole('dialog', { name: '강의자료 업로드' })).toBeInTheDocument()
-    const titleInput = screen.getByRole('textbox', { name: '자료 제목' })
+    expect(screen.getByRole('dialog', { name: '수업 생성' })).toBeInTheDocument()
+    const titleInput = screen.getByRole('textbox', { name: '수업 제목' })
     expect(titleInput).toHaveValue('lecture.pdf')
-    expect(screen.getByRole('button', { name: '업로드' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '생성' })).toBeEnabled()
     fireEvent.change(titleInput, { target: { value: 'lecture' } })
-    fireEvent.click(screen.getByRole('button', { name: '업로드' }))
+    fireEvent.click(screen.getByRole('button', { name: '생성' }))
 
     await waitFor(() => expect(uploadedValues).not.toBeNull())
     expect(uploadedValues).toEqual({
@@ -174,10 +211,12 @@ describe('ClassroomDetailPage instructor materials', () => {
       weekNumber: '1',
     })
     expect(await screen.findByRole('button', { name: 'lecture' })).toBeInTheDocument()
-    expect(within(contentRegion).getByText('PDF')).toBeInTheDocument()
-    expect(within(contentRegion).queryByText('자료', { exact: true })).not.toBeInTheDocument()
-    expect(screen.getByText('자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.')).toBeInTheDocument()
-    expect(screen.getByText('자료 처리가 완료되었습니다. 바로 학습할 수 있습니다.')).toBeInTheDocument()
+    expect(within(contentRegion).getByText('자료')).toHaveClass('min-h-5', 'rounded-md', 'border', 'px-1.5', 'type-caption', 'font-semibold')
+    const lectureButton = screen.getByText('lecture').closest('button')
+    expect(lectureButton?.parentElement).toHaveClass('h-11', 'min-h-11')
+    expect(within(lectureButton!).queryByText('자료', { exact: true })).not.toBeInTheDocument()
+    expect(screen.getByText('수업 생성을 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.')).toBeInTheDocument()
+    expect(screen.getByText('수업 생성이 완료되었습니다. 바로 학습할 수 있습니다.')).toBeInTheDocument()
     expect(screen.queryByText(/열람 가능/)).not.toBeInTheDocument()
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
     expect(screen.queryByRole('region', { name: '전체 콘텐츠' })).not.toBeInTheDocument()
@@ -256,12 +295,75 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.queryByText(/24쪽/)).not.toBeInTheDocument()
     expect(screen.queryByText(/8월 2일 업로드/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('1주차 자료 드롭 영역')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '자료 추가' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '수업 생성' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료 업로드' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '공지 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '시험 추가' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: '1주차 공개 상태' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '연결 리스트' }))
     expect(await screen.findByText('PDF 뷰어')).toBeInTheDocument()
+  })
+
+  it('opens an existing notice as markdown before allowing the instructor to edit it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        'http://localhost',
+      )
+
+      if (url.pathname === '/api/classrooms/12') return success(classroomFixture)
+      if (url.pathname === '/api/classrooms/12/weeks') {
+        return success({ items: [weekFixture] })
+      }
+      if (url.pathname === '/api/classrooms/12/notices') {
+        return success({
+          items: [{
+            classroomId: 12,
+            content: '## 준비 사항\n\n- 교재 지참',
+            createdAt: '2026-08-01T00:00:00Z',
+            noticeId: 20,
+            published: true,
+            publishedAt: '2026-08-02T00:00:00Z',
+            title: '첫 수업 안내',
+            updatedAt: '2026-08-02T00:00:00Z',
+            weekNumber: null,
+          }],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/classrooms/12?filter=notice']}>
+        <AuthProvider initialUser={{ email: 'instructor@example.com', id: 7, name: '강의자', role: 'INSTRUCTOR' }}>
+          <ToastProvider>
+            <Routes>
+              <Route path="/classrooms/:classroomId" element={<ClassroomDetailPage />} />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /첫 수업 안내/ }))
+
+    expect(screen.getByRole('heading', { name: '첫 수업 안내' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '준비 사항' })).toBeInTheDocument()
+    expect(screen.getByText('교재 지참')).toBeInTheDocument()
+    expect(screen.queryByLabelText('공지 제목')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '편집하기' }))
+
+    expect(screen.getByRole('heading', { name: '공지 편집' })).toBeInTheDocument()
+    expect(screen.getByLabelText('공지 제목')).toHaveValue('첫 수업 안내')
+    expect(screen.getByLabelText('본문')).toHaveValue('## 준비 사항\n\n- 교재 지참')
   })
 
   it('refreshes learner materials when the classroom tab becomes active again', async () => {
@@ -403,7 +505,8 @@ describe('ClassroomDetailPage instructor materials', () => {
 
     fireEvent.click(thirdWeek)
     expect(await screen.findByRole('button', { name: 'scheduled-week' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '자료 추가' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '수업 생성' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료 업로드' })).not.toBeInTheDocument()
   })
 })
 

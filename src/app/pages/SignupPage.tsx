@@ -55,15 +55,13 @@ const roleOptions: Array<{
   value: SignupRole
 }> = [
   {
-    description:
-      '초대코드로 강의실에 참여하고, 자료를 보며 AI와 학습해요',
+    description: '강의실에 참여해 AI와 학습해요',
     icon: GraduationCap,
     label: '학습자',
     value: 'LEARNER',
   },
   {
-    description:
-      '강의실을 만들어 자료를 올리고, 초대코드로 학습자를 초대해요',
+    description: '강의실을 만들고 학습자를 관리해요',
     icon: Presentation,
     label: '강의자',
     value: 'INSTRUCTOR',
@@ -350,9 +348,6 @@ export function SignupPage() {
           <h1 className="type-page-title font-bold text-stone-900">
             어떤 역할로 사용하시나요?
           </h1>
-          <p className="type-body text-stone-400">
-            가입 후에도 설정에서 변경할 수 있어요
-          </p>
         </div>
 
         <div
@@ -546,9 +541,7 @@ export function SignupPage() {
           </div>
           <div className="relative mt-1">
             <input
-              aria-describedby={
-                errors.password ? 'signup-password-error' : 'password-strength'
-              }
+              aria-describedby={errors.password ? 'signup-password-error' : undefined}
               aria-invalid={errors.password ? true : undefined}
               autoComplete="new-password"
               className={fieldClassName(Boolean(errors.password), 'pr-11')}
@@ -562,8 +555,10 @@ export function SignupPage() {
               aria-label={
                 isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'
               }
-              className="absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              aria-pressed={isPasswordVisible}
+              className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
               onClick={() => setIsPasswordVisible((visible) => !visible)}
+              title={isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'}
               type="button"
             >
               {isPasswordVisible ? (
@@ -574,9 +569,13 @@ export function SignupPage() {
             </button>
           </div>
           <div
-            aria-live="polite"
-            className="mt-2 flex items-center gap-1.5"
+            aria-label="비밀번호 안전도"
+            aria-valuemax={4}
+            aria-valuemin={0}
+            aria-valuenow={passwordStrength.score}
+            className="mt-2 flex w-full items-center gap-1.5"
             id="password-strength"
+            role="progressbar"
           >
             {Array.from({ length: 4 }, (_, index) => (
               <span
@@ -589,14 +588,6 @@ export function SignupPage() {
                 key={index}
               />
             ))}
-            <span
-              className={[
-                'ml-1.5 min-w-9 text-right type-micro font-semibold',
-                passwordStrength.labelClassName,
-              ].join(' ')}
-            >
-              {passwordStrength.label}
-            </span>
           </div>
         </div>
 
@@ -643,10 +634,12 @@ export function SignupPage() {
                   ? '비밀번호 확인 숨기기'
                   : '비밀번호 확인 표시'
               }
-              className="absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              aria-pressed={isConfirmPasswordVisible}
+              className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
               onClick={() =>
                 setIsConfirmPasswordVisible((visible) => !visible)
               }
+              title={isConfirmPasswordVisible ? '비밀번호 확인 숨기기' : '비밀번호 확인 표시'}
               type="button"
             >
               {isConfirmPasswordVisible ? (
@@ -744,15 +737,11 @@ function fieldClassName(hasError: boolean, spacingClassName: string): string {
 
 function getPasswordStrength(password: string): {
   barClassName: string
-  label: string
-  labelClassName: string
   score: number
 } {
   if (!password) {
     return {
       barClassName: 'bg-stone-300',
-      label: '',
-      labelClassName: 'text-stone-400',
       score: 0,
     }
   }
@@ -767,8 +756,6 @@ function getPasswordStrength(password: string): {
   if (score >= 3) {
     return {
       barClassName: 'bg-emerald-600',
-      label: '안전',
-      labelClassName: 'text-emerald-700',
       score,
     }
   }
@@ -776,16 +763,12 @@ function getPasswordStrength(password: string): {
   if (score === 2) {
     return {
       barClassName: 'bg-amber-500',
-      label: '보통',
-      labelClassName: 'text-amber-700',
       score,
     }
   }
 
   return {
     barClassName: 'bg-rose-500',
-    label: '약함',
-    labelClassName: 'text-rose-700',
     score: Math.max(1, score),
   }
 }
