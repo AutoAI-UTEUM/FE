@@ -1,4 +1,4 @@
-import { Archive, KeyRound, Upload, X } from 'lucide-react'
+import { Archive, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -13,10 +13,15 @@ import { usePolling } from '../../shared/state'
 import { Button, EmptyState, useToast } from '../../shared/ui'
 import { examDetailPath, sessionDetailPath } from '../routes'
 import { ClassroomContentPanel, ClassroomContentRail } from './classroom/ClassroomContentView'
-import { ExamContentPanel, NoticeContentPanel } from './classroom/ClassroomContentPanels'
+import { ExamContentPanel, NoticeContentPanel, NoticeDetailPanel } from './classroom/ClassroomContentPanels'
+import {
+  ClassroomResourcePreviewPanel,
+  ClassroomResourceUploadDialog,
+  type ClassroomResourcePreviewValue,
+} from './classroom/ClassroomResourcePreview'
 import { buildClassroomContent, filterClassroomContent, getGlobalClassroomContent, type ClassroomContentFilter } from './classroom/classroomContentModel'
 import { ClassroomWorkspaceContainer } from './classroom/ClassroomWorkspaceContainer'
-import { ClassroomWorkspaceHeader } from './classroom/ClassroomWorkspaceHeader'
+import { ClassroomHeaderInfoBar, ClassroomWorkspaceHeader } from './classroom/ClassroomWorkspaceHeader'
 
 type ResourceKey = 'exams' | 'notices' | 'weeks'
 
@@ -42,6 +47,9 @@ export function ClassroomDetailPage() {
   const [uploadTargetWeek, setUploadTargetWeek] = useState<number | null>(null)
   const [uploadInitialFile, setUploadInitialFile] = useState<File | null>(null)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [isResourceUploadDialogOpen, setIsResourceUploadDialogOpen] = useState(false)
+  const [resourceTargetWeek, setResourceTargetWeek] = useState<number | null>(null)
+  const [resourcePreview, setResourcePreview] = useState<ClassroomResourcePreviewValue | null>(null)
   const [draggingWeek, setDraggingWeek] = useState<number | null>(null)
   const [pendingMaterial, setPendingMaterial] = useState<{ id: string; title: string; weekNumber: number } | null>(null)
   const [openingMaterialId, setOpeningMaterialId] = useState<string | null>(null)
@@ -86,6 +94,12 @@ export function ClassroomDetailPage() {
     return () => window.clearTimeout(timer)
   }, [classroomId, load])
 
+  useEffect(() => () => {
+    if (resourcePreview?.source.kind === 'file' && resourcePreview.source.objectUrl) {
+      URL.revokeObjectURL(resourcePreview.source.objectUrl)
+    }
+  }, [resourcePreview])
+
   useEffect(() => {
     function refreshVisibleContent() {
       if (document.visibilityState === 'visible') {
@@ -117,7 +131,7 @@ export function ClassroomDetailPage() {
         : undefined
       if (uploadedMaterial?.status === 'READY') {
         setPendingMaterial((current) => current?.id === expectedId ? null : current)
-        showToast('자료 처리가 완료되었습니다. 바로 학습할 수 있습니다.', 'success')
+        showToast('수업 생성이 완료되었습니다. 바로 학습할 수 있습니다.', 'success')
       }
       if (uploadedMaterial?.status === 'FAILED') {
         setPendingMaterial((current) => current?.id === expectedId ? null : current)
@@ -151,13 +165,23 @@ export function ClassroomDetailPage() {
   const content = useMemo(() => buildClassroomContent(weeks, notices, exams), [exams, notices, weeks])
   const globalItems = useMemo(() => getGlobalClassroomContent(content, filter), [content, filter])
   const visibleItems = useMemo(() => filterClassroomContent(content, selectedWeekNumber, filter), [content, filter, selectedWeekNumber])
-  const selectedNotice = panel?.startsWith('notice-') && panel !== 'notice-new'
-    ? notices.find((notice) => notice.id === panel.slice('notice-'.length)) ?? null
+  const editingNoticeId = panel?.startsWith('notice-edit-')
+    ? panel.slice('notice-edit-'.length)
+    : null
+  const viewingNoticeId = panel?.startsWith('notice-')
+    && panel !== 'notice-new'
+    && !panel.startsWith('notice-edit-')
+    ? panel.slice('notice-'.length)
+    : null
+  const selectedNoticeId = editingNoticeId ?? viewingNoticeId
+  const selectedNotice = selectedNoticeId
+    ? notices.find((notice) => notice.id === selectedNoticeId) ?? null
     : null
   const selectedExam = panel?.startsWith('exam-') && panel !== 'exam-new'
     ? exams.find((exam) => exam.id === panel.slice('exam-'.length)) ?? null
     : null
-  const editingNotice = panel === 'notice-new' || Boolean(selectedNotice)
+  const editingNotice = panel === 'notice-new' || Boolean(editingNoticeId && selectedNotice)
+  const viewingNotice = Boolean(viewingNoticeId && selectedNotice)
   const editingExam = panel === 'exam-new' || Boolean(selectedExam)
 
   function updateQuery(updates: Record<string, string | null>, replace = false) {
@@ -181,7 +205,7 @@ export function ClassroomDetailPage() {
       const material = await materialsRepository.upload(file, { classroomId, title, weekNumber })
       const uploadMessage = material.status === 'FAILED'
         ? `${getMaterialFailureMessage(material.failureReason)}${material.traceId ? ` 문의 코드 ${material.traceId}` : ''}`
-        : '자료 업로드를 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.'
+        : '수업 생성을 시작했습니다. 처리가 완료되면 학습자 화면에 반영됩니다.'
       showToast(uploadMessage, material.status === 'FAILED' ? 'danger' : 'success')
       if (material.status === 'PROCESSING') {
         setPendingMaterial({ id: material.id, title: material.title, weekNumber })
@@ -268,29 +292,38 @@ export function ClassroomDetailPage() {
 
   const selectedWeek = weeks.find((week) => week.weekNumber === selectedWeekNumber)
 
-  return <ClassroomWorkspaceContainer>
+  return <ClassroomWorkspaceContainer className="lg:overflow-hidden">
     <ClassroomWorkspaceHeader
-      actions={isInstructor ? <Button disabled={isReadOnly} onClick={() => void copyInviteCode(classroom, classroomsRepository, setClassroom, showToast)} variant="secondary"><KeyRound size={14} />{classroom.inviteCode ?? '초대 코드'}</Button> : undefined}
+      actions={<ClassroomHeaderInfoBar classroom={classroom} inviteCodeDisabled={isReadOnly} onInviteCodeClick={() => void copyInviteCode(classroom, classroomsRepository, setClassroom, showToast)} showInviteCode={isInstructor} />}
       activeTab="course"
       classroom={classroom}
+      showClassroomSummary={false}
     />
 
     {isInstructor && isReadOnly ? <p className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 type-caption text-stone-600"><Archive size={15} />종료된 강의실입니다. 콘텐츠를 확인할 수 있지만 새 항목을 추가하거나 수정할 수 없습니다.</p> : null}
 
-    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
       <ClassroomContentRail
         endDate={classroom.endDate}
-        onSelect={(weekNumber) => updateQuery({ panel: null, week: weekNumber === null ? 'all' : String(weekNumber) })}
+        onSelect={(weekNumber) => {
+          setResourcePreview(null)
+          updateQuery({ panel: null, week: weekNumber === null ? 'all' : String(weekNumber) })
+        }}
         selectedWeekNumber={selectedWeekNumber}
         startDate={classroom.startDate}
         weeks={weeks}
       />
-      <div className="min-w-0">
-        {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
+      <div className="min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
+        {viewingNotice && selectedNotice ? <NoticeDetailPanel canEdit={canManage} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onEdit={() => updateQuery({ panel: `notice-edit-${selectedNotice.id}` })} /> : null}
+        {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: selectedNotice ? `notice-${selectedNotice.id}` : null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
         {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}
-        {!editingNotice && !editingExam ? <ClassroomContentPanel
+        {resourcePreview ? <ClassroomResourcePreviewPanel
+          onClose={() => setResourcePreview(null)}
+          resource={resourcePreview}
+          weekTitle={weeks.find((week) => week.weekNumber === resourcePreview.weekNumber)?.title}
+        /> : null}
+        {!viewingNotice && !editingNotice && !editingExam && !resourcePreview ? <ClassroomContentPanel
           canManage={canManage}
-          endDate={classroom.endDate}
           errors={resourceErrors}
           filter={filter}
           globalItems={globalItems}
@@ -301,6 +334,9 @@ export function ClassroomDetailPage() {
               setUploadTargetWeek(selectedWeekNumber ?? weeks[0]?.weekNumber ?? null)
               setUploadInitialFile(null)
               setIsUploadDialogOpen(true)
+            } else if (kind === 'resource') {
+              setResourceTargetWeek(selectedWeekNumber ?? weeks[0]?.weekNumber ?? null)
+              setIsResourceUploadDialogOpen(true)
             } else updateQuery({ panel: `${kind}-new` })
           }}
           onDrop={(file) => {
@@ -330,13 +366,21 @@ export function ClassroomDetailPage() {
           selectedWeek={selectedWeek}
           selectedWeekNumber={selectedWeekNumber}
           setDragging={setDraggingWeek}
-          startDate={classroom.startDate}
           draggingWeek={draggingWeek}
         /> : null}
       </div>
     </section>
 
     {isUploadDialogOpen ? <UploadMaterialDialog initialFile={uploadInitialFile ?? undefined} initialWeekNumber={uploadTargetWeek ?? undefined} isUploading={isUploading} onClose={() => { setIsUploadDialogOpen(false); setUploadInitialFile(null) }} onUpload={uploadMaterial} weeks={weeks} /> : null}
+    {isResourceUploadDialogOpen ? <ClassroomResourceUploadDialog
+      initialWeekNumber={resourceTargetWeek ?? undefined}
+      onClose={() => setIsResourceUploadDialogOpen(false)}
+      onPreview={(resource) => {
+        setResourcePreview(resource)
+        setIsResourceUploadDialogOpen(false)
+      }}
+      weeks={weeks}
+    /> : null}
     {renamingMaterial ? <RenameMaterialDialog initialTitle={renamingMaterial.title} onClose={() => setRenamingMaterial(null)} onSave={renameMaterial} /> : null}
   </ClassroomWorkspaceContainer>
 }
@@ -362,7 +406,7 @@ function resolveSelectedWeek(value: string | null, classroom: Classroom | null, 
 }
 
 function parseFilter(value: string | null): ClassroomContentFilter {
-  return value === 'material' || value === 'notice' || value === 'exam' ? value : 'all'
+  return value === 'material' || value === 'resource' || value === 'notice' || value === 'exam' ? value : 'all'
 }
 
 function sortWeeks(weeks: ClassroomWeek[]): ClassroomWeek[] {
@@ -384,5 +428,5 @@ function UploadMaterialDialog({ initialFile, initialWeekNumber, isUploading, onC
     setFile(nextFile)
     setTitle(nextFile?.name ?? '')
   }
-  return <div aria-label="강의자료 업로드" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">강의자료 업로드</h2><button aria-label="강의자료 업로드 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} type="file" /></label>{fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}<label className="mt-4 block type-control font-semibold">자료 제목<input aria-invalid={Boolean(titleError)} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={MAX_MATERIAL_TITLE_LENGTH} onChange={(event) => setTitle(event.target.value)} placeholder="자료 제목을 입력하세요." value={title} /></label>{titleError && file ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{titleError}</p> : null}<div className="mt-5 flex justify-end gap-2"><Button onClick={onClose} variant="secondary">취소</Button><Button disabled={!file || Boolean(fileError) || Boolean(titleError) || isUploading} type="submit">{isUploading ? '업로드 중' : '업로드'}</Button></div></form></div>
+  return <div aria-label="수업 생성" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">수업 생성</h2><button aria-label="수업 생성 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} type="file" /></label>{fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}<label className="mt-4 block type-control font-semibold">수업 제목<input aria-invalid={Boolean(titleError)} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={MAX_MATERIAL_TITLE_LENGTH} onChange={(event) => setTitle(event.target.value)} placeholder="수업 제목을 입력하세요." value={title} /></label>{titleError && file ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{titleError}</p> : null}<div className="mt-5 flex justify-end gap-2"><Button onClick={onClose} variant="secondary">취소</Button><Button disabled={!file || Boolean(fileError) || Boolean(titleError) || isUploading} type="submit">{isUploading ? '생성 중' : '생성'}</Button></div></form></div>
 }

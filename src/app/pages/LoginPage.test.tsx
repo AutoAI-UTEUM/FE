@@ -61,6 +61,21 @@ function renderLogin(path = '/login') {
 }
 
 describe('LoginPage', () => {
+  it('toggles the local login password visibility', () => {
+    renderLogin()
+
+    expect(screen.queryByText('다시 오신 걸 환영해요')).not.toBeInTheDocument()
+    const passwordInput = screen.getByLabelText('비밀번호')
+    expect(passwordInput).toHaveAttribute('type', 'password')
+
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 표시' }))
+    expect(passwordInput).toHaveAttribute('type', 'text')
+    expect(screen.getByRole('button', { name: '비밀번호 숨기기' })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
+    expect(passwordInput).toHaveAttribute('type', 'password')
+  })
+
   it('places Google login after local login and shows the signup prompt', async () => {
     renderLogin()
 

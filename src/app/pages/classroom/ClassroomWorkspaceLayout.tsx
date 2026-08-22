@@ -19,6 +19,7 @@ export function ClassroomWorkspaceLayout() {
   const [titleAccessoryTarget, setTitleAccessoryTarget] = useState<HTMLDivElement | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const usesFixedContentViewport = pathname.replace(/\/$/, '') === `/classrooms/${classroomId}`
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -54,13 +55,14 @@ export function ClassroomWorkspaceLayout() {
   }
 
   return (
-    <ClassroomWorkspaceContainer>
+    <ClassroomWorkspaceContainer className={usesFixedContentViewport ? 'lg:h-[calc(100dvh-2.5rem)] lg:overflow-hidden' : undefined}>
       <ClassroomWorkspaceShellContext.Provider value={shellValue}>
         <ClassroomWorkspaceHeader
           actionSlotRef={setActionTarget}
           activeTab={getActiveTab(pathname)}
           classroom={classroom}
           root
+          showClassroomSummary={!usesFixedContentViewport}
           titleAccessorySlotRef={setTitleAccessoryTarget}
         />
         <Outlet />

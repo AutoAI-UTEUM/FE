@@ -53,8 +53,9 @@ describe('AppRoutes', () => {
 
     expect(screen.getAllByText('으뜸')).not.toHaveLength(0)
     expect(screen.getAllByText('UTEUM')).not.toHaveLength(0)
-    expect(screen.getByText(/같은 강의,/)).toBeInTheDocument()
-    expect(screen.getByText(/나에게 맞춘 학습\./)).toBeInTheDocument()
+    expect(screen.getByText(/같은 강의,/)).toHaveClass('type-auth-intro')
+    expect(screen.getByText(/나에게 맞춘 학습\./)).toHaveClass('type-auth-intro')
+    expect(screen.getByText(/이해 속도에 맞춰 설명하고 점검하는/)).toHaveClass('type-auth-description')
     expect(
       screen.queryByText(
         'Ulsan University Tailored Educational User-adapted Module',
@@ -90,8 +91,8 @@ describe('AppRoutes', () => {
       within(screen.getByRole('complementary')).getByText('으뜸'),
     ).toBeInTheDocument()
     expect(
-      within(screen.getByRole('complementary')).getByText('UTEUM'),
-    ).toBeInTheDocument()
+      within(screen.getByRole('complementary')).queryByText('UTEUM'),
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: '내 강의실' }),
     ).toBeInTheDocument()
@@ -343,6 +344,11 @@ describe('AppRoutes', () => {
 
     const heading = await screen.findByRole('heading', { level: 1, name: '자료구조' })
     const weekRail = await screen.findByRole('navigation', { name: '강의실 주차' })
+    const classroomContent = screen.getByRole('region', { name: '강의실 통합 콘텐츠' })
+    expect(classroomContent.parentElement?.parentElement).toHaveClass(
+      'lg:h-[calc(100dvh-2.5rem)]',
+      'lg:overflow-hidden',
+    )
     const secondWeekButton = within(weekRail).getByText('심화 학습').closest('button')
     expect(secondWeekButton).not.toBeNull()
     fireEvent.click(secondWeekButton!)

@@ -102,7 +102,15 @@ describe('ChatPanel', () => {
     render(
       <ChatHarness
         materialOverview={{
-          content: '## 목차\n\n- **기초 개념** p.4–11\n- 문제 풀이 흐름',
+          content: [
+            '자료 전체 흐름을 설명하는 요약입니다.',
+            '',
+            '## 목차',
+            '',
+            '- **기초 개념** (p.4–11)',
+            '  - 핵심 개념을 예제로 연결해 학습합니다.',
+            '  - 키워드: 정의, 예제',
+          ].join('\n'),
           materialId: '10',
           status: 'READY',
           updatedAt: '2026-08-15T00:00:00Z',
@@ -115,10 +123,12 @@ describe('ChatPanel', () => {
     fireEvent.click(await screen.findByRole('tab', { name: '개요' }))
 
     expect(screen.getByRole('heading', { name: '목차' })).toBeInTheDocument()
-    expect(screen.getByRole('list')).toBeInTheDocument()
+    expect(screen.getAllByRole('list')).toHaveLength(2)
     const emphasizedText = screen.getByText('기초 개념')
     expect(emphasizedText.tagName).toBe('STRONG')
     expect(screen.queryByText(/\*\*기초 개념\*\*/)).not.toBeInTheDocument()
+    expect(screen.getByText('핵심 개념을 예제로 연결해 학습합니다.')).toBeInTheDocument()
+    expect(screen.getByText('키워드: 정의, 예제')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'p.4–11' }))
     expect(onOverviewPageSelect).toHaveBeenCalledWith(4)
   })

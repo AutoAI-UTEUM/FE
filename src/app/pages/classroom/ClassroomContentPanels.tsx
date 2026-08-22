@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, Send, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
 import type { ClassroomNotice, ClassroomNoticeInput } from '../../../features/classrooms'
@@ -6,7 +6,68 @@ import { ExamEditor } from '../../../features/exams/ExamEditor'
 import { createQuestion, isExamDraftValid } from '../../../features/exams/examEditorModel'
 import type { CreateExamInput, Exam, ExamsRepository } from '../../../features/exams/examsRepository'
 import { getRequestErrorMessage } from '../../../shared/api'
-import { Badge, Button, MarkdownEditor, useToast } from '../../../shared/ui'
+import { formatDateTime } from '../../../shared/lib/format'
+import { Badge, Button, MarkdownContent, MarkdownEditor, useToast } from '../../../shared/ui'
+
+export function NoticeDetailPanel({
+  canEdit,
+  notice,
+  onClose,
+  onEdit,
+}: {
+  canEdit: boolean
+  notice: ClassroomNotice
+  onClose: () => void
+  onEdit: () => void
+}) {
+  const statusDate = notice.published
+    ? notice.publishedAt
+    : notice.publishAt
+
+  return (
+    <article className="flex min-h-[520px] flex-col rounded-lg border border-stone-200 bg-white">
+      <div className="flex min-h-14 items-center gap-3 border-b border-stone-200 px-5">
+        <button
+          aria-label="목록으로 돌아가기"
+          className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100"
+          onClick={onClose}
+          type="button"
+        >
+          <ArrowLeft size={16} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="type-section-title font-bold text-stone-950">공지</h2>
+            <Badge tone={notice.published ? 'success' : 'warning'}>
+              {notice.published ? '게시됨' : '예약'}
+            </Badge>
+          </div>
+          <p className="type-caption text-stone-500">
+            {notice.weekNumber === null ? '전체 공지' : `${notice.weekNumber}주차 공지`}
+          </p>
+        </div>
+        {canEdit ? (
+          <Button onClick={onEdit} size="sm" variant="secondary">
+            <Pencil size={14} />
+            편집하기
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="flex-1 px-5 py-6 sm:px-7">
+        <div className="border-b border-stone-100 pb-5">
+          <h1 className="type-page-title font-bold text-stone-950">{notice.title}</h1>
+          {statusDate ? (
+            <p className="mt-2 type-caption text-stone-400">
+              {notice.published ? '게시' : '예약'} {formatDateTime(statusDate)}
+            </p>
+          ) : null}
+        </div>
+        <MarkdownContent className="pt-6 text-stone-800" content={notice.content} />
+      </div>
+    </article>
+  )
+}
 
 export function NoticeContentPanel({
   disabled,

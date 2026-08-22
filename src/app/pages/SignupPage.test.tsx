@@ -41,6 +41,9 @@ describe('SignupPage', () => {
       'aria-checked',
       'true',
     )
+    expect(screen.getByText('강의실에 참여해 AI와 학습해요')).toBeInTheDocument()
+    expect(screen.getByText('강의실을 만들고 학습자를 관리해요')).toBeInTheDocument()
+    expect(screen.queryByText('가입 후에도 설정에서 변경할 수 있어요')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: /^강의자/ }))
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
@@ -83,17 +86,24 @@ describe('SignupPage', () => {
       target: { value: 'password-123' },
     })
 
-    expect(screen.getByText('안전')).toBeInTheDocument()
+    expect(screen.queryByText('약함')).not.toBeInTheDocument()
+    expect(screen.queryByText('보통')).not.toBeInTheDocument()
+    expect(screen.queryByText('안전')).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '비밀번호 안전도' })).toHaveClass('w-full')
+    expect(screen.getByRole('progressbar', { name: '비밀번호 안전도' })).toHaveAttribute('aria-valuenow', '4')
     expect(screen.getByLabelText('비밀번호')).toHaveAttribute(
       'type',
       'password',
     )
     fireEvent.click(screen.getByRole('button', { name: '비밀번호 표시' }))
     expect(screen.getByLabelText('비밀번호')).toHaveAttribute('type', 'text')
+    expect(screen.getByRole('button', { name: '비밀번호 숨기기' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('비밀번호 확인')).toHaveAttribute(
       'type',
       'password',
     )
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 확인 표시' }))
+    expect(screen.getByLabelText('비밀번호 확인')).toHaveAttribute('type', 'text')
 
     expect(screen.queryByLabelText(/소속/)).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /학습 소식 이메일 수신/ })).not.toBeInTheDocument()

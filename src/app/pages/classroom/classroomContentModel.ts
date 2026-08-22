@@ -1,7 +1,7 @@
 import type { ClassroomMaterial, ClassroomNotice, ClassroomWeek } from '../../../features/classrooms'
 import type { Exam } from '../../../features/exams'
 
-export type ClassroomContentFilter = 'all' | 'exam' | 'material' | 'notice'
+export type ClassroomContentFilter = 'all' | 'exam' | 'material' | 'notice' | 'resource'
 
 export type ClassroomContentItem =
   | { id: string; kind: 'material'; occurredAt: string; source: ClassroomMaterial; title: string; weekNumber: number; weekOrder: number }

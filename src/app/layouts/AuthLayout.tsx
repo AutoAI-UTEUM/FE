@@ -27,12 +27,12 @@ export function AuthLayout() {
         </Link>
 
         <div className="flex flex-col gap-4">
-          <p className="max-w-sm type-display font-bold leading-[1.35]">
+          <p className="max-w-sm type-auth-intro font-bold">
             같은 강의,
             <br />
             나에게 맞춘 학습.
           </p>
-          <p className="max-w-sm type-body leading-relaxed text-stone-500">
+          <p className="max-w-sm type-auth-description text-stone-500">
             이해 속도에 맞춰 설명하고 점검하는
             <br />
             개인 맞춤형 학습 플랫폼, {SERVICE_NAME}

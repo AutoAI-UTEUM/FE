@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -35,6 +35,7 @@ export function LoginPage() {
   const [errors, setErrors] = useState<LoginFormErrors>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const isSessionExpired = searchParams.get('reason') === 'session-expired'
@@ -95,9 +96,8 @@ export function LoginPage() {
 
   return (
     <div>
-      <div className="flex flex-col gap-1.5">
+      <div>
         <h1 className="type-page-title font-bold text-stone-900">로그인</h1>
-        <p className="type-body text-stone-400">다시 오신 걸 환영해요</p>
       </div>
 
       {isSessionExpired || isIdleExpired ? (
@@ -123,16 +123,29 @@ export function LoginPage() {
           value={values.email}
         />
         <div className="mt-4">
-          <TextInput
-            autoComplete="current-password"
-            error={errors.password}
-            id="login-password"
-            label="비밀번호"
-            onChange={(event) => updateValue('password', event.target.value)}
-            placeholder="8자 이상"
-            type="password"
-            value={values.password}
-          />
+          <div className="relative">
+            <TextInput
+              autoComplete="current-password"
+              className="pr-11"
+              error={errors.password}
+              id="login-password"
+              label="비밀번호"
+              onChange={(event) => updateValue('password', event.target.value)}
+              placeholder="8자 이상"
+              type={isPasswordVisible ? 'text' : 'password'}
+              value={values.password}
+            />
+            <button
+              aria-label={isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'}
+              aria-pressed={isPasswordVisible}
+              className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              onClick={() => setIsPasswordVisible((visible) => !visible)}
+              title={isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'}
+              type="button"
+            >
+              {isPasswordVisible ? <EyeOff aria-hidden="true" size={16} /> : <Eye aria-hidden="true" size={16} />}
+            </button>
+          </div>
         </div>
         <div className="mt-2 flex justify-end type-control">
           <Link
