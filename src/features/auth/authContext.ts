@@ -5,7 +5,11 @@ import type {
   ApiSuccess,
   RawApiRequestOptions,
 } from '../../shared/api'
-import type { LoginFormValues, SignupFormValues } from './authValidation'
+import type {
+  GoogleAuthValues,
+  LoginFormValues,
+  SignupFormValues,
+} from './authValidation'
 
 export interface AuthUser {
   affiliation?: string
@@ -36,11 +40,15 @@ export interface AuthContextValue {
     email: string,
     signal?: AbortSignal,
   ) => Promise<boolean>
+  clearGoogleSignup: () => void
   isAuthenticated: boolean
   isInitializing: boolean
   login: (values: LoginFormValues) => Promise<void>
+  loginWithGoogle: (values: GoogleAuthValues) => Promise<void>
   logoutReason: LogoutReason | null
   logout: () => Promise<void>
+  pendingGoogleIdToken: string | null
+  prepareGoogleSignup: (idToken: string) => void
   signup: (values: SignupFormValues) => Promise<void>
   user: AuthUser | null
   updateUser: (user: AuthUser) => void

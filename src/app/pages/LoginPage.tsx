@@ -1,8 +1,9 @@
 import { ArrowRight, LogIn } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
+  GoogleSignInButton,
   hasFormErrors,
   mapAuthErrorToFormErrors,
   useAuth,
@@ -11,9 +12,11 @@ import {
   type LoginFormValues,
 } from '../../features/auth'
 import { ServiceStatusIndicator } from '../../features/health'
+import { ApiClientError } from '../../shared/api'
 import { Button, TextInput } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+import { SERVICE_NAME } from '../../shared/config/brand'
 
 const initialValues: LoginFormValues = {
   email: '',
@@ -22,17 +25,26 @@ const initialValues: LoginFormValues = {
 
 export function LoginPage() {
   usePageTitle('로그인')
-  const { login } = useAuth()
+  const {
+    clearGoogleSignup,
+    login,
+    loginWithGoogle,
+    prepareGoogleSignup,
+  } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [values, setValues] = useState<LoginFormValues>(initialValues)
   const [errors, setErrors] = useState<LoginFormErrors>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  // TODO(BE): 소셜 로그인 API 없음. docs/be-api-requests.md 참고
-  const [pendingNotice, setPendingNotice] = useState<string | null>(null)
+  const [googleError, setGoogleError] = useState<string | null>(null)
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const isSessionExpired = searchParams.get('reason') === 'session-expired'
   const isIdleExpired = searchParams.get('reason') === 'idle'
+
+  useEffect(() => {
+    clearGoogleSignup()
+  }, [clearGoogleSignup])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -58,6 +70,29 @@ export function LoginPage() {
     setValues((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: undefined }))
     setServerError(null)
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setIsGoogleSubmitting(true)
+    setGoogleError(null)
+
+    try {
+      await loginWithGoogle({ idToken })
+      navigate(routes.classrooms, { replace: true })
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.status === 409 &&
+        error.code === 'SIGNUP_REQUIRED'
+      ) {
+        prepareGoogleSignup(idToken)
+        navigate(routes.signup)
+        return
+      }
+      setGoogleError('Google 로그인 요청을 처리하지 못했습니다.')
+    } finally {
+      setIsGoogleSubmitting(false)
+    }
   }
 
   return (
@@ -132,32 +167,26 @@ export function LoginPage() {
         <span className="h-px flex-1 bg-stone-200" />
       </div>
 
-      <button
-        className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-[10px] border border-stone-200 type-body font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-        onClick={() =>
-          setPendingNotice('소셜 로그인은 백엔드 연동 대기 중입니다.')
-        }
-        type="button"
-      >
-        <span
-          aria-hidden="true"
-          className="size-4.5 rounded-full"
-          style={{
-            background:
-              'conic-gradient(#ea4335 0 25%,#4285f4 0 50%,#34a853 0 75%,#fbbc05 0)',
-          }}
+      <div className="mt-5">
+        <GoogleSignInButton
+          disabled={isGoogleSubmitting}
+          onCredential={(idToken) => void handleGoogleCredential(idToken)}
         />
-        Google로 계속하기
-      </button>
+        {isGoogleSubmitting ? (
+          <p className="mt-2 text-center type-caption text-stone-500" role="status">
+            Google 계정을 확인하고 있습니다.
+          </p>
+        ) : null}
+      </div>
 
-      {pendingNotice ? (
-        <p className="mt-3 type-body font-medium text-amber-700" role="status">
-          {pendingNotice}
+      {googleError ? (
+        <p className="mt-3 type-body font-medium text-rose-700" role="alert">
+          {googleError}
         </p>
       ) : null}
 
       <p className="mt-6 text-center type-caption leading-relaxed text-stone-400">
-        계속하면 EduPilot의 이용약관과
+        계속하면 {SERVICE_NAME}의 이용약관과
         <br />
         개인정보 처리방침에 동의하는 것으로 간주합니다
       </p>

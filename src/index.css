@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+.google-signin-button > div,
+.google-signin-button > div > div {
+  width: 100% !important;
+}
+
+.google-signin-button [role='button'] {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: 44px !important;
+  border-radius: 0.5rem !important;
+}
+
 .study-session-content {
   display: grid;
   grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);

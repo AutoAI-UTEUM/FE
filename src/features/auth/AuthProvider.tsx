@@ -19,7 +19,11 @@ import {
   type LogoutReason,
 } from './authContext'
 import { getAuthRepository } from './authRepository'
-import type { LoginFormValues, SignupFormValues } from './authValidation'
+import type {
+  GoogleAuthValues,
+  LoginFormValues,
+  SignupFormValues,
+} from './authValidation'
 
 interface AuthProviderProps {
   initialUser?: AuthUser | null
@@ -45,6 +49,9 @@ export function AuthProvider({
   )
   const [isInitializing, setIsInitializing] = useState(!hasExplicitInitialUser)
   const [logoutReason, setLogoutReason] = useState<LogoutReason | null>(null)
+  const [pendingGoogleIdToken, setPendingGoogleIdToken] = useState<string | null>(
+    null,
+  )
   const sessionRef = useRef(session)
   const sessionRevisionRef = useRef(0)
   // 로그인/복원 시점에 beginSession·restore가 현재 시각으로 초기화한다.
@@ -178,6 +185,23 @@ export function AuthProvider({
     [beginSession, repository],
   )
 
+  const loginWithGoogle = useCallback(
+    async (values: GoogleAuthValues) => {
+      const result = await repository.loginWithGoogle(values)
+      setPendingGoogleIdToken(null)
+      beginSession(result.accessToken, result.user)
+    },
+    [beginSession, repository],
+  )
+
+  const prepareGoogleSignup = useCallback((idToken: string) => {
+    setPendingGoogleIdToken(idToken)
+  }, [])
+
+  const clearGoogleSignup = useCallback(() => {
+    setPendingGoogleIdToken(null)
+  }, [])
+
   const checkEmailAvailability = useCallback(
     (email: string, signal?: AbortSignal) =>
       repository.checkEmailAvailability(email, signal),
@@ -292,11 +316,15 @@ export function AuthProvider({
       apiRequest: authenticatedRequest,
       rawApiRequest: authenticatedRawRequest,
       checkEmailAvailability,
+      clearGoogleSignup,
       isAuthenticated: session !== null,
       isInitializing,
       login,
+      loginWithGoogle,
       logoutReason,
       logout,
+      pendingGoogleIdToken,
+      prepareGoogleSignup,
       signup,
       user: session?.user ?? null,
       updateUser,
@@ -306,10 +334,14 @@ export function AuthProvider({
       authenticatedRequest,
       authenticatedRawRequest,
       checkEmailAvailability,
+      clearGoogleSignup,
       isInitializing,
       login,
+      loginWithGoogle,
       logout,
       logoutReason,
+      pendingGoogleIdToken,
+      prepareGoogleSignup,
       session,
       signup,
       updateUser,

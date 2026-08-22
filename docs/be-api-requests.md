@@ -17,7 +17,7 @@ FE repository에 반영했다. 아래에는 **화면은 존재하지만 여전�
 
 | 화면 | 연결된 기능 | 공개 API가 없거나 응답이 부족한 기능 |
 | --- | --- | --- |
-| 로그인·회원가입 | 가입, 이메일 중복 확인, 로그인, refresh, 로그아웃 | 비밀번호 재설정, Google OAuth |
+| 로그인·회원가입 | 가입, 이메일 중복 확인, 로그인, refresh, 로그아웃, Google GIS 로그인 FE 계약 | 비밀번호 재설정, Google 로그인 BE 배포 확인 |
 | 설정 | 프로필, 아바타, 환경설정, 회원 탈퇴 | `studyReminder`·새 자료 알림의 실제 이메일/인앱 전달과 읽음 상태 |
 | 강의실 목록 | 생성, 조회, 수정, 종료, 영구 삭제, 초대 코드 | 종료 강의실 재활성화, 서버 검색·추가 정렬 |
 | 강의실 강의 | 주차, PDF 자료, 공지, 시험 CRUD | 주차별 공지, 공지 예약 게시, PPT/PPTX, 처리 실패 상세 |
@@ -76,17 +76,19 @@ GET  /api/reports/{reportId}
 
 ## P1. 인증 보조 기능
 
-비밀번호 찾기와 Google 로그인 UI는 있지만 실제 요청을 보낼 API가 없다.
+Google 로그인은 BE와 합의한 GIS ID 토큰 교환 계약으로 FE 구현을 완료했으며,
+BE 배포와 웹 클라이언트 ID 공유 후 실연동을 확인한다.
 
 ```http
 POST /api/auth/password-reset/request
 POST /api/auth/password-reset/confirm
-GET  /api/auth/oauth/google/authorize
-GET  /api/auth/oauth/google/callback
+POST /api/auth/google
 ```
 
-비밀번호 재설정 요청은 계정 존재 여부를 노출하지 않는 동일 응답을 반환하고,
-OAuth 콜백은 현재 refresh HttpOnly cookie 정책을 유지해야 한다.
+Google 요청은 GIS credential을 `idToken`으로 전송한다. `409 SIGNUP_REQUIRED`이면
+같은 토큰과 `role`, `termsVersion`, `privacyVersion`을 추가해 재호출한다. refresh는
+기존과 동일한 HttpOnly cookie 정책을 유지한다. 비밀번호 재설정 요청은 계정 존재
+여부를 노출하지 않는 동일 응답을 반환해야 한다.
 
 ## 연결 완료. 수강생별 학습 현황
 

@@ -37,6 +37,9 @@ const initialValues: SignupFormValues = {
   role: 'LEARNER',
 }
 
+const GOOGLE_TERMS_VERSION = '2026-07-01'
+const GOOGLE_PRIVACY_VERSION = '2026-07-01'
+
 type SignupStep = 'account' | 'role'
 type EmailAvailabilityStatus =
   | 'available'
@@ -69,7 +72,13 @@ const roleOptions: Array<{
 
 export function SignupPage() {
   usePageTitle('회원가입')
-  const { checkEmailAvailability, signup } = useAuth()
+  const {
+    checkEmailAvailability,
+    clearGoogleSignup,
+    loginWithGoogle,
+    pendingGoogleIdToken,
+    signup,
+  } = useAuth()
   const navigate = useNavigate()
   const [step, setStep] = useState<SignupStep>('role')
   const [values, setValues] = useState<SignupFormValues>(initialValues)
@@ -87,6 +96,11 @@ export function SignupPage() {
     useState(false)
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
+  const [googleRole, setGoogleRole] = useState<SignupRole>('LEARNER')
+  const [hasAcceptedGoogleTerms, setHasAcceptedGoogleTerms] = useState(false)
+  const [googleTermsError, setGoogleTermsError] = useState<string | null>(null)
+  const [googleError, setGoogleError] = useState<string | null>(null)
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
@@ -179,6 +193,36 @@ export function SignupPage() {
     }
   }
 
+  async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!pendingGoogleIdToken) return
+    if (!hasAcceptedGoogleTerms) {
+      setGoogleTermsError('필수 약관에 동의해 주세요.')
+      return
+    }
+
+    setIsGoogleSubmitting(true)
+    setGoogleError(null)
+    try {
+      await loginWithGoogle({
+        idToken: pendingGoogleIdToken,
+        privacyVersion: GOOGLE_PRIVACY_VERSION,
+        role: googleRole,
+        termsVersion: GOOGLE_TERMS_VERSION,
+      })
+      navigate(routes.classrooms, { replace: true })
+    } catch {
+      setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
+    } finally {
+      setIsGoogleSubmitting(false)
+    }
+  }
+
+  function cancelGoogleSignup() {
+    clearGoogleSignup()
+    navigate(routes.login, { replace: true })
+  }
+
   function updateValue<Field extends keyof SignupFormValues>(
     field: Field,
     value: SignupFormValues[Field],
@@ -202,6 +246,101 @@ export function SignupPage() {
   const selectedRoleLabel =
     values.role === 'INSTRUCTOR' ? '강의자' : '학습자'
   const passwordStrength = getPasswordStrength(values.password)
+
+  if (pendingGoogleIdToken) {
+    return (
+      <div>
+        <div className="flex flex-col gap-1.5">
+          <p className="type-control text-stone-400">Google 회원가입</p>
+          <h1 className="type-page-title font-bold text-stone-900">
+            Google 가입을 완료해 주세요
+          </h1>
+          <p className="type-body text-stone-400">
+            으뜸에서 사용할 역할을 선택해 주세요
+          </p>
+        </div>
+
+        <form className="mt-6" onSubmit={handleGoogleSignup}>
+          <div
+            aria-label="Google 가입 역할"
+            className="grid grid-cols-2 rounded-lg bg-stone-100 p-1"
+            role="radiogroup"
+          >
+            {([
+              ['LEARNER', '학습자'],
+              ['INSTRUCTOR', '강의자'],
+            ] as const).map(([role, label]) => {
+              const isSelected = googleRole === role
+              return (
+                <button
+                  aria-checked={isSelected}
+                  className={[
+                    'h-10 rounded-md type-body font-semibold transition-colors',
+                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600',
+                    isSelected
+                      ? 'bg-white text-brand-700 shadow-sm'
+                      : 'text-stone-500 hover:text-stone-800',
+                  ].join(' ')}
+                  key={role}
+                  onClick={() => setGoogleRole(role)}
+                  role="radio"
+                  type="button"
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+
+          <label className="mt-5 flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
+            <input
+              checked={hasAcceptedGoogleTerms}
+              className="mt-0.5 size-4 shrink-0 rounded border-stone-300 accent-brand-600"
+              onChange={(event) => {
+                setHasAcceptedGoogleTerms(event.target.checked)
+                setGoogleTermsError(null)
+              }}
+              type="checkbox"
+            />
+            <span>
+              이용약관 및 개인정보 처리방침에 동의합니다{' '}
+              <span className="font-semibold text-rose-600">*</span>
+            </span>
+          </label>
+          {googleTermsError ? (
+            <p className="mt-1 type-caption font-medium text-rose-700" role="alert">
+              {googleTermsError}
+            </p>
+          ) : null}
+
+          {googleError ? (
+            <p className="mt-3 type-body font-medium text-rose-700" role="alert">
+              {googleError}
+            </p>
+          ) : null}
+
+          <div className="mt-5 flex gap-2">
+            <Button
+              className="h-11 flex-1"
+              disabled={isGoogleSubmitting}
+              type="submit"
+            >
+              {isGoogleSubmitting ? '가입 중' : '동의하고 가입하기'}
+            </Button>
+            <Button
+              className="h-11"
+              disabled={isGoogleSubmitting}
+              onClick={cancelGoogleSignup}
+              type="button"
+              variant="secondary"
+            >
+              취소
+            </Button>
+          </div>
+        </form>
+      </div>
+    )
+  }
 
   if (step === 'role') {
     return (

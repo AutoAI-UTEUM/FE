@@ -48,6 +48,19 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
+  it('shows the UTEUM brand and English expansion on the login screen', async () => {
+    renderRoute('/login', null)
+
+    expect(screen.getAllByText('으뜸')).not.toHaveLength(0)
+    expect(screen.getAllByText('UTEUM')).not.toHaveLength(0)
+    expect(
+      screen.getAllByText(
+        'Ulsan University Tailored Educational User-adapted Module',
+      ),
+    ).not.toHaveLength(0)
+    await waitFor(() => expect(document.title).toBe('로그인 · 으뜸'))
+  })
+
   it('uses a 30-minute inactivity timeout', () => {
     expect(AUTH_IDLE_TIMEOUT_MS).toBe(30 * 60 * 1000)
   })
@@ -71,6 +84,12 @@ describe('AppRoutes', () => {
       'lg:py-5',
     )
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
+    expect(
+      within(screen.getByRole('complementary')).getByText('으뜸'),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('complementary')).getByText('UTEUM'),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: '내 강의실' }),
     ).toBeInTheDocument()

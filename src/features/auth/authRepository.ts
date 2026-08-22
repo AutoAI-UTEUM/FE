@@ -2,6 +2,7 @@ import { apiRequest, ApiClientError } from '../../shared/api'
 import type { AuthUser } from './authContext'
 import { AuthValidationError } from './authErrors'
 import type {
+  GoogleAuthValues,
   LoginFormValues,
   SignupFormErrors,
   SignupFormValues,
@@ -18,6 +19,7 @@ export interface AuthRepository {
     signal?: AbortSignal,
   ) => Promise<boolean>
   getMe: (accessToken: string, signal?: AbortSignal) => Promise<AuthUser>
+  loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthSessionResult>
   login: (values: LoginFormValues) => Promise<AuthSessionResult>
   logout: () => Promise<void>
   refresh: (signal?: AbortSignal) => Promise<string>
@@ -86,6 +88,25 @@ const repository: AuthRepository = {
       }
     } catch (error) {
       throw mapRemoteAuthError(error, 'login')
+    }
+  },
+
+  async loginWithGoogle(values) {
+    const { data } = await apiRequest<LoginResponseDto>('/api/auth/google', {
+      body: {
+        affiliation: values.affiliation?.trim() || undefined,
+        idToken: values.idToken,
+        learningEmailOptIn: values.learningEmailOptIn,
+        privacyVersion: values.privacyVersion,
+        role: values.role,
+        termsVersion: values.termsVersion,
+      },
+      method: 'POST',
+    })
+
+    return {
+      accessToken: data.accessToken,
+      user: mapUser(data.user),
     }
   },
 

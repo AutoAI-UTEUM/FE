@@ -1,6 +1,11 @@
 import { BookOpenCheck } from 'lucide-react'
 import { Link, Outlet } from 'react-router-dom'
 
+import {
+  SERVICE_NAME,
+  SERVICE_NAME_ENGLISH,
+  SERVICE_NAME_EXPANSION,
+} from '../../shared/config/brand'
 import { routes } from '../routes'
 
 export function AuthLayout() {
@@ -14,7 +19,12 @@ export function AuthLayout() {
           <span className="flex size-6 items-center justify-center rounded-[7px] bg-brand-600 text-white">
             <BookOpenCheck aria-hidden="true" size={13} />
           </span>
-          <span className="type-body font-bold">EduPilot</span>
+          <span className="flex items-baseline gap-2">
+            <span className="type-body font-bold">{SERVICE_NAME}</span>
+            <span className="type-micro font-semibold text-stone-400">
+              {SERVICE_NAME_ENGLISH}
+            </span>
+          </span>
         </Link>
 
         <div className="flex flex-col gap-4">
@@ -28,9 +38,19 @@ export function AuthLayout() {
             <br />
             대화하는 학습 플랫폼
           </p>
+          <div className="mt-2 max-w-sm border-l-2 border-brand-300 pl-3">
+            <p className="type-caption font-bold text-brand-700">
+              {SERVICE_NAME_ENGLISH}
+            </p>
+            <p className="mt-1 type-caption leading-relaxed text-stone-500">
+              {SERVICE_NAME_EXPANSION}
+            </p>
+          </div>
         </div>
 
-        <p className="type-micro text-stone-400">© 2026 EduPilot</p>
+        <p className="type-micro text-stone-400">
+          © 2026 {SERVICE_NAME} · {SERVICE_NAME_ENGLISH}
+        </p>
       </aside>
 
       <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8">
@@ -42,8 +62,17 @@ export function AuthLayout() {
             <span className="flex size-8 items-center justify-center rounded-[9px] bg-brand-600 text-white">
               <BookOpenCheck aria-hidden="true" size={17} />
             </span>
-            <span className="type-dialog-title font-bold">EduPilot</span>
+            <span className="flex flex-col">
+              <span className="type-dialog-title font-bold">{SERVICE_NAME}</span>
+              <span className="type-micro font-semibold text-stone-400">
+                {SERVICE_NAME_ENGLISH}
+              </span>
+            </span>
           </Link>
+
+          <p className="mb-7 type-caption leading-relaxed text-stone-400 lg:hidden">
+            {SERVICE_NAME_EXPANSION}
+          </p>
 
           <Outlet />
         </div>

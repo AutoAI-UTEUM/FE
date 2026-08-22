@@ -1,6 +1,6 @@
-# EduPilot Frontend
+# 으뜸 (UTEUM) Frontend
 
-EduPilot의 React 프론트엔드입니다. 브라우저에서 호출하는 서버는 Spring Main Service 하나이며 FastAPI AI Service를 직접 호출하지 않습니다.
+으뜸(UTEUM)의 React 프론트엔드입니다. 브라우저에서 호출하는 서버는 Spring Main Service 하나이며 FastAPI AI Service를 직접 호출하지 않습니다.
 
 ## 기술 스택
 
@@ -76,7 +76,7 @@ src/
 
 ## UI 작업 가이드
 
-EduPilot FE는 운영형 SaaS 학습 도구 방향을 기본으로 합니다. 외부 디자인 skill을 참고할 때는 [MengTo/Skills 적용 가이드](docs/mengto-skills-guide.md)를 따릅니다.
+으뜸 FE는 운영형 SaaS 학습 도구 방향을 기본으로 합니다. 외부 디자인 skill을 참고할 때는 [MengTo/Skills 적용 가이드](docs/mengto-skills-guide.md)를 따릅니다.
 
 회원가입 소속 자동완성에 사용할 수 있는 공식 데이터와 권장 연동
 구조는 [소속 기관 데이터 연동 검토](docs/affiliation-data-sources.md)에

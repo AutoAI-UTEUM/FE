@@ -41,3 +41,11 @@ export function normalizeApiBaseUrl(value: string | undefined): string {
 export function getApiBaseUrl(): string {
   return normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 }
+
+export function getGoogleClientId(): string | null {
+  return normalizeGoogleClientId(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+}
+
+export function normalizeGoogleClientId(value: string | undefined): string | null {
+  return value?.trim() || null
+}
