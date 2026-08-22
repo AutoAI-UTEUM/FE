@@ -123,7 +123,7 @@ export function GoogleSignInButton({
       className={disabled ? 'pointer-events-none opacity-60' : undefined}
     >
       <div
-        className="google-signin-button h-11 w-full overflow-hidden rounded-lg"
+        className="google-signin-button h-11 w-full min-w-full max-w-full overflow-hidden rounded-lg"
         ref={containerRef}
       />
     </div>
