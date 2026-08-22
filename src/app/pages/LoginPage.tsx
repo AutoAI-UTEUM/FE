@@ -1,4 +1,4 @@
-import { ArrowRight, LogIn } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -11,12 +11,10 @@ import {
   type LoginFormErrors,
   type LoginFormValues,
 } from '../../features/auth'
-import { ServiceStatusIndicator } from '../../features/health'
 import { ApiClientError } from '../../shared/api'
 import { Button, TextInput } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { SERVICE_NAME } from '../../shared/config/brand'
 
 const initialValues: LoginFormValues = {
   email: '',
@@ -113,7 +111,7 @@ export function LoginPage() {
         </p>
       ) : null}
 
-      <form className="mt-6 space-y-4" noValidate onSubmit={handleSubmit}>
+      <form className="mt-6" noValidate onSubmit={handleSubmit}>
         <TextInput
           autoComplete="email"
           error={errors.email}
@@ -124,18 +122,31 @@ export function LoginPage() {
           type="email"
           value={values.email}
         />
-        <TextInput
-          autoComplete="current-password"
-          error={errors.password}
-          id="login-password"
-          label="비밀번호"
-          onChange={(event) => updateValue('password', event.target.value)}
-          placeholder="8자 이상"
-          type="password"
-          value={values.password}
-        />
-        <Button className="h-11 w-full" disabled={isSubmitting} type="submit">
-          <LogIn aria-hidden="true" size={15} />
+        <div className="mt-4">
+          <TextInput
+            autoComplete="current-password"
+            error={errors.password}
+            id="login-password"
+            label="비밀번호"
+            onChange={(event) => updateValue('password', event.target.value)}
+            placeholder="8자 이상"
+            type="password"
+            value={values.password}
+          />
+        </div>
+        <div className="mt-2 flex justify-end type-control">
+          <Link
+            className="text-stone-500 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            to={routes.forgotPassword}
+          >
+            비밀번호 찾기
+          </Link>
+        </div>
+        <Button
+          className="mt-6 h-11 w-full"
+          disabled={isSubmitting}
+          type="submit"
+        >
           {isSubmitting ? '로그인 중' : '로그인'}
         </Button>
       </form>
@@ -145,29 +156,7 @@ export function LoginPage() {
           {serverError}
         </p>
       ) : null}
-      <div className="mt-5 flex items-center justify-between type-control">
-        <Link
-          className="text-stone-500 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-          to={routes.forgotPassword}
-        >
-          비밀번호 찾기
-        </Link>
-        <Link
-          to={routes.signup}
-          className="inline-flex items-center gap-1 font-semibold text-brand-600 underline-offset-4 hover:underline"
-        >
-          회원가입
-          <ArrowRight aria-hidden="true" size={14} />
-        </Link>
-      </div>
-
-      <div className="mt-6 flex items-center gap-3 type-caption text-stone-400">
-        <span className="h-px flex-1 bg-stone-200" />
-        또는
-        <span className="h-px flex-1 bg-stone-200" />
-      </div>
-
-      <div className="mt-5">
+      <div className="mt-2.5">
         <GoogleSignInButton
           disabled={isGoogleSubmitting}
           onCredential={(idToken) => void handleGoogleCredential(idToken)}
@@ -185,15 +174,16 @@ export function LoginPage() {
         </p>
       ) : null}
 
-      <p className="mt-6 text-center type-caption leading-relaxed text-stone-400">
-        계속하면 {SERVICE_NAME}의 이용약관과
-        <br />
-        개인정보 처리방침에 동의하는 것으로 간주합니다
+      <p className="mt-6 text-center type-caption text-stone-500">
+        계정이 없으신가요?{' '}
+        <Link
+          to={routes.signup}
+          className="inline-flex items-center gap-1 font-semibold text-brand-600 underline-offset-4 hover:underline"
+        >
+          회원가입
+          <ArrowRight aria-hidden="true" size={14} />
+        </Link>
       </p>
-
-      <div className="mt-4 flex justify-center border-t border-stone-100 pt-3">
-        <ServiceStatusIndicator />
-      </div>
     </div>
   )
 }

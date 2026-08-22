@@ -3,12 +3,15 @@
 .google-signin-button > div,
 .google-signin-button > div > div {
   width: 100% !important;
+  max-width: none !important;
+  min-width: 100% !important;
 }
 
-.google-signin-button [role='button'] {
+.google-signin-button [role='button'],
+.google-signin-button iframe {
   width: 100% !important;
   max-width: none !important;
-  min-width: 0 !important;
+  min-width: 100% !important;
   height: 44px !important;
   border-radius: 0.5rem !important;
 }

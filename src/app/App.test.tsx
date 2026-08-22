@@ -48,16 +48,18 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
-  it('shows the UTEUM brand and English expansion on the login screen', async () => {
+  it('shows the UTEUM brand and personalized learning message on the login screen', async () => {
     renderRoute('/login', null)
 
     expect(screen.getAllByText('으뜸')).not.toHaveLength(0)
     expect(screen.getAllByText('UTEUM')).not.toHaveLength(0)
+    expect(screen.getByText(/같은 강의,/)).toBeInTheDocument()
+    expect(screen.getByText(/나에게 맞춘 학습\./)).toBeInTheDocument()
     expect(
-      screen.getAllByText(
+      screen.queryByText(
         'Ulsan University Tailored Educational User-adapted Module',
       ),
-    ).not.toHaveLength(0)
+    ).not.toBeInTheDocument()
     await waitFor(() => expect(document.title).toBe('로그인 · 으뜸'))
   })
 

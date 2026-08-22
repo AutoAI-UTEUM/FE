@@ -61,7 +61,7 @@ function renderLogin(path = '/login') {
 }
 
 describe('LoginPage', () => {
-  it('places Google login after local login and shows service health', async () => {
+  it('places Google login after local login and shows the signup prompt', async () => {
     renderLogin()
 
     const localLogin = screen.getByRole('button', { name: '로그인' })
@@ -72,6 +72,8 @@ describe('LoginPage', () => {
     expect(googleLogin.closest('.google-signin-button')).toHaveClass(
       'h-11',
       'w-full',
+      'min-w-full',
+      'max-w-full',
       'rounded-lg',
     )
     expect(window.google?.accounts.id.renderButton).toHaveBeenCalledWith(
@@ -87,9 +89,9 @@ describe('LoginPage', () => {
       localLogin.compareDocumentPosition(googleLogin) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(
-      await screen.findByRole('button', { name: '서비스 상태: 정상' }),
-    ).toBeInTheDocument()
+    expect(screen.getByText('계정이 없으신가요?')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '회원가입' })).toBeInTheDocument()
+    expect(screen.queryByText('또는')).not.toBeInTheDocument()
   })
 
   it('logs in an existing member with a GIS credential', async () => {

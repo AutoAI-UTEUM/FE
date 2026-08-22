@@ -4,7 +4,6 @@ import { Link, Outlet } from 'react-router-dom'
 import {
   SERVICE_NAME,
   SERVICE_NAME_ENGLISH,
-  SERVICE_NAME_EXPANSION,
 } from '../../shared/config/brand'
 import { routes } from '../routes'
 
@@ -29,27 +28,19 @@ export function AuthLayout() {
 
         <div className="flex flex-col gap-4">
           <p className="max-w-sm type-display font-bold leading-[1.35]">
-            강의 자료를 읽고,
+            같은 강의,
             <br />
-            바로 물어보세요.
+            나에게 맞춘 학습.
           </p>
           <p className="max-w-sm type-body leading-relaxed text-stone-500">
-            PDF를 보면서 AI 학습 도우미와
+            이해 속도에 맞춰 설명하고 점검하는
             <br />
-            대화하는 학습 플랫폼
+            개인 맞춤형 학습 플랫폼, {SERVICE_NAME}
           </p>
-          <div className="mt-2 max-w-sm border-l-2 border-brand-300 pl-3">
-            <p className="type-caption font-bold text-brand-700">
-              {SERVICE_NAME_ENGLISH}
-            </p>
-            <p className="mt-1 type-caption leading-relaxed text-stone-500">
-              {SERVICE_NAME_EXPANSION}
-            </p>
-          </div>
         </div>
 
         <p className="type-micro text-stone-400">
-          © 2026 {SERVICE_NAME} · {SERVICE_NAME_ENGLISH}
+          © 2026 {SERVICE_NAME} ({SERVICE_NAME_ENGLISH})
         </p>
       </aside>
 
@@ -69,10 +60,6 @@ export function AuthLayout() {
               </span>
             </span>
           </Link>
-
-          <p className="mb-7 type-caption leading-relaxed text-stone-400 lg:hidden">
-            {SERVICE_NAME_EXPANSION}
-          </p>
 
           <Outlet />
         </div>
