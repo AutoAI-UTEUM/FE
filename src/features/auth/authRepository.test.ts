@@ -115,6 +115,71 @@ describe('remote auth repository', () => {
     })
   })
 
+  it('logs in an existing Google user with only the id token', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        data: {
+          accessToken: 'google-access-token',
+          expiresIn: 3600,
+          tokenType: 'Bearer',
+          user: {
+            email: 'google@example.com',
+            id: 2,
+            name: 'Google 사용자',
+            role: 'LEARNER',
+          },
+        },
+        message: 'Google 로그인 완료',
+        success: true,
+      }),
+    )
+
+    await expect(
+      getAuthRepository().loginWithGoogle({ idToken: 'google-id-token' }),
+    ).resolves.toMatchObject({
+      accessToken: 'google-access-token',
+      user: { email: 'google@example.com', role: 'LEARNER' },
+    })
+
+    expectJsonRequest(fetchMock, 0, '/api/auth/google', {
+      idToken: 'google-id-token',
+    })
+  })
+
+  it('sends the signup contract for a new Google user', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        data: {
+          accessToken: 'google-access-token',
+          expiresIn: 3600,
+          tokenType: 'Bearer',
+          user: {
+            email: 'google@example.com',
+            id: 2,
+            name: 'Google 사용자',
+            role: 'INSTRUCTOR',
+          },
+        },
+        message: 'Google 회원가입 완료',
+        success: true,
+      }),
+    )
+
+    await getAuthRepository().loginWithGoogle({
+      idToken: 'google-id-token',
+      privacyVersion: '2026-07-01',
+      role: 'INSTRUCTOR',
+      termsVersion: '2026-07-01',
+    })
+
+    expectJsonRequest(fetchMock, 0, '/api/auth/google', {
+      idToken: 'google-id-token',
+      privacyVersion: '2026-07-01',
+      role: 'INSTRUCTOR',
+      termsVersion: '2026-07-01',
+    })
+  })
+
   it('validates a restored token using the bearer header', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       jsonResponse({

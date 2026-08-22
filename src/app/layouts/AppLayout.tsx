@@ -38,6 +38,7 @@ import {
   type AppNotificationType,
 } from '../../features/notifications'
 import { cx } from '../../shared/lib/cx'
+import { SERVICE_NAME, SERVICE_NAME_ENGLISH } from '../../shared/config/brand'
 import { formatDateTime } from '../../shared/lib/format'
 import {
   classroomAnnouncementsPath,
@@ -327,9 +328,15 @@ export function AppLayout() {
                 <BookOpenCheck aria-hidden="true" size={16} />
               </span>
               <span
-                className={cx('type-section-title font-bold', isCollapsed && 'lg:hidden')}
+                className={cx(
+                  'flex min-w-0 items-baseline gap-1.5',
+                  isCollapsed && 'lg:hidden',
+                )}
               >
-                EduPilot
+                <span className="type-section-title font-bold">{SERVICE_NAME}</span>
+                <span className="type-micro font-semibold text-stone-400">
+                  {SERVICE_NAME_ENGLISH}
+                </span>
               </span>
             </Link>
             <div

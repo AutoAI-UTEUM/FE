@@ -98,6 +98,28 @@ export async function handleApiFixtureRequest(
     })
   }
 
+  if (request.method === 'POST' && path === '/api/auth/google') {
+    const body = await readJson<{ idToken: string; role?: string }>(request)
+    if (body.idToken === 'new-google-id-token' && !body.role) {
+      return apiFailure(
+        'SIGNUP_REQUIRED',
+        '신규 회원은 가입 정보가 필요합니다.',
+        409,
+      )
+    }
+    return apiSuccess({
+      accessToken: 'google-access-token',
+      expiresIn: 3600,
+      tokenType: 'Bearer',
+      user: {
+        email: 'google@example.com',
+        id: 2,
+        name: 'Google 사용자',
+        role: body.role ?? 'LEARNER',
+      },
+    })
+  }
+
   if (request.method === 'POST' && path === '/api/auth/refresh') {
     return apiFailure('TOKEN_INVALID', '유효하지 않은 인증 토큰입니다.', 401)
   }

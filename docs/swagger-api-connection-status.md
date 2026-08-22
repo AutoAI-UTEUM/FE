@@ -14,6 +14,10 @@
 
 ## 이번 반영
 
+- Google 로그인 FE 선연동: GIS 표준 버튼에서 받은 ID 토큰을
+  `POST /api/auth/google`로 전달한다. `409 SIGNUP_REQUIRED`이면 역할과 필수 약관
+  버전을 같은 토큰에 추가해 재호출한다. BE Swagger 배포와
+  `VITE_GOOGLE_CLIENT_ID` 설정 후 실데이터 smoke를 진행한다.
 - 인앱 알림: `GET /api/users/me/notifications`를 사이드바 알림 패널에 연결하고,
   서버 `readAt` 기준 미읽음 배지와 개별·전체 읽음 처리를 제공한다.
   `PATCH /api/users/me/notifications/{notificationId}/read`와

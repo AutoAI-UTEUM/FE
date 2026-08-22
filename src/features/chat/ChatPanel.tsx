@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from 'react'
 import { cx } from '../../shared/lib/cx'
+import { SERVICE_NAME } from '../../shared/config/brand'
 import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime, formatTime } from '../../shared/lib/format'
 import { Button, MarkdownContent } from '../../shared/ui'
@@ -290,7 +291,7 @@ export function ChatPanel({
   async function shareMessage(content: string) {
     try {
       if (navigator.share) {
-        await navigator.share({ text: content, title: 'EduPilot 학습 대화' })
+        await navigator.share({ text: content, title: `${SERVICE_NAME} 학습 대화` })
         setMessageActionStatus('메시지를 공유했습니다.')
         return
       }

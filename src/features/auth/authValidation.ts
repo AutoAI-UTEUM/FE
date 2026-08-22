@@ -5,6 +5,15 @@ export interface LoginFormValues {
 
 export type SignupRole = 'INSTRUCTOR' | 'LEARNER'
 
+export interface GoogleAuthValues {
+  affiliation?: string
+  idToken: string
+  learningEmailOptIn?: boolean
+  privacyVersion?: string
+  role?: SignupRole
+  termsVersion?: string
+}
+
 export interface SignupFormValues extends LoginFormValues {
   affiliation?: string
   learningEmailOptIn?: boolean
