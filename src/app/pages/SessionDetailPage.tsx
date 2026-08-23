@@ -511,7 +511,7 @@ export function SessionDetailPage() {
   }
 
   async function runTurn(
-    eventType: 'EXPLAIN_CURRENT_PAGE' | 'QUIZ_TYPE_SELECTED',
+    eventType: 'EXPLAIN_CURRENT_PAGE' | 'NOTE_REQUESTED' | 'QUIZ_TYPE_SELECTED',
     payload: Record<string, unknown>,
   ) {
     if (isActionPending) return undefined
