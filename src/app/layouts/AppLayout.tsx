@@ -300,13 +300,13 @@ export function AppLayout() {
   return (
     <div
       className={cx(
-        'bg-white text-stone-900 dark:bg-[#1b1c20] lg:flex',
+        'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex',
         isStudyWorkspace ? 'h-dvh overflow-hidden' : 'min-h-screen',
       )}
     >
       <aside
         className={cx(
-          'relative z-40 flex border-b border-stone-200 bg-stone-100 px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4',
+          'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4',
           isCollapsed ? 'lg:w-14 lg:px-2' : 'lg:w-52 lg:px-2.5',
         )}
       >
@@ -342,7 +342,7 @@ export function AppLayout() {
                   aria-expanded={isNotificationsOpen}
                   aria-haspopup="dialog"
                   aria-label={`알림 ${unreadNotificationCount}개`}
-                  className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
+                  className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
                   onClick={() => {
                     if (!isNotificationsOpen) {
                       setIsLoadingNotifications(true)
@@ -379,7 +379,7 @@ export function AppLayout() {
               </div>
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
-                className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100 lg:flex"
+                className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex"
                 onClick={() =>
                   setSidebarPreference({
                     isCollapsed: !isCollapsed,
@@ -436,7 +436,7 @@ export function AppLayout() {
                     {sidebarClassrooms.map((classroom) => (
                       <NavLink
                         className={({ isActive }) => cx(
-                          'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800 dark:hover:bg-stone-100',
+                          'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800',
                           isActive && 'bg-brand-50 text-brand-700',
                         )}
                         key={classroom.id}
@@ -481,7 +481,7 @@ export function AppLayout() {
             aria-haspopup="menu"
             aria-label="프로필 메뉴"
             className={cx(
-              'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-t border-transparent p-1.5 text-left hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100',
+              'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-t border-transparent p-1.5 text-left hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
               isCollapsed && 'justify-center p-1',
             )}
             onClick={() => setIsMenuOpen((open) => !open)}
@@ -736,8 +736,8 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
     isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     isActive
-      ? 'bg-white font-semibold text-stone-900 shadow-sm dark:bg-stone-200'
-      : 'font-medium text-stone-500 hover:bg-white/60 hover:text-stone-800 dark:hover:bg-stone-100',
+      ? 'bg-brand-50 font-semibold text-brand-700 shadow-sm'
+      : 'font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800',
   )
 }
 
@@ -747,13 +747,7 @@ const instructorNavigation: Array<{ icon: LucideIcon; label: string; to: string 
   { icon: UserPlus, label: '입장 요청', to: routes.entranceRequests },
 ]
 
-function classroomDotClassName(color: Classroom['color']): string {
-  return {
-    BLUE: 'bg-blue-500',
-    GRAY: 'bg-stone-400',
-    GREEN: 'bg-emerald-500',
-    ORANGE: 'bg-orange-500',
-    PURPLE: 'bg-violet-500',
-    RED: 'bg-rose-500',
-  }[color]
+function classroomDotClassName(_color: Classroom['color']): string {
+  void _color
+  return 'bg-brand-700'
 }
