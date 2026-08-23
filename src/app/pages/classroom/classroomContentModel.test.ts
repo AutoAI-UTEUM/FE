@@ -54,6 +54,19 @@ describe('classroomContentModel', () => {
       'material-13',
     ])
   })
+
+  it('separates generated lessons from uploaded resources', () => {
+    const items = buildClassroomContent([weekFixture], [], [], [{
+      id: 'resource-1',
+      source: { kind: 'link', url: 'https://uteum.com' },
+      title: '참고 링크',
+      uploadedAt: '2026-08-02T00:00:00Z',
+      weekNumber: 2,
+    }])
+
+    expect(filterClassroomContent(items, 2, 'material').map((item) => item.title)).toEqual(['자료.pdf'])
+    expect(filterClassroomContent(items, 2, 'resource').map((item) => item.title)).toEqual(['참고 링크'])
+  })
 })
 
 const weekFixture: ClassroomWeek = {

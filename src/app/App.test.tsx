@@ -51,8 +51,8 @@ describe('AppRoutes', () => {
   it('shows the Uteum brand and personalized learning message on the login screen', async () => {
     renderRoute('/login', null)
 
-    expect(screen.getAllByText('으뜸')).not.toHaveLength(0)
-    expect(screen.getAllByText('Uteum')).not.toHaveLength(0)
+    expect(await screen.findAllByText('으뜸')).not.toHaveLength(0)
+    expect(await screen.findAllByText('Uteum')).not.toHaveLength(0)
     expect(screen.getByText(/같은 강의,/)).toHaveClass('type-auth-intro')
     expect(screen.getByText(/나에게 맞춘 학습\./)).toHaveClass('type-auth-intro')
     expect(screen.getByText(/이해 속도에 맞춰 설명하고 점검하는/)).toHaveClass('type-auth-description')
@@ -68,18 +68,18 @@ describe('AppRoutes', () => {
     expect(AUTH_IDLE_TIMEOUT_MS).toBe(30 * 60 * 1000)
   })
 
-  it('renders the forgot password route', () => {
+  it('renders the forgot password route', async () => {
     renderRoute('/forgot-password', null)
 
     expect(
-      screen.getByRole('heading', { name: '비밀번호 찾기' }),
+      await screen.findByRole('heading', { name: '비밀번호 찾기' }),
     ).toBeInTheDocument()
   })
 
   it('redirects the root route to classrooms', async () => {
     renderRoute('/')
 
-    expect(screen.getByRole('main')).toHaveClass(
+    expect(await screen.findByRole('main')).toHaveClass(
       'px-4',
       'py-4',
       'sm:px-6',
@@ -256,10 +256,10 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument()
   })
 
-  it('opens the learner calendar without instructor schedule commands', () => {
+  it('opens the learner calendar without instructor schedule commands', async () => {
     renderRoute('/calendar')
 
-    expect(screen.getByRole('heading', { name: '캘린더' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '캘린더' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '일정 추가' })).not.toBeInTheDocument()
   })
 
@@ -297,7 +297,7 @@ describe('AppRoutes', () => {
     })
 
     expect(
-      screen.getByRole('heading', { name: '입장 요청' }),
+      await screen.findByRole('heading', { name: '입장 요청' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
     expect(screen.getByRole('link', { name: '강의실' })).toBeInTheDocument()
@@ -441,7 +441,7 @@ describe('AppRoutes', () => {
       role: 'INSTRUCTOR',
     })
 
-    expect(screen.getByRole('heading', { name: '학생 리포트' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '학생 리포트' })).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '새 리포트 생성' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '저장된 버전' })).toBeInTheDocument()
 
@@ -515,11 +515,11 @@ describe('AppRoutes', () => {
     expect(requests).toContain('DELETE /api/users/me/notifications/100')
   })
 
-  it('renders the not found route for unknown paths', () => {
+  it('renders the not found route for unknown paths', async () => {
     renderRoute('/missing-page')
 
     expect(
-      screen.getByRole('heading', {
+      await screen.findByRole('heading', {
         name: '페이지를 찾을 수 없습니다.',
       }),
     ).toBeInTheDocument()
@@ -682,10 +682,10 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument()
   })
 
-  it('validates signup form fields', () => {
+  it('validates signup form fields', async () => {
     renderRoute('/signup', null)
 
-    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    fireEvent.click(await screen.findByRole('button', { name: '다음' }))
     fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
 
     expect(screen.getByText('이름을 입력하세요.')).toBeInTheDocument()

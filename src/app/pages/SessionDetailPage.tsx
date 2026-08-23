@@ -488,31 +488,21 @@ export function SessionDetailPage() {
     if (moved) await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
   }
 
-  function showNextPageConfirmation() {
-    chat.clearUiActions()
-    setSession((current) => current ? {
-      ...current,
-      uiActions: [createNextPageConfirmation()],
-    } : current)
-  }
-
   async function handleQuizDecline() {
     if (isActionPending) return
+    chat.clearUiActions()
+    setSession((current) => current ? { ...current, uiActions: [] } : current)
     setIsActionPending(true)
     setError(null)
     try {
       const result = await sessionsRepository.declineQuiz(activeSession.id)
       applyTurnResult({
         ...result,
-        uiActions: normalizeProgressActions(result.uiActions),
+        uiActions: [],
       }, true)
     } catch (requestError) {
-      if (
-        requestError instanceof ApiClientError
-        && (requestError.status === 404 || requestError.status === 405)
-      ) {
-        showNextPageConfirmation()
-      } else {
+      if (!(requestError instanceof ApiClientError
+        && (requestError.status === 404 || requestError.status === 405))) {
         setError(getRequestErrorMessage(requestError))
       }
     } finally {

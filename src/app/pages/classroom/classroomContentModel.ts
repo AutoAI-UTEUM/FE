@@ -3,8 +3,33 @@ import type { Exam } from '../../../features/exams'
 
 export type ClassroomContentFilter = 'all' | 'exam' | 'material' | 'notice' | 'resource'
 
+export type ClassroomResourceSource =
+  | {
+      fileName: string
+      fileSize: number
+      kind: 'file'
+      objectUrl?: string
+      previewKind: 'document' | 'image' | 'pdf'
+    }
+  | {
+      kind: 'link'
+      url: string
+    }
+
+export interface ClassroomResourcePreviewValue {
+  source: ClassroomResourceSource
+  title: string
+  weekNumber: number
+}
+
+export interface ClassroomResource extends ClassroomResourcePreviewValue {
+  id: string
+  uploadedAt: string
+}
+
 export type ClassroomContentItem =
   | { id: string; kind: 'material'; occurredAt: string; source: ClassroomMaterial; title: string; weekNumber: number; weekOrder: number }
+  | { id: string; kind: 'resource'; occurredAt: string; source: ClassroomResource; title: string; weekNumber: number; weekOrder: number }
   | { id: string; kind: 'notice'; occurredAt: string; source: ClassroomNotice; title: string; weekNumber: number | null; weekOrder: number | null }
   | { id: string; kind: 'exam'; occurredAt: string; source: Exam; title: string; weekNumber: number | null; weekOrder: number | null }
 
@@ -12,6 +37,7 @@ export function buildClassroomContent(
   weeks: ClassroomWeek[],
   notices: ClassroomNotice[],
   exams: Exam[],
+  resources: ClassroomResource[] = [],
 ): ClassroomContentItem[] {
   const weekOrderByNumber = new Map(
     weeks.map((week) => [week.weekNumber, week.weekNumber]),
@@ -27,6 +53,15 @@ export function buildClassroomContent(
       weekNumber: week.weekNumber,
       weekOrder: week.weekNumber,
     }))),
+    ...resources.map((resource): ClassroomContentItem => ({
+      id: `resource-${resource.id}`,
+      kind: 'resource',
+      occurredAt: resource.uploadedAt,
+      source: resource,
+      title: resource.title,
+      weekNumber: resource.weekNumber,
+      weekOrder: resource.weekNumber,
+    })),
     ...notices.map((notice): ClassroomContentItem => ({
       id: `notice-${notice.id}`,
       kind: 'notice',

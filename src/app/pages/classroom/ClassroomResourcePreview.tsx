@@ -14,25 +14,9 @@ import { useMemo, useState, type FormEvent } from 'react'
 
 import type { ClassroomWeek } from '../../../features/classrooms'
 import { Badge, Button } from '../../../shared/ui'
+import type { ClassroomResourcePreviewValue } from './classroomContentModel'
 
-type ResourceSource =
-  | {
-      fileName: string
-      fileSize: number
-      kind: 'file'
-      objectUrl?: string
-      previewKind: 'document' | 'image' | 'pdf'
-    }
-  | {
-      kind: 'link'
-      url: string
-    }
-
-export interface ClassroomResourcePreviewValue {
-  source: ResourceSource
-  title: string
-  weekNumber: number
-}
+export type { ClassroomResourcePreviewValue } from './classroomContentModel'
 
 export function ClassroomResourceUploadDialog({
   initialWeekNumber,

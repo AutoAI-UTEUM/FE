@@ -732,7 +732,7 @@ function turnResponse(body: { eventType?: string }): Response {
       uiActions: [
         {
           content: '퀴즈를 진행할까요?',
-          noEvent: 'MOVE_NEXT_PAGE',
+          noEvent: 'WAIT',
           type: 'BINARY_DECISION',
           yesEvent: 'SHOW_QUIZ_TYPE_SELECT',
         },
