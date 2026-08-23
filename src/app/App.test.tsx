@@ -48,11 +48,11 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
-  it('shows the UTEUM brand and personalized learning message on the login screen', async () => {
+  it('shows the Uteum brand and personalized learning message on the login screen', async () => {
     renderRoute('/login', null)
 
     expect(screen.getAllByText('으뜸')).not.toHaveLength(0)
-    expect(screen.getAllByText('UTEUM')).not.toHaveLength(0)
+    expect(screen.getAllByText('Uteum')).not.toHaveLength(0)
     expect(screen.getByText(/같은 강의,/)).toHaveClass('type-auth-intro')
     expect(screen.getByText(/나에게 맞춘 학습\./)).toHaveClass('type-auth-intro')
     expect(screen.getByText(/이해 속도에 맞춰 설명하고 점검하는/)).toHaveClass('type-auth-description')
@@ -91,7 +91,7 @@ describe('AppRoutes', () => {
       within(screen.getByRole('complementary')).getByText('으뜸'),
     ).toBeInTheDocument()
     expect(
-      within(screen.getByRole('complementary')).queryByText('UTEUM'),
+      within(screen.getByRole('complementary')).queryByText('Uteum'),
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: '내 강의실' }),

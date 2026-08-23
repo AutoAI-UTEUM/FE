@@ -42,7 +42,7 @@ describe('ClassroomContentView week periods', () => {
     expect(navigation.parentElement).toHaveClass('lg:h-full', 'lg:overflow-hidden')
     expect(within(navigation).getByText('심화').closest('button')).toHaveTextContent('8.10 - 8.16')
     expect(within(navigation).getByText('기초').closest('button')).toHaveTextContent('8.3 - 8.9')
-    expect(within(navigation).getByText('전체 항목').closest('button')).toHaveClass('h-10')
+    expect(within(navigation).getByText('전체 항목').closest('button')).toHaveClass('h-9', 'min-h-9')
     expect(within(navigation).getByText('심화').closest('button')).toHaveClass('h-10')
   })
 
@@ -148,6 +148,7 @@ describe('ClassroomContentView week periods', () => {
     expect(noticeRow?.firstElementChild).toHaveTextContent('공지')
     expect(noticeRow?.firstElementChild).toHaveClass('min-h-5', 'rounded-md', 'border', 'px-1.5', 'type-caption', 'font-semibold')
     expect(noticeRow?.firstElementChild?.querySelector('svg')).toBeNull()
+    expect(noticeRow?.lastElementChild).toHaveClass('size-8', 'shrink-0', 'items-center', 'justify-center')
     expect(within(noticeButton!).queryByText('공지')).not.toBeInTheDocument()
     expect(within(resourceList).queryByText('게시됨')).not.toBeInTheDocument()
     expect(within(resourceList).getByText('예약')).toBeInTheDocument()
