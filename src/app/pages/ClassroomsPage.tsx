@@ -246,7 +246,7 @@ function LearnerClassroomsPage() {
         </h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sortedClassrooms.map((classroom) => (
-            <Link className="flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 hover:border-brand-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" key={classroom.id} to={classroomDetailPath(classroom.id)}>
+            <Link className="flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" key={classroom.id} to={classroomDetailPath(classroom.id)}>
               <div className="flex items-start gap-4">
                 <span className={`flex size-11 shrink-0 items-center justify-center rounded-lg type-body font-bold ${getClassroomTone(classroom)}`}>
                   {classroom.name.slice(0, 1)}
@@ -258,7 +258,7 @@ function LearnerClassroomsPage() {
                   </p>
                 </div>
                 <span className={classroom.status === 'ACTIVE'
-                  ? 'rounded-full bg-emerald-50 px-2 py-1 type-micro font-semibold text-emerald-700'
+                  ? 'rounded-full bg-[#E7F6EC] px-2 py-1 type-micro font-semibold text-[#12833E]'
                   : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'}>
                   {classroom.status === 'ACTIVE' ? '수강 중' : '종료'}
                 </span>
@@ -268,7 +268,7 @@ function LearnerClassroomsPage() {
                   <span className="text-stone-400">진도</span>
                   <strong className="text-brand-700">{classroom.progressRate}%</strong>
                 </div>
-                <div className="mt-1.5 h-1 rounded-full bg-stone-200">
+                <div className="mt-1.5 h-1 rounded-full bg-stone-100">
                   <span className="block h-full rounded-full bg-brand-600" style={{ width: `${Math.min(100, Math.max(0, classroom.progressRate))}%` }} />
                 </div>
                 <p className="mt-3 truncate type-caption text-stone-500">
@@ -394,19 +394,7 @@ function LearnerClassroomsPage() {
   )
 }
 
-function getClassroomTone(classroom: Classroom): string {
-  switch (classroom.color) {
-    case 'ORANGE':
-      return 'bg-orange-100 text-orange-700'
-    case 'GREEN':
-      return 'bg-emerald-100 text-emerald-700'
-    case 'PURPLE':
-      return 'bg-violet-100 text-violet-700'
-    case 'RED':
-      return 'bg-rose-100 text-rose-700'
-    case 'GRAY':
-      return 'bg-stone-100 text-stone-500'
-    case 'BLUE':
-      return 'bg-brand-100 text-brand-700'
-  }
+function getClassroomTone(_classroom: Classroom): string {
+  void _classroom
+  return 'bg-brand-50 text-brand-700'
 }

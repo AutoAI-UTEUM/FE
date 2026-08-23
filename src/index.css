@@ -119,26 +119,36 @@
   line-height: 0.875rem;
 }
 
-/* 브랜드 컬러 — 디자인 시안(강의실 레이아웃 시안.dc.html)의 #4059d6 인디고 스케일.
-   팔레트 교체 시 이 블록만 수정한다. */
+/* 차콜 모노 시안의 브랜드 및 공통 뉴트럴 팔레트. */
 @theme {
-  --color-brand-50: #f0f2fc;
-  --color-brand-100: #e3e8ff;
-  --color-brand-200: #c9d2f8;
-  --color-brand-300: #a3b0f0;
-  --color-brand-400: #7787e4;
-  --color-brand-500: #5567dc;
-  --color-brand-600: #4059d6;
-  --color-brand-700: #3448bb;
-  --color-brand-800: #2c3c9a;
-  --color-brand-900: #28357d;
-  --color-brand-950: #1a2150;
+  --color-brand-50: #eef0f4;
+  --color-brand-100: #e3e6ee;
+  --color-brand-200: #c9ceda;
+  --color-brand-300: #c9ceda;
+  --color-brand-400: #8a90a0;
+  --color-brand-500: #3c4152;
+  --color-brand-600: #20263a;
+  --color-brand-700: #20263a;
+  --color-brand-800: #10141f;
+  --color-brand-900: #171c29;
+  --color-brand-950: #10141f;
+  --color-stone-50: #f7f8fa;
+  --color-stone-100: #eef0f4;
+  --color-stone-200: #e3e6ee;
+  --color-stone-300: #c9ceda;
+  --color-stone-400: #a6acbb;
+  --color-stone-500: #8a90a0;
+  --color-stone-600: #6e7382;
+  --color-stone-700: #4a4f5e;
+  --color-stone-800: #3c4152;
+  --color-stone-900: #171a22;
+  --color-stone-950: #171a22;
 }
 
 :root {
   font-family: var(--font-sans);
   color: var(--color-stone-900);
-  background: #fff;
+  background: #f6f7f9;
   color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -203,7 +213,7 @@ html.dark {
 
 html {
   min-width: 320px;
-  background: #fff;
+  background: #f6f7f9;
   scrollbar-gutter: stable;
 }
 
@@ -222,7 +232,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: #fff;
+  background: #f6f7f9;
   font-size: 0.875rem;
   line-height: 1.375rem;
 }
@@ -245,28 +255,28 @@ html.dark .shadow-lg {
 
 /* 인증 화면은 제공된 로그인·회원가입 정본처럼 항상 밝은 테마로 표시한다. */
 .auth-light {
-  --color-brand-50: #f0f2fc;
-  --color-brand-100: #e3e8ff;
-  --color-brand-200: #c9d2f8;
-  --color-brand-300: #a3b0f0;
-  --color-brand-400: #7787e4;
-  --color-brand-500: #5567dc;
-  --color-brand-600: #4059d6;
-  --color-brand-700: #3448bb;
-  --color-brand-800: #2c3c9a;
-  --color-brand-900: #28357d;
-  --color-brand-950: #1a2150;
-  --color-stone-50: #fafaf9;
-  --color-stone-100: #f5f5f4;
-  --color-stone-200: #e7e5e4;
-  --color-stone-300: #d6d3d1;
-  --color-stone-400: #a8a29e;
-  --color-stone-500: #78716c;
-  --color-stone-600: #57534e;
-  --color-stone-700: #44403c;
-  --color-stone-800: #292524;
-  --color-stone-900: #1c1917;
-  --color-stone-950: #0c0a09;
+  --color-brand-50: #eef0f4;
+  --color-brand-100: #e3e6ee;
+  --color-brand-200: #c9ceda;
+  --color-brand-300: #c9ceda;
+  --color-brand-400: #8a90a0;
+  --color-brand-500: #3c4152;
+  --color-brand-600: #20263a;
+  --color-brand-700: #20263a;
+  --color-brand-800: #10141f;
+  --color-brand-900: #171c29;
+  --color-brand-950: #10141f;
+  --color-stone-50: #f7f8fa;
+  --color-stone-100: #eef0f4;
+  --color-stone-200: #e3e6ee;
+  --color-stone-300: #c9ceda;
+  --color-stone-400: #a6acbb;
+  --color-stone-500: #8a90a0;
+  --color-stone-600: #6e7382;
+  --color-stone-700: #4a4f5e;
+  --color-stone-800: #3c4152;
+  --color-stone-900: #171a22;
+  --color-stone-950: #171a22;
   color-scheme: light;
 }
 

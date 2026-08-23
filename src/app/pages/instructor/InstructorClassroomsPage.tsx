@@ -358,7 +358,7 @@ function ClassroomCard({
 
   return (
     <article
-      className={`flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 ${isActive ? '' : 'opacity-60'}`}
+      className={`flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 ${isActive ? '' : 'opacity-60'}`}
     >
       <div className="flex items-start gap-4">
         <span
@@ -381,7 +381,7 @@ function ClassroomCard({
         <span
           className={
             isActive
-              ? 'rounded-full bg-emerald-50 px-2 py-1 type-micro font-semibold text-emerald-700'
+              ? 'rounded-full bg-[#E7F6EC] px-2 py-1 type-micro font-semibold text-[#12833E]'
               : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'
           }
         >
@@ -427,7 +427,7 @@ function ClassroomCard({
             {progress}%
           </strong>
         </div>
-        <div className="mt-2 h-1.5 rounded-full bg-stone-200">
+        <div className="mt-2 h-1.5 rounded-full bg-stone-100">
           <div
             className={`h-full rounded-full ${isActive ? 'bg-brand-600' : 'bg-stone-400'}`}
             style={{ width: `${progress}%` }}
@@ -665,21 +665,9 @@ async function loadCardDetails(
   )
 }
 
-function getClassroomTone(color: ClassroomColor): string {
-  switch (color) {
-    case 'ORANGE':
-      return 'bg-orange-100 text-orange-700'
-    case 'GREEN':
-      return 'bg-emerald-100 text-emerald-700'
-    case 'PURPLE':
-      return 'bg-violet-100 text-violet-700'
-    case 'RED':
-      return 'bg-rose-100 text-rose-700'
-    case 'GRAY':
-      return 'bg-stone-100 text-stone-500'
-    case 'BLUE':
-      return 'bg-brand-100 text-brand-700'
-  }
+function getClassroomTone(_color: ClassroomColor): string {
+  void _color
+  return 'bg-brand-50 text-brand-700'
 }
 
 function CreateClassroomDialog({
