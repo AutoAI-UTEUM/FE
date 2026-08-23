@@ -8,6 +8,7 @@ export { UiActionsRenderer } from './UiActionsRenderer'
 export type {
   LearningSession,
   LearningSessionStatus,
+  NoteDraft,
   UiAction,
   UiActionEvent,
 } from './sessionTypes'

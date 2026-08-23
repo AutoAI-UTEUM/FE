@@ -68,10 +68,10 @@ export function InstructorLearningStatusPage() {
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader activeTab="learning" classroom={classroom} />
 
-      <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(460px,1.35fr)]">
+      <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-2 2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)]">
         <MaterialAnalyticsPanel analytics={analytics} />
         <QuestionAnalyticsPanel analytics={analytics} />
-        <StudentLearningTable classroomId={classroom.id} students={students} />
+        <StudentLearningTable className="xl:col-span-2 2xl:col-span-1" classroomId={classroom.id} students={students} />
       </section>
     </ClassroomWorkspaceContainer>
   )

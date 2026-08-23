@@ -8,6 +8,7 @@ import type {
   LearningSession,
   LearningSessionStatus,
   PendingDiagnosisReference,
+  NoteDraft,
   SessionMessage,
   SessionQuizSummary,
   SessionTurnResult,
@@ -66,6 +67,7 @@ interface CursorPage<T> {
 
 interface SessionTurnDto {
   messages?: SessionMessageDto[]
+  noteDraft?: unknown
   state?: {
     activeQuizId?: number | string | null
     currentPage?: number
@@ -104,6 +106,7 @@ export interface SessionTurnRequest {
   eventType:
     | 'DIAGNOSIS_ANSWER_SUBMITTED'
     | 'EXPLAIN_CURRENT_PAGE'
+    | 'NOTE_REQUESTED'
     | 'QUIZ_TYPE_SELECTED'
     | 'USER_QUESTION'
   payload: Record<string, unknown>
@@ -111,7 +114,7 @@ export interface SessionTurnRequest {
 }
 
 export interface SessionStreamHandlers {
-  onCompleted?: () => void
+  onCompleted?: (noteDraft?: NoteDraft) => void
   onContentDelta?: (text: string) => void
   onError?: (message: string) => void
   onStatus?: (message: string) => void
@@ -324,6 +327,7 @@ export function createSessionsRepository(
         activeQuizId: mapNullableId(data.state, 'activeQuizId'),
         currentPage: data.state?.currentPage,
         messages: (data.messages ?? []).map(mapMessage),
+        noteDraft: mapNoteDraft(data.noteDraft),
         pageStatus: data.state?.pageStatus,
         pendingDiagnosis: mapNullableDiagnosis(data.state),
         uiActions: mapUiActions(data.uiActions),
@@ -361,7 +365,7 @@ function handleStreamMessage(
   }
 
   if (eventType === 'completed') {
-    handlers.onCompleted?.()
+    handlers.onCompleted?.(mapNoteDraft(payload.noteDraft))
     return
   }
 
@@ -425,9 +429,21 @@ const UI_ACTION_EVENTS = [
   'COMPLETE_SESSION',
   'EXPLAIN_CURRENT_PAGE',
   'MOVE_NEXT_PAGE',
+  'NOTE_REQUESTED',
   'SHOW_QUIZ_TYPE_SELECT',
   'WAIT',
 ] as const
+
+function mapNoteDraft(value: unknown): NoteDraft | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const draft = value as Record<string, unknown>
+  if (typeof draft.title !== 'string' || typeof draft.content !== 'string') {
+    return undefined
+  }
+  const title = draft.title.trim().slice(0, 60)
+  const content = draft.content.trim()
+  return title && content ? { content, title } : undefined
+}
 
 function toUiActionEvent(value: string | undefined): UiActionEvent | undefined {
   return UI_ACTION_EVENTS.find((event) => event === value)

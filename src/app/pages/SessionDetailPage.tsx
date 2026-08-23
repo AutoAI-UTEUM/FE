@@ -511,7 +511,7 @@ export function SessionDetailPage() {
   }
 
   async function runTurn(
-    eventType: 'EXPLAIN_CURRENT_PAGE' | 'QUIZ_TYPE_SELECTED',
+    eventType: 'EXPLAIN_CURRENT_PAGE' | 'NOTE_REQUESTED' | 'QUIZ_TYPE_SELECTED',
     payload: Record<string, unknown>,
   ) {
     if (isActionPending) return undefined
@@ -558,6 +558,9 @@ export function SessionDetailPage() {
         return
       case 'EXPLAIN_CURRENT_PAGE':
         await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
+        return
+      case 'NOTE_REQUESTED':
+        await runTurn('NOTE_REQUESTED', {})
         return
       case 'SHOW_QUIZ_TYPE_SELECT':
         chat.clearUiActions()

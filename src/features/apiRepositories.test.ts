@@ -149,7 +149,7 @@ describe('remote feature repositories', () => {
     const rawRequest = vi.fn().mockResolvedValue(
       new Response(
         encoder.encode(
-          'event: status\ndata: {"stage":"GENERATING"}\n\nevent: content_delta\ndata: {"text":"실시간 답변"}\n\nevent: ui_action\ndata: {"action":{"type":"MOVE_NEXT_PAGE","content":"다음 쪽으로 이동"}}\n\nevent: completed\ndata: {}\n\n',
+          'event: status\ndata: {"stage":"GENERATING"}\n\nevent: content_delta\ndata: {"text":"실시간 답변"}\n\nevent: ui_action\ndata: {"action":{"type":"MOVE_NEXT_PAGE","content":"다음 쪽으로 이동"}}\n\nevent: completed\ndata: {"noteDraft":{"title":"핵심 정리","content":"## 개념\\n\\n- 적용 사례"}}\n\n',
         ),
         { headers: { 'Content-Type': 'text/event-stream' } },
       ),
@@ -175,7 +175,10 @@ describe('remote feature repositories', () => {
         label: '다음 쪽으로 이동',
       }),
     )
-    expect(handlers.onCompleted).toHaveBeenCalledOnce()
+    expect(handlers.onCompleted).toHaveBeenCalledWith({
+      content: '## 개념\n\n- 적용 사례',
+      title: '핵심 정리',
+    })
   })
 
   it('sends session page moves and learning turns using the contract paths', async () => {
@@ -200,8 +203,9 @@ describe('remote feature repositories', () => {
               status: 'COMPLETED',
             },
           ],
+          noteDraft: { title: '턴 노트', content: '**핵심** 내용' },
           state: { currentPage: 3, pageStatus: 'IN_PROGRESS' },
-          uiActions: [],
+          uiActions: [{ content: '노트로 정리할까요?', noEvent: 'WAIT', type: 'BINARY_DECISION', yesEvent: 'NOTE_REQUESTED' }],
         }),
       )
       .mockResolvedValueOnce(
@@ -241,7 +245,9 @@ describe('remote feature repositories', () => {
     ).resolves.toMatchObject({
       currentPage: 3,
       messages: [{ id: '501', senderType: 'AI', status: 'COMPLETED' }],
+      noteDraft: { content: '**핵심** 내용', title: '턴 노트' },
       pageStatus: 'IN_PROGRESS',
+      uiActions: [{ kind: 'BINARY_DECISION', noEvent: 'WAIT', yesEvent: 'NOTE_REQUESTED' }],
     })
     expect(request).toHaveBeenNthCalledWith(
       3,
