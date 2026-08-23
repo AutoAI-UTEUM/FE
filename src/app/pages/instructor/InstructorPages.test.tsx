@@ -558,7 +558,8 @@ describe('instructor pages', () => {
     expect(screen.getByLabelText('7쪽 질문 4건').firstElementChild).toHaveStyle({ width: '50%' })
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '김학습 리포트' })).toHaveAttribute('href', '/classrooms/12/students/9/reports')
-    expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(460px,1.35fr)]')
+    expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('xl:grid-cols-2', '2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)]')
+    expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('xl:col-span-2', '2xl:col-span-1')
     expect(screen.getByText('64%')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: '리마인더 보내기' }),

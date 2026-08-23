@@ -6,6 +6,7 @@ import {
   ListChecks,
   NotebookPen,
   RotateCcw,
+  Save,
   Share2,
   Trash2,
   XCircle,
@@ -80,6 +81,7 @@ export function ChatPanel({
   chat,
   className,
   conversationAction,
+  currentPage,
   onExplainCurrentPage,
   onExplainNextPage,
   onOpenQuiz,
@@ -247,11 +249,11 @@ export function ChatPanel({
     void saveNote(lastAnswer.content, lastAnswer.pageNumber, lastAnswer.id)
   }
 
-  async function saveNote(content: string, pageNumber?: number, sourceMessageId?: string) {
+  async function saveNote(content: string, pageNumber?: number, sourceMessageId?: string): Promise<boolean> {
     if (!notesRepository) {
       setNotes((current) => [...current, { content, id: `local-${Date.now()}`, pageNumber, sourceMessageId }])
       setTab('notes')
-      return
+      return true
     }
     try {
       const numericMessageId = Number(sourceMessageId)
@@ -265,12 +267,20 @@ export function ChatPanel({
       setError(null)
       setMessageActionStatus('노트에 저장했습니다.')
       setTab('notes')
+      return true
     } catch (requestError) {
       const message = getRequestErrorMessage(requestError)
       setNotesError(message)
       setError(`노트를 저장하지 못했습니다. ${message}`)
       setMessageActionStatus('노트를 저장하지 못했습니다.')
+      return false
     }
+  }
+
+  async function saveNoteDraft() {
+    if (!chat.noteDraft) return
+    const saved = await saveNote(`# ${chat.noteDraft.title}\n\n${chat.noteDraft.content}`, currentPage)
+    if (saved) chat.clearNoteDraft()
   }
 
   async function removeNote(id: string) {
@@ -402,6 +412,30 @@ export function ChatPanel({
             onShare={() => void shareMessage(message.content)}
           />
         ))}
+
+        {chat.noteDraft ? (
+          <article
+            aria-label="노트 초안 미리보기"
+            className="w-full rounded-xl border border-brand-200 bg-brand-50/40 p-3.5"
+          >
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="type-caption font-semibold text-brand-700">노트 초안</p>
+                <h3 className="mt-1 type-section-title font-bold text-stone-950">{chat.noteDraft.title}</h3>
+              </div>
+              <Button
+                disabled={chat.isTurnPending}
+                onClick={() => void saveNoteDraft()}
+                size="sm"
+                type="button"
+              >
+                <Save aria-hidden="true" size={13} />
+                저장
+              </Button>
+            </div>
+            <MarkdownContent className="mt-3 border-t border-brand-100 pt-3 text-stone-800" content={chat.noteDraft.content} />
+          </article>
+        ) : null}
 
         <p aria-live="polite" className="sr-only">{messageActionStatus}</p>
 

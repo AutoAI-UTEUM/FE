@@ -96,6 +96,17 @@ function hideIncompleteStreamingStrongDelimiter(content: string): string {
     : `${content.slice(0, lastDelimiter)}${content.slice(lastDelimiter + 2)}`
 }
 
+function addFractionMatrixRowSpacing(content: string): string {
+  return content.replace(
+    /\\begin\{(Bmatrix|Vmatrix|array|bmatrix|matrix|pmatrix|vmatrix)\}([\s\S]*?)\\end\{\1\}/g,
+    (matrix, environment: string, body: string) => {
+      if (!/\\(?:d?frac|tfrac)\b/.test(body)) return matrix
+      const spacedBody = body.replace(/\\\\(?!\[)/g, '\\\\[0.5em]')
+      return `\\begin{${environment}}${spacedBody}\\end{${environment}}`
+    },
+  )
+}
+
 function normalizeMarkdownLatex(content: string, isStreaming: boolean): string {
   return content
     .split(markdownCodePattern)
@@ -110,7 +121,9 @@ function normalizeMarkdownLatex(content: string, isStreaming: boolean): string {
           `$${expression.trim()}$`
         ))
 
-      const withStableStrongEmphasis = normalizeWrappedStrongPunctuation(withStandardDelimiters)
+      const withStableStrongEmphasis = normalizeWrappedStrongPunctuation(
+        addFractionMatrixRowSpacing(withStandardDelimiters),
+      )
       return normalizeParenthesizedLatex(
         isStreaming
           ? hideIncompleteStreamingStrongDelimiter(withStableStrongEmphasis)

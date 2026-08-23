@@ -559,6 +559,9 @@ export function SessionDetailPage() {
       case 'EXPLAIN_CURRENT_PAGE':
         await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
         return
+      case 'NOTE_REQUESTED':
+        await runTurn('NOTE_REQUESTED', {})
+        return
       case 'SHOW_QUIZ_TYPE_SELECT':
         chat.clearUiActions()
         setSession((current) => current ? { ...current, uiActions: [] } : current)

@@ -428,6 +428,26 @@ describe('ChatPanel', () => {
     expect(container.querySelector('.katex-display')).toBeInTheDocument()
   })
 
+  it('adds safe row spacing to fraction matrices', async () => {
+    const repository = createRepository({
+      listMessages: vi.fn().mockResolvedValue([
+        {
+          content: String.raw`$$
+\nabla f(x)=\begin{bmatrix}\frac{\partial f}{\partial x_1}\\\frac{\partial f}{\partial x_2}\end{bmatrix}
+$$`,
+          createdAt: '2026-08-06T00:00:00Z',
+          id: 'latex-matrix',
+          senderType: 'AI',
+        },
+      ]),
+    })
+    const { container } = render(<ChatHarness repository={repository} />)
+
+    await waitFor(() => expect(container.querySelector('.katex-display')).toBeInTheDocument())
+    expect(container.querySelectorAll('.mfrac')).toHaveLength(2)
+    expect(container.querySelector('.katex-mathml annotation')).toHaveTextContent('\\\\[0.5em]')
+  })
+
   it('renders parenthesized LaTeX returned without markdown math delimiters', async () => {
     const repository = createRepository({
       listMessages: vi.fn().mockResolvedValue([
@@ -518,6 +538,54 @@ describe('ChatPanel', () => {
     )
     expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: '내 노트' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('previews a completed note draft and saves it only after confirmation', async () => {
+    const request = vi.fn(async (_path: string, options?: { body?: unknown; method?: string }) => {
+      if (!options?.method || options.method === 'GET') {
+        return {
+          data: { items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 },
+          success: true,
+        }
+      }
+      return {
+        data: { content: '# 역전파 핵심\n\n**기울기**를 연쇄적으로 계산합니다.', noteId: 77, pageNumber: 3 },
+        success: true,
+      }
+    }) as unknown as AuthenticatedRequest
+    const repository = createRepository({
+      submitTurn: vi.fn().mockResolvedValue({
+        messages: [],
+        noteDraft: {
+          content: '**기울기**를 연쇄적으로 계산합니다.',
+          title: '역전파 핵심',
+        },
+        uiActions: [],
+      }),
+    })
+
+    render(<ChatHarness currentPage={3} repository={repository} request={request} />)
+    const input = await screen.findByLabelText('질문')
+    fireEvent.change(input, { target: { value: '노트를 만들어줘' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    const preview = await screen.findByRole('article', { name: '노트 초안 미리보기' })
+    expect(preview).toHaveTextContent('역전파 핵심')
+    expect(preview.querySelector('strong')).toHaveTextContent('기울기')
+    expect(request).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith('/api/sessions/100/notes', {
+      body: {
+        content: '# 역전파 핵심\n\n**기울기**를 연쇄적으로 계산합니다.',
+        pageNumber: 3,
+        sourceMessageId: undefined,
+      },
+      method: 'POST',
+    }))
+    expect(screen.queryByRole('article', { name: '노트 초안 미리보기' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /내 노트/ })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('shows message actions on user chat bubbles', async () => {

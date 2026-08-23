@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiClientError } from '../../shared/api'
 import type {
   SessionMessage,
+  NoteDraft,
   SessionsRepository,
   SessionTurnRequest,
   SessionTurnResult,
@@ -13,11 +14,13 @@ import type { ChatMessage } from './chatTypes'
 export interface SessionChat {
   appendLocalMessage: (message: ChatMessage) => void
   appendMessages: (messages: SessionMessage[]) => void
+  clearNoteDraft: () => void
   clearUiActions: () => void
   historyError: string | null
   isLoadingHistory: boolean
   isTurnPending: boolean
   messages: ChatMessage[]
+  noteDraft: NoteDraft | null
   markMessageFailed: (requestId: string) => void
   markMessageRetrying: (requestId: string) => void
   reloadHistory: () => void
@@ -41,6 +44,7 @@ export function useSessionChat(
   const [historyReloadKey, setHistoryReloadKey] = useState(0)
   const [streamNotice, setStreamNotice] = useState<string | null>(null)
   const [streamUiActions, setStreamUiActions] = useState<UiAction[]>([])
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null)
   const streamingMessageIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -86,6 +90,8 @@ export function useSessionChat(
     setStreamUiActions([])
   }, [])
 
+  const clearNoteDraft = useCallback(() => setNoteDraft(null), [])
+
   const reloadHistory = useCallback(() => {
     setHistoryError(null)
     setIsLoadingHistory(true)
@@ -119,7 +125,10 @@ export function useSessionChat(
         .stream(
           sessionId,
           {
-            onCompleted: () => setStreamNotice(null),
+            onCompleted: (draft) => {
+              setStreamNotice(null)
+              if (draft) setNoteDraft(draft)
+            },
             onContentDelta: (text) => {
               setStreamNotice('답변을 실시간으로 받고 있습니다.')
               setMessages((current) => {
@@ -168,6 +177,7 @@ export function useSessionChat(
         const result = await repository.submitTurn(sessionId, turn)
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
+        if (result.noteDraft) setNoteDraft(result.noteDraft)
         onResult?.(result)
         setStreamNotice(null)
         return result
@@ -198,6 +208,7 @@ export function useSessionChat(
       setHistoryError(null)
       setStreamNotice(null)
       setStreamUiActions([])
+      setNoteDraft(null)
       streamingMessageIdRef.current = null
     } finally {
       setIsTurnPending(false)
@@ -207,6 +218,7 @@ export function useSessionChat(
   return {
     appendLocalMessage,
     appendMessages,
+    clearNoteDraft,
     clearUiActions,
     historyError,
     isLoadingHistory,
@@ -214,6 +226,7 @@ export function useSessionChat(
     markMessageFailed,
     markMessageRetrying,
     messages,
+    noteDraft,
     reloadHistory,
     startNewConversation,
     streamNotice,
