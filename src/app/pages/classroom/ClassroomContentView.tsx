@@ -117,7 +117,9 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, onRenameMateria
 }) {
   return <div className="flex h-11 min-h-11 items-center gap-3 rounded-lg border border-stone-200 bg-white px-4 hover:bg-stone-50/70">
     {item.kind === 'material'
-      ? <Badge size="compact" tone="danger">자료</Badge>
+      ? <Badge size="compact" tone="info">수업</Badge>
+      : item.kind === 'resource'
+        ? <Badge size="compact" tone="danger">자료</Badge>
       : item.kind === 'notice'
         ? <Badge size="compact" tone="warning">공지</Badge>
         : <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><ClipboardList aria-hidden="true" size={16} /></span>}

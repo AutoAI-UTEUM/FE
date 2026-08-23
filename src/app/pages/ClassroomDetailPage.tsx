@@ -19,7 +19,7 @@ import {
   ClassroomResourceUploadDialog,
   type ClassroomResourcePreviewValue,
 } from './classroom/ClassroomResourcePreview'
-import { buildClassroomContent, filterClassroomContent, getGlobalClassroomContent, type ClassroomContentFilter } from './classroom/classroomContentModel'
+import { buildClassroomContent, filterClassroomContent, getGlobalClassroomContent, type ClassroomContentFilter, type ClassroomResource } from './classroom/classroomContentModel'
 import { ClassroomWorkspaceContainer } from './classroom/ClassroomWorkspaceContainer'
 import { ClassroomHeaderInfoBar, ClassroomWorkspaceHeader } from './classroom/ClassroomWorkspaceHeader'
 
@@ -50,11 +50,14 @@ export function ClassroomDetailPage() {
   const [isResourceUploadDialogOpen, setIsResourceUploadDialogOpen] = useState(false)
   const [resourceTargetWeek, setResourceTargetWeek] = useState<number | null>(null)
   const [resourcePreview, setResourcePreview] = useState<ClassroomResourcePreviewValue | null>(null)
+  const [resources, setResources] = useState<ClassroomResource[]>([])
   const [draggingWeek, setDraggingWeek] = useState<number | null>(null)
   const [pendingMaterial, setPendingMaterial] = useState<{ id: string; title: string; weekNumber: number } | null>(null)
   const [openingMaterialId, setOpeningMaterialId] = useState<string | null>(null)
   const [renamingMaterial, setRenamingMaterial] = useState<{ id: string; title: string } | null>(null)
   const materialRefreshInFlightRef = useRef(false)
+  const resourceObjectUrlsRef = useRef(new Set<string>())
+  const resourceSequenceRef = useRef(0)
   const uploadInFlightRef = useRef(false)
   const isInstructor = isInstructorRole(user?.role)
   const isReadOnly = classroom?.status === 'COMPLETED'
@@ -95,10 +98,8 @@ export function ClassroomDetailPage() {
   }, [classroomId, load])
 
   useEffect(() => () => {
-    if (resourcePreview?.source.kind === 'file' && resourcePreview.source.objectUrl) {
-      URL.revokeObjectURL(resourcePreview.source.objectUrl)
-    }
-  }, [resourcePreview])
+    resourceObjectUrlsRef.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+  }, [])
 
   useEffect(() => {
     function refreshVisibleContent() {
@@ -162,7 +163,10 @@ export function ClassroomDetailPage() {
   const filter = parseFilter(searchParams.get('filter'))
   const panel = searchParams.get('panel')
 
-  const content = useMemo(() => buildClassroomContent(weeks, notices, exams), [exams, notices, weeks])
+  const content = useMemo(
+    () => buildClassroomContent(weeks, notices, exams, resources),
+    [exams, notices, resources, weeks],
+  )
   const globalItems = useMemo(() => getGlobalClassroomContent(content, filter), [content, filter])
   const visibleItems = useMemo(() => filterClassroomContent(content, selectedWeekNumber, filter), [content, filter, selectedWeekNumber])
   const editingNoticeId = panel?.startsWith('notice-edit-')
@@ -348,6 +352,7 @@ export function ClassroomDetailPage() {
           onFilter={(nextFilter) => updateQuery({ filter: nextFilter === 'all' ? null : nextFilter })}
           onItem={(item) => {
             if (item.kind === 'material') void openMaterial(item.source.id)
+            if (item.kind === 'resource') setResourcePreview(item.source)
             if (item.kind === 'notice') updateQuery({ panel: `notice-${item.source.id}` })
             if (item.kind === 'exam') {
               if (isInstructor) updateQuery({ panel: `exam-${item.source.id}` })
@@ -376,7 +381,17 @@ export function ClassroomDetailPage() {
       initialWeekNumber={resourceTargetWeek ?? undefined}
       onClose={() => setIsResourceUploadDialogOpen(false)}
       onPreview={(resource) => {
-        setResourcePreview(resource)
+        resourceSequenceRef.current += 1
+        const uploadedResource: ClassroomResource = {
+          ...resource,
+          id: `local-${resourceSequenceRef.current}`,
+          uploadedAt: new Date().toISOString(),
+        }
+        if (uploadedResource.source.kind === 'file' && uploadedResource.source.objectUrl) {
+          resourceObjectUrlsRef.current.add(uploadedResource.source.objectUrl)
+        }
+        setResources((current) => [uploadedResource, ...current])
+        setResourcePreview(uploadedResource)
         setIsResourceUploadDialogOpen(false)
       }}
       weeks={weeks}
