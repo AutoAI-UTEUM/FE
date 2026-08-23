@@ -129,7 +129,7 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, onRenameMateria
       </span>
     </button>
     {item.kind === 'material' && openingMaterialId === item.source.id ? <span className="type-caption text-brand-700">수업 여는 중</span> : null}
-    {canManage && item.kind === 'material' ? <details className="relative shrink-0"><summary aria-label={`${item.title} 작업 메뉴`} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"><MoreHorizontal size={16} /></summary><div className="absolute top-9 right-0 z-20 w-28 rounded-lg border border-stone-200 bg-white p-1 shadow-lg"><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => onRenameMaterial({ id: item.source.id, title: item.title })} type="button">이름 변경</button><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => void onRemoveMaterial(item.weekNumber, item.source.id, item.title)} type="button">주차에서 제거</button></div></details> : <MoreHorizontal className="shrink-0 text-stone-300" size={16} />}
+    {canManage && item.kind === 'material' ? <details className="relative shrink-0"><summary aria-label={`${item.title} 작업 메뉴`} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"><MoreHorizontal size={16} /></summary><div className="absolute top-9 right-0 z-20 w-28 rounded-lg border border-stone-200 bg-white p-1 shadow-lg"><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => onRenameMaterial({ id: item.source.id, title: item.title })} type="button">이름 변경</button><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => void onRemoveMaterial(item.weekNumber, item.source.id, item.title)} type="button">주차에서 제거</button></div></details> : <span className="flex size-8 shrink-0 items-center justify-center"><MoreHorizontal className="text-stone-300" size={16} /></span>}
   </div>
 }
 
@@ -172,7 +172,7 @@ function resourceLabel(key: ResourceKey): string {
 }
 
 function railButtonClass(selected: boolean): string {
-  return `flex h-10 w-full items-center gap-1.5 rounded-md px-1.5 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
+  return `flex h-9 min-h-9 w-full items-center gap-1.5 rounded-md px-1.5 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
 }
 
 function weekRailButtonClass(selected: boolean): string {
