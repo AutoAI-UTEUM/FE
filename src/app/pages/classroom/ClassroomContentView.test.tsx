@@ -41,6 +41,7 @@ describe('ClassroomContentView week periods', () => {
     expect(navigation).toHaveClass('lg:overflow-y-auto', 'min-h-0', 'px-1.5', 'py-3')
     expect(navigation.parentElement).toHaveClass('lg:h-full', 'lg:overflow-hidden')
     expect(within(navigation).getByText('심화').closest('button')).toHaveTextContent('8.10 - 8.16')
+    expect(within(navigation).getByText('8.10 - 8.16')).toHaveClass('whitespace-nowrap', 'text-right')
     expect(within(navigation).getByText('기초').closest('button')).toHaveTextContent('8.3 - 8.9')
     expect(within(navigation).getByText('전체 항목').closest('button')).toHaveClass('h-9', 'min-h-9')
     expect(within(navigation).getByText('심화').closest('button')).toHaveClass('h-10')

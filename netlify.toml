@@ -7,7 +7,7 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://edu-pilot.duckdns.org/api/:splat"
+  to = "https://dev.uteum.com/api/:splat"
   status = 200
   force = true
 

@@ -51,6 +51,24 @@
   line-height: 1.5;
 }
 
+@media (min-width: 1280px) and (max-width: 1919px) and (max-height: 1200px) {
+  .notion-block-editor .bn-editor {
+    font-size: 16px;
+  }
+
+  .notion-block-editor .bn-block-content[data-content-type='heading'][data-level='1'] {
+    font-size: 1.875rem;
+  }
+
+  .notion-block-editor .bn-block-content[data-content-type='heading'][data-level='2'] {
+    font-size: 1.5rem;
+  }
+
+  .notion-block-editor .bn-block-content[data-content-type='heading'][data-level='3'] {
+    font-size: 1.25rem;
+  }
+}
+
 .dark .notion-block-editor {
   border-color: #3f3f46;
   background: #202126;

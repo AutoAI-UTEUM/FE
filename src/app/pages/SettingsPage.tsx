@@ -141,7 +141,7 @@ export function SettingsContent({ className }: { className?: string } = {}) {
   }
 
   async function uploadAvatar(file: File) {
-    try { await repository.uploadAvatar(file); const blob = await repository.getAvatar(); if (avatarUrl) URL.revokeObjectURL(avatarUrl); const next = URL.createObjectURL(blob); setAvatarUrl(next); if (user) updateUser({ ...user, avatarUrl: '/api/users/me/avatar' }); showToast('프로필 사진을 변경했습니다.', 'success') }
+    try { await repository.uploadAvatar(file); const blob = await repository.getAvatar(); if (avatarUrl) URL.revokeObjectURL(avatarUrl); const next = URL.createObjectURL(blob); setAvatarUrl(next); if (user) updateUser({ ...user, avatarUrl: next }); showToast('프로필 사진을 변경했습니다.', 'success') }
     catch (error) { showToast(getRequestErrorMessage(error), 'danger') }
   }
 
@@ -366,9 +366,6 @@ function AppearanceSection({
   return (
     <Card as="section" className="border-0 p-0">
       <h2 className="type-section-title font-bold text-stone-950">화면 모드</h2>
-      <p className="mt-1 type-body text-stone-500">
-        작업 환경에 맞게 화면 밝기를 조정합니다.
-      </p>
       <div className="mt-5 grid gap-2 sm:grid-cols-3">
         {THEME_OPTIONS.map((option) => (
           <button

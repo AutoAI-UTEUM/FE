@@ -166,4 +166,33 @@ describe('QuizPage', () => {
     expect(screen.getByText('이해가 낮은 페이지를 복습해야 합니다.')).toBeInTheDocument()
     expect(screen.getByText('복습 순서를 다시 확인해 보세요.')).toBeInTheDocument()
   })
+
+  it('connects the shared quiz review chat after submission', async () => {
+    render(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace
+            embedded
+            materialId="10"
+            quizId="50"
+            reviewSummary={{
+              maxScore: 100,
+              passed: false,
+              quizId: '50',
+              quizType: 'MCQ',
+              score: 48,
+              submitted: true,
+              title: '학습 확인 퀴즈',
+            }}
+          />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    const input = await screen.findByLabelText('퀴즈 복습 질문')
+    fireEvent.change(input, { target: { value: '이 문항은 왜 틀렸어?' } })
+    fireEvent.click(screen.getByRole('button', { name: '퀴즈 복습 질문 보내기' }))
+
+    expect(await screen.findByText(/'이 문항은 왜 틀렸어\?'을 다시 설명할게요/)).toBeInTheDocument()
+  })
 })

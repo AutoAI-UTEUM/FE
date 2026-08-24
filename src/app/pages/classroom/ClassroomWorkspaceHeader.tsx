@@ -10,10 +10,11 @@ import {
   classroomAnalyticsPath,
   classroomDetailPath,
   classroomEditPath,
+  classroomReportsPath,
 } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
-export type ClassroomWorkspaceTab = 'course' | 'learning' | 'settings'
+export type ClassroomWorkspaceTab = 'course' | 'learning' | 'reports' | 'settings'
 
 export function ClassroomHeaderInfoBar({
   classroom,
@@ -79,7 +80,8 @@ export function ClassroomWorkspaceHeader({
   const tabs = isInstructorRole(user?.role)
     ? [
         { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
-        { id: 'learning' as const, label: '학습현황·리포트', to: classroomAnalyticsPath(classroom.id) },
+        { id: 'learning' as const, label: '학습현황', to: classroomAnalyticsPath(classroom.id) },
+        { id: 'reports' as const, label: '리포트', to: classroomReportsPath(classroom.id) },
         { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
       ]
     : []
@@ -103,18 +105,20 @@ export function ClassroomWorkspaceHeader({
 
   return (
     <header className="shrink-0">
-      <PageHeader
-        actions={actions || actionSlotRef ? <div className="contents" ref={actionSlotRef}>{actions}</div> : undefined}
-        title={classroom.name}
-        titleAccessory={<>
-          {showClassroomSummary ? <p className="type-control text-stone-500">
-            {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · 수강생 {classroom.learnerCount}명
-          </p> : null}
-          {titleAccessory || titleAccessorySlotRef ? <div className="contents" ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
-        </>}
-      />
+      <div className="lg:h-10">
+        <PageHeader
+          actions={actions || actionSlotRef ? <div className="contents" ref={actionSlotRef}>{actions}</div> : undefined}
+          title={classroom.name}
+          titleAccessory={<>
+            {showClassroomSummary ? <p className="type-control text-stone-500">
+              {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · 수강생 {classroom.learnerCount}명
+            </p> : null}
+            {titleAccessory || titleAccessorySlotRef ? <div className="contents" ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}
+          </>}
+        />
+      </div>
       {showTabs && tabs.length > 0 ? <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
-        {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? 'page' : undefined} className={activeTab === tab.id ? 'relative flex shrink-0 items-center type-body font-bold text-stone-950 after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-brand-600' : 'relative flex shrink-0 items-center type-body font-medium text-stone-500 hover:text-stone-900'} key={tab.id} preventScrollReset to={tab.to}>{tab.label}</Link>)}
+        {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? 'page' : undefined} className={activeTab === tab.id ? 'relative flex shrink-0 items-center type-body font-semibold text-stone-950 after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-brand-600' : 'relative flex shrink-0 items-center type-body font-semibold text-stone-500 hover:text-stone-900'} key={tab.id} preventScrollReset to={tab.to}>{tab.label}</Link>)}
       </nav> : null}
     </header>
   )

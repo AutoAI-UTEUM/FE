@@ -3,8 +3,8 @@
 ## 기준
 
 - 확인일: 2026-08-20
-- Swagger UI: <https://edu-pilot.duckdns.org/swagger-ui/index.html>
-- OpenAPI JSON: <https://edu-pilot.duckdns.org/v3/api-docs>
+- Swagger UI: <https://dev.uteum.com/swagger-ui/index.html>
+- OpenAPI JSON: <https://dev.uteum.com/v3/api-docs>
 - BE 문서: `AutoAI-EduPilot/BE` `develop`의 `docs/api-spec.md`
 - Swagger operation: 100개
 

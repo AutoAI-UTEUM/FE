@@ -115,9 +115,14 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '강의' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: '학습현황·리포트' })).toHaveAttribute('href', '/classrooms/12/analytics')
-    expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '학습현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
+    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
     expect(screen.getByRole('link', { name: '관리' })).toBeInTheDocument()
+    const classroomMenu = screen.getByRole('navigation', { name: '강의실 메뉴' })
+    expect(classroomMenu.previousElementSibling).toHaveClass('lg:h-10')
+    within(classroomMenu)
+      .getAllByRole('link')
+      .forEach((link) => expect(link).toHaveClass('font-semibold'))
     expect(screen.queryByText('자료구조 강의실')).not.toBeInTheDocument()
     const weekNavigation = screen.getByRole('navigation', { name: '강의실 주차' })
     const allItemsButton = within(weekNavigation).getByRole('button', { name: '전체 항목' })
@@ -125,8 +130,8 @@ describe('ClassroomDetailPage instructor materials', () => {
     const secondWeekButton = within(weekNavigation).getByText('심화').closest('button')
     expect(allItemsButton).toHaveAttribute('aria-current', 'page')
     expect(firstWeekButton).not.toHaveAttribute('aria-current')
-    expect(firstWeekButton).toHaveClass('grid-cols-[minmax(0,1fr)_72px]')
-    expect(secondWeekButton).toHaveClass('grid-cols-[minmax(0,1fr)_72px]')
+    expect(firstWeekButton).toHaveClass('grid-cols-[minmax(0,1fr)_96px]')
+    expect(secondWeekButton).toHaveClass('grid-cols-[minmax(0,1fr)_96px]')
     expect(within(weekNavigation).queryByText('1', { exact: true })).not.toBeInTheDocument()
     expect(within(weekNavigation).queryByText('2', { exact: true })).not.toBeInTheDocument()
     expect(within(weekNavigation).getByText('8.3 - 8.9')).toBeInTheDocument()
@@ -142,7 +147,7 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(classroomContent).toHaveClass(
       'lg:min-h-0',
       'lg:flex-1',
-      'lg:grid-cols-[220px_minmax(0,1fr)]',
+      'lg:grid-cols-[260px_minmax(0,1fr)]',
       'lg:grid-rows-[minmax(0,1fr)]',
       'lg:items-stretch',
     )
@@ -159,7 +164,14 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('button', { name: '시험 추가' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
-    const resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
+    let resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
+    fireEvent.mouseDown(resourceDialog)
+    expect(screen.queryByRole('dialog', { name: '자료 업로드' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: '자료 업로드' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
+    resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
     const resourceFile = new File(['document'], '수업 참고자료.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
@@ -182,7 +194,14 @@ describe('ClassroomDetailPage instructor materials', () => {
     fireEvent.click(screen.getByRole('button', { name: '전체' }))
 
     fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
-    const uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
+    let uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
+    fireEvent.mouseDown(uploadDialog)
+    expect(screen.queryByRole('dialog', { name: '수업 생성' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: '수업 생성' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
+    uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
     expect(within(uploadDialog).queryByText('PDF · 최대 45MB')).not.toBeInTheDocument()
     expect(within(uploadDialog).queryByText('PPT/PPTX는 PDF로 변환 후 업로드해 주세요.')).not.toBeInTheDocument()
     const weekSelect = within(uploadDialog).getByRole('combobox', { name: '주차 선택' })

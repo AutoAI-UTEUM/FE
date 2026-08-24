@@ -52,6 +52,11 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('switch', { name: '학습 리마인더' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('AI 답변 스타일')).not.toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: '화면 모드' }))
+    expect(
+      screen.queryByText('작업 환경에 맞게 화면 밝기를 조정합니다.'),
+    ).not.toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: '알림' }))
     expect(screen.getByRole('switch', { name: '새 자료 알림' })).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: '학습 리마인더' })).toBeInTheDocument()
@@ -105,6 +110,15 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('피드백을 보냈습니다.')).toBeInTheDocument()
     expect(screen.getByLabelText('내용')).toHaveValue('')
+    const feedbackCall = vi.mocked(globalThis.fetch).mock.calls.find(([input]) =>
+      String(input instanceof Request ? input.url : input).endsWith('/api/feedback'))
+    expect(feedbackCall?.[1]?.method).toBe('POST')
+    expect(JSON.parse(String(feedbackCall?.[1]?.body))).toMatchObject({
+      category: 'BUG',
+      clientVersion: '0.1.0',
+      message: '설정 화면에서 문제가 발생합니다.',
+      pageUrl: expect.any(String),
+    })
   })
 
   it('withdraws the account after password confirmation', async () => {

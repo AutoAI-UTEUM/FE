@@ -37,6 +37,8 @@ interface SessionPageViewerProps {
 
 type PageFitMode = 'page' | 'height' | 'width'
 
+const DEFAULT_PAGE_ASPECT_RATIO = 1 / Math.sqrt(2)
+
 export function SessionPageViewer({
   backTo,
   currentPage,
@@ -50,7 +52,7 @@ export function SessionPageViewer({
 }: SessionPageViewerProps) {
   const [zoom, setZoom] = useState(100)
   const [pageWidth, setPageWidth] = useState(560)
-  const [pageAspectRatio, setPageAspectRatio] = useState(1 / Math.sqrt(2))
+  const [pageAspectRatio, setPageAspectRatio] = useState(DEFAULT_PAGE_ASPECT_RATIO)
   const [pageFitMode, setPageFitMode] = useState<PageFitMode>('page')
   const [isOutlineVisible, setIsOutlineVisible] = useState(false)
   const viewerRef = useRef<HTMLElement | null>(null)
@@ -239,6 +241,13 @@ export function SessionPageViewer({
           error={<DocumentState isError message="PDF 문서를 열지 못했습니다." />}
           file={file}
           loading={<DocumentState message="PDF 문서를 준비하는 중입니다." />}
+          onLoadSuccess={(document) => {
+            // 시작 페이지와 역할에 상관없이 같은 문서는 같은 크기로 표시한다.
+            void document.getPage(1).then((firstPage) => {
+              const viewport = firstPage.getViewport({ scale: 1 })
+              setPageAspectRatio(viewport.width / viewport.height)
+            }).catch(() => setPageAspectRatio(DEFAULT_PAGE_ASPECT_RATIO))
+          }}
         >
           {isOutlineVisible ? (
             <PageOutline
@@ -256,10 +265,6 @@ export function SessionPageViewer({
               <Page
                 className="overflow-hidden rounded-sm bg-white shadow-[0_2px_14px_rgba(0,0,0,0.08)]"
                 pageNumber={currentPage}
-                onLoadSuccess={(page) => {
-                  const viewport = page.getViewport({ scale: 1 })
-                  setPageAspectRatio(viewport.width / viewport.height)
-                }}
                 renderAnnotationLayer
                 renderTextLayer
                 width={pageWidth * (zoom / 100)}

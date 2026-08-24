@@ -7,6 +7,7 @@ import {
   FileSearch,
   LoaderCircle,
   Plus,
+  Search,
   Settings2,
   Sparkles,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ import {
   classroomReportsPath,
   classroomStudentReportsPath,
 } from '../../routes'
+import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
 const reportsEnabled = isApiCapabilityEnabled('reports')
@@ -58,51 +60,86 @@ export function InstructorReportsPage() {
     () => createClassroomsRepository(apiRequest),
     [apiRequest],
   )
-  const [classrooms, setClassrooms] = useState<Classroom[]>([])
+  const [classroom, setClassroom] = useState<Classroom | null>(null)
   const [students, setStudents] = useState<ReportStudent[]>([])
-  const [isLoading, setIsLoading] = useState(reportsEnabled)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const controller = new AbortController()
-    classroomsRepository
-      .list('', controller.signal)
-      .then(setClassrooms)
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [classroomsRepository])
-
-  useEffect(() => {
-    if (!classroomId || !reportsEnabled) return
+    if (!classroomId) return
     rememberClassroomId(classroomId)
     const controller = new AbortController()
-    repository.listStudents(classroomId, controller.signal)
-      .then(setStudents)
+    Promise.all([
+      classroomsRepository.get(classroomId, controller.signal),
+      reportsEnabled
+        ? repository.listStudents(classroomId, controller.signal)
+        : Promise.resolve([]),
+    ])
+      .then(([nextClassroom, nextStudents]) => {
+        setClassroom(nextClassroom)
+        setStudents(nextStudents)
+      })
       .catch((requestError) => {
         if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false)
-      })
+    })
     return () => controller.abort()
-  }, [classroomId, repository])
+  }, [classroomId, classroomsRepository, repository])
 
-  const selectedClassroom = classrooms.find((classroom) => classroom.id === classroomId)
-  const headerActions = classroomId ? <ButtonLink to={classroomReportCriteriaPath(classroomId)} variant="secondary"><Settings2 size={14} />평가 기준</ButtonLink> : undefined
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
+  const visibleStudents = students.filter((student) => !normalizedQuery
+    || student.name.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
+    || student.email.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
+    || student.affiliation?.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
+  const headerActions = classroomId
+    ? <ButtonLink to={classroomReportCriteriaPath(classroomId)} variant="secondary"><Settings2 aria-hidden="true" size={14} />평가 지표</ButtonLink>
+    : undefined
 
-  return <PageContainer>
-    {selectedClassroom
-      ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="learning" classroom={selectedClassroom} />
-      : <PageHeader actions={headerActions} title="학습 리포트" />}
-    {!reportsEnabled ? <ReportsUnavailableState /> : null}
-    {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
-    {reportsEnabled && error ? <ErrorState description={error} title="학습자 목록을 불러오지 못했습니다" /> : null}
-    {reportsEnabled && !isLoading && !error && students.length === 0 ? <EmptyState description="승인된 학습자가 들어오면 학생별 리포트를 생성할 수 있습니다." title="리포트를 생성할 학습자가 없습니다" /> : null}
-    {reportsEnabled && students.length > 0 ? <section className="overflow-hidden rounded-lg border border-stone-200 bg-white" aria-label="학습자 리포트 목록">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] border-b border-stone-200 bg-stone-50 px-5 py-3 type-caption font-semibold text-stone-500 sm:grid-cols-[1fr_1.4fr_1fr_auto]"><span>학습자</span><span className="hidden sm:block">이메일</span><span className="hidden sm:block">소속</span><span>리포트</span></div>
-      {students.map((student) => <Link className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-stone-100 px-5 py-3 last:border-0 hover:bg-stone-50 sm:grid-cols-[1fr_1.4fr_1fr_auto]" key={student.id} to={classroomStudentReportsPath(classroomId, student.id)}><strong className="truncate type-body text-stone-900">{student.name}</strong><span className="hidden truncate type-control text-stone-500 sm:block">{student.email}</span><span className="hidden truncate type-control text-stone-500 sm:block">{student.affiliation ?? '-'}</span><span className="inline-flex items-center gap-1 type-control font-semibold text-brand-700">열기<ChevronRight size={14} /></span></Link>)}
-    </section> : null}
-  </PageContainer>
+  return (
+    <ClassroomWorkspaceContainer>
+      {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="reports" classroom={classroom} /> : null}
+
+      {!reportsEnabled ? <ReportsUnavailableState /> : null}
+      {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
+      {reportsEnabled && error ? <ErrorState description={error} title="학습자 목록을 불러오지 못했습니다" /> : null}
+      {reportsEnabled && !isLoading && !error && students.length === 0 ? <EmptyState description="승인된 학습자가 들어오면 학생별 리포트를 생성할 수 있습니다." title="리포트를 생성할 학습자가 없습니다" /> : null}
+      {reportsEnabled && !isLoading && !error && students.length > 0 ? (
+        <section aria-label="학습자 리포트 목록" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white">
+          <div className="flex shrink-0 flex-col gap-3 border-b border-stone-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="type-body font-bold text-stone-900">수강생 리포트</h2>
+              <p className="mt-0.5 type-caption text-stone-400">학습자를 선택해 새 리포트를 생성하거나 저장된 버전을 확인하세요.</p>
+            </div>
+            <label className="relative block w-full sm:w-64">
+              <span className="sr-only">리포트 학습자 검색</span>
+              <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
+              <input aria-label="리포트 학습자 검색" className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" onChange={(event) => setSearchQuery(event.target.value)} placeholder="이름, 이메일 또는 소속 검색" type="search" value={searchQuery} />
+            </label>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable]">
+            <div className="min-w-[760px]">
+              <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+                <span className="pl-11">학습자</span><span>이메일</span><span>소속</span><span className="text-center">리포트</span>
+              </div>
+              {visibleStudents.length === 0 ? (
+                <div className="flex min-h-40 items-center justify-center type-body text-stone-400">검색 결과가 없습니다.</div>
+              ) : visibleStudents.map((student) => (
+                <article className="grid min-h-16 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 px-5 last:border-0 hover:bg-stone-50" key={student.id}>
+                  <div className="flex min-w-0 items-center gap-3"><span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{student.name.trim().slice(0, 1) || '?'}</span><strong className="truncate type-body text-stone-900">{student.name}</strong></div>
+                  <span className="truncate type-control text-stone-500">{student.email}</span>
+                  <span className="truncate type-control text-stone-500">{student.affiliation ?? '-'}</span>
+                  <ButtonLink aria-label={`${student.name} 리포트 열기`} className="w-full" size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary">리포트 보기</ButtonLink>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+    </ClassroomWorkspaceContainer>
+  )
 }
 
 export function InstructorStudentReportsPage() {

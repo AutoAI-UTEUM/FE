@@ -2,7 +2,7 @@
 
 기준:
 
-- 배포 Swagger: `https://edu-pilot.duckdns.org/v3/api-docs`
+- dev Swagger: `https://dev.uteum.com/v3/api-docs`
 - BE `main`: `616bd8a`
 - 확인일: 2026-07-30
 

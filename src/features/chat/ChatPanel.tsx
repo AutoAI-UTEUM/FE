@@ -28,6 +28,7 @@ import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime, formatTime } from '../../shared/lib/format'
 import { Button, MarkdownContent } from '../../shared/ui'
 import type { AuthenticatedRequest } from '../auth'
+import { DocumentChatPanel } from '../documentChat'
 import type { MaterialOverview } from '../materials'
 import { createNotesRepository, type Note } from '../notes'
 import type { SessionQuizSummary, SessionTurnResult } from '../sessions'
@@ -52,6 +53,7 @@ interface ChatPanelProps {
   quizzes?: SessionQuizSummary[]
   quizzesError?: string | null
   isLoadingQuizzes?: boolean
+  materialId?: string
   materialOverview?: MaterialOverview | null
   onOverviewPageSelect?: (pageNumber: number) => void
   onOpenQuiz?: (quizId: string) => void
@@ -60,7 +62,7 @@ interface ChatPanelProps {
   sessionId: string
 }
 
-type ChatPanelTab = 'overview' | 'chat' | 'notes' | 'quizzes'
+type ChatPanelTab = 'overview' | 'chat' | 'document' | 'notes' | 'quizzes'
 
 /** 시안 4d의 빠른 액션 칩 */
 const QUICK_ACTIONS = [
@@ -93,6 +95,7 @@ export function ChatPanel({
   quizzes = [],
   quizzesError = null,
   isLoadingQuizzes = false,
+  materialId,
   materialOverview = null,
   request,
   sessionId,
@@ -345,6 +348,13 @@ export function ChatPanel({
             label="AI 채팅"
             onSelect={() => setTab('chat')}
           />
+          {request && materialId ? (
+            <PanelTab
+              isActive={tab === 'document'}
+              label="자료 질문"
+              onSelect={() => setTab('document')}
+            />
+          ) : null}
           <PanelTab
             count={quizzes.length}
             isActive={tab === 'quizzes'}
@@ -363,6 +373,14 @@ export function ChatPanel({
 
       {tab === 'overview' ? (
         <OverviewPanel onPageSelect={onOverviewPageSelect} overview={materialOverview} />
+      ) : tab === 'document' && request && materialId ? (
+        <DocumentChatPanel
+          className="!min-h-0 !rounded-none !border-0"
+          key={`${materialId}-material`}
+          materialId={materialId}
+          mode="material"
+          request={request}
+        />
       ) : tab === 'quizzes' ? (
         <QuizzesPanel
           error={quizzesError}

@@ -402,9 +402,6 @@ function InviteCodeRegenerationDialog({
             재발급하면 <strong>현재 초대 코드 {classroom.inviteCode ?? ''}</strong>는 즉시 폐기되며 더 이상 사용할 수 없습니다.
           </p>
         </div>
-        <p className="mt-3 type-body text-stone-600">
-          {classroom.name}의 초대 코드를 정말 재발급할지 확인해 주세요.
-        </p>
         <div className="mt-6 flex justify-end gap-2">
           <Button disabled={isSubmitting} onClick={onClose} variant="secondary">취소</Button>
           <Button disabled={isSubmitting} onClick={onConfirm}>
@@ -516,7 +513,7 @@ function ClassroomCard({
             className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50"
             to={learningStatusPath(classroom.id)}
           >
-            학습현황·리포트
+            학습현황
           </Link>
         ) : null}
         <Link

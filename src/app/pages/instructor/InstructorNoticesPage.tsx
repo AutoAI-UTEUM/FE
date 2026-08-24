@@ -1,9 +1,15 @@
-import { Plus, Save, Trash2 } from 'lucide-react'
+import { ChevronDown, Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
-import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice } from '../../../features/classrooms'
+import {
+  createClassroomsRepository,
+  rememberClassroomId,
+  type Classroom,
+  type ClassroomNotice,
+  type ClassroomNoticeInput,
+} from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { Button, EmptyState, MarkdownEditor, useToast } from '../../../shared/ui'
@@ -69,7 +75,7 @@ export function InstructorNoticesPage() {
     setNewDraftVersion((version) => version + 1)
   }
 
-  async function saveNotice(input: { content: string; title: string }) {
+  async function saveNotice(input: ClassroomNoticeInput) {
     try {
       if (selectedNotice) {
         const updated = await repository.updateNotice(classroomId, selectedNotice.id, input)
@@ -140,6 +146,7 @@ export function InstructorNoticesPage() {
         <NoticeEditor
           disabled={isReadOnly}
           key={selectedNotice ? selectedNotice.id : `new-${newDraftVersion}`}
+          maxWeekNumber={classroom.weekCount}
           notice={selectedNotice}
           onDelete={selectedNotice ? () => removeNotice(selectedNotice) : undefined}
           onSubmit={saveNotice}
@@ -152,19 +159,22 @@ export function InstructorNoticesPage() {
 
 function NoticeEditor({
   disabled,
+  maxWeekNumber,
   notice,
   onDelete,
   onSubmit,
   removing,
 }: {
   disabled: boolean
+  maxWeekNumber: number
   notice: ClassroomNotice | null
   onDelete?: () => Promise<void>
-  onSubmit: (input: { content: string; title: string }) => Promise<void>
+  onSubmit: (input: ClassroomNoticeInput) => Promise<void>
   removing: boolean
 }) {
   const [title, setTitle] = useState(notice?.title ?? '')
   const [content, setContent] = useState(notice?.content ?? '')
+  const [weekNumber, setWeekNumber] = useState<number | null>(notice?.weekNumber ?? null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -172,7 +182,11 @@ function NoticeEditor({
     if (!title.trim() || !content.trim() || isSubmitting || disabled) return
     setIsSubmitting(true)
     try {
-      await onSubmit({ content: content.trim(), title: title.trim() })
+      await onSubmit({
+        content: content.trim(),
+        title: title.trim(),
+        weekNumber,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -186,6 +200,23 @@ function NoticeEditor({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
         <label className="block type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} placeholder="공지 제목을 입력하세요" value={title} /></label>
+        <label className="block type-control font-semibold text-stone-700">
+          게시 주차
+          <span className="relative mt-1.5 block">
+            <select
+              className="h-11 w-full appearance-none rounded-lg border border-stone-300 bg-white pr-10 pl-3.5 type-body text-stone-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50 disabled:text-stone-400"
+              disabled={disabled}
+              onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)}
+              value={weekNumber ?? ''}
+            >
+              <option value="">전체 공지</option>
+              {Array.from({ length: maxWeekNumber }, (_, index) => index + 1).map((value) => (
+                <option key={value} value={value}>{value}주차</option>
+              ))}
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-stone-400" size={16} />
+          </span>
+        </label>
         <div className="flex min-h-0 flex-1 flex-col type-control font-semibold text-stone-700">
           <span>본문</span>
           <MarkdownEditor ariaLabel="본문" className="mt-1.5" disabled={disabled} maxLength={5000} onChange={setContent} placeholder="공지 내용을 입력하세요" value={content} />
@@ -210,7 +241,7 @@ function groupNoticesByWeek(notices: ClassroomNotice[]): NoticeGroup[] {
   return [...grouped.entries()]
     .sort(([left], [right]) => (left ?? Number.MAX_SAFE_INTEGER) - (right ?? Number.MAX_SAFE_INTEGER))
     .map(([weekNumber, groupedNotices]) => ({
-      label: weekNumber === null ? '기타' : `${weekNumber}주차`,
+      label: weekNumber === null ? '전체 공지' : `${weekNumber}주차`,
       notices: groupedNotices,
       weekNumber,
     }))
