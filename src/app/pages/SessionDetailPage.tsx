@@ -12,6 +12,7 @@ import {
 } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { ChatPanel, useSessionChat } from '../../features/chat'
+import { DocumentQuestionChat } from '../../features/documentChat'
 import { createMaterialsRepository, type MaterialOverview } from '../../features/materials'
 import type { QuizKind } from '../../features/quiz'
 import {
@@ -624,7 +625,7 @@ export function SessionDetailPage() {
   function handleOpenQuizHistory(quizId: string) {
     const summary = sessionQuizzes.find((quiz) => quiz.quizId === quizId)
     setEmbeddedQuizReviewSummary(summary?.submitted ? summary : undefined)
-    if (!summary?.submitted) setLockedQuizId(quizId)
+    setLockedQuizId(summary?.submitted ? null : quizId)
     setEmbeddedQuizId(quizId)
   }
 
@@ -776,6 +777,15 @@ export function SessionDetailPage() {
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"
+            documentChat={activeSession.materialId ? (
+              <DocumentQuestionChat
+                key={`${activeSession.materialId}-${embeddedQuizId && !lockedQuizId ? 'quiz' : 'document'}`}
+                materialId={activeSession.materialId}
+                mode={embeddedQuizId && !lockedQuizId ? 'quiz' : 'document'}
+                request={apiRequest}
+              />
+            ) : undefined}
+            documentChatLabel={embeddedQuizId && !lockedQuizId ? '\uD034\uC988 \uC9C8\uBB38' : '\uC790\uB8CC \uC9C8\uBB38'}
             materialOverview={materialOverview}
             conversationAction={hasConversationAction ? (
               <div className="grid gap-2">

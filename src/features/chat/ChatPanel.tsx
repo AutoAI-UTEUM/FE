@@ -36,6 +36,8 @@ import { getChatErrorMessage, type SessionChat } from './useSessionChat'
 interface ChatPanelProps {
   chat: SessionChat
   className?: string
+  documentChat?: ReactNode
+  documentChatLabel?: string
   /** 서버 결정·퀴즈 유형 선택을 대화 로그의 AI 메시지로 표시한다. */
   conversationAction?: ReactNode
   currentPage?: number
@@ -59,7 +61,7 @@ interface ChatPanelProps {
   sessionId: string
 }
 
-type ChatPanelTab = 'overview' | 'chat' | 'notes' | 'quizzes'
+type ChatPanelTab = 'document-chat' | 'overview' | 'chat' | 'notes' | 'quizzes'
 
 /** 시안 4d의 빠른 액션 칩 */
 const QUICK_ACTIONS = [
@@ -82,6 +84,8 @@ export function ChatPanel({
   className,
   conversationAction,
   currentPage,
+  documentChat,
+  documentChatLabel = '\uC790\uB8CC \uC9C8\uBB38',
   onExplainCurrentPage,
   onExplainNextPage,
   onOpenQuiz,
@@ -337,6 +341,13 @@ export function ChatPanel({
             label="AI 채팅"
             onSelect={() => setTab('chat')}
           />
+          {documentChat ? (
+            <PanelTab
+              isActive={tab === 'document-chat'}
+              label={documentChatLabel}
+              onSelect={() => setTab('document-chat')}
+            />
+          ) : null}
           <PanelTab
             count={quizzes.length}
             isActive={tab === 'quizzes'}
@@ -355,6 +366,8 @@ export function ChatPanel({
 
       {tab === 'overview' ? (
         <OverviewPanel onPageSelect={onOverviewPageSelect} overview={materialOverview} />
+      ) : tab === 'document-chat' && documentChat ? (
+        documentChat
       ) : tab === 'quizzes' ? (
         <QuizzesPanel
           error={quizzesError}
