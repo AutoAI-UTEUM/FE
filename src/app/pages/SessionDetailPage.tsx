@@ -26,7 +26,6 @@ import {
   type UiAction,
   type UiActionEvent,
 } from '../../features/sessions'
-import type { UiActionSelection } from '../../features/sessions/UiActionsRenderer'
 import {
   Button,
   ButtonLink,
@@ -488,28 +487,6 @@ export function SessionDetailPage() {
     if (moved) await runTurn('EXPLAIN_CURRENT_PAGE', { detailLevel: 'NORMAL' })
   }
 
-  async function handleQuizDecline() {
-    if (isActionPending) return
-    chat.clearUiActions()
-    setSession((current) => current ? { ...current, uiActions: [] } : current)
-    setIsActionPending(true)
-    setError(null)
-    try {
-      const result = await sessionsRepository.declineQuiz(activeSession.id)
-      applyTurnResult({
-        ...result,
-        uiActions: [],
-      }, true)
-    } catch (requestError) {
-      if (!(requestError instanceof ApiClientError
-        && (requestError.status === 404 || requestError.status === 405))) {
-        setError(getRequestErrorMessage(requestError))
-      }
-    } finally {
-      setIsActionPending(false)
-    }
-  }
-
   async function runTurn(
     eventType: 'EXPLAIN_CURRENT_PAGE' | 'NOTE_REQUESTED' | 'QUIZ_TYPE_SELECTED',
     payload: Record<string, unknown>,
@@ -547,11 +524,7 @@ export function SessionDetailPage() {
     }
   }
 
-  async function handleEvent(event: UiActionEvent, selection?: UiActionSelection) {
-    if (selection?.choice === 'no' && isQuizProposal(selection.action)) {
-      await handleQuizDecline()
-      return
-    }
+  async function handleEvent(event: UiActionEvent) {
     switch (event) {
       case 'MOVE_NEXT_PAGE':
         await handlePageNavigation(currentPage + 1)
@@ -806,7 +779,7 @@ export function SessionDetailPage() {
                   <UiActionsRenderer
                     actions={availableUiActions}
                     disabled={isActionPending || chat.isTurnPending}
-                    onEvent={(event, selection) => void handleEvent(event, selection)}
+                    onEvent={(event) => void handleEvent(event)}
                     onOpenDiagnosis={(diagnosisId) =>
                       navigate(diagnosisPath(activeSession.id, diagnosisId))
                     }
@@ -916,11 +889,6 @@ function normalizeProgressActions(actions: UiAction[]): UiAction[] {
   return actions.map((action) => action.kind === 'MOVE_NEXT_PAGE'
     ? createNextPageConfirmation()
     : action)
-}
-
-function isQuizProposal(action: UiAction): boolean {
-  return action.kind === 'BINARY_DECISION'
-    && (action.yesEvent === 'SHOW_QUIZ_TYPE_SELECT' || action.label.includes('퀴즈'))
 }
 
 function createTurnRequestId(): string {
