@@ -3,6 +3,8 @@ import {
   ChevronRight,
   Download,
   List,
+  Maximize2,
+  Minimize2,
   Minus,
   MoveHorizontal,
   MoveVertical,
@@ -29,9 +31,11 @@ interface SessionPageViewerProps {
   file?: Blob | null
   fileError?: string | null
   isPending?: boolean
+  isPdfFocusMode?: boolean
   materialTitle?: string
   onMovePage: (page: number) => void
   onOpenResources?: () => void
+  onTogglePdfFocusMode?: () => void
   totalPages: number
 }
 
@@ -43,9 +47,11 @@ export function SessionPageViewer({
   file,
   fileError,
   isPending = false,
+  isPdfFocusMode = false,
   materialTitle,
   onMovePage,
   onOpenResources,
+  onTogglePdfFocusMode,
   totalPages,
 }: SessionPageViewerProps) {
   const [zoom, setZoom] = useState(100)
@@ -211,6 +217,15 @@ export function SessionPageViewer({
             onClick={() => setIsOutlineVisible((visible) => !visible)}
             showLabel={false}
           />
+          {onTogglePdfFocusMode ? (
+            <ToolbarButton
+              icon={isPdfFocusMode ? Minimize2 : Maximize2}
+              isActive={isPdfFocusMode}
+              label={isPdfFocusMode ? '집중 보기 종료' : 'PDF 집중 보기'}
+              onClick={onTogglePdfFocusMode}
+              showLabel={false}
+            />
+          ) : null}
           <ToolbarButton
             disabled={!file}
             icon={Download}

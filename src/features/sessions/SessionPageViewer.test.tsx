@@ -62,6 +62,39 @@ describe('SessionPageViewer', () => {
     expect(onOpenResources).toHaveBeenCalledOnce()
   })
 
+  it('toggles PDF focus mode from the viewer toolbar', () => {
+    const onTogglePdfFocusMode = vi.fn()
+    const { rerender } = render(
+      <SessionPageViewer
+        currentPage={1}
+        file={undefined}
+        onMovePage={vi.fn()}
+        onTogglePdfFocusMode={onTogglePdfFocusMode}
+        totalPages={3}
+      />,
+    )
+
+    const focusButton = screen.getByRole('button', { name: 'PDF 집중 보기' })
+    expect(focusButton).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(focusButton)
+    expect(onTogglePdfFocusMode).toHaveBeenCalledOnce()
+
+    rerender(
+      <SessionPageViewer
+        currentPage={1}
+        file={undefined}
+        isPdfFocusMode
+        onMovePage={vi.fn()}
+        onTogglePdfFocusMode={onTogglePdfFocusMode}
+        totalPages={3}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '집중 보기 종료' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
   it('moves pages with arrow keys and zooms with control-wheel', () => {
     const onMovePage = vi.fn()
     render(

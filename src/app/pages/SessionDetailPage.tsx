@@ -101,6 +101,7 @@ export function SessionDetailPage() {
   const [chatPanelWidth, setChatPanelWidth] = useState<number | null>(null)
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
   const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
+  const [isPdfFocusMode, setIsPdfFocusMode] = useState(false)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
   const chat = useSessionChat(sessionsRepository, sessionId ?? '')
@@ -110,6 +111,19 @@ export function SessionDetailPage() {
   const weekPagePath = resolvedClassroomId
     ? classroomDetailPath(resolvedClassroomId)
     : routes.classrooms
+
+  useEffect(() => {
+    if (!isPdfFocusMode) return
+
+    function exitPdfFocusMode(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setIsPdfFocusMode(false)
+    }
+
+    window.addEventListener('keydown', exitPdfFocusMode)
+    return () => window.removeEventListener('keydown', exitPdfFocusMode)
+  }, [isPdfFocusMode])
 
   useEffect(() => {
     if (!sessionId) return
@@ -677,14 +691,18 @@ export function SessionDetailPage() {
   }
 
   return (
-    <div className="h-full min-h-0">
+    <div
+      className={isPdfFocusMode
+        ? 'fixed inset-0 z-[100] h-dvh min-h-0 bg-white'
+        : 'h-full min-h-0'}
+    >
       <h1 className="sr-only">학습 공간</h1>
       <p className="sr-only">
         {activeSession.materialTitle} 학습 화면입니다.
       </p>
 
       <section className="flex h-full min-h-0">
-        {isResourcePanelOpen ? (
+        {isResourcePanelOpen && !isPdfFocusMode ? (
           <SessionResourcePanel
             activeMaterialId={activeSession.materialId}
             onClose={() => setIsResourcePanelOpen(false)}
@@ -698,7 +716,9 @@ export function SessionDetailPage() {
         ) : null}
 
         <div
-          className="study-session-content h-full min-h-0 min-w-0 flex-1"
+          className={isPdfFocusMode
+            ? 'grid h-full min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]'
+            : 'study-session-content h-full min-h-0 min-w-0 flex-1'}
           ref={workspaceRef}
           style={chatPanelWidth === null
             ? undefined
@@ -735,36 +755,40 @@ export function SessionDetailPage() {
                 file={materialFile}
                 fileError={materialFileError}
                 isPending={isActionPending}
+                isPdfFocusMode={isPdfFocusMode}
                 materialTitle={activeSession.materialTitle}
                 onMovePage={handlePageNavigation}
-                onOpenResources={isResourcePanelOpen
+                onOpenResources={isPdfFocusMode || isResourcePanelOpen
                   ? undefined
                   : () => setIsResourcePanelOpen(true)}
+                onTogglePdfFocusMode={() => setIsPdfFocusMode((isFocused) => !isFocused)}
                 totalPages={totalPages}
               />
             )}
           </Suspense>
 
-          <div
-            aria-label="PDF와 AI 채팅 너비 조절"
-            aria-orientation="vertical"
-            aria-valuemax={Math.round(chatPanelMaxWidth)}
-            aria-valuemin={MIN_CHAT_PANEL_WIDTH}
-            aria-valuenow={chatPanelWidth === null ? undefined : Math.round(chatPanelWidth)}
-            className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex"
-            onDoubleClick={() => setChatPanelWidth(null)}
-            onKeyDown={handleResizerKeyDown}
-            onPointerDown={handleResizerPointerDown}
-            onPointerMove={handleResizerPointerMove}
-            onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
-            role="separator"
-            tabIndex={0}
-            title="드래그하여 PDF와 채팅 너비 조절, 두 번 클릭하여 동일 너비로 복원"
-          >
-            <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
-          </div>
+          {!isPdfFocusMode ? (
+            <div
+              aria-label="PDF와 AI 채팅 너비 조절"
+              aria-orientation="vertical"
+              aria-valuemax={Math.round(chatPanelMaxWidth)}
+              aria-valuemin={MIN_CHAT_PANEL_WIDTH}
+              aria-valuenow={chatPanelWidth === null ? undefined : Math.round(chatPanelWidth)}
+              className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex"
+              onDoubleClick={() => setChatPanelWidth(null)}
+              onKeyDown={handleResizerKeyDown}
+              onPointerDown={handleResizerPointerDown}
+              onPointerMove={handleResizerPointerMove}
+              onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
+              role="separator"
+              tabIndex={0}
+              title="드래그하여 PDF와 채팅 너비 조절, 두 번 클릭하여 동일 너비로 복원"
+            >
+              <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
+            </div>
+          ) : null}
 
-          {lockedQuizId ? (
+          {!isPdfFocusMode && (lockedQuizId ? (
             <QuizChatLockPanel
               isQuizVisible={embeddedQuizId === lockedQuizId}
               onResume={() => {
@@ -846,7 +870,7 @@ export function SessionDetailPage() {
             quizzesError={sessionQuizzesError}
             isLoadingQuizzes={isLoadingSessionQuizzes}
             sessionId={activeSession.id}
-          />}
+          />)}
         </div>
       </section>
     </div>

@@ -70,6 +70,30 @@ describe('SessionDetailPage', () => {
     expect(screen.getByRole('button', { name: '자료 목록' })).toBeInTheDocument()
   })
 
+  it('shows only the PDF in focus mode and restores the workspace with Escape', async () => {
+    renderSessionDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: '자료 목록' }))
+    expect(await screen.findByRole('button', { name: '자료 목록 닫기' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'PDF 집중 보기' }))
+    expect(screen.getByRole('button', { name: '집중 보기 종료' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료 목록 닫기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'AI 채팅' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '집중 보기 종료' }))
+    expect(screen.getByRole('button', { name: 'PDF 집중 보기' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '자료 목록 닫기' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'PDF 집중 보기' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'PDF 집중 보기' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '자료 목록 닫기' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
+  })
+
   it('moves and explains the next page from a typed navigation command', async () => {
     renderSessionDetail()
 
