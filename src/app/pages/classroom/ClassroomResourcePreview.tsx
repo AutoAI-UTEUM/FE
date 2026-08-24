@@ -10,7 +10,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import type { ClassroomWeek } from '../../../features/classrooms'
 import { Badge, Button } from '../../../shared/ui'
@@ -43,6 +43,14 @@ export function ClassroomResourceUploadDialog({
   const titleError = title.trim() ? null : '자료 제목을 입력하세요.'
   const urlError = mode === 'link' && url ? validateWebUrl(url) : null
   const canPreview = !titleError && (mode === 'file' ? Boolean(file) : Boolean(url) && !urlError)
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
 
   function selectFile(nextFile: File | null) {
     setFile(nextFile)
@@ -85,6 +93,9 @@ export function ClassroomResourceUploadDialog({
       aria-label="자료 업로드"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       role="dialog"
     >
       <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>

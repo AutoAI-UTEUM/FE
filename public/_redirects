@@ -1,2 +1,2 @@
-/api/*  https://edu-pilot.duckdns.org/api/:splat  200!
+/api/*  https://dev.uteum.com/api/:splat  200!
 /*       /index.html                                 200

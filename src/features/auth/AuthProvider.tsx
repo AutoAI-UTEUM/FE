@@ -30,6 +30,7 @@ interface AuthProviderProps {
 }
 
 export const AUTH_IDLE_TIMEOUT_MS = 30 * 60 * 1000
+export const AUTH_RESTORE_TIMEOUT_MS = 5_000
 const IDLE_CHECK_INTERVAL_MS = 30_000
 
 interface AuthSession {
@@ -97,7 +98,12 @@ export function AuthProvider({
     }
 
     const controller = new AbortController()
+    let isActive = true
     const restoreRevision = sessionRevisionRef.current
+    const timeoutId = window.setTimeout(() => {
+      controller.abort()
+      if (isActive) setIsInitializing(false)
+    }, AUTH_RESTORE_TIMEOUT_MS)
 
     repository
       .refresh(controller.signal)
@@ -118,10 +124,15 @@ export function AuthProvider({
         // 쿠키 없음/만료(TOKEN_INVALID) — 비로그인 상태로 시작 (배너 없음)
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsInitializing(false)
+        window.clearTimeout(timeoutId)
+        if (isActive) setIsInitializing(false)
       })
 
-    return () => controller.abort()
+    return () => {
+      isActive = false
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, [hasExplicitInitialUser, repository])
 
   // 30분 무활동 시 로그아웃 (refresh 쿠키도 폐기)
@@ -225,7 +236,7 @@ export function AuthProvider({
   const updateUser = useCallback((user: AuthUser) => {
     const current = sessionRef.current
     if (!current) return
-    const nextSession = { ...current, user }
+    const nextSession = { ...current, user: { ...current.user, ...user } }
     sessionRef.current = nextSession
     setSession(nextSession)
   }, [])

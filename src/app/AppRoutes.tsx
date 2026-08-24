@@ -23,6 +23,7 @@ const ExamsPage = lazy(() => import('./pages/ExamsPage').then((module) => ({ def
 const InstructorCalendarPage = lazy(() => import('./pages/instructor/InstructorCalendarPage').then((module) => ({ default: module.InstructorCalendarPage })))
 const InstructorClassroomEditPage = lazy(() => import('./pages/instructor/InstructorClassroomEditPage').then((module) => ({ default: module.InstructorClassroomEditPage })))
 const InstructorLearningStatusPage = lazy(() => import('./pages/instructor/InstructorLearningStatusPage').then((module) => ({ default: module.InstructorLearningStatusPage })))
+const InstructorReportsPage = lazy(() => import('./pages/instructor/InstructorReportsPage').then((module) => ({ default: module.InstructorReportsPage })))
 const InstructorReportCriteriaPage = lazy(() => import('./pages/instructor/InstructorReportsPage').then((module) => ({ default: module.InstructorReportCriteriaPage })))
 const InstructorReportDetailPage = lazy(() => import('./pages/instructor/InstructorReportsPage').then((module) => ({ default: module.InstructorReportDetailPage })))
 const InstructorStudentReportsPage = lazy(() => import('./pages/instructor/InstructorReportsPage').then((module) => ({ default: module.InstructorStudentReportsPage })))
@@ -80,6 +81,7 @@ export function AppRoutes() {
               <Route path="students" element={<Navigate to="../analytics" replace />} />
               <Route path="settings" element={<InstructorClassroomEditPage />} />
               <Route path="analytics" element={<InstructorLearningStatusPage />} />
+              <Route path="reports" element={<InstructorReportsPage />} />
               <Route path="report-criteria" element={<InstructorReportCriteriaPage />} />
               <Route path="announcements" element={<ClassroomContentLegacyRedirect filter="notice" />} />
             </Route>
@@ -99,7 +101,6 @@ export function AppRoutes() {
               element={<EntranceRequestsPage />}
             />
             <Route path={routes.classroomEntranceRequests} element={<Navigate to={routes.entranceRequests} replace />} />
-            <Route path={routes.classroomReports} element={<LegacyClassroomRouteRedirect destination="analytics" />} />
             <Route path={routes.classroomStudentReports} element={<InstructorStudentReportsPage />} />
             <Route path={routes.classroomReportDetail} element={<InstructorReportDetailPage />} />
           </Route>

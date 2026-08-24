@@ -6,6 +6,7 @@ import type {
   AuthenticatedRequest,
 } from './auth'
 import { createMaterialsRepository } from './materials'
+import { createDocumentChatRepository } from './documentChat'
 import { createMemoryRepository } from './memory'
 import { createQuizRepository } from './quiz'
 import { createSessionsRepository } from './sessions'
@@ -15,6 +16,33 @@ afterEach(() => {
 })
 
 describe('remote feature repositories', () => {
+  it('uses the material and quiz document chat endpoints', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(success({ answer: '자료 답변', warnings: [] }))
+      .mockResolvedValueOnce(success({ answer: '퀴즈 답변', warnings: [] }))
+    const repository = createDocumentChatRepository(request as AuthenticatedRequest)
+    const history = [{ content: '앞 질문', role: 'USER' as const }]
+
+    await expect(repository.ask('10', 'material', '자료 질문', history)).resolves.toEqual({
+      answer: '자료 답변',
+      warnings: [],
+    })
+    await expect(repository.ask('10', 'quiz', '복습 질문', history)).resolves.toEqual({
+      answer: '퀴즈 답변',
+      warnings: [],
+    })
+    expect(request).toHaveBeenNthCalledWith(1, '/api/materials/10/doc-chat', {
+      body: { history, question: '자료 질문' },
+      method: 'POST',
+      signal: undefined,
+    })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/materials/10/quiz-chat', {
+      body: { history, question: '복습 질문' },
+      method: 'POST',
+      signal: undefined,
+    })
+  })
+
   it('maps paged materials and uploads multipart data', async () => {
     const request = vi
       .fn()

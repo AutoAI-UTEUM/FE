@@ -19,7 +19,7 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
       {weeks.map((week) => {
         const period = formatClassroomWeekPeriod(startDate, endDate, week.weekNumber)
-        return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={weekRailButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><strong className="min-w-0 truncate text-left type-caption">{week.title}</strong>{period ? <span className="text-left type-micro tabular-nums text-stone-400">{period}</span> : <span />}</button>
+        return <button aria-current={selectedWeekNumber === week.weekNumber ? 'page' : undefined} className={weekRailButtonClass(selectedWeekNumber === week.weekNumber)} key={week.id} onClick={() => onSelect(week.weekNumber)} type="button"><strong className="min-w-0 truncate text-left type-caption">{week.title}</strong>{period ? <span className="whitespace-nowrap text-right type-micro tabular-nums text-stone-400">{period}</span> : <span />}</button>
       })}
       {weeks.length === 0 ? <p className="px-3 py-8 text-center type-control text-stone-400">등록된 주차 없음</p> : null}
     </nav>
@@ -178,5 +178,5 @@ function railButtonClass(selected: boolean): string {
 }
 
 function weekRailButtonClass(selected: boolean): string {
-  return `grid h-10 w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md px-2 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
+  return `grid h-10 w-full grid-cols-[minmax(0,1fr)_96px] items-center gap-2 rounded-md px-2 ${selected ? 'bg-brand-50 text-brand-800' : 'text-stone-700 hover:bg-stone-50'}`
 }

@@ -51,4 +51,16 @@ export function createUserSettingsRepository(request: AuthenticatedRequest, rawR
   }
 }
 
-function mapUser(value: UserDto): AuthUser { return { affiliation: value.affiliation, avatarUrl: value.avatarUrl, email: value.email, id: value.id, learningEmailOptIn: value.learningEmailOptIn, name: value.name, role: value.role } }
+function mapUser(value: UserDto): AuthUser {
+  return {
+    email: value.email,
+    id: value.id,
+    name: value.name,
+    ...(value.affiliation !== undefined ? { affiliation: value.affiliation } : {}),
+    ...(value.avatarUrl !== undefined ? { avatarUrl: value.avatarUrl } : {}),
+    ...(value.learningEmailOptIn !== undefined
+      ? { learningEmailOptIn: value.learningEmailOptIn }
+      : {}),
+    ...(value.role !== undefined ? { role: value.role } : {}),
+  }
+}

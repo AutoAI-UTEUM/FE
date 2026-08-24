@@ -58,9 +58,10 @@ function renderInstructorRoute(page: ReactNode, path: string, routePath: string)
 }
 
 
-function stubNoticesApi() {
-  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+function stubNoticesApi(noticeRequests?: Array<{ content: string; title: string; weekNumber: number | null }>) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(String(input instanceof Request ? input.url : input), 'http://localhost')
+    const method = input instanceof Request ? input.method : init?.method ?? 'GET'
     const envelope = (data: unknown) =>
       new Response(JSON.stringify({ data, message: 'ok', success: true }), {
         headers: { 'Content-Type': 'application/json' },
@@ -68,6 +69,23 @@ function stubNoticesApi() {
       })
 
     if (url.pathname.includes('/notices')) {
+      if (method === 'POST' || method === 'PATCH') {
+        const body = JSON.parse(String(input instanceof Request ? await input.clone().text() : init?.body)) as {
+          content: string
+          title: string
+          weekNumber: number | null
+        }
+        noticeRequests?.push(body)
+        return envelope({
+          classroomId: 1,
+          ...body,
+          createdAt: '2026-07-26T00:00:00Z',
+          noticeId: method === 'POST' ? 12 : 11,
+          published: true,
+          publishedAt: '2026-07-26T00:00:00Z',
+          updatedAt: '2026-07-26T00:00:00Z',
+        })
+      }
       return envelope({
         items: [
           {
@@ -398,7 +416,7 @@ describe('instructor pages', () => {
     expect(screen.getByText('38%')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '자료 관리' })).toHaveAttribute('href', '/classrooms/12')
     expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/classrooms/12/settings')
-    expect(screen.getByRole('link', { name: '학습현황·리포트' })).toHaveAttribute('href', '/classrooms/12/analytics')
+    expect(screen.getByRole('link', { name: '학습현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
 
     fetchMock.mockRestore()
   })
@@ -413,6 +431,9 @@ describe('instructor pages', () => {
     let dialog = screen.getByRole('dialog', { name: '초대 코드를 재발급할까요?' })
     expect(dialog).toHaveTextContent('현재 초대 코드 7QK4-MZ2A')
     expect(dialog).toHaveTextContent('즉시 폐기되며 더 이상 사용할 수 없습니다.')
+    expect(dialog).not.toHaveTextContent(
+      '자료구조의 초대 코드를 정말 재발급할지 확인해 주세요.',
+    )
     expect(requests.regenerate).toBe(0)
 
     fireEvent.click(within(dialog).getByRole('button', { name: '취소' }))
@@ -441,7 +462,7 @@ describe('instructor pages', () => {
 
     expect(screen.getByRole('link', { name: '보관된 자료 보기' })).toHaveAttribute('href', '/classrooms/12')
     expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/classrooms/12/settings')
-    expect(screen.queryByRole('link', { name: '학습현황·리포트' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '학습현황' })).not.toBeInTheDocument()
 
     fetchMock.mockRestore()
   })
@@ -531,7 +552,9 @@ describe('instructor pages', () => {
     renderCalendar()
     const viewControls = screen.getByRole('group', { name: '캘린더 보기' })
     const addButton = screen.getByRole('button', { name: '일정 추가' })
-    const page = screen.getByRole('heading', { name: '캘린더' }).closest('.w-full')
+    const page = screen
+      .getByRole('heading', { name: '캘린더' })
+      .closest('[data-page-container="standard"]')
 
     expect(viewControls.nextElementSibling).toBe(addButton)
     expect(page).toHaveClass('lg:h-[calc(100dvh-2.5rem)]', 'lg:overflow-hidden')
@@ -605,11 +628,15 @@ describe('instructor pages', () => {
       ['/classrooms/12/analytics'],
     )
 
-    expect(await screen.findByRole('link', { name: '학습현황·리포트' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: '학습현황' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
     expect(screen.queryByText('관찰 데이터 축적 중')).not.toBeInTheDocument()
-    expect(await screen.findByText('최근 7일 AI 질문')).toBeInTheDocument()
-    expect(screen.getByText('6건')).toBeInTheDocument()
+    expect(await screen.findByText('최근 질문 수')).toBeInTheDocument()
+    expect(screen.getByLabelText('최근 질문 수 집계 기준')).toBeInTheDocument()
+    expect(screen.getByRole('tooltip')).toHaveTextContent('최근 7일 기준')
+    expect(screen.getByRole('tooltip')).toHaveClass('top-[calc(100%+7px)]')
+    expect(screen.getByRole('tooltip')).not.toHaveClass('bottom-[calc(100%+7px)]')
+    expect(screen.getByText('6건')).toHaveClass('text-center')
     expect(screen.queryByLabelText('학습 현황 요약')).not.toBeInTheDocument()
     expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
     expect(screen.getByText('p.3')).toBeInTheDocument()
@@ -617,57 +644,38 @@ describe('instructor pages', () => {
     expect(screen.getByLabelText('3쪽 질문 8건').firstElementChild).toHaveStyle({ width: '100%' })
     expect(screen.getByLabelText('7쪽 질문 4건').firstElementChild).toHaveStyle({ width: '50%' })
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '김학습 리포트' })).toHaveAttribute('href', '/classrooms/12/students/9/reports')
+    expect(screen.queryByText('3명')).not.toBeInTheDocument()
     expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('lg:grid-cols-2', '2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)]')
     expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-col', 'lg:col-span-2', '2xl:col-span-1')
     expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass('min-h-0', 'flex-1', 'overflow-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
     expect(screen.getByRole('button', { name: '이름 오름차순 정렬' }).parentElement).toHaveClass('sticky', 'top-0')
+    expect(screen.getByRole('button', { name: '이름 오름차순 정렬' })).toHaveClass('pl-11')
     expect(screen.getByText('64%')).toBeInTheDocument()
 
     const studentList = screen.getByRole('region', { name: '수강생별 학습 현황 목록' })
-    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
-      '김학습 리포트',
-      '이우수 리포트',
-      '박느림 리포트',
-    ])
+    const getStudentOrder = () => within(studentList)
+      .getAllByRole('article', { name: /학습 현황$/ })
+      .map((row) => row.getAttribute('aria-label'))
+    expect(getStudentOrder()).toEqual(['김학습 학습 현황', '이우수 학습 현황', '박느림 학습 현황'])
+    expect(within(studentList).queryByRole('link', { name: /리포트/ })).not.toBeInTheDocument()
 
-    expect(screen.getByRole('button', { name: '최근 7일 AI 질문 내림차순 정렬' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '최근 질문 수 내림차순 정렬' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '최근 학습 오름차순 정렬' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '평균 진도율 내림차순 정렬' }))
-    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
-      '이우수 리포트',
-      '김학습 리포트',
-      '박느림 리포트',
-    ])
+    expect(getStudentOrder()).toEqual(['이우수 학습 현황', '김학습 학습 현황', '박느림 학습 현황'])
     fireEvent.click(screen.getByRole('button', { name: '평균 진도율 오름차순 정렬' }))
-    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
-      '박느림 리포트',
-      '김학습 리포트',
-      '이우수 리포트',
-    ])
+    expect(getStudentOrder()).toEqual(['박느림 학습 현황', '김학습 학습 현황', '이우수 학습 현황'])
 
     fireEvent.click(screen.getByRole('button', { name: '이름 오름차순 정렬' }))
-    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
-      '김학습 리포트',
-      '박느림 리포트',
-      '이우수 리포트',
-    ])
-    fireEvent.click(screen.getByRole('button', { name: '최근 7일 AI 질문 내림차순 정렬' }))
-    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
-      '이우수 리포트',
-      '김학습 리포트',
-      '박느림 리포트',
-    ])
+    expect(getStudentOrder()).toEqual(['김학습 학습 현황', '박느림 학습 현황', '이우수 학습 현황'])
+    fireEvent.click(screen.getByRole('button', { name: '최근 질문 수 내림차순 정렬' }))
+    expect(getStudentOrder()).toEqual(['이우수 학습 현황', '김학습 학습 현황', '박느림 학습 현황'])
     fireEvent.click(screen.getByRole('button', { name: '최근 학습 내림차순 정렬' }))
-    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
-      '김학습 리포트',
-      '이우수 리포트',
-      '박느림 리포트',
-    ])
+    expect(getStudentOrder()).toEqual(['김학습 학습 현황', '이우수 학습 현황', '박느림 학습 현황'])
 
     fireEvent.change(screen.getByRole('searchbox', { name: '수강생 검색' }), { target: { value: 'excellent@' } })
-    expect(within(studentList).getByRole('link', { name: '이우수 리포트' })).toBeInTheDocument()
-    expect(within(studentList).queryByRole('link', { name: '김학습 리포트' })).not.toBeInTheDocument()
+    expect(within(studentList).getByRole('article', { name: '이우수 학습 현황' })).toBeInTheDocument()
+    expect(within(studentList).queryByRole('article', { name: '김학습 학습 현황' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: '리마인더 보내기' }),
     ).not.toBeInTheDocument()
@@ -681,7 +689,32 @@ describe('instructor pages', () => {
     fireEvent.click(await screen.findByRole('button', { name: '새 공지' }))
     expect(screen.getByRole('heading', { name: '공지 작성' })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('공지 제목을 입력하세요')).toHaveValue('')
+    const weekSelect = screen.getByRole('combobox', { name: '게시 주차' })
+    expect(weekSelect).toHaveValue('')
+    expect([...weekSelect.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+      '전체 공지',
+      ...Array.from({ length: 15 }, (_, index) => `${index + 1}주차`),
+    ])
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fetchMock.mockRestore()
+  })
+
+  it('sends the selected week when creating a notice', async () => {
+    const noticeRequests: Array<{ content: string; title: string; weekNumber: number | null }> = []
+    const fetchMock = stubNoticesApi(noticeRequests)
+    renderInstructorRoute(<InstructorNoticesPage />, '/classrooms/1/announcements', '/classrooms/:classroomId/announcements')
+
+    fireEvent.click(await screen.findByRole('button', { name: '새 공지' }))
+    fireEvent.change(screen.getByPlaceholderText('공지 제목을 입력하세요'), { target: { value: '3주차 안내' } })
+    fireEvent.change(screen.getByRole('combobox', { name: '게시 주차' }), { target: { value: '3' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '본문' }), { target: { value: '수업 자료를 확인해 주세요.' } })
+    fireEvent.click(screen.getByRole('button', { name: '공지 게시' }))
+
+    await waitFor(() => expect(noticeRequests).toEqual([{
+      content: '수업 자료를 확인해 주세요.',
+      title: '3주차 안내',
+      weekNumber: 3,
+    }]))
     fetchMock.mockRestore()
   })
 })

@@ -10,6 +10,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth'
+import { DocumentChatPanel } from '../../features/documentChat'
 import { getRequestErrorMessage } from '../../shared/api'
 import {
   createQuizRepository,
@@ -28,7 +29,7 @@ import {
   PageContainer,
   PageHeader,
 } from '../../shared/ui'
-import type { SessionQuizSummary } from '../../features/sessions'
+import { createSessionsRepository, type SessionQuizSummary } from '../../features/sessions'
 import { diagnosisPath, routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
@@ -40,16 +41,20 @@ interface QuizWorkspaceProps {
   embedded?: boolean
   onBackToPdf?: () => void
   onSubmitted?: (result: PublicQuizResult) => void
+  materialId?: string
   quizId?: string
   reviewSummary?: SessionQuizSummary
+  showReviewChat?: boolean
 }
 
 export function QuizWorkspace({
   embedded = false,
+  materialId: materialIdProp,
   onBackToPdf,
   onSubmitted,
   quizId: quizIdProp,
   reviewSummary,
+  showReviewChat = true,
 }: QuizWorkspaceProps) {
   usePageTitle(embedded ? '학습 공간' : '퀴즈')
   const { quizId: routeQuizId } = useParams()
@@ -60,6 +65,10 @@ export function QuizWorkspace({
     () => createQuizRepository(apiRequest),
     [apiRequest],
   )
+  const sessionsRepository = useMemo(
+    () => createSessionsRepository(apiRequest),
+    [apiRequest],
+  )
   const [quiz, setQuiz] = useState<PublicQuiz | null | undefined>()
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<QuizAnswers>({})
@@ -68,13 +77,22 @@ export function QuizWorkspace({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [result, setResult] = useState<PublicQuizResult | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [sessionMaterial, setSessionMaterial] = useState<{
+    materialId?: string
+    sessionId: string
+  }>()
   const questions = quiz?.questions ?? []
   const question = questions[currentQuestionIndex] ?? questions[0]
   const diagnosisEntry = result?.diagnosisEntry
-  const isReviewMode = reviewSummary?.submitted === true
+  const isReviewMode = reviewSummary?.submitted === true || quiz?.submitted === true
   const isReadOnly = isSubmitted || isReviewMode
   const isLastQuestion = currentQuestionIndex === questions.length - 1
   const resultSummary = isReviewMode ? reviewSummary : result
+  const resolvedMaterialId = materialIdProp ?? (
+    sessionMaterial && sessionMaterial.sessionId === quiz?.sessionId
+      ? sessionMaterial.materialId
+      : undefined
+  )
   const currentFeedback = result?.feedback.find(
     (candidate) => candidate.questionId === question?.id,
   )
@@ -115,6 +133,28 @@ export function QuizWorkspace({
 
     return () => controller.abort()
   }, [isReviewMode, quizId, reloadKey, repository])
+
+  useEffect(() => {
+    if (materialIdProp) return
+    if (!quiz?.sessionId) return
+
+    const controller = new AbortController()
+    sessionsRepository.getById(quiz.sessionId, controller.signal)
+      .then((quizSession) => {
+        if (!controller.signal.aborted) {
+          setSessionMaterial({
+            materialId: quizSession?.materialId,
+            sessionId: quiz.sessionId,
+          })
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSessionMaterial({ sessionId: quiz.sessionId })
+        }
+      })
+    return () => controller.abort()
+  }, [materialIdProp, quiz?.sessionId, sessionsRepository])
 
   function updateAnswer(questionId: string, value: string) {
     setAnswers((current) => ({ ...current, [questionId]: value }))
@@ -332,6 +372,15 @@ export function QuizWorkspace({
           </div>
         </form>
       </section>
+      {showReviewChat && isReadOnly && resolvedMaterialId ? (
+        <DocumentChatPanel
+          className="mt-4 min-h-[520px]"
+          key={`${resolvedMaterialId}-quiz`}
+          materialId={resolvedMaterialId}
+          mode="quiz"
+          request={apiRequest}
+        />
+      ) : null}
     </QuizFrame>
   )
 }

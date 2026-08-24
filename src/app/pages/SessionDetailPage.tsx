@@ -12,6 +12,7 @@ import {
 } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { ChatPanel, useSessionChat } from '../../features/chat'
+import { DocumentChatPanel } from '../../features/documentChat'
 import { createMaterialsRepository, type MaterialOverview } from '../../features/materials'
 import type { QuizKind } from '../../features/quiz'
 import {
@@ -797,16 +798,28 @@ export function SessionDetailPage() {
             {embeddedQuizId ? (
               <QuizWorkspace
                 embedded
+                materialId={activeSession.materialId}
                 onBackToPdf={() => {
                   setEmbeddedQuizId(null)
                   setEmbeddedQuizReviewSummary(undefined)
                 }}
-                onSubmitted={() => {
+                onSubmitted={(result) => {
+                  const quizSummary = sessionQuizzes.find((item) => item.quizId === embeddedQuizId)
+                  setEmbeddedQuizReviewSummary({
+                    maxScore: result.maxScore,
+                    passed: result.passed,
+                    quizId: embeddedQuizId,
+                    quizType: quizSummary?.quizType ?? 'QUIZ',
+                    score: result.score,
+                    submitted: true,
+                    title: quizSummary?.title ?? '학습 확인 퀴즈',
+                  })
                   setLockedQuizId(null)
                   void refreshLearningProgress()
                 }}
                 quizId={embeddedQuizId}
                 reviewSummary={embeddedQuizReviewSummary}
+                showReviewChat={false}
               />
             ) : (
               <SessionPageViewer
@@ -852,10 +865,19 @@ export function SessionDetailPage() {
                 setEmbeddedQuizId(lockedQuizId)
               }}
             />
+          ) : embeddedQuizId && embeddedQuizReviewSummary?.submitted && activeSession.materialId ? (
+            <DocumentChatPanel
+              className="!min-h-0 !rounded-none !border-0"
+              key={`${activeSession.materialId}-quiz`}
+              materialId={activeSession.materialId}
+              mode="quiz"
+              request={apiRequest}
+            />
           ) : <ChatPanel
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"
+            materialId={activeSession.materialId}
             materialOverview={materialOverview}
             conversationAction={hasConversationAction ? (
               <div className="grid gap-2">

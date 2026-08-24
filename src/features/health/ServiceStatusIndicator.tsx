@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { cx } from '../../shared/lib/cx'
 import {
@@ -8,56 +8,75 @@ import {
   type ServiceStatus,
 } from './healthRepository'
 
+const SERVICE_HEALTH_TIMEOUT_MS = 5_000
+
 export function ServiceStatusIndicator() {
   const [health, setHealth] = useState<ServiceHealth | null>(null)
   const [isChecking, setIsChecking] = useState(true)
+  const activeRequestRef = useRef<AbortController | null>(null)
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
+  const refresh = useCallback(async () => {
     await Promise.resolve()
-    if (signal?.aborted) return
+
+    activeRequestRef.current?.abort()
+    const controller = new AbortController()
+    activeRequestRef.current = controller
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      SERVICE_HEALTH_TIMEOUT_MS,
+    )
 
     setIsChecking(true)
     try {
-      setHealth(await getServiceHealth(signal))
+      const nextHealth = await getServiceHealth(controller.signal)
+      if (activeRequestRef.current === controller) setHealth(nextHealth)
     } catch {
-      if (!signal?.aborted) {
+      if (activeRequestRef.current === controller) {
         setHealth({
           checks: { aiService: 'DOWN', db: 'DOWN', main: 'DOWN' },
           status: 'DOWN',
         })
       }
     } finally {
-      if (!signal?.aborted) setIsChecking(false)
+      window.clearTimeout(timeoutId)
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null
+        setIsChecking(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
-    const initialCheckId = window.setTimeout(
-      () => void refresh(controller.signal),
-      0,
-    )
+    const initialCheckId = window.setTimeout(() => void refresh(), 0)
     const intervalId = window.setInterval(() => void refresh(), 60_000)
     return () => {
-      controller.abort()
+      activeRequestRef.current?.abort()
+      activeRequestRef.current = null
       window.clearTimeout(initialCheckId)
       window.clearInterval(intervalId)
     }
   }, [refresh])
 
   const status = health?.status ?? 'DOWN'
-  const label = isChecking && !health ? '확인 중' : statusLabels[status]
+  const isServerOnline = health?.checks.main === 'UP'
+  const label = isChecking && !health
+    ? '서버 상태 확인 중'
+    : isServerOnline
+      ? '서버 온라인'
+      : '서버 오프라인'
   const detail = health
     ? `Main ${health.checks.main} · DB ${health.checks.db} · AI ${health.checks.aiService}`
     : '서비스 상태를 확인하는 중입니다.'
 
   return (
     <button
-      aria-label={`서비스 상태: ${label}`}
+      aria-label={label}
       className={cx(
         'flex h-8 items-center justify-center gap-2 rounded-lg px-2 type-caption text-stone-500 hover:bg-stone-50',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+        isChecking && 'cursor-wait',
       )}
+      disabled={isChecking}
       onClick={() => void refresh()}
       title={`${label} · ${detail}`}
       type="button"
@@ -69,7 +88,7 @@ export function ServiceStatusIndicator() {
           isChecking ? 'animate-pulse bg-stone-400' : statusDotClasses[status],
         )}
       />
-      <span>서비스 {label}</span>
+      <span>{label}</span>
       <RefreshCw
         aria-hidden="true"
         className={cx(
@@ -80,12 +99,6 @@ export function ServiceStatusIndicator() {
       />
     </button>
   )
-}
-
-const statusLabels: Record<ServiceStatus, string> = {
-  DEGRADED: '일부 지연',
-  DOWN: '점검 필요',
-  UP: '정상',
 }
 
 const statusDotClasses: Record<ServiceStatus, string> = {

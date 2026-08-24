@@ -61,7 +61,7 @@ const learnerNavigation: Array<{
 ]
 
 export function AppLayout() {
-  const { apiRequest, logout, user } = useAuth()
+  const { apiRequest, logout, rawApiRequest, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
@@ -85,6 +85,10 @@ export function AppLayout() {
   const [notificationsError, setNotificationsError] = useState<string | null>(null)
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true)
   const [notificationReloadKey, setNotificationReloadKey] = useState(0)
+  const [loadedProfileAvatar, setLoadedProfileAvatar] = useState<{
+    source: string
+    url: string
+  } | null>(null)
   const roleLabel = getRoleLabel(user?.role)
   const isInstructor = isInstructorRole(user?.role)
   const classroomsRepository = useMemo(
@@ -101,6 +105,16 @@ export function AppLayout() {
   const primaryNavigation = useMemo(() => isInstructor
     ? instructorNavigation
     : learnerNavigation, [isInstructor])
+  const avatarSource = user?.avatarUrl
+  const isDirectAvatarSource = avatarSource?.startsWith('blob:')
+    || avatarSource?.startsWith('data:')
+  const profileAvatarUrl = !avatarSource
+    ? null
+    : isDirectAvatarSource
+      ? avatarSource
+      : loadedProfileAvatar?.source === avatarSource
+        ? loadedProfileAvatar.url
+        : null
 
   useEffect(() => {
     document.documentElement.classList.toggle(
@@ -111,6 +125,26 @@ export function AppLayout() {
       document.documentElement.classList.remove('study-workspace-active')
     }
   }, [isStudyWorkspace])
+
+  useEffect(() => {
+    if (!avatarSource || isDirectAvatarSource) return
+
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    rawApiRequest('/api/users/me/avatar', { signal: controller.signal })
+      .then((response) => response.blob())
+      .then((blob) => {
+        if (controller.signal.aborted) return
+        objectUrl = URL.createObjectURL(blob)
+        setLoadedProfileAvatar({ source: avatarSource, url: objectUrl })
+      })
+      .catch(() => undefined)
+
+    return () => {
+      controller.abort()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [avatarSource, isDirectAvatarSource, rawApiRequest])
 
   useEffect(() => {
     let cancelled = false
@@ -262,21 +296,8 @@ export function AppLayout() {
       className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
       role="menu"
     >
-      <div className="flex items-center gap-2.5 border-b border-stone-100 px-2.5 py-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-stone-200 type-caption font-semibold text-stone-600">
-          {user?.name?.slice(0, 1) ?? '?'}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate type-control font-semibold text-stone-800">
-            {user?.name}
-          </p>
-          <p className="truncate type-micro text-stone-400">
-            {user?.email} · {roleLabel}
-          </p>
-        </div>
-      </div>
       <button
-        className="mt-1 flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={openSettings}
         role="menuitem"
         type="button"
@@ -463,7 +484,7 @@ export function AppLayout() {
             onClick={() => setIsMenuOpen((open) => !open)}
             type="button"
           >
-            {user?.name?.slice(0, 1) ?? '?'}
+            <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-9 type-caption" name={user?.name} />
           </button>
           {isMenuOpen ? (
             <div className="absolute top-[calc(100%+8px)] right-0 z-30 w-60 lg:hidden">
@@ -487,9 +508,7 @@ export function AppLayout() {
             onClick={() => setIsMenuOpen((open) => !open)}
             type="button"
           >
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-stone-200 type-micro font-semibold text-stone-600">
-              {user?.name?.slice(0, 1) ?? '?'}
-            </span>
+            <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-7 type-micro" name={user?.name} />
             <span className={cx('min-w-0 flex-1', isCollapsed && 'lg:hidden')}>
               <span className="block truncate type-control font-semibold text-stone-800">
                 {user?.name}
@@ -526,7 +545,7 @@ export function AppLayout() {
           className={
             isStudyWorkspace
               ? 'h-full min-h-0'
-              : 'mx-auto w-full max-w-[1600px]'
+              : 'app-page-frame'
           }
         >
           <Outlet />
@@ -534,6 +553,31 @@ export function AppLayout() {
       </main>
       {isSettingsOpen ? <SettingsDialog onClose={() => setIsSettingsOpen(false)} /> : null}
     </div>
+  )
+}
+
+function ProfileAvatar({
+  avatarUrl,
+  className,
+  name,
+}: {
+  avatarUrl: string | null
+  className: string
+  name?: string
+}) {
+  return (
+    <span
+      className={cx(
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-200 font-semibold text-stone-600',
+        className,
+      )}
+    >
+      {avatarUrl ? (
+        <img alt="" className="size-full object-cover" src={avatarUrl} />
+      ) : (
+        name?.slice(0, 1) ?? '?'
+      )}
+    </span>
   )
 }
 

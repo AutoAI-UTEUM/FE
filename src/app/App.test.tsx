@@ -104,14 +104,47 @@ describe('AppRoutes', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('renders the integrated session detail route', async () => {
-    renderRoute('/sessions/100')
+  it.each([
+    ['학습자', { email: 'learner@example.com', name: '학습자', role: 'LEARNER' as const }],
+    ['강의자', { email: 'instructor@example.com', name: '강의자', role: 'INSTRUCTOR' as const }],
+  ])('%s에게 동일한 일반 페이지 규격을 적용한다', async (_roleLabel, user) => {
+    const { container } = renderRoute('/classrooms', user)
+
+    expect(
+      await screen.findByRole('heading', { name: '내 강의실' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
+    expect(screen.getByRole('main')).toHaveClass(
+      'px-4',
+      'py-4',
+      'sm:px-6',
+      'lg:px-12',
+      'lg:py-5',
+    )
+    expect(container.querySelector('main > .app-page-frame')).toBeInTheDocument()
+    expect(
+      container.querySelector('[data-page-container="standard"]'),
+    ).toHaveClass('app-page-frame')
+  })
+
+  it.each([
+    ['학습자', { email: 'learner@example.com', name: '학습자', role: 'LEARNER' as const }],
+    ['강의자', { email: 'instructor@example.com', name: '강의자', role: 'INSTRUCTOR' as const }],
+  ])('%s에게 동일한 PDF 학습 공간 규격을 적용한다', async (_roleLabel, user) => {
+    renderRoute('/sessions/100', user)
 
     expect(
       await screen.findByRole('heading', { name: '학습 공간' }),
     ).toBeInTheDocument()
     expect(screen.getByText('시험 대비 요약.pdf 학습 화면입니다.')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-14')
+    expect(screen.getByRole('main')).toHaveClass('lg:h-dvh', 'overflow-hidden', 'p-0')
+    expect(await screen.findByRole('region', { name: 'PDF 뷰어' })).toHaveClass(
+      'h-full',
+      'min-h-0',
+      'min-w-0',
+    )
   })
 
   it('redirects the removed session list route to classrooms', async () => {
@@ -130,6 +163,8 @@ describe('AppRoutes', () => {
 
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
     fireEvent.click(profileTrigger)
+    const [profileMenu] = screen.getAllByRole('menu')
+    expect(within(profileMenu).queryByText('learner@test.com')).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '화면 모드' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: '도움말 · 피드백' })).not.toBeInTheDocument()
     const [settingsMenuItem] = screen.getAllByRole('menuitem', { name: '설정' })
@@ -150,6 +185,34 @@ describe('AppRoutes', () => {
 
     fireEvent.click(settingsDialog)
     expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
+  })
+
+  it('applies saved profile changes to the shared sidebar profile', async () => {
+    renderRoute('/')
+
+    const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
+    fireEvent.click(profileTrigger)
+    const [settingsMenuItem] = screen.getAllByRole('menuitem', { name: '설정' })
+    fireEvent.click(settingsMenuItem)
+
+    const settingsDialog = await screen.findByRole('dialog', { name: '설정' })
+    fireEvent.change(within(settingsDialog).getByLabelText('이름'), {
+      target: { value: '김학습' },
+    })
+    fireEvent.change(within(settingsDialog).getByLabelText('소속'), {
+      target: { value: '서울대학교' },
+    })
+    fireEvent.click(within(settingsDialog).getByRole('button', { name: '저장' }))
+
+    expect(await screen.findByText('설정을 저장했습니다.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        screen
+          .getAllByRole('button', { name: '프로필 메뉴' })
+          .some((button) => button.textContent?.includes('김학습')),
+      ).toBe(true)
+    })
+    expect(within(settingsDialog).getByDisplayValue('서울대학교')).toBeInTheDocument()
   })
 
   it('shows learner study menus and keeps instructor management menus out', () => {
@@ -393,7 +456,9 @@ describe('AppRoutes', () => {
     })
 
     const studentPanel = await screen.findByLabelText('수강생별 학습 현황')
-    expect(studentPanel.closest('.w-full')).toHaveClass(
+    expect(
+      studentPanel.closest('[data-page-container="standard"]'),
+    ).toHaveClass(
       'lg:h-[calc(100dvh-2.5rem)]',
       'lg:overflow-hidden',
     )
@@ -402,6 +467,54 @@ describe('AppRoutes', () => {
       'flex-1',
       'overflow-auto',
     )
+  })
+
+  it('opens reports as a separate classroom workspace', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms/12/students') {
+        return apiSuccess({
+          items: [
+            {
+              affiliation: '컴퓨터공학부',
+              email: 'learner@example.com',
+              name: '김학습',
+              studentId: 31,
+            },
+            {
+              affiliation: '산업공학과',
+              email: 'excellent@example.com',
+              name: '이우수',
+              studentId: 32,
+            },
+          ],
+          page: 0,
+          size: 100,
+          totalElements: 2,
+          totalPages: 1,
+        })
+      }
+      return undefined
+    })
+
+    renderRoute('/classrooms/12/reports', {
+      email: 'instructor@example.com',
+      name: '강의자',
+      role: 'INSTRUCTOR',
+    })
+
+    expect(await screen.findByRole('heading', { name: '수강생 리포트' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: '학습현황' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: '평가 지표' })).toHaveAttribute('href', '/classrooms/12/report-criteria')
+    expect(screen.queryByText('분석 대상 학습자')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '김학습 리포트 열기' })).toHaveAttribute('href', '/classrooms/12/students/31/reports')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '리포트 학습자 검색' }), {
+      target: { value: '산업공학과' },
+    })
+    expect(screen.getByRole('link', { name: '이우수 리포트 열기' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '김학습 리포트 열기' })).not.toBeInTheDocument()
   })
 
   it('localizes report criteria and hides evidence source codes', async () => {
@@ -461,7 +574,7 @@ describe('AppRoutes', () => {
     expect(screen.queryByText('근거가 부족한 항목은 점수로 환산하지 않습니다. 추가 학습 기록이 쌓인 뒤 리포트를 다시 생성해 주세요.')).not.toBeInTheDocument()
   })
 
-  it('opens the student report history from the classroom analytics table', async () => {
+  it('opens the student report history from the reports workspace', async () => {
     installApiFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/classrooms/12/students/31/reports') {

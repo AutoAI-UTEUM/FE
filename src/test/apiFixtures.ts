@@ -48,6 +48,25 @@ export async function handleApiFixtureRequest(
   }
 
   if (
+    request.method === 'POST' &&
+    /^\/api\/materials\/\d+\/(doc-chat|quiz-chat)$/.test(path)
+  ) {
+    const body = await readJson<{
+      history?: Array<{ content: string; role: string }>
+      question?: string
+    }>(request)
+    const isQuizReview = path.endsWith('/quiz-chat')
+    return apiSuccess({
+      answer: isQuizReview
+        ? `제출한 퀴즈를 기준으로 '${body.question ?? ''}'을 다시 설명할게요.`
+        : `자료 전체를 기준으로 '${body.question ?? ''}'에 답변할게요.`,
+      warnings: body.history && body.history.length > 10
+        ? [{ message: '최근 대화를 중심으로 답변했습니다.', type: 'CONTEXT_TRUNCATED' }]
+        : [],
+    })
+  }
+
+  if (
     request.method === 'GET' &&
     /^\/api\/sessions\/\d+\/stream$/.test(path)
   ) {
@@ -159,6 +178,17 @@ export async function handleApiFixtureRequest(
       email: 'learner@example.com',
       id: 1,
       name: 'learner',
+      role: 'LEARNER',
+    })
+  }
+
+  if (request.method === 'PATCH' && path === '/api/users/me') {
+    const body = await readJson<{ affiliation?: string; name?: string }>(request)
+    return apiSuccess({
+      affiliation: body.affiliation,
+      email: 'learner@example.com',
+      id: 1,
+      name: body.name ?? 'learner',
       role: 'LEARNER',
     })
   }

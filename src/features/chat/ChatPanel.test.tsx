@@ -17,6 +17,7 @@ afterEach(() => {
 function ChatHarness({
   conversationAction,
   currentPage,
+  materialId,
   materialOverview,
   onExplainCurrentPage,
   onExplainNextPage,
@@ -28,6 +29,7 @@ function ChatHarness({
 }: {
   conversationAction?: ReactNode
   currentPage?: number
+  materialId?: string
   materialOverview?: MaterialOverview | null
   onExplainCurrentPage?: () => void
   onExplainNextPage?: () => void
@@ -43,6 +45,7 @@ function ChatHarness({
       chat={chat}
       conversationAction={conversationAction}
       currentPage={currentPage}
+      materialId={materialId}
       materialOverview={materialOverview}
       onExplainCurrentPage={onExplainCurrentPage}
       onExplainNextPage={onExplainNextPage}
@@ -77,6 +80,33 @@ describe('ChatPanel', () => {
     expect(screen.getByText('개요를 준비 중입니다.')).toBeInTheDocument()
     expect(screen.getByText('생성이 완료되면 자료의 목차와 흐름이 여기에 표시됩니다.')).toBeInTheDocument()
     expect(screen.queryByLabelText('질문')).not.toBeInTheDocument()
+  })
+
+  it('opens the full-material question API in a separate shared chat tab', async () => {
+    const request = vi.fn().mockResolvedValue({
+      data: { answer: '자료 전체 답변입니다.', warnings: [] },
+      message: '요청이 성공했습니다.',
+      success: true,
+    })
+    render(
+      <ChatHarness
+        materialId="10"
+        repository={createRepository()}
+        request={request as AuthenticatedRequest}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('tab', { name: '자료 질문' }))
+    fireEvent.change(screen.getByLabelText('자료 질문'), {
+      target: { value: '전체 흐름을 알려줘' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '자료 질문 보내기' }))
+
+    expect(await screen.findByText('자료 전체 답변입니다.')).toBeInTheDocument()
+    expect(request).toHaveBeenCalledWith('/api/materials/10/doc-chat', expect.objectContaining({
+      body: { history: [], question: '전체 흐름을 알려줘' },
+      method: 'POST',
+    }))
   })
 
   it('uses the same 16px layout for quiz and note empty states', async () => {

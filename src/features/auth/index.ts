@@ -1,4 +1,8 @@
-export { AUTH_IDLE_TIMEOUT_MS, AuthProvider } from './AuthProvider'
+export {
+  AUTH_IDLE_TIMEOUT_MS,
+  AUTH_RESTORE_TIMEOUT_MS,
+  AuthProvider,
+} from './AuthProvider'
 export { RequireAuth } from './RequireAuth'
 export { RequireInstructor } from './RequireInstructor'
 export { GoogleSignInButton } from './GoogleSignInButton'

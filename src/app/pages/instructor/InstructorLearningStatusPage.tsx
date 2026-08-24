@@ -4,7 +4,7 @@ import {
   ArrowUpDown,
   BarChart3,
   FileQuestion,
-  FileText,
+  Info,
   Search,
   Users,
 } from 'lucide-react'
@@ -23,8 +23,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
 import { formatRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, ButtonLink, EmptyState } from '../../../shared/ui'
-import { classroomStudentReportsPath } from '../../routes'
+import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
@@ -80,7 +79,7 @@ export function InstructorLearningStatusPage() {
       <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)] 2xl:grid-rows-[minmax(0,1fr)]">
         <MaterialAnalyticsPanel analytics={analytics} />
         <QuestionAnalyticsPanel analytics={analytics} />
-        <StudentLearningTable className="lg:col-span-2 2xl:col-span-1" classroomId={classroom.id} students={students} />
+        <StudentLearningTable className="lg:col-span-2 2xl:col-span-1" students={students} />
       </section>
     </ClassroomWorkspaceContainer>
   )
@@ -141,7 +140,7 @@ function QuestionAnalyticsPanel({ analytics, className }: { analytics: Classroom
   )
 }
 
-function StudentLearningTable({ classroomId, className, students }: { classroomId: string; className?: string; students: ClassroomStudent[] }) {
+function StudentLearningTable({ className, students }: { className?: string; students: ClassroomStudent[] }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sort, setSort] = useState<StudentSort>({ direction: 'desc', key: 'recentActivity' })
   const visibleStudents = useMemo(() => {
@@ -162,10 +161,7 @@ function StudentLearningTable({ classroomId, className, students }: { classroomI
   return (
     <section aria-label="수강생별 학습 현황" className={cx('flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
       <div className="flex shrink-0 flex-col gap-3 border-b border-stone-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
-          <span className="type-caption text-stone-400">{visibleStudents.length}명</span>
-        </div>
+        <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
         <label className="relative block w-full sm:w-56">
           <span className="sr-only">수강생 검색</span>
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
@@ -185,28 +181,29 @@ function StudentLearningTable({ classroomId, className, students }: { classroomI
         role="region"
         tabIndex={0}
       >
-        <div className="min-w-[680px]">
-          <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px_86px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
-            <StudentSortHeader activeSort={sort} label="이름" onSelect={selectSort} sortKey="name" />
+        <div className="min-w-[650px]">
+          <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+            <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
             <StudentSortHeader activeSort={sort} label="평균 진도율" onSelect={selectSort} sortKey="progress" />
-            <StudentSortHeader activeSort={sort} label="최근 7일 AI 질문" onSelect={selectSort} sortKey="questions" />
-            <StudentSortHeader activeSort={sort} label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
-            <span className="text-center">리포트</span>
+            <div className="flex items-center justify-center gap-1">
+              <StudentSortHeader activeSort={sort} className="justify-center" label="최근 질문 수" onSelect={selectSort} sortKey="questions" />
+              <RecentQuestionCountHelp />
+            </div>
+            <StudentSortHeader activeSort={sort} className="justify-center" label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
           </div>
           {visibleStudents.length === 0 ? (
             <div className="flex min-h-40 items-center justify-center type-body text-stone-400">
               {students.length === 0 ? '표시할 수강생이 없습니다.' : '검색 결과가 없습니다.'}
             </div>
           ) : visibleStudents.map((student) => (
-            <article className="grid min-h-14 grid-cols-[minmax(160px,1.2fr)_minmax(140px,1fr)_110px_100px_86px] items-center gap-3 border-b border-stone-100 px-5 last:border-0" key={student.id}>
+            <article aria-label={`${student.name} 학습 현황`} className="grid min-h-14 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 border-b border-stone-100 px-5 last:border-0" key={student.id}>
               <div className="flex min-w-0 items-center gap-3">
                 <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
                 <div className="min-w-0"><strong className="block truncate type-control text-stone-900">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></div>
               </div>
               <StudentProgress value={student.averageProgressRate} />
-              <span className="type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
-              <span className="type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
-              <ButtonLink aria-label={`${student.name} 리포트`} size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary"><FileText aria-hidden="true" size={14} />리포트</ButtonLink>
+              <span className="text-center type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
+              <span className="text-center type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
             </article>
           ))}
         </div>
@@ -221,11 +218,13 @@ type StudentSort = { direction: StudentSortDirection; key: StudentSortKey }
 
 function StudentSortHeader({
   activeSort,
+  className,
   label,
   onSelect,
   sortKey,
 }: {
   activeSort: StudentSort
+  className?: string
   label: string
   onSelect: (key: StudentSortKey) => void
   sortKey: StudentSortKey
@@ -247,6 +246,7 @@ function StudentSortHeader({
       className={cx(
         'flex min-h-8 items-center gap-1 rounded-md text-left hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600',
         isActive && 'text-brand-700',
+        className,
       )}
       onClick={() => onSelect(sortKey)}
       type="button"
@@ -254,6 +254,25 @@ function StudentSortHeader({
       <span>{label}</span>
       <SortIcon aria-hidden="true" className="shrink-0" size={12} />
     </button>
+  )
+}
+
+function RecentQuestionCountHelp() {
+  return (
+    <span className="group relative inline-flex shrink-0 items-center">
+      <Info
+        aria-label="최근 질문 수 집계 기준"
+        className="cursor-help text-stone-400 outline-none focus:text-stone-700"
+        size={13}
+        tabIndex={0}
+      />
+      <span
+        className="pointer-events-none absolute top-[calc(100%+7px)] left-1/2 z-30 w-max -translate-x-1/2 rounded-md bg-stone-900 px-2 py-1 type-micro font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        role="tooltip"
+      >
+        최근 7일 기준
+      </span>
+    </span>
   )
 }
 

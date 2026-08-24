@@ -20,7 +20,11 @@ export function ClassroomWorkspaceLayout() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const usesFixedContentViewport = pathname.replace(/\/$/, '') === `/classrooms/${classroomId}`
-  const usesDesktopFixedContentViewport = pathname.replace(/\/$/, '') === `/classrooms/${classroomId}/analytics`
+  const normalizedPathname = pathname.replace(/\/$/, '')
+  const usesDesktopFixedContentViewport = [
+    `/classrooms/${classroomId}/analytics`,
+    `/classrooms/${classroomId}/reports`,
+  ].includes(normalizedPathname)
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -80,6 +84,7 @@ export function ClassroomWorkspaceLayout() {
 
 function getActiveTab(pathname: string): ClassroomWorkspaceTab {
   if (pathname.endsWith('/analytics') || pathname.endsWith('/students')) return 'learning'
-  if (pathname.endsWith('/settings') || pathname.endsWith('/report-criteria')) return 'settings'
+  if (pathname.endsWith('/reports') || pathname.endsWith('/report-criteria')) return 'reports'
+  if (pathname.endsWith('/settings')) return 'settings'
   return 'course'
 }

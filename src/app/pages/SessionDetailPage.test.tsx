@@ -300,7 +300,7 @@ describe('SessionDetailPage', () => {
     expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
   })
 
-  it('restores AI chat immediately after the active quiz is submitted', async () => {
+  it('opens quiz review chat immediately after the active quiz is submitted', async () => {
     renderSessionDetail()
 
     fireEvent.click(await screen.findByRole('button', { name: '네' }))
@@ -313,7 +313,8 @@ describe('SessionDetailPage', () => {
     fireEvent.click(screen.getByLabelText('이해가 낮은 페이지를 다시 읽는다.'))
     fireEvent.click(screen.getByRole('button', { name: '제출' }))
 
-    expect(await screen.findByLabelText('질문')).toBeInTheDocument()
+    expect(await screen.findByLabelText('퀴즈 복습 질문')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '퀴즈 복습 챗' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).not.toBeInTheDocument()
   })
 
@@ -396,8 +397,8 @@ describe('SessionDetailPage', () => {
     expect(within(quizInfo).getByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
     expect(screen.getByText('새 개념을 학습할 때 가장 먼저 확인할 정보는 무엇인가요?')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: 'AI 채팅' }))
-    expect(screen.getByLabelText('질문')).toBeInTheDocument()
+    expect(screen.getByLabelText('퀴즈 복습 질문')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '퀴즈 복습 챗' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).not.toBeInTheDocument()
   })
 

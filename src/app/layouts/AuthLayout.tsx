@@ -5,6 +5,7 @@ import {
   SERVICE_NAME,
   SERVICE_NAME_ENGLISH,
 } from '../../shared/config/brand'
+import { ServiceStatusIndicator } from '../../features/health'
 import { routes } from '../routes'
 
 export function AuthLayout() {
@@ -62,6 +63,13 @@ export function AuthLayout() {
           </Link>
 
           <Outlet />
+
+          <footer
+            aria-label="서비스 연결 상태"
+            className="mt-8 flex justify-center border-t border-stone-100 pt-4"
+          >
+            <ServiceStatusIndicator />
+          </footer>
         </div>
       </section>
     </main>

@@ -28,7 +28,7 @@ npm run dev
 | 이름 | 예시 | 설명 |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `/api` | 브라우저가 호출할 Spring Main Service 경로 |
-| `VITE_DEV_PROXY_TARGET` | `https://edu-pilot.duckdns.org` | 로컬 `/api` 요청을 전달할 백엔드 |
+| `VITE_DEV_PROXY_TARGET` | `https://dev.uteum.com` | 로컬 `/api` 요청을 전달할 개발 백엔드 |
 
 기본 로컬 서버는 배포된 dev 백엔드를 프록시하므로 역할, 인증 쿠키,
 API 응답이 배포 화면과 같습니다. 로컬 Spring을 사용할 때만

@@ -36,6 +36,14 @@
     "Segoe UI", sans-serif;
 }
 
+/* 역할과 페이지 종류에 관계없이 사용하는 기본 콘텐츠 프레임. */
+@utility app-page-frame {
+  width: 100%;
+  max-width: 1600px;
+  min-width: 0;
+  margin-inline: auto;
+}
+
 /* 역할 기반 타이포그래피. 화면별 임의 px 값 대신 의미에 따라 사용한다. */
 @utility type-display {
   font-size: 1.75rem;
@@ -117,6 +125,72 @@
 @utility type-compact-action {
   font-size: 0.625rem;
   line-height: 0.875rem;
+}
+
+/*
+ * 노트북 작업 뷰포트에서 읽기 편하도록 글자만 기본보다 약 2px 키운다.
+ * Retina 캡처 3578×2048은 CSS 뷰포트 약 1789×1024이므로 해당 범위를 포함한다.
+ */
+@media (min-width: 1280px) and (max-width: 1919px) and (max-height: 1200px) {
+  .type-display {
+    font-size: 1.875rem;
+    line-height: 2.5rem;
+  }
+
+  .type-auth-intro {
+    font-size: 2.625rem;
+  }
+
+  .type-auth-description,
+  .type-body {
+    font-size: 1rem;
+    line-height: 1.5625rem;
+  }
+
+  .type-page-title {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .type-card-title {
+    font-size: 1.375rem;
+    line-height: 1.875rem;
+  }
+
+  .type-dialog-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+
+  .type-section-title {
+    font-size: 1.125rem;
+    line-height: 1.625rem;
+  }
+
+  .type-chat-body {
+    font-size: 1.0625rem;
+    line-height: 1.6875rem;
+  }
+
+  .type-control {
+    font-size: 0.9375rem;
+    line-height: 1.375rem;
+  }
+
+  .type-caption {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .type-micro {
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+  }
+
+  .type-compact-action {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
 }
 
 /* 차콜 모노 시안의 브랜드 및 공통 뉴트럴 팔레트. */
@@ -235,6 +309,13 @@ body {
   background: #f6f7f9;
   font-size: 0.875rem;
   line-height: 1.375rem;
+}
+
+@media (min-width: 1280px) and (max-width: 1919px) and (max-height: 1200px) {
+  body {
+    font-size: 1rem;
+    line-height: 1.5625rem;
+  }
 }
 
 html.dark body {
