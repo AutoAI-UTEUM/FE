@@ -360,6 +360,50 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBe(heading)
   })
 
+  it('keeps learning analytics inside a fixed desktop viewport', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms' && url.searchParams.get('size') === '100') {
+        return apiSuccess({
+          items: [{
+            classroomId: 12,
+            color: 'BLUE',
+            endDate: '2026-08-16',
+            instructorName: '강의자',
+            learnerCount: 1,
+            name: '자료구조',
+            pendingRequestCount: 0,
+            progressRate: 0,
+            startDate: '2026-08-03',
+            status: 'ACTIVE',
+            weekCount: 2,
+          }],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return undefined
+    })
+    renderRoute('/classrooms/12/analytics', {
+      email: 'instructor@example.com',
+      name: '강의자',
+      role: 'INSTRUCTOR',
+    })
+
+    const studentPanel = await screen.findByLabelText('수강생별 학습 현황')
+    expect(studentPanel.closest('.w-full')).toHaveClass(
+      'lg:h-[calc(100dvh-2.5rem)]',
+      'lg:overflow-hidden',
+    )
+    expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass(
+      'min-h-0',
+      'flex-1',
+      'overflow-auto',
+    )
+  })
+
   it('localizes report criteria and hides evidence source codes', async () => {
     installApiFixtureServer((request) => {
       const url = new URL(request.url)

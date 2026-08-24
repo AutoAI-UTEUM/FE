@@ -69,6 +69,8 @@ export function InstructorClassroomsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [inviteCodeRegenerationTarget, setInviteCodeRegenerationTarget] = useState<DisplayClassroom | null>(null)
+  const [isRegeneratingInviteCode, setIsRegeneratingInviteCode] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -119,11 +121,12 @@ export function InstructorClassroomsPage() {
       if (event.key === 'Escape') {
         setIsCreateOpen(false)
         setIsSearchOpen(false)
+        if (!isRegeneratingInviteCode) setInviteCodeRegenerationTarget(null)
       }
     }
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
-  }, [])
+  }, [isRegeneratingInviteCode])
 
   useEffect(() => {
     if (isSearchOpen) searchInputRef.current?.focus()
@@ -200,24 +203,27 @@ export function InstructorClassroomsPage() {
   }
 
   async function regenerateInviteCode(classroom: Classroom) {
-    if (
-      !window.confirm(
-        '기존 초대 코드는 더 이상 사용할 수 없습니다. 재발급할까요?',
-      )
-    ) {
-      return
-    }
+    if (isRegeneratingInviteCode) return
+    setIsRegeneratingInviteCode(true)
     try {
       const code = await repository.regenerateInviteCode(classroom.id)
-      await navigator.clipboard.writeText(code)
       setClassrooms((items) =>
         items.map((item) =>
           item.id === classroom.id ? { ...item, inviteCode: code } : item,
         ),
       )
-      showToast('새 초대 코드를 발급하고 복사했습니다.', 'success')
+      setInviteCodeRegenerationTarget(null)
+
+      try {
+        await navigator.clipboard.writeText(code)
+        showToast('새 초대 코드를 발급하고 복사했습니다.', 'success')
+      } catch {
+        showToast('새 초대 코드를 발급했습니다. 새 코드를 직접 복사해 주세요.', 'success')
+      }
     } catch (requestError) {
       showToast(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      setIsRegeneratingInviteCode(false)
     }
   }
 
@@ -279,7 +285,7 @@ export function InstructorClassroomsPage() {
               classroom={classroom}
               key={classroom.id}
               onCopy={() => void copyInviteCode(classroom)}
-              onRegenerate={() => void regenerateInviteCode(classroom)}
+              onRegenerate={() => setInviteCodeRegenerationTarget(classroom)}
             />
           ))}
         </section>
@@ -339,7 +345,74 @@ export function InstructorClassroomsPage() {
           }}
         />
       ) : null}
+
+      {inviteCodeRegenerationTarget ? (
+        <InviteCodeRegenerationDialog
+          classroom={inviteCodeRegenerationTarget}
+          isSubmitting={isRegeneratingInviteCode}
+          onClose={() => setInviteCodeRegenerationTarget(null)}
+          onConfirm={() => void regenerateInviteCode(inviteCodeRegenerationTarget)}
+        />
+      ) : null}
     </PageContainer>
+  )
+}
+
+function InviteCodeRegenerationDialog({
+  classroom,
+  isSubmitting,
+  onClose,
+  onConfirm,
+}: {
+  classroom: Classroom
+  isSubmitting: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      aria-labelledby="invite-code-regeneration-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose()
+      }}
+      role="dialog"
+    >
+      <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="type-caption font-semibold text-amber-700">초대 코드 변경</p>
+            <h2 className="mt-1 type-dialog-title font-bold text-stone-950" id="invite-code-regeneration-title">
+              초대 코드를 재발급할까요?
+            </h2>
+          </div>
+          <button
+            aria-label="초대 코드 재발급 닫기"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSubmitting}
+            onClick={onClose}
+            type="button"
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="type-body leading-6 text-amber-900">
+            재발급하면 <strong>현재 초대 코드 {classroom.inviteCode ?? ''}</strong>는 즉시 폐기되며 더 이상 사용할 수 없습니다.
+          </p>
+        </div>
+        <p className="mt-3 type-body text-stone-600">
+          {classroom.name}의 초대 코드를 정말 재발급할지 확인해 주세요.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button disabled={isSubmitting} onClick={onClose} variant="secondary">취소</Button>
+          <Button disabled={isSubmitting} onClick={onConfirm}>
+            {isSubmitting ? '재발급 중' : '재발급 확인'}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 

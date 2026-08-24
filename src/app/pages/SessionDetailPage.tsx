@@ -60,6 +60,13 @@ const MIN_CHAT_PANEL_WIDTH = 360
 const MIN_PDF_PANEL_WIDTH = 360
 const PANEL_RESIZER_WIDTH = 6
 const OVERVIEW_POLL_INTERVAL_MS = 15_000
+const PAGE_MOVE_DEBOUNCE_MS = 500
+
+interface QueuedPageMove {
+  pageNumber: number
+  resolvers: Array<(succeeded: boolean) => void>
+  suppressUiActions: boolean
+}
 
 export function SessionDetailPage() {
   usePageTitle('학습 공간')
@@ -103,13 +110,33 @@ export function SessionDetailPage() {
   const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
+  const currentPageRef = useRef(1)
+  const pageMoveTimerRef = useRef<number | undefined>(undefined)
+  const queuedPageMoveRef = useRef<QueuedPageMove | null>(null)
   const chat = useSessionChat(sessionsRepository, sessionId ?? '')
+  const chatTurnPendingRef = useRef(chat.isTurnPending)
   const [resolvedClassroomId, setResolvedClassroomId] = useState<string | null>(
     () => getRememberedClassroomId(),
   )
   const weekPagePath = resolvedClassroomId
     ? classroomDetailPath(resolvedClassroomId)
     : routes.classrooms
+
+  useEffect(() => {
+    currentPageRef.current = currentPage
+  }, [currentPage])
+
+  useEffect(() => {
+    chatTurnPendingRef.current = chat.isTurnPending
+  }, [chat.isTurnPending])
+
+  useEffect(() => () => {
+    if (pageMoveTimerRef.current !== undefined) {
+      window.clearTimeout(pageMoveTimerRef.current)
+    }
+    queuedPageMoveRef.current?.resolvers.forEach((resolve) => resolve(false))
+    queuedPageMoveRef.current = null
+  }, [])
 
   useEffect(() => {
     if (!sessionId) return
@@ -119,7 +146,7 @@ export function SessionDetailPage() {
       .getById(sessionId, controller.signal)
       .then(async (nextSession) => {
         if (!nextSession) {
-          setSession(null)
+          navigate(routes.classrooms, { replace: true })
           return
         }
 
@@ -136,6 +163,7 @@ export function SessionDetailPage() {
 
         const hydratedSession = withPagePromptFallback({ ...nextSession, materialTitle, totalPages })
         setSession(hydratedSession)
+        currentPageRef.current = hydratedSession.currentPage
         setCurrentPage(hydratedSession.currentPage)
         setError(null)
       })
@@ -152,6 +180,7 @@ export function SessionDetailPage() {
     return () => controller.abort()
   }, [
     materialsRepository,
+    navigate,
     reloadKey,
     sessionId,
     sessionsRepository,
@@ -410,7 +439,10 @@ export function SessionDetailPage() {
     const nextPage = preservePage || result.currentPage === undefined
       ? undefined
       : movePage(result.currentPage, totalPages)
-    if (nextPage !== undefined) setCurrentPage(nextPage)
+    if (nextPage !== undefined) {
+      currentPageRef.current = nextPage
+      setCurrentPage(nextPage)
+    }
     setSession((current) => current
       ? {
           ...current,
@@ -427,11 +459,15 @@ export function SessionDetailPage() {
       : current)
   }
 
-  async function handlePageMove(
+  async function executePageMove(
     nextPage: number,
     suppressUiActions = false,
   ): Promise<boolean> {
-    if (isActionPending) return false
+    if (isActionPending || chatTurnPendingRef.current) {
+      currentPageRef.current = activeSession.currentPage
+      setCurrentPage(activeSession.currentPage)
+      return false
+    }
     const nextSafePage = movePage(nextPage, totalPages)
     setIsActionPending(true)
     setError(null)
@@ -441,6 +477,7 @@ export function SessionDetailPage() {
         nextSafePage,
       )
       chat.clearUiActions()
+      currentPageRef.current = result.currentPage
       setCurrentPage(result.currentPage)
       setSession((current) =>
         current
@@ -459,18 +496,60 @@ export function SessionDetailPage() {
       )
       return true
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (isTurnInProgressError(requestError)) {
+        setError(null)
+        await chat.waitForTurnCompletion((result) => applyTurnResult(result))
+      } else {
+        setError(getRequestErrorMessage(requestError))
+        currentPageRef.current = activeSession.currentPage
+        setCurrentPage(activeSession.currentPage)
+      }
       return false
     } finally {
       setIsActionPending(false)
     }
   }
 
+  function handlePageMove(
+    nextPage: number,
+    suppressUiActions = false,
+  ): Promise<boolean> {
+    if (isActionPending || chat.isTurnPending) return Promise.resolve(false)
+    const nextSafePage = movePage(nextPage, totalPages)
+    currentPageRef.current = nextSafePage
+    setCurrentPage(nextSafePage)
+
+    if (pageMoveTimerRef.current !== undefined) {
+      window.clearTimeout(pageMoveTimerRef.current)
+    }
+
+    return new Promise((resolve) => {
+      const queued = queuedPageMoveRef.current
+      queuedPageMoveRef.current = {
+        pageNumber: nextSafePage,
+        resolvers: [...(queued?.resolvers ?? []), resolve],
+        suppressUiActions,
+      }
+      pageMoveTimerRef.current = window.setTimeout(() => {
+        const pendingMove = queuedPageMoveRef.current
+        queuedPageMoveRef.current = null
+        pageMoveTimerRef.current = undefined
+        if (!pendingMove) return
+        void executePageMove(
+          pendingMove.pageNumber,
+          pendingMove.suppressUiActions,
+        ).then((succeeded) => {
+          pendingMove.resolvers.forEach((resolveMove) => resolveMove(succeeded))
+        })
+      }, PAGE_MOVE_DEBOUNCE_MS)
+    })
+  }
+
   async function handlePageNavigation(nextPage: number) {
     const nextSafePage = movePage(nextPage, totalPages)
 
-    if (nextSafePage === currentPage) {
-      if (nextPage > currentPage) setError('마지막 페이지입니다.')
+    if (nextSafePage === currentPageRef.current) {
+      if (nextPage > currentPageRef.current) setError('마지막 페이지입니다.')
       return
     }
 
@@ -478,8 +557,8 @@ export function SessionDetailPage() {
   }
 
   async function handleExplainNextPage() {
-    const nextPage = movePage(currentPage + 1, totalPages)
-    if (nextPage === currentPage) {
+    const nextPage = movePage(currentPageRef.current + 1, totalPages)
+    if (nextPage === currentPageRef.current) {
       setError('마지막 페이지입니다.')
       return
     }
@@ -489,7 +568,7 @@ export function SessionDetailPage() {
   }
 
   async function handleQuizDecline() {
-    if (isActionPending) return
+    if (isActionPending || chat.isTurnPending) return
     chat.clearUiActions()
     setSession((current) => current ? { ...current, uiActions: [] } : current)
     setIsActionPending(true)
@@ -514,7 +593,7 @@ export function SessionDetailPage() {
     eventType: 'EXPLAIN_CURRENT_PAGE' | 'NOTE_REQUESTED' | 'QUIZ_TYPE_SELECTED',
     payload: Record<string, unknown>,
   ) {
-    if (isActionPending) return undefined
+    if (isActionPending || chat.isTurnPending) return undefined
     setIsActionPending(true)
     setError(null)
     try {
@@ -568,7 +647,7 @@ export function SessionDetailPage() {
         setIsSelectingQuizType(true)
         return
       case 'COMPLETE_SESSION': {
-        if (isActionPending) return
+        if (isActionPending || chat.isTurnPending) return
         setIsActionPending(true)
         setError(null)
         try {
@@ -687,6 +766,7 @@ export function SessionDetailPage() {
         {isResourcePanelOpen ? (
           <SessionResourcePanel
             activeMaterialId={activeSession.materialId}
+            isPending={isActionPending || chat.isTurnPending}
             onClose={() => setIsResourcePanelOpen(false)}
             resourcePath={(material) =>
               material.sessionId
@@ -734,7 +814,7 @@ export function SessionDetailPage() {
                 currentPage={currentPage}
                 file={materialFile}
                 fileError={materialFileError}
-                isPending={isActionPending}
+                isPending={isActionPending || chat.isTurnPending}
                 materialTitle={activeSession.materialTitle}
                 onMovePage={handlePageNavigation}
                 onOpenResources={isResourcePanelOpen
@@ -927,6 +1007,12 @@ function createTurnRequestId(): string {
   return typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `turn-${Date.now()}`
+}
+
+function isTurnInProgressError(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError
+    && error.status === 409
+    && error.code === 'TURN_IN_PROGRESS'
 }
 
 type ClassroomsRepository = ReturnType<typeof createClassroomsRepository>

@@ -85,4 +85,30 @@ describe('SessionPageViewer', () => {
     })
     expect(screen.getByText('110%')).toBeInTheDocument()
   })
+
+  it('locks page and classroom navigation while an AI answer is pending', () => {
+    const onMovePage = vi.fn()
+    render(
+      <MemoryRouter>
+        <SessionPageViewer
+          backTo="/classrooms/12"
+          currentPage={2}
+          file={undefined}
+          isPending
+          onMovePage={onMovePage}
+          totalPages={3}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: '주차 페이지로' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '주차 페이지로 (AI 답변 생성 중 이동 불가)' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '이전 (사용 불가)' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '다음 (사용 불가)' })).toBeDisabled()
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    fireEvent.click(screen.getByRole('button', { name: '목차' }))
+    expect(screen.getByRole('button', { name: '1쪽으로 이동' })).toBeDisabled()
+    expect(onMovePage).not.toHaveBeenCalled()
+  })
 })

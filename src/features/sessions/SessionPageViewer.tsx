@@ -140,14 +140,26 @@ export function SessionPageViewer({
     <section aria-label="PDF 뷰어" className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-y-0 border-stone-200 bg-white" ref={viewerRef}>
       <div className="flex h-13 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
         {backTo ? (
-          <Link
-            aria-label="주차 페이지로"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-            title="주차 페이지로"
-            to={backTo}
-          >
-            <ChevronLeft aria-hidden="true" size={16} />
-          </Link>
+          isPending ? (
+            <button
+              aria-label="주차 페이지로 (AI 답변 생성 중 이동 불가)"
+              className="flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-stone-200 text-stone-300"
+              disabled
+              title="AI 답변 생성이 끝나면 이동할 수 있습니다."
+              type="button"
+            >
+              <ChevronLeft aria-hidden="true" size={16} />
+            </button>
+          ) : (
+            <Link
+              aria-label="주차 페이지로"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              title="주차 페이지로"
+              to={backTo}
+            >
+              <ChevronLeft aria-hidden="true" size={16} />
+            </Link>
+          )
         ) : null}
         <h2 className="hidden min-w-0 truncate type-section-title font-semibold text-stone-950 sm:block">
           {materialTitle ?? '학습 자료'}

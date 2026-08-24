@@ -4,6 +4,7 @@ import {
   Copy,
   FileText,
   ListChecks,
+  LoaderCircle,
   NotebookPen,
   RotateCcw,
   Save,
@@ -104,6 +105,7 @@ export function ChatPanel({
   const [messageActionStatus, setMessageActionStatus] = useState('')
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const turnSubmissionLockRef = useRef(false)
   const notesRepository = useMemo(
     () => request ? createNotesRepository(request) : null,
     [request],
@@ -145,7 +147,8 @@ export function ChatPanel({
     const trimmedQuestion = text.trim()
     if (!trimmedQuestion) return
 
-    if (chat.isTurnPending) return
+    if (chat.isTurnPending || turnSubmissionLockRef.current) return
+    turnSubmissionLockRef.current = true
 
     const requestId = createRequestId()
     const isProgressCommand = Boolean(
@@ -186,11 +189,14 @@ export function ChatPanel({
     } catch (requestError) {
       if (!isProgressCommand) chat.markMessageFailed(requestId)
       setError(getChatErrorMessage(requestError))
+    } finally {
+      turnSubmissionLockRef.current = false
     }
   }
 
   async function retryMessage(message: ChatMessage) {
-    if (!message.requestId || chat.isTurnPending) return
+    if (!message.requestId || chat.isTurnPending || turnSubmissionLockRef.current) return
+    turnSubmissionLockRef.current = true
     chat.markMessageRetrying(message.requestId)
     setError(null)
     try {
@@ -208,6 +214,8 @@ export function ChatPanel({
     } catch (requestError) {
       chat.markMessageFailed(message.requestId)
       setError(getChatErrorMessage(requestError))
+    } finally {
+      turnSubmissionLockRef.current = false
     }
   }
 
@@ -441,9 +449,10 @@ export function ChatPanel({
 
         {chat.isTurnPending ? (
           <div
-            className="mr-auto max-w-[90%] animate-pulse rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5"
+            className="mr-auto flex max-w-[90%] items-center gap-2 rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5"
             role="status"
           >
+            <LoaderCircle aria-hidden="true" className="shrink-0 animate-spin text-brand-600" size={15} />
             <p className="type-chat-body text-stone-500">
               {chat.streamNotice ?? '답변을 작성하는 중입니다…'}
             </p>

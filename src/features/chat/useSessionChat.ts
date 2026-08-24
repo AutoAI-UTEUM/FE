@@ -31,7 +31,13 @@ export interface SessionChat {
     turn: SessionTurnRequest,
     onResult?: (result: SessionTurnResult) => void,
   ) => Promise<SessionTurnResult>
+  waitForTurnCompletion: (
+    onResult?: (result: SessionTurnResult) => void,
+  ) => Promise<SessionTurnResult | undefined>
 }
+
+const TURN_IN_PROGRESS_NOTICE = 'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.'
+const TURN_RECOVERY_POLL_INTERVAL_MS = 1_500
 
 export function useSessionChat(
   repository: SessionsRepository,
@@ -46,13 +52,25 @@ export function useSessionChat(
   const [streamUiActions, setStreamUiActions] = useState<UiAction[]>([])
   const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null)
   const streamingMessageIdRef = useRef<string | null>(null)
+  const messagesRef = useRef<ChatMessage[]>([])
+  const isTurnPendingRef = useRef(false)
+
+  const updateMessages = useCallback((updater: (current: ChatMessage[]) => ChatMessage[]) => {
+    setMessages((current) => {
+      const next = updater(current)
+      messagesRef.current = next
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     repository
       .listMessages(sessionId, controller.signal)
       .then((history) => {
-        setMessages(history.map(mapSessionMessage))
+        const nextMessages = history.map(mapSessionMessage)
+        messagesRef.current = nextMessages
+        setMessages(nextMessages)
         setHistoryError(null)
       })
       .catch((requestError: unknown) => {
@@ -69,7 +87,7 @@ export function useSessionChat(
 
   const appendMessages = useCallback((incoming: SessionMessage[]) => {
     if (incoming.length === 0) return
-    setMessages((current) => {
+    updateMessages((current) => {
       const confirmed = current.filter((message) => message.status !== 'streaming')
       const existingIds = new Set(confirmed.map((message) => message.id))
       return [
@@ -80,11 +98,11 @@ export function useSessionChat(
       ]
     })
     streamingMessageIdRef.current = null
-  }, [])
+  }, [updateMessages])
 
   const appendLocalMessage = useCallback((message: ChatMessage) => {
-    setMessages((current) => [...current, message])
-  }, [])
+    updateMessages((current) => [...current, message])
+  }, [updateMessages])
 
   const clearUiActions = useCallback(() => {
     setStreamUiActions([])
@@ -99,39 +117,58 @@ export function useSessionChat(
   }, [])
 
   const markMessageFailed = useCallback((requestId: string) => {
-    setMessages((current) => current.map((message) => (
+    updateMessages((current) => current.map((message) => (
       message.requestId === requestId ? { ...message, status: 'failed' } : message
     )))
-  }, [])
+  }, [updateMessages])
 
   const markMessageRetrying = useCallback((requestId: string) => {
-    setMessages((current) => current.map((message) => (
+    updateMessages((current) => current.map((message) => (
       message.requestId === requestId ? { ...message, status: 'sent' } : message
     )))
-  }, [])
+  }, [updateMessages])
 
   const submitTurn = useCallback(
     async (
       turn: SessionTurnRequest,
       onResult?: (result: SessionTurnResult) => void,
     ) => {
+      if (isTurnPendingRef.current) {
+        throw new ApiClientError({
+          code: 'TURN_IN_PROGRESS_LOCAL',
+          message: TURN_IN_PROGRESS_NOTICE,
+          status: 409,
+        })
+      }
+      isTurnPendingRef.current = true
       setIsTurnPending(true)
       setStreamNotice('실시간 응답을 연결하는 중입니다.')
       setStreamUiActions([])
       const streamController = new AbortController()
       const streamMessageId = `stream-${turn.requestId}`
+      const knownMessageIds = new Set(messagesRef.current
+        .filter((message) => message.role === 'assistant' && message.status === 'sent')
+        .map((message) => message.id))
+      const recoveredUiActions: UiAction[] = []
+      let completedNoteDraft: NoteDraft | undefined
+      let resolveStreamCompleted: (() => void) | undefined
+      const streamCompleted = new Promise<void>((resolve) => {
+        resolveStreamCompleted = resolve
+      })
       streamingMessageIdRef.current = streamMessageId
       const streamPromise = repository
         .stream(
           sessionId,
           {
             onCompleted: (draft) => {
+              completedNoteDraft = draft
               setStreamNotice(null)
               if (draft) setNoteDraft(draft)
+              resolveStreamCompleted?.()
             },
             onContentDelta: (text) => {
               setStreamNotice('답변을 실시간으로 받고 있습니다.')
-              setMessages((current) => {
+              updateMessages((current) => {
                 const index = current.findIndex(
                   (message) => message.id === streamMessageId,
                 )
@@ -156,8 +193,10 @@ export function useSessionChat(
             onError: (message) => setStreamNotice(message),
             onStatus: (stage) =>
               setStreamNotice(getStreamStageLabel(stage)),
-            onUiAction: (action) =>
-              setStreamUiActions((current) => [...current, action]),
+            onUiAction: (action) => {
+              recoveredUiActions.push(action)
+              setStreamUiActions((current) => [...current, action])
+            },
           },
           streamController.signal,
         )
@@ -182,6 +221,54 @@ export function useSessionChat(
         setStreamNotice(null)
         return result
       } catch (error) {
+        if (isTurnInProgressError(error)) {
+          // 거부된 중복 질문은 실패/재시도 대상으로 남기지 않는다.
+          updateMessages((current) => current.filter(
+            (message) => message.requestId !== turn.requestId,
+          ))
+          setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+
+          const pollController = new AbortController()
+          const recoveredHistoryPromise = pollForCompletedTurn(
+            repository,
+            sessionId,
+            knownMessageIds,
+            pollController.signal,
+          )
+          const recoverySource = await Promise.race([
+            streamCompleted.then(() => 'stream' as const),
+            recoveredHistoryPromise.then(() => 'poll' as const),
+          ])
+          pollController.abort()
+
+          const [historyResult, sessionResult] = await Promise.allSettled([
+            recoverySource === 'poll'
+              ? recoveredHistoryPromise
+              : repository.listMessages(sessionId),
+            repository.getById(sessionId),
+          ])
+          const recoveredMessages = historyResult.status === 'fulfilled'
+            ? historyResult.value
+            : []
+          const recoveredSession = sessionResult.status === 'fulfilled'
+            ? sessionResult.value
+            : null
+          const result: SessionTurnResult = {
+            activeQuizId: recoveredSession?.activeQuizId,
+            currentPage: recoveredSession?.currentPage,
+            messages: recoveredMessages,
+            noteDraft: completedNoteDraft,
+            pageStatus: recoveredSession?.pageStatus,
+            pendingDiagnosis: recoveredSession?.pendingDiagnosis,
+            uiActions: recoveredSession?.uiActions ?? recoveredUiActions,
+          }
+          appendMessages(recoveredMessages)
+          setStreamUiActions(result.uiActions)
+          onResult?.(result)
+          setStreamNotice(null)
+          return result
+        }
+
         // 완료된 턴의 중복 requestId는 최신 메시지 복원으로 수렴한다.
         if (
           error instanceof ApiClientError &&
@@ -193,10 +280,11 @@ export function useSessionChat(
       } finally {
         streamController.abort()
         await streamPromise
+        isTurnPendingRef.current = false
         setIsTurnPending(false)
       }
     },
-    [appendMessages, reloadHistory, repository, sessionId],
+    [appendMessages, reloadHistory, repository, sessionId, updateMessages],
   )
 
   const startNewConversation = useCallback(async () => {
@@ -215,6 +303,78 @@ export function useSessionChat(
     }
   }, [isTurnPending, repository, sessionId])
 
+  const waitForTurnCompletion = useCallback(async (
+    onResult?: (result: SessionTurnResult) => void,
+  ) => {
+    if (isTurnPendingRef.current) return undefined
+    isTurnPendingRef.current = true
+    setIsTurnPending(true)
+    setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+
+    const knownMessageIds = new Set(messagesRef.current
+      .filter((message) => message.role === 'assistant' && message.status === 'sent')
+      .map((message) => message.id))
+    const streamController = new AbortController()
+    const pollController = new AbortController()
+    let resolveStreamCompleted: (() => void) | undefined
+    const streamCompleted = new Promise<void>((resolve) => {
+      resolveStreamCompleted = resolve
+    })
+    const streamPromise = repository.stream(sessionId, {
+      onCompleted: (draft) => {
+        if (draft) setNoteDraft(draft)
+        resolveStreamCompleted?.()
+      },
+      onError: () => setStreamNotice(TURN_IN_PROGRESS_NOTICE),
+      onStatus: () => setStreamNotice(TURN_IN_PROGRESS_NOTICE),
+    }, streamController.signal).catch(() => undefined)
+    const recoveredHistoryPromise = pollForCompletedTurn(
+      repository,
+      sessionId,
+      knownMessageIds,
+      pollController.signal,
+    )
+
+    try {
+      const recoverySource = await Promise.race([
+        streamCompleted.then(() => 'stream' as const),
+        recoveredHistoryPromise.then(() => 'poll' as const),
+      ])
+      pollController.abort()
+      const [historyResult, sessionResult] = await Promise.allSettled([
+        recoverySource === 'poll'
+          ? recoveredHistoryPromise
+          : repository.listMessages(sessionId),
+        repository.getById(sessionId),
+      ])
+      const recoveredMessages = historyResult.status === 'fulfilled'
+        ? historyResult.value
+        : []
+      const recoveredSession = sessionResult.status === 'fulfilled'
+        ? sessionResult.value
+        : null
+      const result: SessionTurnResult = {
+        activeQuizId: recoveredSession?.activeQuizId,
+        currentPage: recoveredSession?.currentPage,
+        messages: recoveredMessages,
+        pageStatus: recoveredSession?.pageStatus,
+        pendingDiagnosis: recoveredSession?.pendingDiagnosis,
+        uiActions: recoveredSession?.uiActions ?? [],
+      }
+      appendMessages(recoveredMessages)
+      setStreamUiActions(result.uiActions)
+      onResult?.(result)
+      return result
+    } finally {
+      pollController.abort()
+      streamController.abort()
+      await streamPromise
+      setStreamNotice(null)
+      isTurnPendingRef.current = false
+      setIsTurnPending(false)
+    }
+  }, [appendMessages, repository, sessionId])
+
   return {
     appendLocalMessage,
     appendMessages,
@@ -232,7 +392,52 @@ export function useSessionChat(
     streamNotice,
     streamUiActions,
     submitTurn,
+    waitForTurnCompletion,
   }
+}
+
+function isTurnInProgressError(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError
+    && error.status === 409
+    && error.code === 'TURN_IN_PROGRESS'
+}
+
+async function pollForCompletedTurn(
+  repository: SessionsRepository,
+  sessionId: string,
+  knownMessageIds: ReadonlySet<string>,
+  signal: AbortSignal,
+): Promise<SessionMessage[]> {
+  while (!signal.aborted) {
+    try {
+      const history = await repository.listMessages(sessionId, signal)
+      const hasNewCompletedAnswer = history.some((message) =>
+        message.senderType === 'AI'
+        && message.status !== 'FAILED'
+        && message.status !== 'PENDING'
+        && !knownMessageIds.has(message.id))
+      if (hasNewCompletedAnswer) return history
+    } catch (error) {
+      if (signal.aborted) return []
+      if (error instanceof ApiClientError && error.code === 'REQUEST_ABORTED') return []
+    }
+    await waitForRecoveryPoll(signal)
+  }
+  return []
+}
+
+function waitForRecoveryPoll(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+    const timeoutId = window.setTimeout(resolve, TURN_RECOVERY_POLL_INTERVAL_MS)
+    signal.addEventListener('abort', () => {
+      window.clearTimeout(timeoutId)
+      resolve()
+    }, { once: true })
+  })
 }
 
 function getStreamStageLabel(stage: string): string {
@@ -252,7 +457,11 @@ function mapSessionMessage(message: SessionMessage): ChatMessage {
     messageType: message.messageType,
     pageNumber: message.pageNumber,
     role: message.senderType === 'USER' ? 'user' : 'assistant',
-    status: message.status === 'FAILED' ? 'failed' : 'sent',
+    status: message.status === 'FAILED'
+      ? 'failed'
+      : message.status === 'PENDING'
+        ? 'streaming'
+        : 'sent',
   }
 }
 
