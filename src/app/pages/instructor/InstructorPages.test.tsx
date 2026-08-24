@@ -105,9 +105,13 @@ function stubNoticesApi() {
   })
 }
 
-function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
-  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+function stubClassroomsApi(
+  status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE',
+  inviteCodeRequests?: { regenerate: number },
+) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input)
+    const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
     const envelope = (data: unknown) =>
       new Response(JSON.stringify({ data, message: 'ok', success: true }), {
         headers: { 'Content-Type': 'application/json' },
@@ -126,21 +130,47 @@ function stubClassroomsApi(status: 'ACTIVE' | 'COMPLETED' = 'ACTIVE') {
         { materialId: 10, pageNumber: 7, questionCount: 4 },
       ],
     })
+    if (url.includes('/invite-code/regenerate') && method === 'POST') {
+      if (inviteCodeRequests) inviteCodeRequests.regenerate += 1
+      return envelope({ inviteCode: 'NEW8-CODE' })
+    }
     if (url.includes('/invite-code')) return envelope({ inviteCode: '7QK4-MZ2A' })
     if (url.includes('/students')) return envelope({
-      items: [{
-        aiQuestionCountLast7Days: 6,
-        averageProgressRate: 64,
-        email: 'learner@example.com',
-        joinedAt: '2026-08-01T00:00:00Z',
-        lastActiveAt: new Date().toISOString(),
-        name: '김학습',
-        status: 'ACTIVE',
-        studentId: 9,
-      }],
+      items: [
+        {
+          aiQuestionCountLast7Days: 6,
+          averageProgressRate: 64,
+          email: 'learner@example.com',
+          joinedAt: '2026-08-01T00:00:00Z',
+          lastActiveAt: '2026-08-24T08:00:00Z',
+          name: '김학습',
+          status: 'ACTIVE',
+          studentId: 9,
+        },
+        {
+          aiQuestionCountLast7Days: 12,
+          averageProgressRate: 92,
+          email: 'excellent@example.com',
+          joinedAt: '2026-08-01T00:00:00Z',
+          lastActiveAt: '2026-08-23T08:00:00Z',
+          name: '이우수',
+          status: 'ACTIVE',
+          studentId: 10,
+        },
+        {
+          aiQuestionCountLast7Days: 2,
+          averageProgressRate: 20,
+          email: 'slow@example.com',
+          joinedAt: '2026-08-01T00:00:00Z',
+          lastActiveAt: '2026-08-22T08:00:00Z',
+          name: '박느림',
+          status: 'ACTIVE',
+          studentId: 11,
+        },
+      ],
       page: 0,
       size: 100,
-      totalElements: 1,
+      totalElements: 3,
       totalPages: 1,
     })
     if (url.includes('/weeks')) return envelope({ items: [] })
@@ -373,6 +403,36 @@ describe('instructor pages', () => {
     fetchMock.mockRestore()
   })
 
+  it('regenerates an invite code only after destructive-action confirmation', async () => {
+    const requests = { regenerate: 0 }
+    const fetchMock = stubClassroomsApi('ACTIVE', requests)
+    renderInstructorPage(<InstructorClassroomsPage />)
+    const regenerateButton = await screen.findByRole('button', { name: '자료구조 초대 코드 재발급' })
+
+    fireEvent.click(regenerateButton)
+    let dialog = screen.getByRole('dialog', { name: '초대 코드를 재발급할까요?' })
+    expect(dialog).toHaveTextContent('현재 초대 코드 7QK4-MZ2A')
+    expect(dialog).toHaveTextContent('즉시 폐기되며 더 이상 사용할 수 없습니다.')
+    expect(requests.regenerate).toBe(0)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '취소' }))
+    expect(screen.queryByRole('dialog', { name: '초대 코드를 재발급할까요?' })).not.toBeInTheDocument()
+    expect(requests.regenerate).toBe(0)
+
+    fireEvent.click(regenerateButton)
+    dialog = screen.getByRole('dialog', { name: '초대 코드를 재발급할까요?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '재발급 확인' }))
+
+    await waitFor(() => expect(requests.regenerate).toBe(1))
+    expect(await screen.findByText('NEW8-CODE')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '초대 코드를 재발급할까요?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '새 초대 코드를 발급했습니다. 새 코드를 직접 복사해 주세요.',
+    )
+
+    fetchMock.mockRestore()
+  })
+
   it('keeps classroom settings available after the classroom is completed', async () => {
     const fetchMock = stubClassroomsApi('COMPLETED')
     renderInstructorPage(<InstructorClassroomsPage />)
@@ -558,9 +618,56 @@ describe('instructor pages', () => {
     expect(screen.getByLabelText('7쪽 질문 4건').firstElementChild).toHaveStyle({ width: '50%' })
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '김학습 리포트' })).toHaveAttribute('href', '/classrooms/12/students/9/reports')
-    expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('xl:grid-cols-2', '2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)]')
-    expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('xl:col-span-2', '2xl:col-span-1')
+    expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('lg:grid-cols-2', '2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)]')
+    expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-col', 'lg:col-span-2', '2xl:col-span-1')
+    expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass('min-h-0', 'flex-1', 'overflow-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
+    expect(screen.getByRole('button', { name: '이름 오름차순 정렬' }).parentElement).toHaveClass('sticky', 'top-0')
     expect(screen.getByText('64%')).toBeInTheDocument()
+
+    const studentList = screen.getByRole('region', { name: '수강생별 학습 현황 목록' })
+    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
+      '김학습 리포트',
+      '이우수 리포트',
+      '박느림 리포트',
+    ])
+
+    expect(screen.getByRole('button', { name: '최근 7일 AI 질문 내림차순 정렬' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '최근 학습 오름차순 정렬' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '평균 진도율 내림차순 정렬' }))
+    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
+      '이우수 리포트',
+      '김학습 리포트',
+      '박느림 리포트',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: '평균 진도율 오름차순 정렬' }))
+    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
+      '박느림 리포트',
+      '김학습 리포트',
+      '이우수 리포트',
+    ])
+
+    fireEvent.click(screen.getByRole('button', { name: '이름 오름차순 정렬' }))
+    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
+      '김학습 리포트',
+      '박느림 리포트',
+      '이우수 리포트',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: '최근 7일 AI 질문 내림차순 정렬' }))
+    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
+      '이우수 리포트',
+      '김학습 리포트',
+      '박느림 리포트',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: '최근 학습 내림차순 정렬' }))
+    expect(within(studentList).getAllByRole('link', { name: /리포트/ }).map((link) => link.getAttribute('aria-label'))).toEqual([
+      '김학습 리포트',
+      '이우수 리포트',
+      '박느림 리포트',
+    ])
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '수강생 검색' }), { target: { value: 'excellent@' } })
+    expect(within(studentList).getByRole('link', { name: '이우수 리포트' })).toBeInTheDocument()
+    expect(within(studentList).queryByRole('link', { name: '김학습 리포트' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: '리마인더 보내기' }),
     ).not.toBeInTheDocument()

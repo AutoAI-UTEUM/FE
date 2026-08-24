@@ -19,7 +19,7 @@ import { Link } from 'react-router-dom'
 import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, type Classroom } from '../../features/classrooms'
 import { createSessionsRepository, type LearningSession } from '../../features/sessions'
-import { getRequestErrorMessage } from '../../shared/api'
+import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { Button, ButtonLink, EmptyState, PageContainer, PageHeader, useToast } from '../../shared/ui'
 import { classroomDetailPath, sessionDetailPath } from '../routes'
@@ -131,7 +131,12 @@ function LearnerClassroomsPage() {
       setIsJoinOpen(false)
       showToast('강의실 참여 요청을 보냈습니다.', 'success')
     } catch (requestError) {
-      showToast(getRequestErrorMessage(requestError), 'danger')
+      showToast(
+        requestError instanceof ApiClientError && requestError.status === 409
+          ? '이미 참여를 신청한 강의실입니다. 승인 상태를 확인해 주세요.'
+          : getRequestErrorMessage(requestError),
+        'danger',
+      )
     } finally {
       setIsJoining(false)
     }

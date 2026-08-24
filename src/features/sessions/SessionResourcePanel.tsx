@@ -18,6 +18,7 @@ export interface SessionResourceWeek {
 
 interface SessionResourcePanelProps {
   activeMaterialId?: string
+  isPending?: boolean
   onClose: () => void
   resourcePath: (material: SessionResourceMaterial) => string
   weeks: SessionResourceWeek[]
@@ -25,6 +26,7 @@ interface SessionResourcePanelProps {
 
 export function SessionResourcePanel({
   activeMaterialId,
+  isPending = false,
   onClose,
   resourcePath,
   weeks,
@@ -64,6 +66,7 @@ export function SessionResourcePanel({
               {week.materials.map((material) => (
                 <li className="min-w-0 w-full max-w-full" key={material.id}>
                   <ResourceRow
+                    disabled={isPending}
                     isActive={material.id === activeMaterialId}
                     isMuted={material.status !== 'READY'}
                     to={resourcePath(material)}
@@ -86,45 +89,57 @@ export function SessionResourcePanel({
 }
 
 function ResourceRow({
+  disabled = false,
   isActive = false,
   isMuted = false,
   title,
   to,
 }: {
+  disabled?: boolean
   isActive?: boolean
   isMuted?: boolean
   title: string
   to: string
 }) {
+  const className = cx(
+    'flex min-h-8.5 min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-1.5 type-control',
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+    disabled && 'cursor-not-allowed opacity-60',
+    isActive
+      ? 'bg-white font-semibold text-stone-900 shadow-sm'
+      : isMuted
+        ? 'text-stone-400 hover:bg-white dark:hover:bg-stone-100'
+        : 'text-stone-600 hover:bg-white hover:text-stone-900 dark:hover:bg-stone-100',
+  )
+  const content = <>
+    <span
+      className={cx(
+        'flex h-5 w-8 shrink-0 items-center justify-center self-center rounded type-micro font-bold leading-none',
+        getMaterialKind(title) === 'PPT'
+          ? 'bg-amber-100 text-amber-700'
+          : 'bg-rose-100 text-rose-700',
+      )}
+    >
+      {getMaterialKind(title)}
+    </span>
+    <span
+      className="block min-w-0 max-w-full flex-1 overflow-hidden text-ellipsis whitespace-nowrap leading-5"
+      title={title}
+    >
+      {title}
+    </span>
+  </>
+
+  if (disabled) {
+    return <button aria-label={`${title} (AI 답변 생성 중 이동 불가)`} className={className} disabled type="button">{content}</button>
+  }
+
   return (
     <Link
-      className={cx(
-        'flex min-h-8.5 min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-lg px-2 py-1.5 type-control',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
-        isActive
-          ? 'bg-white font-semibold text-stone-900 shadow-sm'
-          : isMuted
-            ? 'text-stone-400 hover:bg-white dark:hover:bg-stone-100'
-            : 'text-stone-600 hover:bg-white hover:text-stone-900 dark:hover:bg-stone-100',
-      )}
+      className={className}
       to={to}
     >
-      <span
-        className={cx(
-          'flex h-5 w-8 shrink-0 items-center justify-center self-center rounded type-micro font-bold leading-none',
-          getMaterialKind(title) === 'PPT'
-            ? 'bg-amber-100 text-amber-700'
-            : 'bg-rose-100 text-rose-700',
-        )}
-      >
-        {getMaterialKind(title)}
-      </span>
-      <span
-        className="block min-w-0 max-w-full flex-1 overflow-hidden text-ellipsis whitespace-nowrap leading-5"
-        title={title}
-      >
-        {title}
-      </span>
+      {content}
     </Link>
   )
 }

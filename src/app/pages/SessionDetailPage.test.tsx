@@ -10,7 +10,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
-import { apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { rememberClassroomId } from '../../features/classrooms'
 import { SessionDetailPage } from './SessionDetailPage'
 
@@ -36,6 +36,7 @@ function renderSessionDetail(path = '/sessions/100') {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+          <Route path="/classrooms" element={<p>내 강의실 화면</p>} />
           <Route path="/quizzes/:quizId" element={<p>퀴즈 화면</p>} />
           <Route
             path="/sessions/:sessionId/diagnosis/:diagnosisId"
@@ -188,12 +189,73 @@ describe('SessionDetailPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders a session 404 state', async () => {
+  it('redirects a deleted session URL to the classroom list', async () => {
     renderSessionDetail('/sessions/999')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '세션을 찾을 수 없습니다.',
-    )
+    expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
+  })
+
+  it('debounces rapid page changes and sends only the last page after 500ms', async () => {
+    const requestedPages: number[] = []
+    installApiFixtureServer(async (request) => {
+      const url = new URL(request.url)
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/100/page') {
+        const body = await request.json() as { pageNumber: number }
+        requestedPages.push(body.pageNumber)
+        return apiSuccess({ currentPage: body.pageNumber, uiActions: [] })
+      }
+      return undefined
+    })
+    renderSessionDetail()
+
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    await screen.findByRole('progressbar', { name: '학습 진행률 3 / 5쪽' })
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+
+    expect(requestedPages).toEqual([])
+    await waitFor(() => expect(requestedPages).toEqual([4]), { timeout: 1_500 })
+  })
+
+  it('does not retry a page PATCH conflict and waits for the active turn', async () => {
+    let patchCalls = 0
+    let completeStream: (() => void) | undefined
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/100/page') {
+        patchCalls += 1
+        return apiFailure('TURN_IN_PROGRESS', '이미 답변 생성 중입니다.', 409)
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/stream') {
+        return new Promise<Response>((resolve) => {
+          completeStream = () => resolve(new Response(
+            'event: completed\ndata: {}\n\n',
+            { headers: { 'Content-Type': 'text/event-stream' } },
+          ))
+        })
+      }
+      return undefined
+    })
+    renderSessionDetail()
+
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+
+    expect(await screen.findByText(
+      'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.',
+      {},
+      { timeout: 1_500 },
+    )).toBeInTheDocument()
+    expect(patchCalls).toBe(1)
+    expect(screen.getByLabelText('질문')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '다음 (사용 불가)' })).toBeDisabled()
+
+    completeStream?.()
+
+    await waitFor(() => expect(screen.getByLabelText('질문')).toBeEnabled())
+    expect(patchCalls).toBe(1)
   })
 
   it('runs an explain turn from the restored widget and shows the AI message', async () => {

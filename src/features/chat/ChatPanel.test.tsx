@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedRequest } from '../auth'
 import type { MaterialOverview } from '../materials'
 import type { SessionsRepository, SessionTurnResult } from '../sessions'
+import { ApiClientError } from '../../shared/api'
 import { ChatPanel } from './ChatPanel'
 import { useSessionChat } from './useSessionChat'
 
@@ -298,6 +299,105 @@ describe('ChatPanel', () => {
     expect(screen.getByRole('button', { name: '응답 대기 중' })).toBeDisabled()
 
     resolveTurn?.({ messages: [], uiActions: [] })
+  })
+
+  it('waits for the existing turn without retrying when the server returns TURN_IN_PROGRESS', async () => {
+    let completeStream: (() => void) | undefined
+    let hasCompleted = false
+    const submitTurn = vi.fn().mockRejectedValue(new ApiClientError({
+      code: 'TURN_IN_PROGRESS',
+      message: '이미 처리 중인 턴입니다.',
+      status: 409,
+    }))
+    const listMessages = vi.fn().mockImplementation(async () => hasCompleted
+      ? [{
+          content: '기존 턴의 답변입니다.',
+          createdAt: '2026-08-24T06:00:00Z',
+          id: 'existing-answer',
+          senderType: 'AI' as const,
+          status: 'COMPLETED' as const,
+        }]
+      : [])
+    const repository = createRepository({
+      getById: vi.fn().mockResolvedValue({
+        currentPage: 2,
+        id: '100',
+        lastActivityAt: '2026-08-24T06:00:00Z',
+        materialId: '10',
+        materialTitle: '학습 자료.pdf',
+        pageStatus: 'EXPLAINED',
+        status: 'ACTIVE',
+        uiActions: [],
+      }),
+      listMessages,
+      stream: vi.fn().mockImplementation((_sessionId, handlers) =>
+        new Promise<void>((resolve) => {
+          completeStream = () => {
+            hasCompleted = true
+            handlers.onCompleted?.()
+            resolve()
+          }
+        })),
+      submitTurn,
+    })
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
+
+    fireEvent.change(input, { target: { value: '이어서 질문할게요.' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.',
+    )
+    expect(input).toBeDisabled()
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(screen.queryByText('전송 실패')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+
+    await act(async () => completeStream?.())
+
+    expect(await screen.findByText('기존 턴의 답변입니다.')).toBeInTheDocument()
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(input).toBeEnabled()
+    expect(screen.queryByText('이어서 질문할게요.')).not.toBeInTheDocument()
+  })
+
+  it('polls only the message history when the conflict stream is unavailable', async () => {
+    let historyCallCount = 0
+    const submitTurn = vi.fn().mockRejectedValue(new ApiClientError({
+      code: 'TURN_IN_PROGRESS',
+      message: '이미 처리 중인 턴입니다.',
+      status: 409,
+    }))
+    const listMessages = vi.fn().mockImplementation(async () => {
+      historyCallCount += 1
+      return historyCallCount === 1
+        ? []
+        : [{
+            content: '폴링으로 복원한 답변입니다.',
+            createdAt: '2026-08-24T06:00:00Z',
+            id: 'polled-answer',
+            senderType: 'AI' as const,
+            status: 'COMPLETED' as const,
+          }]
+    })
+    const repository = createRepository({
+      getById: vi.fn().mockResolvedValue(null),
+      listMessages,
+      stream: vi.fn().mockRejectedValue(new Error('실시간 연결 실패')),
+      submitTurn,
+    })
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
+
+    fireEvent.change(input, { target: { value: '중복 질문' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    expect(await screen.findByText('폴링으로 복원한 답변입니다.')).toBeInTheDocument()
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(listMessages.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText('중복 질문')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
   })
 
   it('retries a failed question with the original request id', async () => {
