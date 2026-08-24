@@ -96,6 +96,7 @@ describe('classrooms repository', () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ data: { items: [{ classroomId: 12, content: '내용', createdAt: '2026-08-01', noticeId: 7, publishedAt: '2026-08-01', title: '공지', updatedAt: '2026-08-01' }] } })
       .mockResolvedValueOnce({ data: { classroomId: 12, content: '내용', createdAt: '2026-08-01', noticeId: 8, publishAt: '2026-08-12T00:00:00Z', published: false, publishedAt: '2026-08-01', title: '주차 공지', updatedAt: '2026-08-01', weekNumber: 3 } })
+      .mockResolvedValueOnce({ data: { classroomId: 12, content: '내용', createdAt: '2026-08-01', noticeId: 8, publishAt: null, published: true, publishedAt: '2026-08-01', title: '전체 공지', updatedAt: '2026-08-01', weekNumber: null } })
     const repository = createClassroomsRepository(request as AuthenticatedRequest)
 
     await expect(repository.listNotices('12')).resolves.toEqual([expect.objectContaining({ id: '7', weekNumber: null })])
@@ -103,6 +104,11 @@ describe('classrooms repository', () => {
     expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/notices', {
       body: { content: '내용', publishAt: '2026-08-12T00:00:00Z', title: '주차 공지', weekNumber: 3 },
       method: 'POST',
+    })
+    await repository.updateNotice('12', '8', { publishAt: null, title: '전체 공지', weekNumber: null })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/classrooms/12/notices/8', {
+      body: { publishAt: null, title: '전체 공지', weekNumber: null },
+      method: 'PATCH',
     })
   })
 })

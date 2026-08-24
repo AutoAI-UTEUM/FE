@@ -59,15 +59,43 @@ function renderInstructorRoute(page: ReactNode, path: string, routePath: string)
 
 
 function stubNoticesApi() {
-  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(String(input instanceof Request ? input.url : input), 'http://localhost')
+    const method = input instanceof Request ? input.method : init?.method ?? 'GET'
     const envelope = (data: unknown) =>
       new Response(JSON.stringify({ data, message: 'ok', success: true }), {
         headers: { 'Content-Type': 'application/json' },
         status: 200,
       })
 
+    if (url.pathname === '/api/classrooms/1/weeks') {
+      return envelope({
+        items: [
+          { displayOrder: 1, materials: [], status: 'PUBLISHED', title: '자료구조 기초', weekId: 101, weekNumber: 1 },
+          { displayOrder: 2, materials: [], status: 'PUBLISHED', title: '연결 리스트', weekId: 102, weekNumber: 2 },
+        ],
+      })
+    }
     if (url.pathname.includes('/notices')) {
+      if (method !== 'GET') {
+        const body = JSON.parse(input instanceof Request
+          ? await input.clone().text()
+          : String(init?.body)) as {
+          content: string
+          publishAt: string | null
+          title: string
+          weekNumber: number | null
+        }
+        return envelope({
+          ...body,
+          classroomId: 1,
+          createdAt: '2026-08-24T00:00:00Z',
+          noticeId: 12,
+          published: body.publishAt === null,
+          publishedAt: '2026-08-24T00:00:00Z',
+          updatedAt: '2026-08-24T00:00:00Z',
+        })
+      }
       return envelope({
         items: [
           {
@@ -75,9 +103,12 @@ function stubNoticesApi() {
             content: '중간고사 범위는 1~4주차입니다.',
             createdAt: '2026-07-26T00:00:00Z',
             noticeId: 11,
+            publishAt: null,
+            published: true,
             publishedAt: '2026-07-26T00:00:00Z',
             title: '중간고사 범위 안내',
             updatedAt: '2026-07-26T00:00:00Z',
+            weekNumber: null,
           },
         ],
         page: 0,
@@ -574,7 +605,49 @@ describe('instructor pages', () => {
     fireEvent.click(await screen.findByRole('button', { name: '새 공지' }))
     expect(screen.getByRole('heading', { name: '공지 작성' })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('공지 제목을 입력하세요')).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: '공지 범위' })).toHaveValue('')
+    expect(screen.getByRole('radio', { name: '즉시 게시' })).toBeChecked()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fetchMock.mockRestore()
+  })
+
+  it('creates a week-specific scheduled notice with the documented fields', async () => {
+    const fetchMock = stubNoticesApi()
+    renderInstructorRoute(<InstructorNoticesPage />, '/classrooms/1/announcements', '/classrooms/:classroomId/announcements')
+
+    fireEvent.click(await screen.findByRole('button', { name: '새 공지' }))
+    fireEvent.change(screen.getByLabelText('공지 제목'), { target: { value: '2주차 과제 안내' } })
+    fireEvent.change(screen.getByLabelText('본문'), { target: { value: '금요일까지 제출해 주세요.' } })
+    fireEvent.change(screen.getByRole('combobox', { name: '공지 범위' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByText('예약 게시'))
+    expect(screen.getByRole('radio', { name: '예약 게시' })).toBeChecked()
+
+    const localPublishAt = '2026-09-02T09:30'
+    fireEvent.change(screen.getByLabelText('게시 시각'), { target: { value: localPublishAt } })
+    fireEvent.click(screen.getByRole('button', { name: '예약하기' }))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) =>
+      (input instanceof Request ? input.method : init?.method) === 'POST'
+      && new URL(String(input instanceof Request ? input.url : input), 'http://localhost').pathname === '/api/classrooms/1/notices',
+    )).toBe(true))
+    const call = fetchMock.mock.calls.find(([callInput, callInit]) =>
+      (callInput instanceof Request ? callInput.method : callInit?.method) === 'POST'
+      && new URL(String(callInput instanceof Request ? callInput.url : callInput), 'http://localhost').pathname === '/api/classrooms/1/notices',
+    )
+    expect(call).toBeDefined()
+    if (!call) throw new Error('공지 생성 요청을 찾을 수 없습니다.')
+    const [input, init] = call
+    const body = JSON.parse(input instanceof Request
+      ? await input.clone().text()
+      : String(init?.body))
+
+    expect(body).toEqual({
+      content: '금요일까지 제출해 주세요.',
+      publishAt: new Date(localPublishAt).toISOString(),
+      title: '2주차 과제 안내',
+      weekNumber: 2,
+    })
+    expect(await screen.findByText('예약')).toBeInTheDocument()
     fetchMock.mockRestore()
   })
 })

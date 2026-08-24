@@ -3,7 +3,14 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
-import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice } from '../../../features/classrooms'
+import {
+  createClassroomsRepository,
+  rememberClassroomId,
+  type Classroom,
+  type ClassroomNotice,
+  type ClassroomNoticeInput,
+  type ClassroomWeek,
+} from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { Button, EmptyState, MarkdownEditor, useToast } from '../../../shared/ui'
@@ -23,6 +30,7 @@ export function InstructorNoticesPage() {
   const { show: showToast } = useToast()
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
   const [classroom, setClassroom] = useState<Classroom | null>(null)
+  const [weeks, setWeeks] = useState<ClassroomWeek[]>([])
   const [notices, setNotices] = useState<ClassroomNotice[]>([])
   const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null)
   const [newDraftVersion, setNewDraftVersion] = useState(0)
@@ -34,11 +42,13 @@ export function InstructorNoticesPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const [nextClassroom, nextNotices] = await Promise.all([
+      const [nextClassroom, nextWeeks, nextNotices] = await Promise.all([
         repository.get(classroomId),
+        repository.listWeeks(classroomId),
         repository.listNotices(classroomId),
       ])
       setClassroom(nextClassroom)
+      setWeeks(nextWeeks)
       setNotices(nextNotices)
       setSelectedNoticeId((current) => (
         current && nextNotices.some((notice) => notice.id === current)
@@ -69,7 +79,7 @@ export function InstructorNoticesPage() {
     setNewDraftVersion((version) => version + 1)
   }
 
-  async function saveNotice(input: { content: string; title: string }) {
+  async function saveNotice(input: ClassroomNoticeInput) {
     try {
       if (selectedNotice) {
         const updated = await repository.updateNotice(classroomId, selectedNotice.id, input)
@@ -128,7 +138,11 @@ export function InstructorNoticesPage() {
                   {group.notices.map((notice) => (
                     <button aria-pressed={selectedNoticeId === notice.id} className={`w-full rounded-md px-3 py-2.5 text-left ${selectedNoticeId === notice.id ? 'bg-white shadow-sm ring-1 ring-stone-200 dark:bg-stone-100' : 'hover:bg-white/80 dark:hover:bg-stone-100'}`} key={notice.id} onClick={() => setSelectedNoticeId(notice.id)} type="button">
                       <strong className="block truncate type-control text-stone-900">{notice.title}</strong>
-                      <time className="mt-1 block type-caption text-stone-400">{formatNoticeDate(notice.publishedAt)}</time>
+                      <span className="mt-1 flex items-center gap-1.5 type-caption text-stone-400">
+                        <span className={notice.published ? 'text-emerald-700' : 'text-amber-700'}>{notice.published ? '게시됨' : '예약'}</span>
+                        <span aria-hidden="true">·</span>
+                        <time dateTime={notice.published ? notice.publishedAt : notice.publishAt ?? notice.publishedAt}>{formatNoticeStatusDate(notice)}</time>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -144,6 +158,7 @@ export function InstructorNoticesPage() {
           onDelete={selectedNotice ? () => removeNotice(selectedNotice) : undefined}
           onSubmit={saveNotice}
           removing={removingId === selectedNotice?.id}
+          weeks={weeks}
         />
       </section>
     </ClassroomWorkspaceContainer>
@@ -156,23 +171,35 @@ function NoticeEditor({
   onDelete,
   onSubmit,
   removing,
+  weeks,
 }: {
   disabled: boolean
   notice: ClassroomNotice | null
   onDelete?: () => Promise<void>
-  onSubmit: (input: { content: string; title: string }) => Promise<void>
+  onSubmit: (input: ClassroomNoticeInput) => Promise<void>
   removing: boolean
+  weeks: ClassroomWeek[]
 }) {
   const [title, setTitle] = useState(notice?.title ?? '')
   const [content, setContent] = useState(notice?.content ?? '')
+  const [weekNumber, setWeekNumber] = useState<number | null>(notice?.weekNumber ?? null)
+  const [publishMode, setPublishMode] = useState<'IMMEDIATE' | 'TIMED'>(notice?.publishAt ? 'TIMED' : 'IMMEDIATE')
+  const [publishAt, setPublishAt] = useState(toDateTimeLocal(notice?.publishAt))
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const hasValidPublishAt = publishMode === 'IMMEDIATE' || Boolean(publishAt)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!title.trim() || !content.trim() || isSubmitting || disabled) return
+    if (!title.trim() || !content.trim() || !hasValidPublishAt || isSubmitting || disabled) return
     setIsSubmitting(true)
     try {
-      await onSubmit({ content: content.trim(), title: title.trim() })
+      await onSubmit({
+        content: content.trim(),
+        publishAt: publishMode === 'IMMEDIATE' ? null : new Date(publishAt).toISOString(),
+        title: title.trim(),
+        weekNumber,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -182,10 +209,41 @@ function NoticeEditor({
     <form className="flex min-h-[440px] min-w-0 flex-col" onSubmit={submit}>
       <div className="flex min-h-12 items-center justify-between border-b border-stone-200 px-5">
         <h2 className="type-body font-bold text-stone-900">{notice ? '공지 편집' : '공지 작성'}</h2>
-        {notice ? <time className="type-caption text-stone-400">{formatNoticeDate(notice.publishedAt)} 게시</time> : null}
+        {notice ? (
+          <span className={`rounded-full px-2 py-1 type-caption font-semibold ${notice.published ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+            {notice.published ? '게시됨' : `${formatNoticeStatusDate(notice)} 예약`}
+          </span>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
         <label className="block type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} placeholder="공지 제목을 입력하세요" value={title} /></label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block type-control font-semibold text-stone-700">
+            공지 범위
+            <select className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 type-body font-normal text-stone-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)} value={weekNumber ?? ''}>
+              <option value="">전체 공지</option>
+              {weeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}
+            </select>
+          </label>
+          <fieldset className="type-control text-stone-700" disabled={disabled}>
+            <legend className="font-semibold">게시 방식</legend>
+            <div className="mt-1.5 grid h-11 grid-cols-2 overflow-hidden rounded-lg border border-stone-300 bg-white p-1">
+              <label className={`flex cursor-pointer items-center justify-center rounded-md type-body font-semibold ${publishMode === 'IMMEDIATE' ? 'bg-brand-50 text-brand-800' : 'text-stone-500'}`}>
+                <input checked={publishMode === 'IMMEDIATE'} className="sr-only" name="notice-publish-mode" onChange={() => setPublishMode('IMMEDIATE')} type="radio" />즉시 게시
+              </label>
+              <label className={`flex cursor-pointer items-center justify-center rounded-md type-body font-semibold ${publishMode === 'TIMED' ? 'bg-brand-50 text-brand-800' : 'text-stone-500'}`}>
+                <input checked={publishMode === 'TIMED'} className="sr-only" name="notice-publish-mode" onChange={() => setPublishMode('TIMED')} type="radio" />예약 게시
+              </label>
+            </div>
+          </fieldset>
+        </div>
+        {publishMode === 'TIMED' ? (
+          <label className="block type-control font-semibold text-stone-700">
+            게시 시각
+            <input aria-label="게시 시각" className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 type-body font-normal text-stone-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} onChange={(event) => setPublishAt(event.target.value)} type="datetime-local" value={publishAt} />
+            <span className="mt-1.5 block type-caption font-normal text-stone-500">미래 시각은 예약 게시되며, 해당 시각이 지나면 자동으로 게시 상태가 됩니다.</span>
+          </label>
+        ) : null}
         <div className="flex min-h-0 flex-1 flex-col type-control font-semibold text-stone-700">
           <span>본문</span>
           <MarkdownEditor ariaLabel="본문" className="mt-1.5" disabled={disabled} maxLength={5000} onChange={setContent} placeholder="공지 내용을 입력하세요" value={content} />
@@ -193,7 +251,7 @@ function NoticeEditor({
       </div>
       <div className="flex min-h-16 items-center justify-between px-5">
         {onDelete ? <Button className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={disabled || removing} onClick={() => void onDelete()} type="button" variant="secondary"><Trash2 aria-hidden="true" size={14} />{removing ? '삭제 중' : '공지 삭제'}</Button> : <span />}
-        <Button disabled={disabled || !title.trim() || !content.trim() || isSubmitting} type="submit"><Save aria-hidden="true" size={14} />{isSubmitting ? '저장 중' : notice ? '변경사항 저장' : '공지 게시'}</Button>
+        <Button disabled={disabled || !title.trim() || !content.trim() || !hasValidPublishAt || isSubmitting} type="submit"><Save aria-hidden="true" size={14} />{isSubmitting ? '저장 중' : notice ? '변경사항 저장' : publishMode === 'TIMED' ? '예약하기' : '공지 게시'}</Button>
       </div>
     </form>
   )
@@ -210,14 +268,31 @@ function groupNoticesByWeek(notices: ClassroomNotice[]): NoticeGroup[] {
   return [...grouped.entries()]
     .sort(([left], [right]) => (left ?? Number.MAX_SAFE_INTEGER) - (right ?? Number.MAX_SAFE_INTEGER))
     .map(([weekNumber, groupedNotices]) => ({
-      label: weekNumber === null ? '기타' : `${weekNumber}주차`,
+      label: weekNumber === null ? '전체 공지' : `${weekNumber}주차`,
       notices: groupedNotices,
       weekNumber,
     }))
 }
 
-function formatNoticeDate(value: string): string {
+function formatNoticeStatusDate(notice: ClassroomNotice): string {
+  return formatNoticeDateTime(notice.published ? notice.publishedAt : notice.publishAt ?? notice.publishedAt)
+}
+
+function formatNoticeDateTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
-  return new Intl.DateTimeFormat('ko-KR', { day: 'numeric', month: 'long' }).format(date)
+  return new Intl.DateTimeFormat('ko-KR', {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'long',
+  }).format(date)
+}
+
+function toDateTimeLocal(value?: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
