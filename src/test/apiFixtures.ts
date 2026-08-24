@@ -460,16 +460,14 @@ export async function handleApiFixtureRequest(
   }
 
   if (request.method === 'POST' && path === '/api/sessions/100/quiz-decline') {
-    return apiSuccess({
-      uiActions: [
-        {
-          content: '다음 페이지로 이동할까요?',
-          noEvent: 'WAIT',
-          type: 'BINARY_DECISION',
-          yesEvent: 'MOVE_NEXT_PAGE',
-        },
-      ],
-    })
+    return apiSuccess([
+      {
+        content: '다음 페이지로 이동할까요?',
+        noEvent: 'WAIT',
+        type: 'BINARY_DECISION',
+        yesEvent: 'MOVE_NEXT_PAGE',
+      },
+    ])
   }
 
   if (request.method === 'POST' && path === '/api/sessions/100/complete') {

@@ -363,6 +363,11 @@ describe('SessionDetailPage', () => {
     )
     expect(screen.queryByText('다음 페이지로 이동할까요?')).not.toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })).toBeInTheDocument()
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input]) =>
+        (input instanceof Request ? input.url : String(input))
+          .includes('/api/sessions/100/quiz-decline')),
+    ).toBe(false)
     const explanationCount = screen.getAllByText('이 페이지는 핵심 개념의 정의를 다룹니다.').length
 
     fireEvent.click(screen.getByRole('button', { name: '다음' }))

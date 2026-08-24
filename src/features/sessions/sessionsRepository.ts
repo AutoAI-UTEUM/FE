@@ -77,15 +77,6 @@ interface SessionTurnDto {
   uiActions?: UiActionDto[]
 }
 
-interface SessionActionDto {
-  activeQuizId?: number | string | null
-  currentPage?: number
-  pageStatus?: string
-  pendingDiagnosis?: PendingDiagnosisDto | null
-  state?: SessionTurnDto['state']
-  uiActions?: UiActionDto[]
-}
-
 interface SessionQuizDto {
   createdAt?: string
   maxScore?: number
@@ -190,18 +181,13 @@ export function createSessionsRepository(
       return mapSession(data)
     },
     async declineQuiz(sessionId, signal) {
-      const { data } = await request<SessionActionDto>(
+      const { data } = await request<UiActionDto[]>(
         `/api/sessions/${encodeURIComponent(sessionId)}/quiz-decline`,
         { method: 'POST', signal },
       )
-      const state = data.state ?? data
       return {
-        activeQuizId: mapNullableId(state, 'activeQuizId'),
-        currentPage: state.currentPage,
         messages: [],
-        pageStatus: state.pageStatus,
-        pendingDiagnosis: mapNullableDiagnosis(state),
-        uiActions: mapUiActions(data.uiActions),
+        uiActions: mapUiActions(data),
       }
     },
     async delete(sessionId, signal) {
