@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth'
 import { getRequestErrorMessage } from '../../shared/api'
@@ -11,21 +11,31 @@ import {
   type PendingDiagnosis,
 } from '../../features/diagnosis'
 import { createSessionsRepository } from '../../features/sessions'
+import type { QuizKind } from '../../features/quiz'
 import {
   Badge,
   Button,
   ButtonLink,
   ErrorState,
   LoadingState,
+  MarkdownContent,
   PageContainer,
   PageHeader,
 } from '../../shared/ui'
-import { sessionDetailPath } from '../routes'
+import { routes, sessionDetailPath } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+
+const QUIZ_TYPE_OPTIONS: Array<{ kind: QuizKind; label: string }> = [
+  { kind: 'MCQ', label: '객관식' },
+  { kind: 'OX', label: 'OX' },
+  { kind: 'SHORT', label: '단답형' },
+  { kind: 'ESSAY', label: '서술형' },
+]
 
 export function DiagnosisPage() {
   usePageTitle('진단·교정')
   const { diagnosisId, sessionId } = useParams()
+  const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const sessionsRepository = useMemo(
     () => createSessionsRepository(apiRequest),
@@ -43,6 +53,7 @@ export function DiagnosisPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isStartingRetest, setIsStartingRetest] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -88,12 +99,34 @@ export function DiagnosisPage() {
     }
   }
 
+  async function handleRetest(kind: QuizKind) {
+    if (!sessionId || isStartingRetest) return
+    setIsStartingRetest(true)
+    setError(null)
+    try {
+      const result = await sessionsRepository.submitTurn(sessionId, {
+        eventType: 'QUIZ_TYPE_SELECTED',
+        payload: { quizType: kind },
+        requestId: createRequestId(),
+      })
+      if (!result.activeQuizId) {
+        setError('재평가 퀴즈를 생성하지 못했습니다. 다시 시도해 주세요.')
+        return
+      }
+      navigate(sessionDetailPath(sessionId), { replace: true })
+    } catch (requestError) {
+      setError(getRequestErrorMessage(requestError))
+    } finally {
+      setIsStartingRetest(false)
+    }
+  }
+
   if (!diagnosisId || !sessionId) {
     return (
       <ErrorState
         title="진행 중인 진단을 찾을 수 없습니다."
         description="진단 또는 세션 식별자가 없습니다."
-        action={<ButtonLink to="/sessions">세션 목록으로</ButtonLink>}
+        action={<ButtonLink to={routes.classrooms}>강의실로</ButtonLink>}
       />
     )
   }
@@ -139,11 +172,11 @@ export function DiagnosisPage() {
         <div className="flex min-w-0 items-start gap-3">
           <RotateCcw aria-hidden="true" className="mt-0.5 shrink-0 text-amber-700" size={18} />
           <div>
-            <h2 className="text-sm font-bold text-amber-950">진단 복원</h2>
-            <p className="mt-1 text-sm leading-6 text-amber-900">
+            <h2 className="type-body font-bold text-amber-950">진단 복원</h2>
+            <p className="mt-1 type-body leading-6 text-amber-900">
               저득점 결과 {pendingDiagnosis.quizScore}점에서 이어진 진단입니다.
             </p>
-            <p className="mt-2 text-sm font-semibold text-amber-950">
+            <p className="mt-2 type-body font-semibold text-amber-950">
               {pendingDiagnosis.sourceQuestion}
             </p>
           </div>
@@ -154,11 +187,11 @@ export function DiagnosisPage() {
       <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="text-lg font-bold text-stone-950">
+            <span className="type-dialog-title font-bold text-stone-950">
               {pendingDiagnosis.prompt}
             </span>
             <textarea
-              className="mt-4 min-h-40 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              className="mt-4 min-h-40 w-full rounded-lg border border-stone-300 px-3 py-2 type-body focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
               disabled={isSubmitted}
               onChange={(event) => {
                 setAnswer(event.target.value)
@@ -169,7 +202,7 @@ export function DiagnosisPage() {
           </label>
 
           {error ? (
-            <p className="mt-3 text-sm font-medium text-rose-700" role="alert">
+            <p className="mt-3 type-body font-medium text-rose-700" role="alert">
               {error}
             </p>
           ) : null}
@@ -187,25 +220,39 @@ export function DiagnosisPage() {
           <div className="flex items-start gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-4 sm:px-5">
             <CheckCircle2 aria-hidden="true" className="mt-0.5 text-emerald-700" size={19} />
             <div>
-              <h2 className="text-base font-bold text-emerald-950">{correction.title}</h2>
-              <p className="mt-1 text-sm leading-6 text-emerald-900">
-                {correction.summary}
-              </p>
+              <h2 className="type-section-title font-bold text-emerald-950">{correction.title}</h2>
+              <MarkdownContent className="mt-1 text-emerald-900" content={correction.summary} />
             </div>
           </div>
           {correction.focusAreas.length > 0 ? (
             <ul className="grid divide-y divide-stone-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {correction.focusAreas.map((focusArea) => (
-                <li className="px-4 py-3 text-sm font-semibold text-stone-700" key={focusArea}>
+                <li className="px-4 py-3 type-body font-semibold text-stone-700" key={focusArea}>
                   {focusArea}
                 </li>
               ))}
             </ul>
           ) : null}
           <div className="border-t border-stone-200 px-4 py-4 sm:px-5">
-            <p className="text-sm text-stone-700">{correction.nextQuestionPrompt}</p>
+            <p className="type-body font-semibold text-stone-900">교정 내용을 확인했습니다. 다시 평가할 퀴즈 유형을 선택하세요.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {QUIZ_TYPE_OPTIONS.map((option) => (
+                <Button
+                  disabled={isStartingRetest}
+                  key={option.kind}
+                  onClick={() => void handleRetest(option.kind)}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            {error ? <p className="mt-3 type-body font-medium text-rose-700" role="alert">{error}</p> : null}
+            <p className="mt-4 type-body text-stone-600">{correction.nextQuestionPrompt}</p>
             <ButtonLink
-              className="mt-4"
+              className="mt-3"
               to={sessionDetailPath(pendingDiagnosis.sessionId)}
               variant="secondary"
             >
@@ -217,4 +264,10 @@ export function DiagnosisPage() {
       ) : null}
     </PageContainer>
   )
+}
+
+function createRequestId(): string {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `retest-${Date.now()}`
 }

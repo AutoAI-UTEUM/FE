@@ -55,6 +55,14 @@ export async function rawApiRequest(
 }
 
 async function mapRawResponseError(response: Response): Promise<ApiClientError> {
+  if (response.status === 429) {
+    return new ApiClientError({
+      code: 'RATE_LIMITED',
+      message: '요청이 많아요, 잠시 후 다시 시도해 주세요.',
+      status: 429,
+    })
+  }
+
   const payload = await readJson(response)
   if (isApiFailure(payload)) {
     return new ApiClientError({

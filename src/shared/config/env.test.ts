@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeApiBaseUrl } from './env'
+import { normalizeApiBaseUrl, normalizeGoogleClientId } from './env'
 
 describe('normalizeApiBaseUrl', () => {
   it('requires the environment value', () => {
@@ -26,5 +26,18 @@ describe('normalizeApiBaseUrl', () => {
   it('maps same-origin markers to an empty base', () => {
     expect(normalizeApiBaseUrl('/api')).toBe('')
     expect(normalizeApiBaseUrl('/')).toBe('')
+  })
+})
+
+describe('normalizeGoogleClientId', () => {
+  it('returns a trimmed client id', () => {
+    expect(normalizeGoogleClientId(' client.apps.googleusercontent.com ')).toBe(
+      'client.apps.googleusercontent.com',
+    )
+  })
+
+  it('treats an empty value as unconfigured', () => {
+    expect(normalizeGoogleClientId(undefined)).toBeNull()
+    expect(normalizeGoogleClientId('  ')).toBeNull()
   })
 })

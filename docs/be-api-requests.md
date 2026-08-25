@@ -1,234 +1,409 @@
-# BE API 요청 목록 (FE → Main/AI)
+# BE 필요 API 목록 (FE -> BE)
+
+## 기준
 
 | 항목 | 내용 |
 | --- | --- |
-| 작성 | FE (이감) |
-| 기준 | 디자인 정본 `강의실 레이아웃 시안.dc.html` (4a~4e) |
-| 상태 | 배포 Swagger 27개 operation 연결 완료 — 아래는 추가 계약 협의 필요 |
+| 확인일 | 2026-08-12 |
+| FE 기준 | `develop` 현재 로컬 변경사항 |
+| BE 기준 | `develop` `docs/api-spec.md` 마지막 갱신 2026-08-02 |
+| 실행 계약 | 배포 Swagger `/v3/api-docs` 91개 operation |
 
-아래 항목은 현재 API 계약만으로 완성할 수 없는 기능입니다. 강의자 계정에는
-시안상 필요한 메뉴와 라우트를 노출하되, 서버 데이터가 필요한 목록과 지표는 빈
-상태로 유지합니다. 저장 동작은 가짜 성공 처리하지 않습니다.
+현재 Swagger에 추가된 강의실, 프로필, 환경설정, 일정 조회, 노트, 피드백 API는
+FE repository에 반영했다. 아래에는 **화면은 존재하지만 여전히 공개 API가 없는
+기능**만 남긴다.
 
-배포 Swagger에 공개된 27개 operation은 FE 연동이 끝났으므로 여기 포함하지 않았습니다.
+## 페이지별 점검 결과
 
----
+| 화면 | 연결된 기능 | 공개 API가 없거나 응답이 부족한 기능 |
+| --- | --- | --- |
+| 로그인·회원가입 | 가입, 이메일 중복 확인, 로그인, refresh, 로그아웃, Google GIS 로그인 FE 계약 | 비밀번호 재설정, Google 로그인 BE 배포 확인 |
+| 설정 | 프로필, 아바타, 환경설정, 회원 탈퇴 | `studyReminder`·새 자료 알림의 실제 이메일/인앱 전달과 읽음 상태 |
+| 강의실 목록 | 생성, 조회, 수정, 종료, 영구 삭제, 초대 코드 | 종료 강의실 재활성화, 서버 검색·추가 정렬 |
+| 강의실 강의 | 주차, PDF 자료, 일반 파일·링크 자료, 공지, 시험 CRUD | PPT/PPTX AI 추출, 처리 실패 상세 |
+| 수강생·입장 요청 | 목록, 제외, 개별 승인·거절, 수강생별 진도·최근 7일 AI 질문, 서버 검색·정렬 | 일괄 승인 |
+| 학습 현황·리포트 | 자료별 현황, 페이지별 질문 수, 수강생별 지표, 리포트 기준·생성·조회 | 리포트 Q&A는 Phase 3 |
+| 캘린더·알림 패널 | 개인 일정 CRUD, 강의실 일정 통합 조회 | 실제 알림 전송, 읽음·삭제·전달 이력 |
+| 자료·세션·PDF·채팅 | 업로드, 세션, 페이지 이동, 대화, 턴 취소, 노트, 퀴즈 | 자연어 학습 명령 정규화, 교정 후 재평가 퀴즈 |
+| 시험 | 시험 CRUD, 제출·결과, AI 문항 초안 | 현재 노출 UI 기준 추가 필수 API 없음 |
 
-## P1 — 시안 4d(학습 화면) 보조 기능
+테마, 패널 너비, 검색창 입력값, 드롭다운 선택 상태처럼 한 기기에서만 필요한 UI
+상태는 서버 API 요청 대상에서 제외한다. 메시지 공유는 Web Share API를 사용하고 지원하지
+않는 환경에서는 복사로 대체하므로 BE API가 필요하지 않다.
 
-### 1-1. 학습 노트
+## 연결 완료: 강의실 일반 자료·학습 턴 취소
 
-시안의 우측 패널은 `AI 채팅` / `내 노트` 2개 탭입니다.
+2026-08-25 dev Swagger에서 공개된 다음 계약을 FE 강의실 콘텐츠와 학습 채팅에
+연결했다.
 
-```
-GET    /api/sessions/{sessionId}/notes            → { items: [Note] }
-POST   /api/sessions/{sessionId}/notes            { content, pageNumber, sourceMessageId? }
-PATCH  /api/notes/{noteId}                        { content }
-DELETE /api/notes/{noteId}
-
-Note = { noteId, content, pageNumber, sourceMessageId?, createdAt, updatedAt }
-```
-
-- **현재 FE 동작**: 노트 탭은 있으나 **브라우저 메모리에만 저장**되어 새로고침 시 사라집니다. AI 답변의 "노트에 저장" 버튼도 로컬 저장입니다.
-- `sourceMessageId`가 있으면 "이 답변에서 저장한 노트"로 역참조가 가능합니다.
-- 자료 단위(`/materials/{id}/notes`)가 더 적합하다면 그쪽도 좋습니다 — 세션이 여러 개일 때 노트가 흩어지지 않는 편을 선호합니다.
-
-### 1-2. 형광펜(하이라이트)
-
-```
-GET    /api/materials/{materialId}/highlights?page={n}
-POST   /api/materials/{materialId}/highlights     { pageNumber, text, rects[], color }
-DELETE /api/highlights/{highlightId}
-
-rects = [{ x, y, width, height }]  // 페이지 크기 대비 0~1 비율 좌표 권장
-```
-
-- **현재 FE 동작**: 잘못된 기능 기대를 만들지 않도록 뷰어 툴바에서 제거했습니다. API 계약이 추가될 때 다시 노출합니다.
-- 좌표는 뷰어 줌 배율과 무관하도록 **비율 좌표**를 권장합니다.
-
-### 1-3. 대화 새로 시작
-
-```
-POST /api/sessions/{sessionId}/conversations   → { conversationId }
+```http
+POST   /api/classrooms/{classroomId}/resources
+GET    /api/classrooms/{classroomId}/resources
+GET    /api/resources/{resourceId}/file
+PATCH  /api/resources/{resourceId}
+DELETE /api/resources/{resourceId}
+POST   /api/sessions/{sessionId}/turns/cancel
 ```
 
-- **현재 FE 동작**: "대화 새로 시작" 버튼이 화면의 메시지 목록만 비웁니다(서버 이력은 그대로).
-- 기존 `qaThread`의 `START_NEW` 모드로 충분하다면 별도 API 없이 **턴 payload로 처리하는 방법**을 알려주세요. 그 경우 FE가 `USER_QUESTION`에 스레드 리셋 플래그를 실어 보내겠습니다.
+일반 자료는 파일·웹 링크 등록, 서버 목록 복원, 파일 미리보기·다운로드, 제목·주차
+수정과 삭제를 지원한다. AI 질문은 정책대로 PDF 수업 자료만 지원한다. 학습 채팅은
+답변 생성 중 `답변 중단` 버튼을 표시하고, 서버 취소 성공 시 로컬 SSE·대기 요청도
+함께 종료한다.
 
-### 1-4. 자료 원본 스트리밍 계약 문서 동기화
+## 연결 완료: 퀴즈 제안 거절
 
-```
-GET /api/materials/{materialId}/file
-```
+퀴즈 제안의 서버 상태를 해제하는 다음 계약을 FE repository와 통합학습 화면에
+연결했고 2026-08-10 배포 Swagger에서도 계약을 확인했다. 응답의 `uiActions`를
+그대로 현재 진행 액션으로 교체한다.
 
-- **현재 FE 동작**: 배포 Swagger에 정식 노출된 위 경로를 사용해 인증된 PDF 원본을 뷰어에 전달합니다.
-- GitHub `api-spec.md`에는 아직 초안으로 적혀 있으므로 Swagger와 문서의 상태를 동기화해 주세요. 응답 `Content-Type`, `Content-Disposition`, Range 요청 지원 여부도 문서에 명시가 필요합니다.
-- 현재 업로드 계약은 PDF만 허용하므로 PPT 배지는 파일명 표시까지만 대응합니다. PPT 원본 또는 PDF 변환본을 같은 뷰어에서 제공하려면 변환·다운로드 계약이 추가로 필요합니다.
-
----
-
-## P2 — 시안 4b·4c(강의실·주차) 도메인
-
-시안의 첫 두 화면은 **강의실(Classroom) → 주차(Week) → 자료(Material)** 3단 구조입니다. 현재 백엔드에는 자료만 있고 상위 두 계층이 없습니다.
-
-> **현재 FE 동작**: `/classrooms`는 역할에 따라 학습자 참여 화면과 강의자 운영
-> 화면으로 분기합니다. 강의자는 검색·강의 생성 모달과 `/classrooms/:id` 자료 관리
-> 화면을 사용할 수 있지만, 생성·조회 계약이 없어 실제 레코드는 표시하거나
-> 저장하지 않습니다.
-
-### 2-1. 강의실 목록·상세
-
-```
-GET  /api/classrooms                       → { items: [ClassroomSummary], page, totalPages }
-GET  /api/classrooms/{classroomId}         → ClassroomDetail
-POST /api/classrooms/join                  { inviteCode } → ClassroomSummary
-
-ClassroomSummary = {
-  classroomId, name, instructorName, currentWeek,
-  progressRate,            // 0~100
-  newMaterialCount,        // "새 자료 2" 배지
-  status,                  // ACTIVE | COMPLETED
-  lastStudied: { materialId, title, pageNumber } | null   // "이어서: 연결 리스트.pdf · 12쪽"
-}
-ClassroomDetail = ClassroomSummary + { materialCount, weeks: [Week] }
+```http
+POST /api/sessions/{sessionId}/quiz-decline
 ```
 
-### 2-2. 주차 구성
+요청 본문은 없으며 다음 페이지 제안 또는 마지막 페이지의 학습 완료 제안을
+응답한다.
 
-```
-GET /api/classrooms/{classroomId}/weeks    → { items: [Week] }
+## 연결 완료: 강의자 학습 현황·리포트
 
-Week = {
-  weekNumber, title,                       // "3주차 — 연결 리스트"
-  status,                                  // CURRENT | COMPLETED | SCHEDULED
-  releaseAt,                               // SCHEDULED일 때 "8월 3일 공개"
-  materials: [{ materialId, title, fileType, pageCount, uploadedAt, progressRate, completed }]
-}
-```
+2026-08-05 배포 Swagger에 아래 endpoint가 공개됐고 FE repository와 강의자 화면에
+연결했다. 배포 빌드는 `VITE_API_CAPABILITIES=reports`로 활성화한다.
 
-- `fileType`: 시안은 PDF/PPT 배지를 구분합니다. 현재 업로드는 PDF만 허용하는데 **PPT 지원 계획이 있는지** 알려주세요. 없으면 배지는 PDF 고정으로 두겠습니다.
-
-### 2-3. 강의자 공지
-
-```
-GET /api/classrooms/{classroomId}/notices  → { items: [Notice] }
-Notice = { noticeId, authorName, content, createdAt }
+```http
+GET  /api/classrooms/{classroomId}/analytics
+GET  /api/classrooms/{classroomId}/students
+GET  /api/classrooms/{classroomId}/report-criteria
+POST /api/classrooms/{classroomId}/report-criteria
+PATCH /api/classrooms/{classroomId}/report-criteria/{criterionId}
+POST /api/classrooms/{classroomId}/students/{studentId}/reports
+GET  /api/classrooms/{classroomId}/students/{studentId}/reports
+GET  /api/reports/{reportId}
 ```
 
-### 2-4. 기존 자료 API 확장 요청
+리포트 생성은 `scope: FULL | WEEK`와 선택적 `weekNumber`를 전송하고, 응답의
+`status=PENDING|PROCESSING|COMPLETED|FAILED`와 `pollAfterSeconds`로 polling한다.
+완료 목록의 `activeGeneration`, 상세의 `overallStage`, `criteria`, nullable score와
+`publicLabel` 근거도 최신 계약에 맞춰 변환한다.
 
-강의실이 생기면 `GET /api/materials` 응답에 아래 필드가 필요합니다.
+다음 기능은 현재 P0 범위에서 제외한다.
 
-```
-+ classroomId, weekNumber
-+ lastReadPage        // "12쪽까지 봤어요"
-+ progressRate        // 자료별 진도 바
-```
+- `POST /api/reports/{reportId}/questions`: DEC-033과 BE #119·#120에 따라 Phase 3.
+  FE 리포트 상세 화면에서도 질문 UI와 repository 메서드를 노출하지 않는다.
+- AI 질문의 주제별 분류: 조회 시 LLM을 호출하지 않고 페이지별 질문 수로 대체한다.
+  주제 클러스터링은 배치 인프라가 마련된 뒤 P2 backlog에서 검토한다.
+- `POST /api/classrooms/{classroomId}/reminders`: 전달 수단과 알림 인프라가 정해질
+  때까지 보류한다. 이메일을 채택하면 비밀번호 재설정 이메일과 함께 구축한다.
 
-**강의실 도입 전에도 `lastReadPage`·`progressRate`는 단독으로 유용합니다**(자료 목록에서 이어보기 표시). 우선 이 두 필드만이라도 추가를 요청드립니다.
+## P1. 인증 보조 기능
 
-### 2-5. 이어서 학습
+Google 로그인은 BE와 합의한 GIS ID 토큰 교환 계약으로 FE 구현을 완료했으며,
+BE 배포와 웹 클라이언트 ID 공유 후 실연동을 확인한다.
 
-```
-GET /api/users/me/continue → { sessionId, materialId, materialTitle, pageNumber, updatedAt } | null
-```
-
-- 시안 4b 상단의 "이어서 학습하기 — 연결 리스트.pdf · 어제 12쪽까지 봤어요" 배너용입니다.
-- `GET /api/sessions?size=1&sort=updatedAt`으로 대체 가능하면 그렇게 쓰겠습니다 — **정렬·필터 지원 여부**만 알려주세요.
-
-### 2-6. 강의자 운영
-
-```
-POST   /api/classrooms
-PATCH  /api/classrooms/{classroomId}
-POST   /api/classrooms/{classroomId}/weeks
-POST   /api/classrooms/{classroomId}/weeks/{weekNumber}/materials
-
-GET    /api/classrooms/{classroomId}/join-requests
-POST   /api/classrooms/{classroomId}/join-requests/{requestId}/approve
-POST   /api/classrooms/{classroomId}/join-requests/{requestId}/reject
-
-GET    /api/classrooms/{classroomId}/analytics
-POST   /api/classrooms/{classroomId}/notices
-PATCH  /api/classrooms/{classroomId}/notices/{noticeId}
-DELETE /api/classrooms/{classroomId}/notices/{noticeId}
+```http
+POST /api/auth/password-reset/request
+POST /api/auth/password-reset/confirm
+POST /api/auth/google
 ```
 
-- 강의 생성: 이름, 학기, 주차 수, 색상, 설명을 저장하고 초대 코드를 반환해야 합니다.
-- 입장 요청: 대기·처리 내역 조회와 개별/전체 승인이 필요합니다.
-- 학습 현황: 학습자 수, 평균 진도, 최근 질문 수, 미접속 인원과 자료별 열람 집계가 필요합니다.
-- 공지: 게시·예약·종료 상태와 열람 인원을 반환해야 합니다.
+Google 요청은 GIS credential을 `idToken`으로 전송한다. `409 SIGNUP_REQUIRED`이면
+같은 토큰과 `role`, `termsVersion`, `privacyVersion`을 추가해 재호출한다. refresh는
+기존과 동일한 HttpOnly cookie 정책을 유지한다. 비밀번호 재설정 요청은 계정 존재
+여부를 노출하지 않는 동일 응답을 반환해야 한다.
 
----
+## 연결 완료: 수강생 목록 / 학습자별 상세 현황
 
-## P3 — 시안 4e(설정) 및 공통
+2026-08-11 기준 `GET /api/classrooms/{classroomId}/students`에 다음 지표와
+검색·정렬 query가 배포되어 FE에 연결됐다.
 
-### 3-1. 프로필 수정
-
-```
-PATCH  /api/users/me            { name?, affiliation? } → User
-POST   /api/users/me/avatar     multipart(file)         → { avatarUrl }
-DELETE /api/users/me/avatar
-```
-
-- **현재 FE 동작**: 이름·소속 입력 필드와 사진 변경/삭제 버튼이 있으나 저장 시 "백엔드 연동 대기" 안내만 표시합니다.
-- `affiliation`(학교·기관)은 시안에만 있는 신규 필드입니다. 불필요하면 빼겠습니다.
-
-### 3-2. 사용자 환경설정
-
-```
-GET   /api/users/me/preferences  → Preferences
-PATCH /api/users/me/preferences  { newMaterialNotification?, studyReminder?, aiAnswerStyle? }
-
-Preferences = {
-  newMaterialNotification: boolean,   // "새 자료 알림"
-  studyReminder: boolean,             // "3일 이상 미접속 시 이메일"
-  aiAnswerStyle: 'CONCISE' | 'NORMAL' | 'DETAILED'   // "AI 답변 스타일"
+```json
+{
+  "averageProgressRate": 64,
+  "aiQuestionCountLast7Days": 12
 }
 ```
 
-- `aiAnswerStyle`은 턴 요청의 `detailLevel`과 연결됩니다. **현재 FE는 `EXPLAIN_CURRENT_PAGE` payload에 `detailLevel: 'NORMAL'`을 하드코딩**하고 있는데, 사용자 설정값을 싣는 게 맞다면 이 API가 필요합니다.
-- 알림 2종은 발송 주체가 BE이므로 저장만으로는 동작하지 않습니다 — 실제 발송 계획도 함께 알려주세요.
+목록 query는 `q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`를 사용한다.
 
-### 3-3. 통합 검색 (⌘K)
+목록의 요약 지표는 현재 배포 API에 연결돼 있다. 기존
+`GET /api/classrooms/{classroomId}/analytics`의 `materials`와
+`questionsByPage`는 **강의실 전체 학습자 집계**이므로, 프로필을 펼쳐
+특정 학습자의 상세 현황에는 사용하지 않는다.
 
-```
-GET /api/search?q={query}&type={material|session|classroom}
-→ { items: [{ type, id, title, subtitle, url }] }
-```
+2026-08-25 배포된 다음 학습자 상세 집계 API를 프로필을 처음 펼칠 때 호출하고,
+같은 화면에서는 학습자별 응답을 캐시해 다시 펼칠 때 중복 호출하지 않는다.
 
-- **현재 FE 동작**: 시안의 `⌘K` 검색 박스를 렌더하지만 클릭 시 비활성 안내를 표시합니다.
-- 우선순위 낮음. 자료 목록 내 클라이언트 필터로 대체 가능하면 그렇게 하겠습니다.
-
-### 3-4. 캘린더
-
-```
-GET /api/users/me/schedule?from={date}&to={date}
-→ { items: [{ date, type, title, classroomId? }] }
+```http
+GET /api/classrooms/{classroomId}/students/{studentId}/learning-analytics?questionPeriod=LAST_7_DAYS
 ```
 
-- 시안 사이드바의 "캘린더" 메뉴용입니다.
-- **현재 FE 동작**: 강의자 계정에 월·주·목록 보기를 제공하며 일정은 빈 상태로
-  표시합니다.
-
-### 3-5. 비밀번호 재설정
-
+```json
+{
+  "lastUpdatedAt": "2026-08-25T03:00:00Z",
+  "materials": [
+    {
+      "materialId": 10,
+      "title": "lecture-01.pdf",
+      "weekNumber": 1,
+      "lastViewedPage": 28,
+      "progressRate": 70,
+      "viewed": true,
+      "lastViewedAt": "2026-08-24T08:00:00Z"
+    }
+  ],
+  "questionsByPage": [
+    {
+      "materialId": 10,
+      "materialTitle": "lecture-01.pdf",
+      "weekNumber": 1,
+      "pageNumber": 12,
+      "questionCount": 4
+    }
+  ],
+  "quizzes": [
+    {
+      "quizId": 51,
+      "materialId": 10,
+      "materialTitle": "lecture-01.pdf",
+      "weekNumber": 1,
+      "title": "1주차 복습 퀴즈",
+      "quizType": "MCQ",
+      "pageNumber": 12,
+      "submitted": true,
+      "score": 8,
+      "maxScore": 10,
+      "passed": true,
+      "submittedAt": "2026-08-24T08:10:00Z"
+    }
+  ]
+}
 ```
-POST /api/auth/password-reset/request    { email }
-POST /api/auth/password-reset/confirm    { token, newPassword }
+
+`questionPeriod`는 `LAST_7_DAYS`와 `ALL`을 지원하며 FE는 현재 최근 질문 수에 맞춰
+`LAST_7_DAYS`를 사용한다. `materials`의 미열람 자료는 `viewed=false`,
+`progressRate=0`, 마지막 페이지·시각은 `null`로 표시한다. `questionsByPage`는 자료
+제목·주차·페이지를 함께 표시한다. `quizzes`의 미응시 항목은 `submitted=false`,
+점수·통과·제출 시각이 `null`이어도 안전하게 렌더링한다. 권한과 403/404 오류 계약은
+기존 강의실 분석 API와 동일하다.
+
+## 연결 완료: 인앱 알림
+
+사이드바 알림 패널은 캘린더 일정과 localStorage 읽음 상태를 사용하지 않고 다음
+서버 인앱 알림 API를 사용한다.
+
+```http
+GET    /api/users/me/notifications
+PATCH  /api/users/me/notifications/{notificationId}/read
+DELETE /api/users/me/notifications/{notificationId}
 ```
 
-- **현재 FE 동작**: `/forgot-password`에서 이메일 형식 검증과 전송 완료 화면까지 구현했지만 실제 메일은 발송하지 않습니다.
-- 요청 API는 계정 존재 여부를 노출하지 않도록 등록 여부와 무관하게 같은 성공 응답을 반환해야 합니다.
-- 재설정 토큰은 일회용, 10분 만료를 권장하며 새 비밀번호는 회원가입과 같은 정책을 사용합니다.
+`MATERIAL_UPLOADED`, `NOTICE_PUBLISHED`, `JOIN_REQUEST_RECEIVED`,
+`JOIN_REQUEST_PROCESSED`를 표시하고 서버 `readAt`을 미읽음 기준으로 사용한다.
+알림의 `link`는 자료·공지·입장 요청 화면으로 연결하며 항목별 삭제도 지원한다.
 
----
+`studyReminder`의 "3일 이상 미접속 시 이메일" 전달과 비밀번호 재설정 이메일은
+공개 계약이 아직 없으므로 별도 BE 작업이 필요하다.
 
-## 회신이 필요한 결정 사항
+## 연결 완료: 캘린더 개인 일정
 
-1. **강의실 도메인(P2)을 MVP에 넣을지** — `/classrooms`는 현재 제품 기본 화면으로 유지하며, 상세·주차 기능은 API 확정 후 노출합니다.
-2. **노트를 세션 단위 vs 자료 단위** 중 어느 쪽으로 둘지.
-3. **PPT 지원 여부** (파일 타입 배지·업로드 검증에 영향).
-4. **`lastReadPage`·`progressRate`** — 강의실과 무관하게 먼저 추가 가능한지.
-5. **대화 새로 시작**을 전용 API로 둘지, 턴 payload 플래그로 둘지.
-6. **자료 원본 스트리밍**의 Swagger 확정 내용을 `api-spec.md`에도 반영할지.
+개인 일정은 localStorage를 사용하지 않고 아래 API로 조회·생성·수정·삭제한다.
+
+```http
+POST   /api/users/me/schedule
+PATCH  /api/users/me/schedule/{scheduleId}
+DELETE /api/users/me/schedule/{scheduleId}
+```
+
+요청은 `title`, `startsAt`, `endsAt`, `hasTime`을 사용하며 서버 응답의
+`kind=PERSONAL`로 수정·삭제 가능 일정을 구분한다.
+
+## 연결 완료: 강의실 수강생 관리
+
+수강생 관리 탭은 승인 이력이 아니라 현재 멤버 목록과 제외 API를 사용한다.
+
+```http
+GET    /api/classrooms/{classroomId}/students
+DELETE /api/classrooms/{classroomId}/students/{studentId}
+```
+
+강의실 수정의 `startDate`, `endDate`는 공개 PATCH 계약에 연결했다. FE에서는 주차
+예약 공개 기능을 제거했으므로 `shiftWeekReleaseDates`는 더 이상 전송하지 않는다.
+영구 삭제 API도 2026-08-06 배포 Swagger에 추가되어 FE 재확인 다이얼로그와 연결했다.
+
+```http
+DELETE /api/classrooms/{classroomId}/permanent
+```
+
+영구 삭제는 확인용 강의실명을 body의 `confirmName`으로 전송하며, trim 후 현재
+강의실명과 정확히 일치할 때만 요청한다.
+
+## P0. 주차 상시 노출 정책으로 변경
+
+FE에서는 주차의 `PRIVATE`, `SCHEDULED`, `PUBLISHED`, `BREAK` 상태 변경 UI와
+예약 공개 시각 입력을 제거했다. 2026-08-13부터 주차 추가·삭제·재정렬 UI를
+제거했으며, `displayOrder`를 사용하지 않고 `weekNumber ASC`로 고정 표시한다.
+주차 이름만 설정 화면에서 수정할 수 있고 저장 버튼을 눌렀을 때 반영한다.
+`PATCH /api/classrooms/{classroomId}/weeks/reorder`는 FE에서 호출하지 않는다.
+
+2026-08-12 BE `develop`은 학습자 `GET /api/classrooms/{classroomId}/weeks`에도 상태와
+관계없이 전체 주차와 연결 자료를 반환하도록 변경됐다. FE는 역할과 관계없이 이
+응답을 `weekNumber ASC`로 정렬하며 `PRIVATE`, `SCHEDULED` 주차의 자료도 별도
+필터 없이 표시한다.
+
+- 자료 상세·파일·세션 생성 권한에서 주차 상태와 `releaseAt` 조건 제거 완료 여부를
+  통합 테스트로 지속 확인한다.
+- 기존 `classroom_weeks`의 상태를 `PUBLISHED`, `releaseAt`을 `null`로 일괄 정리한다.
+- `WEEK_RELEASE` 파생 일정을 통합 일정 응답에서 제거하거나 deprecated 처리한다.
+- 공지 예약 게시와 시험 공개·마감 상태는 콘텐츠 단위 기능이므로 그대로 유지한다.
+
+## 연결 완료: 학습 대화 제어
+
+- `USER_QUESTION.payload.includeCurrentPage`: BE PR #152가 `develop`에 병합되어
+  현재 페이지 첨부·해제 상태를 FE 요청 payload에 연결했다.
+- `대화 새로 시작`: `POST /api/sessions/{sessionId}/conversations`에 연결했다.
+
+## 연결 완료: 통합학습 후속 단계 계약
+
+노션 `통합학습 에이전트 명세서` 4번 시나리오는 페이지 설명 뒤 오케스트레이터가
+현재 페이지 중요도를 판단해 퀴즈 여부를 결정하도록 정의한다. 2026-08-06 배포분은
+표지·목차성 페이지에 다음 페이지 액션을 반환하며, 중요 페이지의 퀴즈 준비 상태는
+기존 turns API 응답과 세션 상세 state로 복원한다.
+
+```http
+POST /api/sessions/{sessionId}/turns
+eventType: EXPLAIN_CURRENT_PAGE
+```
+
+- 응답은 `state.pageStatus=EXPLAINED`와 정확히 하나의 다음 단계 `uiActions`를
+  반환하고 세션 상세에도 같은 액션을 저장한다.
+- 중요 페이지면 `BINARY_DECISION("퀴즈를 진행할까요?",
+  SHOW_QUIZ_TYPE_SELECT, MOVE_NEXT_PAGE)`를 반환한다.
+- 퀴즈가 불필요한 페이지면 `BINARY_DECISION("다음 페이지로 이동할까요?",
+  MOVE_NEXT_PAGE, WAIT)`를 반환한다.
+- 중요도 점수와 내부 판단 근거는 FE에 노출할 필요가 없으며 서버가 최종 액션만
+  확정한다.
+
+저득점의 진단·오개념 교정 이후 재평가 퀴즈를 생성하는 공개 이벤트도 현재 없다.
+같은 turns API에 아래 이벤트를 추가하거나, 기존 `QUIZ_TYPE_SELECTED`에
+`sourceQuizId`와 재평가 목적을 명시할 수 있어야 한다.
+
+```json
+{
+  "eventType": "REMEDIATION_QUIZ_REQUESTED",
+  "payload": {
+    "sourceQuizId": 50
+  }
+}
+```
+
+응답은 기존 퀴즈 생성과 같이 `state.activeQuizId`를 반환하고, 재평가 결과도 기존
+제출·진단·교정 파이프라인에 누적해야 한다. 자연어로 "설명해줘", "퀴즈 내줘"를
+입력한 경우 현재 `USER_QUESTION` 정책과 도구 선택이 충돌할 수 있으므로 BE의
+StateReducer 또는 명령 분류 단계에서 지원 이벤트로 정규화하는 규칙도 필요하다.
+
+## P2. 운영 편의
+
+```http
+GET  /api/search?q={query}
+POST /api/classrooms/{classroomId}/join-requests/approve-batch
+POST /api/classrooms/{classroomId}/reactivate
+```
+
+통합 검색은 강의실·자료 결과의 `type`, `id`, `title`, 이동 경로를 반환한다.
+일괄 승인은 현재 입장 요청 UI의 전체 선택 기능을 활성화할 때 필요하다. 종료된
+강의실을 다시 운영하는 정책을 지원한다면 재활성화 endpoint가 필요하며, 지원하지
+않는 정책이면 현재처럼 종료 버튼을 비활성 상태로 유지한다.
+
+## 최근 연결 및 계약 확인
+
+- 공지의 주차 지정·예약 게시 계약은 2026-08-11 dev 배포분부터 연결했다.
+
+  ```http
+  POST  /api/classrooms/{classroomId}/notices
+  PATCH /api/classrooms/{classroomId}/notices/{noticeId}
+  GET   /api/classrooms/{classroomId}/notices
+  ```
+
+  생성·수정 요청은 `weekNumber: number | null`과 `publishAt: string | null`을 사용한다.
+  응답의 게시 여부는 `published`만 신뢰하며, `publishedAt`은 작성·정렬 시각,
+  `publishAt`은 예약 공개 시각으로 구분한다. 구형 응답에 `published`가 없으면 FE는
+  게시된 공지로 처리한다.
+- 메시지 조회의 `status=FAILED`는 전송 실패로 표시한다. 현재 화면에서 실패한 턴은
+  메모리에 보존한 동일 `requestId`로 재전송한다. 메시지 조회 응답은 `requestId`를
+  반환하지 않으므로 새로고침 후 실패 메시지는 상태만 표시하고 재시도 버튼은
+  제공하지 않는다.
+- 자료 업로드는 PDF 전용으로 확정됐다. PPT/PPTX는 선택 단계에서 차단하고 PDF 변환
+  후 업로드 안내를 표시한다.
+- 업로드 요청이 `200`이어도 비동기 처리 후 `FAILED`가 될 수 있다. 2026-08-11
+  배포 계약의 `failureReason=EXTRACTION_FAILED|PAGE_LIMIT_EXCEEDED|SCHEDULING_FAILED`와
+  `traceId`를 FE에 연결했다.
+- 수강생 목록의 `q`와 `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`,
+  `averageProgressRate`, `aiQuestionCountLast7Days`를 FE 검색·정렬·현황 표에 연결했다.
+- 강의실 목록 정렬은 `RECENT`, `NAME`만 지원한다. 학습자 UI의 진도 낮은 순과 새
+  자료 우선 정렬을 서버에서 지원하려면 enum 확장이 필요하다.
+- `ClassroomSummaryResponse.materialCount`는 강의실 카드에 연결했다. 현재 주차
+  목록 추가 조회는 통합 검색의 자료 인덱스를 만들기 위해 유지하며, 조회 실패
+  시에도 서버의 자료 수 집계값을 보존한다.
+
+## P1. 공지 첨부파일·AI 초안
+
+Notion `8/6 기준 사이트 피드백`의 공지 작성 개선 중 마크다운 편집·미리보기는
+기존 `content` 문자열 계약으로 FE에 반영했다. 첨부파일과 공지 작성 AI는 공개
+API가 없어 다음 계약이 필요하다.
+
+```http
+POST   /api/classrooms/{classroomId}/notice-attachments
+DELETE /api/classrooms/{classroomId}/notice-attachments/{attachmentId}
+POST   /api/classrooms/{classroomId}/notices/ai-draft
+```
+
+- 첨부 업로드는 `multipart/form-data`의 `file`을 받고 `attachmentId`, `fileName`,
+  `contentType`, `size`, `downloadUrl`을 반환한다.
+- 공지 생성·수정 요청에 `attachmentIds: string[]`를 추가하고, 목록·상세 응답에는
+  동일 첨부 메타데이터 배열을 반환한다. 미게시 공지에 연결되지 않은 임시 첨부의
+  만료 정책도 함께 정의해야 한다.
+- AI 초안 요청은 `title?`, `prompt`, `weekNumber?`를 받고 Markdown 본문 `content`를
+  반환한다. 생성 결과는 자동 게시하지 않고 강의자가 편집·확인한 뒤 기존 공지
+  생성 API로 저장한다.
+
+## P1. 내 퀴즈 문항별 제출 결과 조회
+
+현재 `GET /api/sessions/{sessionId}/quizzes`는 퀴즈별 점수·통과 여부만 반환하고,
+`GET /api/quizzes/{quizId}`는 공개 문항과 `submitted` 상태만 반환한다. 제출 당시
+`POST /api/quizzes/{quizId}/submit` 응답에 포함된 문항별 정답·오답·피드백은
+새로고침 후 다시 조회할 수 없다. 제출 완료 퀴즈를 초기 문제로 다시 보여주지 않고
+기존 응시 결과를 복원하려면 다음 조회 계약이 필요하다.
+
+```http
+GET /api/quizzes/{quizId}/submission
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "quizId": 50,
+    "submittedAt": "2026-08-12T10:30:00Z",
+    "score": 80,
+    "maxScore": 100,
+    "passed": true,
+    "gradingResult": {
+      "items": [
+        {
+          "questionId": 501,
+          "submittedAnswer": "B",
+          "correct": true,
+          "earnedScore": 20,
+          "feedback": "핵심 개념을 정확히 구분했습니다."
+        }
+      ]
+    }
+  }
+}
+```
+
+- 학습자 본인의 제출 결과만 조회할 수 있어야 한다.
+- 문항 순서와 공개 문항 정보는 `GET /api/quizzes/{quizId}`와 안정적으로 결합할 수
+  있도록 같은 `questionId`를 사용한다.
+- 미제출 퀴즈는 404 또는 명시적인 `submitted=false` 응답 중 하나로 계약을
+  확정한다.
+- FE는 이 API가 배포되기 전까지 `내 퀴즈`에서 점수·통과 여부만 표시하고 제출
+  완료 퀴즈를 다시 응시 화면으로 열지 않는다.

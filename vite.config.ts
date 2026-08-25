@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   // 기본은 배포 dev 서버이며, 로컬 Spring을 쓰려면 VITE_DEV_PROXY_TARGET으로 지정.
   // 'mock'이면 프록시 대신 테스트 픽스처를 그대로 서빙한다(브라우저 QA용).
   const proxyTarget =
-    env.VITE_DEV_PROXY_TARGET || 'https://edu-pilot.duckdns.org'
+    env.VITE_DEV_PROXY_TARGET || 'https://dev.uteum.com'
   const useMockApi = proxyTarget === 'mock'
 
   return {

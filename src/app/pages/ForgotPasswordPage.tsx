@@ -25,8 +25,8 @@ export function ForgotPasswordPage() {
   return (
     <div>
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-2xl font-bold text-stone-900">비밀번호 찾기</h1>
-        <p className="text-sm text-stone-400">
+        <h1 className="type-page-title font-bold text-stone-900">비밀번호 찾기</h1>
+        <p className="type-body text-stone-400">
           가입한 이메일로 재설정 링크를 보내드려요
         </p>
       </div>
@@ -34,14 +34,14 @@ export function ForgotPasswordPage() {
       <form className="mt-4" noValidate onSubmit={handleSubmit}>
         <div className="flex items-baseline justify-between gap-3">
           <label
-            className="text-[13px] font-semibold text-stone-800"
+            className="type-control font-semibold text-stone-800"
             htmlFor="forgot-password-email"
           >
             이메일
           </label>
           {error ? (
             <p
-              className="text-xs font-medium text-rose-700"
+              className="type-caption font-medium text-rose-700"
               id="forgot-password-email-error"
               role="alert"
             >
@@ -56,7 +56,7 @@ export function ForgotPasswordPage() {
           aria-invalid={error ? true : undefined}
           autoComplete="email"
           className={[
-            'mt-1.5 block h-11 w-full rounded-[10px] border bg-white px-3.5 text-sm text-stone-950',
+            'mt-1.5 block h-11 w-full rounded-[10px] border bg-white px-3.5 type-body text-stone-950',
             'placeholder:text-stone-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100',
             error ? 'border-rose-400' : 'border-stone-300',
           ].join(' ')}
@@ -78,7 +78,7 @@ export function ForgotPasswordPage() {
 
       {isSent ? (
         <p
-          className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-brand-100 bg-brand-50 px-4 py-2.5 text-center text-[13px] font-medium text-brand-600"
+          className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-brand-100 bg-brand-50 px-4 py-2.5 text-center type-control font-medium text-brand-600"
           role="status"
         >
           <Mail aria-hidden="true" className="shrink-0" size={12} />
@@ -87,7 +87,7 @@ export function ForgotPasswordPage() {
       ) : null}
 
       <Link
-        className="mx-auto mt-6 flex w-fit items-center gap-1.5 text-[13px] text-stone-500 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="mx-auto mt-6 flex w-fit items-center gap-1.5 type-control text-stone-500 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         to={routes.login}
       >
         <ArrowLeft aria-hidden="true" size={12} />

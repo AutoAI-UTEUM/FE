@@ -37,7 +37,10 @@ interface QuizSubmitDto {
   gradingResult?: {
     items?: Array<{
       feedback?: string
+      maxScore?: number
       questionId: number | string
+      score?: number
+      verdict?: string
     }>
   }
   maxScore?: number
@@ -51,11 +54,34 @@ interface QuizSubmitDto {
   }>
 }
 
+interface QuizSubmissionDetailDto {
+  items?: Array<{
+    correctAnswer?: string | null
+    explanation?: string | null
+    feedback?: string | null
+    maxScore?: number | null
+    questionId: number | string
+    score?: number | null
+    submittedAnswer?: string | null
+    verdict?: string | null
+  }>
+  maxScore?: number | null
+  passed?: boolean | null
+  quizId: number | string
+  score: number
+  submissionId: number | string
+  submittedAt: string
+}
+
 export interface QuizRepository {
   getById: (
     quizId: string,
     signal?: AbortSignal,
   ) => Promise<PublicQuiz | null>
+  getSubmission: (
+    quizId: string,
+    signal?: AbortSignal,
+  ) => Promise<PublicQuizResult | null>
   submit: (
     quiz: PublicQuiz,
     answers: QuizAnswers,
@@ -74,6 +100,33 @@ export function createQuizRepository(
           { signal },
         )
         return mapQuiz(data)
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 404) return null
+        throw error
+      }
+    },
+    async getSubmission(quizId, signal) {
+      try {
+        const { data } = await request<QuizSubmissionDetailDto>(
+          `/api/quizzes/${encodeURIComponent(quizId)}/submission`,
+          { signal },
+        )
+        return {
+          feedback: (data.items ?? []).map((item) => ({
+            correctAnswer: item.correctAnswer ?? undefined,
+            explanation: item.explanation ?? undefined,
+            maxScore: item.maxScore ?? undefined,
+            message: item.feedback ?? '채점이 완료되었습니다.',
+            questionId: String(item.questionId),
+            score: item.score ?? undefined,
+            submittedAnswer: item.submittedAnswer ?? undefined,
+            verdict: mapVerdict(item.verdict ?? undefined),
+          })),
+          maxScore: data.maxScore ?? undefined,
+          passed: data.passed ?? undefined,
+          score: data.score,
+          submittedAt: data.submittedAt,
+        }
       } catch (error) {
         if (error instanceof ApiClientError && error.status === 404) return null
         throw error
@@ -112,8 +165,11 @@ export function createQuizRepository(
                 sessionId: quiz.sessionId,
               },
         feedback: (data.gradingResult?.items ?? []).map((item) => ({
+          maxScore: item.maxScore,
           message: item.feedback ?? '채점이 완료되었습니다.',
           questionId: String(item.questionId),
+          score: item.score,
+          verdict: mapVerdict(item.verdict),
         })),
         maxScore: data.maxScore,
         passed: data.passed,
@@ -122,6 +178,12 @@ export function createQuizRepository(
       }
     },
   }
+}
+
+function mapVerdict(value: string | undefined): 'CORRECT' | 'PARTIAL' | 'UNKNOWN' | 'WRONG' {
+  return value === 'CORRECT' || value === 'PARTIAL' || value === 'WRONG'
+    ? value
+    : 'UNKNOWN'
 }
 
 function mapQuiz(quiz: PublicQuizDto): PublicQuiz {
@@ -145,11 +207,23 @@ function mapQuestion(
   quizKind: QuizKind,
 ): PublicQuizQuestion {
   return {
-    choices: question.options?.map(mapChoice),
+    choices: mapQuestionChoices(question.options, quizKind),
     id: String(question.questionId),
     kind: quizKind,
     prompt: question.questionText,
   }
+}
+
+function mapQuestionChoices(
+  options: QuizChoiceDto[] | undefined,
+  quizKind: QuizKind,
+): QuizChoice[] | undefined {
+  if (options && options.length > 0) return options.map(mapChoice)
+  if (quizKind !== 'OX') return undefined
+  return [
+    { id: 'true', label: 'O' },
+    { id: 'false', label: 'X' },
+  ]
 }
 
 function mapChoice(choice: QuizChoiceDto): QuizChoice {

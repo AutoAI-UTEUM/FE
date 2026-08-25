@@ -1,0 +1,108 @@
+flowchart TB
+  START([접속]) --> ROOT["/ → /classrooms"]
+  ROOT --> AUTH{인증 상태}
+  AUTH -->|비로그인| LOGIN["로그인 /login"]
+  AUTH -->|학습자| LH["학습자 내 강의실 /classrooms"]
+  AUTH -->|강의자| IH["강의자 내 강의실 /classrooms"]
+
+  subgraph GUEST["인증 페이지"]
+    LOGIN -->|이메일·비밀번호 제출| LOGIN_API["로그인 API → 원래 경로 또는 내 강의실"]
+    LOGIN -->|비밀번호 찾기| FORGOT["비밀번호 찾기 /forgot-password"]
+    FORGOT -.->|이메일 검증·전송| FORGOT_LOCAL["전송 완료 문구만 표시"]
+    FORGOT -->|로그인으로 돌아가기| LOGIN
+    LOGIN -->|회원가입| SIGNUP["회원가입 /signup"]
+    SIGNUP -.->|역할 선택| ACCOUNT["계정 정보 2/2"]
+    ACCOUNT -.->|이메일 입력| EMAIL_CHECK["중복 확인 API"]
+    ACCOUNT -->|약관 동의·가입| SIGNUP_API["가입 API + 자동 로그인 → 내 강의실"]
+    LOGIN -.->|Google로 계속하기| GOOGLE_WAIT["연동 대기 안내"]
+  end
+
+  subgraph SHELL["공통 앱 셸"]
+    PROFILE["프로필 메뉴"] -.-> SETTINGS["설정 /settings"]
+    PROFILE -.-> THEME["라이트·다크·시스템 모드"]
+    PROFILE -->|로그아웃| LOGIN
+    PROFILE -.-> FEEDBACK["도움말·피드백 → 접수 API"]
+    ALERT["알림 버튼"] -.-> ALERT_PANEL["예정 일정 패널"]
+    ALERT_PANEL -->|전체 일정 보기| CAL["캘린더 /calendar"]
+    SETTINGS -.->|프로필·알림·AI 스타일 저장| PREF_API["사용자 설정 API"]
+    SETTINGS -.->|사진 변경·삭제| AVATAR_API["아바타 API"]
+    SETTINGS -->|회원 탈퇴| LOGIN
+    NOTFOUND["404"] -->|내 강의실로| ROOT
+  end
+
+  subgraph LEARNER["학습자 페이지"]
+    LH -.->|검색·정렬| LH_FILTER["강의실 목록 필터"]
+    LH -.->|초대 코드 입력| JOIN["입장 요청 API"]
+    LH -->|이어 학습| SESSION["학습 세션 /sessions/:id"]
+    LH -->|강의실 카드| CD["강의실 상세 /classrooms/:id"]
+    CD -.->|공개 주차 펼치기| WEEK["주차별 자료"]
+    WEEK -->|READY 자료| MD["자료 상세 /materials/:id"]
+
+    MATERIALS["자료 /materials"] -.->|드롭·파일 선택| UPLOAD["PDF 업로드 API"]
+    MATERIALS -.->|상태 새로고침·삭제| MATERIAL_ACTION["목록 갱신·자료 삭제 API"]
+    MATERIALS -->|상세| MD
+    MD -->|학습 시작| SESSION_NEW["세션 생성 API → 학습 세션"]
+    MD -->|활성 세션 있음| SESSION
+
+    SESSIONS["학습 세션 목록 /sessions"] -->|계속 학습| SESSION
+    SESSIONS -.->|삭제| SESSION_DELETE["세션 삭제 API"]
+    SESSION -.->|PDF 페이지 이동| PAGE_API["현재 페이지 저장 API"]
+    SESSION -.->|질문 입력| CHAT["턴 API·SSE 응답"]
+    SESSION -.->|대화 새로 시작| CONVERSATION["새 대화 API"]
+    SESSION -->|퀴즈 유형 선택| QUIZ["퀴즈 /quizzes/:id"]
+    SESSION -->|진단 액션| DIAG["진단·교정 /sessions/:id/diagnosis/:id"]
+    SESSION -->|학습 완료| SESSIONS
+    QUIZ -.->|유형·답 선택, 이전·다음| QUIZ_FORM["문항 진행 상태"]
+    QUIZ -.->|제출| QUIZ_RESULT["채점 결과"]
+    QUIZ_RESULT -->|교정 필요| DIAG
+    QUIZ_RESULT -->|세션으로| SESSION
+    DIAG -.->|답변 제출| CORRECTION["교정 턴 API"]
+    CORRECTION -->|학습으로 복귀| SESSION
+
+    NOTES["내 노트 /notes"] -.->|검색·수정·삭제| NOTE_API["세션 노트 API"]
+    NOTES -->|학습으로 이동| SESSION
+    REVIEW["복습 퀴즈 /review-quizzes"] -->|퀴즈 풀기| QUIZ
+    EXAMS["시험 /exams"] -.->|강의실·상태 필터| EXAM_LIST["시험 목록 API"]
+    EXAMS -->|시험 선택| EXAM_DETAIL["시험 상세 /exams/:id"]
+    EXAM_DETAIL -.->|답 입력·이전·다음·제출| EXAM_SUBMIT["제출 API → 채점 상태 폴링"]
+    CAL -.->|월·주·목록, 날짜 이동| CAL_VIEW["캘린더 탐색"]
+    CAL -.->|일정 추가·삭제| CAL_LOCAL["개인 일정 localStorage"]
+  end
+
+  subgraph INSTRUCTOR["강의자 페이지"]
+    IH -.->|강의실·자료 검색| ISEARCH["검색 오버레이"]
+    IH -.->|초대 코드 복사·재발급| INVITE_API["초대 코드 API"]
+    IH -.->|강의실 만들기| CREATE_ROOM["이름·시작일·주차 수 입력"]
+    CREATE_ROOM -->|만들기| CREATE_API["강의실 + 주차 생성 API"]
+    IH -->|강의실 카드| ICD["강의실 자료 관리 /classrooms/:id"]
+    IH -->|설정| EDIT["강의실 수정 /classrooms/:id/edit"]
+    IH -->|학습 현황| STATUS["학습 현황 /learning-status?classroomId"]
+
+    ICD -.->|PDF 드롭·업로드| WEEK_UPLOAD["선택 주차 자료 업로드 API"]
+    ICD -.->|지금 공개| PUBLISH_WEEK["주차 공개일 수정 API"]
+    ICD -.->|교체·삭제| MATERIAL_MANAGE["재업로드·주차 연결 해제 API"]
+    ICD -->|설정| EDIT
+    EDIT -.->|기본 정보·주차 제목 저장| EDIT_API["강의실·주차 API"]
+    EDIT -.->|드래그 순서·공개/비공개/휴강| WEEK_PARTIAL["UI 상태 중심, 서버 계약 일부 없음"]
+    EDIT -.->|종료| COMPLETE["강의실 종료 API → 내 강의실"]
+    EDIT -.->|학습자 제외| REMOVE_DISABLED["비활성: 수강생 제외 API 없음"]
+    EDIT -.->|영구 삭제| DELETE_DISABLED["비활성: 영구 삭제 API 없음"]
+
+    STATUS -.->|강의실 선택| STATUS_EMPTY["기본 인원·진도만 표시"]
+    STATUS -.->|리마인더·상세 분석| ANALYTICS_DISABLED["비활성: 분석·리포트 API 없음"]
+    NOTICES["공지 관리 /announcements"] -.->|강의실 선택·등록·수정·내리기| NOTICE_API["공지 CRUD API"]
+    REQUESTS["입장 요청 /entrance-requests"] -.->|대기·수강생·처리 내역 탭| REQUEST_LIST["요청 목록 API"]
+    REQUESTS -.->|승인·거절| REQUEST_API["요청 처리 API"]
+    REQUESTS -.->|수강생 제외| REMOVE_DISABLED
+    EXAMS -.->|시험 만들기| EXAM_DRAFT["초안 생성"]
+    EXAM_DETAIL -.->|수정·공개·종료·삭제·제출 현황| EXAM_ADMIN["시험 관리 API"]
+  end
+
+  classDef page fill:#eef2ff,stroke:#4f46e5,color:#111827;
+  classDef action fill:#ecfdf5,stroke:#059669,color:#111827;
+  classDef partial fill:#fffbeb,stroke:#d97706,color:#111827;
+  classDef blocked fill:#fef2f2,stroke:#dc2626,color:#111827;
+  class LOGIN,SIGNUP,FORGOT,SETTINGS,LH,IH,CD,MATERIALS,MD,SESSIONS,SESSION,QUIZ,DIAG,NOTES,REVIEW,EXAMS,EXAM_DETAIL,CAL,ICD,EDIT,STATUS,NOTICES,REQUESTS,NOTFOUND page;
+  class LOGIN_API,EMAIL_CHECK,SIGNUP_API,PREF_API,AVATAR_API,JOIN,UPLOAD,MATERIAL_ACTION,SESSION_NEW,SESSION_DELETE,PAGE_API,CHAT,CONVERSATION,QUIZ_RESULT,CORRECTION,NOTE_API,EXAM_LIST,EXAM_SUBMIT,INVITE_API,CREATE_API,WEEK_UPLOAD,PUBLISH_WEEK,MATERIAL_MANAGE,EDIT_API,COMPLETE,NOTICE_API,REQUEST_LIST,REQUEST_API,EXAM_DRAFT,EXAM_ADMIN,FEEDBACK action;
+  class FORGOT_LOCAL,GOOGLE_WAIT,CAL_LOCAL,WEEK_PARTIAL,STATUS_EMPTY partial;
+  class REMOVE_DISABLED,DELETE_DISABLED,ANALYTICS_DISABLED blocked;

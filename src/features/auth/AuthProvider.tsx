@@ -19,13 +19,18 @@ import {
   type LogoutReason,
 } from './authContext'
 import { getAuthRepository } from './authRepository'
-import type { LoginFormValues, SignupFormValues } from './authValidation'
+import type {
+  GoogleAuthValues,
+  LoginFormValues,
+  SignupFormValues,
+} from './authValidation'
 
 interface AuthProviderProps {
   initialUser?: AuthUser | null
 }
 
-export const AUTH_IDLE_TIMEOUT_MS = 10 * 60 * 1000
+export const AUTH_IDLE_TIMEOUT_MS = 30 * 60 * 1000
+export const AUTH_RESTORE_TIMEOUT_MS = 5_000
 const IDLE_CHECK_INTERVAL_MS = 30_000
 
 interface AuthSession {
@@ -45,6 +50,9 @@ export function AuthProvider({
   )
   const [isInitializing, setIsInitializing] = useState(!hasExplicitInitialUser)
   const [logoutReason, setLogoutReason] = useState<LogoutReason | null>(null)
+  const [pendingGoogleIdToken, setPendingGoogleIdToken] = useState<string | null>(
+    null,
+  )
   const sessionRef = useRef(session)
   const sessionRevisionRef = useRef(0)
   // 로그인/복원 시점에 beginSession·restore가 현재 시각으로 초기화한다.
@@ -90,7 +98,12 @@ export function AuthProvider({
     }
 
     const controller = new AbortController()
+    let isActive = true
     const restoreRevision = sessionRevisionRef.current
+    const timeoutId = window.setTimeout(() => {
+      controller.abort()
+      if (isActive) setIsInitializing(false)
+    }, AUTH_RESTORE_TIMEOUT_MS)
 
     repository
       .refresh(controller.signal)
@@ -111,13 +124,18 @@ export function AuthProvider({
         // 쿠키 없음/만료(TOKEN_INVALID) — 비로그인 상태로 시작 (배너 없음)
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsInitializing(false)
+        window.clearTimeout(timeoutId)
+        if (isActive) setIsInitializing(false)
       })
 
-    return () => controller.abort()
+    return () => {
+      isActive = false
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, [hasExplicitInitialUser, repository])
 
-  // 10분 무활동 시 로그아웃 (refresh 쿠키도 폐기)
+  // 30분 무활동 시 로그아웃 (refresh 쿠키도 폐기)
   useEffect(() => {
     if (!session || hasExplicitInitialUser) {
       return
@@ -178,6 +196,23 @@ export function AuthProvider({
     [beginSession, repository],
   )
 
+  const loginWithGoogle = useCallback(
+    async (values: GoogleAuthValues) => {
+      const result = await repository.loginWithGoogle(values)
+      setPendingGoogleIdToken(null)
+      beginSession(result.accessToken, result.user)
+    },
+    [beginSession, repository],
+  )
+
+  const prepareGoogleSignup = useCallback((idToken: string) => {
+    setPendingGoogleIdToken(idToken)
+  }, [])
+
+  const clearGoogleSignup = useCallback(() => {
+    setPendingGoogleIdToken(null)
+  }, [])
+
   const checkEmailAvailability = useCallback(
     (email: string, signal?: AbortSignal) =>
       repository.checkEmailAvailability(email, signal),
@@ -197,6 +232,14 @@ export function AuthProvider({
     await repository.logout().catch(() => undefined)
     clearSession('manual')
   }, [clearSession, repository])
+
+  const updateUser = useCallback((user: AuthUser) => {
+    const current = sessionRef.current
+    if (!current) return
+    const nextSession = { ...current, user: { ...current.user, ...user } }
+    sessionRef.current = nextSession
+    setSession(nextSession)
+  }, [])
 
   const authenticatedRequest = useCallback<AuthContextValue['apiRequest']>(
     async (path, options = {}) => {
@@ -284,25 +327,35 @@ export function AuthProvider({
       apiRequest: authenticatedRequest,
       rawApiRequest: authenticatedRawRequest,
       checkEmailAvailability,
+      clearGoogleSignup,
       isAuthenticated: session !== null,
       isInitializing,
       login,
+      loginWithGoogle,
       logoutReason,
       logout,
+      pendingGoogleIdToken,
+      prepareGoogleSignup,
       signup,
       user: session?.user ?? null,
+      updateUser,
       withdraw,
     }),
     [
       authenticatedRequest,
       authenticatedRawRequest,
       checkEmailAvailability,
+      clearGoogleSignup,
       isInitializing,
       login,
+      loginWithGoogle,
       logout,
       logoutReason,
+      pendingGoogleIdToken,
+      prepareGoogleSignup,
       session,
       signup,
+      updateUser,
       withdraw,
     ],
   )

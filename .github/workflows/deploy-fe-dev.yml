@@ -4,7 +4,7 @@ name: Deploy FE dev
 on:
   push:
     branches:
-      - main
+      - develop
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +19,10 @@ jobs:
     name: deploy-fe-dev
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VITE_API_BASE_URL: /api
+      VITE_API_CAPABILITIES: reports
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
     steps:
       - name: Checkout repository
@@ -44,8 +48,20 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          VITE_API_BASE_URL: /api
+
+      - name: Resolve expected entry asset
+        id: build_metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          entry_asset="$({
+            sed -nE 's#.*<script[^>]+src="([^"]+)"[^>]*></script>.*#\1#p' dist/index.html
+          } | head -n 1)"
+          test -n "$entry_asset"
+          if [[ "$entry_asset" != /* ]]; then
+            entry_asset="/$entry_asset"
+          fi
+          echo "entry_asset=$entry_asset" >> "$GITHUB_OUTPUT"
 
       - name: Copy dist to server
         uses: appleboy/scp-action@v1
@@ -76,15 +92,21 @@ jobs:
 
       - name: Smoke test
         shell: bash
+        env:
+          EXPECTED_ENTRY: ${{ steps.build_metadata.outputs.entry_asset }}
         run: |
           set -euo pipefail
           for attempt in $(seq 1 6); do
-            if curl --fail --silent https://edu-pilot.duckdns.org/ \
-              | grep -qi '<div id="root"'; then
-              echo "FE deployed"
+            live_html="$(curl --fail --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              "https://dev.uteum.com/?deploy=${GITHUB_SHA}&attempt=${attempt}")"
+            if printf '%s' "$live_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY"; then
+              curl --fail --silent --show-error \
+                "https://dev.uteum.com${EXPECTED_ENTRY}" > /dev/null
+              echo "FE deployed with expected entry: $EXPECTED_ENTRY"
               exit 0
             fi
-            echo "Smoke attempt $attempt/6 failed"
+            echo "Smoke attempt $attempt/6 failed: expected $EXPECTED_ENTRY"
             sleep 5
           done
           exit 1

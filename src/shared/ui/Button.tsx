@@ -66,8 +66,8 @@ function getButtonClassName({
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-3.5 py-2 text-sm',
+  sm: 'px-3 py-1.5 type-caption',
+  md: 'px-3.5 py-2 type-body',
 }
 
 const variantClasses: Record<ButtonVariant, string> = {

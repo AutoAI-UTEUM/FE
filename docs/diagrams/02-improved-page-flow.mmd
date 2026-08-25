@@ -1,0 +1,62 @@
+flowchart TB
+  START([접속]) --> AUTH{인증·역할}
+  AUTH -->|미인증| LOGIN["로그인 /login"]
+  AUTH -->|학습자| CLASSROOMS["내 강의실 /classrooms"]
+  AUTH -->|강의자| I_CLASSROOMS["내 강의실 /classrooms"]
+
+  subgraph GUARDS["전 페이지 공통 UX 가드"]
+    CONTEXT["마지막 강의실 컨텍스트 유지"] --> CANONICAL["전역·과거 링크를 정규 경로로 replace"]
+    AUTHZ["강의자 전용 권한 가드"] --> FORBIDDEN["403 설명 + 안전한 복귀 경로"]
+    ASYNC["비동기 작업 공통 폴링"] --> BODY_STATUS["응답 body status 기준 · 지연/실패 복구"]
+    DESTRUCT["삭제·종료·탈퇴"] --> CONFIRM["대상 재확인 후 실행"]
+    STATE["탭·필터·폼 상태"] --> RESTORE["URL/sessionStorage로 복원"]
+    CAPABILITY["미배포 API capability 가드"] --> NO_MOCK["명시적 준비 중 상태 · 데모 데이터 금지"]
+  end
+
+  subgraph LEARNER["학습자"]
+    CLASSROOMS --> ROOM["강의실 /classrooms/:classroomId"]
+    ROOM --> MATERIAL["자료 /materials/:materialId"]
+    MATERIAL --> SESSION["학습 /sessions/:sessionId"]
+    SESSION --> QUIZ["퀴즈 /quizzes/:quizId"]
+    SESSION --> DIAGNOSIS["진단 /sessions/:sessionId/diagnosis/:diagnosisId"]
+    CLASSROOMS --> CALENDAR["캘린더 /calendar"]
+  end
+
+  subgraph INSTRUCTOR["강의자 · 강의실 범위 정규 경로"]
+    I_CLASSROOMS --> I_ROOM["자료 관리 /classrooms/:classroomId"]
+    I_ROOM --> SETTINGS["설정 /classrooms/:classroomId/settings"]
+    I_ROOM --> I_CALENDAR["캘린더 /classrooms/:classroomId/calendar"]
+    I_ROOM --> ANALYTICS["학습 현황 /classrooms/:classroomId/analytics"]
+    I_ROOM --> NOTICES["공지 /classrooms/:classroomId/announcements"]
+    I_ROOM --> REQUESTS["입장 요청 /classrooms/:classroomId/entrance-requests"]
+    I_ROOM --> EXAMS["시험 /classrooms/:classroomId/exams"]
+    EXAMS --> EXAM["시험 상세 /classrooms/:classroomId/exams/:examId"]
+    ANALYTICS --> REPORTS["리포트 대상 /classrooms/:classroomId/reports"]
+    REPORTS --> VERSIONS["학생 리포트 /classrooms/:classroomId/students/:studentId/reports"]
+    VERSIONS --> DETAIL["상세 /classrooms/:classroomId/students/:studentId/reports/:reportId"]
+    REPORTS --> CRITERIA["평가 기준 /classrooms/:classroomId/report-criteria"]
+  end
+
+  subgraph REPORT_FLOW["강사용 리포트 정책"]
+    SCOPE["전체 기간 / 주차 선택"] --> CREATE["POST 생성 · requestId"]
+    CREATE --> POLL["202 이후 GET /api/reports/:reportId 폴링"]
+    POLL -->|PENDING · PROCESSING| POLL
+    POLL -->|COMPLETED| RESULT["9개 기준 · 종합 4단계 · 서버 trend"]
+    POLL -->|FAILED| RETRY["실패 사유 + 동일 작업 재확인/재생성"]
+    RESULT --> NULL_SCORE["score=null은 데이터 부족 · 0점 그래프 금지"]
+    RESULT --> QA["리포트 버전 고정 근거 질문"]
+  end
+
+  LEGACY["/learning-status · /announcements · /entrance-requests · /exams · /classrooms/:id/edit · /reports/:id"] --> CANONICAL
+  ANALYTICS --> SCOPE
+  BODY_STATUS --> POLL
+  CAPABILITY --> CREATE
+
+  classDef page fill:#eef2ff,stroke:#4f46e5,color:#111827;
+  classDef action fill:#ecfdf5,stroke:#059669,color:#111827;
+  classDef guard fill:#f5f3ff,stroke:#7c3aed,color:#111827;
+  classDef newapi fill:#fff7ed,stroke:#ea580c,color:#111827;
+  class LOGIN,CLASSROOMS,I_CLASSROOMS,ROOM,MATERIAL,SESSION,QUIZ,DIAGNOSIS,CALENDAR,I_ROOM,SETTINGS,I_CALENDAR,ANALYTICS,NOTICES,REQUESTS,EXAMS,EXAM,REPORTS,VERSIONS,DETAIL,CRITERIA page;
+  class CANONICAL,FORBIDDEN,BODY_STATUS,CONFIRM,RESTORE,NO_MOCK,SCOPE,RESULT,RETRY,NULL_SCORE,QA action;
+  class CONTEXT,AUTHZ,ASYNC,DESTRUCT,STATE,CAPABILITY guard;
+  class CREATE,POLL newapi;

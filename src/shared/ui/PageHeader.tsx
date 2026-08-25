@@ -12,9 +12,9 @@ export function PageHeader({
   titleAccessory,
 }: PageHeaderProps) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <header className="flex min-h-10 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <h1 className="min-w-0 break-words text-[22px] font-bold text-stone-950">
+        <h1 className="min-w-0 break-words type-page-title font-bold text-stone-950">
           {title}
         </h1>
         {titleAccessory}

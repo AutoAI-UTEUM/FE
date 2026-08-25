@@ -17,6 +17,9 @@ jobs:
     name: frontend-ci
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      VITE_API_BASE_URL: /api
+      VITE_API_CAPABILITIES: reports
 
     steps:
       - name: Checkout repository

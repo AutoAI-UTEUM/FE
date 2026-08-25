@@ -41,6 +41,9 @@ describe('SignupPage', () => {
       'aria-checked',
       'true',
     )
+    expect(screen.getByText('강의실에 참여해 AI와 학습해요')).toBeInTheDocument()
+    expect(screen.getByText('강의실을 만들고 학습자를 관리해요')).toBeInTheDocument()
+    expect(screen.queryByText('가입 후에도 설정에서 변경할 수 있어요')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: /^강의자/ }))
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
@@ -72,7 +75,7 @@ describe('SignupPage', () => {
     expect(screen.getByText('필수 약관에 동의해 주세요.')).toBeInTheDocument()
   })
 
-  it('shows password strength and selects an affiliation suggestion', () => {
+  it('shows password strength without optional profile fields', () => {
     renderSignup()
 
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
@@ -83,26 +86,27 @@ describe('SignupPage', () => {
       target: { value: 'password-123' },
     })
 
-    expect(screen.getByText('안전')).toBeInTheDocument()
+    expect(screen.queryByText('약함')).not.toBeInTheDocument()
+    expect(screen.queryByText('보통')).not.toBeInTheDocument()
+    expect(screen.queryByText('안전')).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '비밀번호 안전도' })).toHaveClass('w-full')
+    expect(screen.getByRole('progressbar', { name: '비밀번호 안전도' })).toHaveAttribute('aria-valuenow', '4')
     expect(screen.getByLabelText('비밀번호')).toHaveAttribute(
       'type',
       'password',
     )
     fireEvent.click(screen.getByRole('button', { name: '비밀번호 표시' }))
     expect(screen.getByLabelText('비밀번호')).toHaveAttribute('type', 'text')
+    expect(screen.getByRole('button', { name: '비밀번호 숨기기' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('비밀번호 확인')).toHaveAttribute(
       'type',
       'password',
     )
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 확인 표시' }))
+    expect(screen.getByLabelText('비밀번호 확인')).toHaveAttribute('type', 'text')
 
-    fireEvent.change(screen.getByRole('combobox', { name: /소속/ }), {
-      target: { value: '서울' },
-    })
-    fireEvent.click(screen.getByRole('option', { name: /서울대학교/ }))
-
-    expect(screen.getByRole('combobox', { name: /소속/ })).toHaveValue(
-      '서울대학교',
-    )
+    expect(screen.queryByLabelText(/소속/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /학습 소식 이메일 수신/ })).not.toBeInTheDocument()
   })
 
   it('signs up, auto-logs-in, and redirects to classrooms', async () => {
@@ -136,13 +140,14 @@ describe('SignupPage', () => {
       .mock.calls.find(([input]) =>
         String(input).endsWith('/api/auth/signup'),
       )
-    expect(JSON.parse(String(signupCall?.[1]?.body))).toMatchObject({
+    const signupBody = JSON.parse(String(signupCall?.[1]?.body))
+    expect(signupBody).toMatchObject({
       email: 'new@example.com',
+      learningEmailOptIn: false,
       role: 'INSTRUCTOR',
     })
-    expect(JSON.parse(String(signupCall?.[1]?.body))).not.toHaveProperty(
-      'confirmPassword',
-    )
+    expect(signupBody).not.toHaveProperty('affiliation')
+    expect(signupBody).not.toHaveProperty('confirmPassword')
   })
 
   it('blocks signup when the passwords do not match', () => {

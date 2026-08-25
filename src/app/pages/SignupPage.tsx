@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronUp,
   Check,
   Eye,
   EyeOff,
@@ -11,7 +10,6 @@ import {
 } from 'lucide-react'
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -39,6 +37,9 @@ const initialValues: SignupFormValues = {
   role: 'LEARNER',
 }
 
+const GOOGLE_TERMS_VERSION = '2026-07-01'
+const GOOGLE_PRIVACY_VERSION = '2026-07-01'
+
 type SignupStep = 'account' | 'role'
 type EmailAvailabilityStatus =
   | 'available'
@@ -54,32 +55,28 @@ const roleOptions: Array<{
   value: SignupRole
 }> = [
   {
-    description:
-      '초대코드로 강의실에 참여하고, 자료를 보며 AI와 학습해요',
+    description: '강의실에 참여해 AI와 학습해요',
     icon: GraduationCap,
     label: '학습자',
     value: 'LEARNER',
   },
   {
-    description:
-      '강의실을 만들어 자료를 올리고, 초대코드로 학습자를 초대해요',
+    description: '강의실을 만들고 학습자를 관리해요',
     icon: Presentation,
     label: '강의자',
     value: 'INSTRUCTOR',
   },
 ]
 
-const AFFILIATIONS = [
-  { name: '서울대학교', type: '대학교' },
-  { name: '서울과학기술대학교', type: '대학교' },
-  { name: '서울시립대학교', type: '대학교' },
-  { name: '연세대학교', type: '대학교' },
-  { name: '고려대학교', type: '대학교' },
-]
-
 export function SignupPage() {
   usePageTitle('회원가입')
-  const { checkEmailAvailability, signup } = useAuth()
+  const {
+    checkEmailAvailability,
+    clearGoogleSignup,
+    loginWithGoogle,
+    pendingGoogleIdToken,
+    signup,
+  } = useAuth()
   const navigate = useNavigate()
   const [step, setStep] = useState<SignupStep>('role')
   const [values, setValues] = useState<SignupFormValues>(initialValues)
@@ -95,36 +92,14 @@ export function SignupPage() {
   >(null)
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     useState(false)
-  const [affiliation, setAffiliation] = useState('')
-  const [isAffiliationOpen, setIsAffiliationOpen] = useState(false)
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false)
-  const [acceptsLearningEmails, setAcceptsLearningEmails] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
-  const affiliationContainerRef = useRef<HTMLDivElement | null>(null)
+  const [googleRole, setGoogleRole] = useState<SignupRole>('LEARNER')
+  const [hasAcceptedGoogleTerms, setHasAcceptedGoogleTerms] = useState(false)
+  const [googleTermsError, setGoogleTermsError] = useState<string | null>(null)
+  const [googleError, setGoogleError] = useState<string | null>(null)
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
-
-  const filteredAffiliations = useMemo(() => {
-    const query = affiliation.trim().toLowerCase()
-    if (!query) return AFFILIATIONS.slice(0, 3)
-    return AFFILIATIONS.filter((item) =>
-      item.name.toLowerCase().includes(query),
-    ).slice(0, 3)
-  }, [affiliation])
-
-  useEffect(() => {
-    if (!isAffiliationOpen) return
-
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      if (
-        !affiliationContainerRef.current?.contains(event.target as Node)
-      ) {
-        setIsAffiliationOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', closeOnOutsidePress)
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePress)
-  }, [isAffiliationOpen])
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
@@ -216,6 +191,36 @@ export function SignupPage() {
     }
   }
 
+  async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!pendingGoogleIdToken) return
+    if (!hasAcceptedGoogleTerms) {
+      setGoogleTermsError('필수 약관에 동의해 주세요.')
+      return
+    }
+
+    setIsGoogleSubmitting(true)
+    setGoogleError(null)
+    try {
+      await loginWithGoogle({
+        idToken: pendingGoogleIdToken,
+        privacyVersion: GOOGLE_PRIVACY_VERSION,
+        role: googleRole,
+        termsVersion: GOOGLE_TERMS_VERSION,
+      })
+      navigate(routes.classrooms, { replace: true })
+    } catch {
+      setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
+    } finally {
+      setIsGoogleSubmitting(false)
+    }
+  }
+
+  function cancelGoogleSignup() {
+    clearGoogleSignup()
+    navigate(routes.login, { replace: true })
+  }
+
   function updateValue<Field extends keyof SignupFormValues>(
     field: Field,
     value: SignupFormValues[Field],
@@ -240,17 +245,109 @@ export function SignupPage() {
     values.role === 'INSTRUCTOR' ? '강의자' : '학습자'
   const passwordStrength = getPasswordStrength(values.password)
 
+  if (pendingGoogleIdToken) {
+    return (
+      <div>
+        <div className="flex flex-col gap-1.5">
+          <p className="type-control text-stone-400">Google 회원가입</p>
+          <h1 className="type-page-title font-bold text-stone-900">
+            Google 가입을 완료해 주세요
+          </h1>
+          <p className="type-body text-stone-400">
+            으뜸에서 사용할 역할을 선택해 주세요
+          </p>
+        </div>
+
+        <form className="mt-6" onSubmit={handleGoogleSignup}>
+          <div
+            aria-label="Google 가입 역할"
+            className="grid grid-cols-2 rounded-lg bg-stone-100 p-1"
+            role="radiogroup"
+          >
+            {([
+              ['LEARNER', '학습자'],
+              ['INSTRUCTOR', '강의자'],
+            ] as const).map(([role, label]) => {
+              const isSelected = googleRole === role
+              return (
+                <button
+                  aria-checked={isSelected}
+                  className={[
+                    'h-10 rounded-md type-body font-semibold transition-colors',
+                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600',
+                    isSelected
+                      ? 'bg-white text-brand-700 shadow-sm'
+                      : 'text-stone-500 hover:text-stone-800',
+                  ].join(' ')}
+                  key={role}
+                  onClick={() => setGoogleRole(role)}
+                  role="radio"
+                  type="button"
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+
+          <label className="mt-5 flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
+            <input
+              checked={hasAcceptedGoogleTerms}
+              className="mt-0.5 size-4 shrink-0 rounded border-stone-300 accent-brand-600"
+              onChange={(event) => {
+                setHasAcceptedGoogleTerms(event.target.checked)
+                setGoogleTermsError(null)
+              }}
+              type="checkbox"
+            />
+            <span>
+              이용약관 및 개인정보 처리방침에 동의합니다{' '}
+              <span className="font-semibold text-rose-600">*</span>
+            </span>
+          </label>
+          {googleTermsError ? (
+            <p className="mt-1 type-caption font-medium text-rose-700" role="alert">
+              {googleTermsError}
+            </p>
+          ) : null}
+
+          {googleError ? (
+            <p className="mt-3 type-body font-medium text-rose-700" role="alert">
+              {googleError}
+            </p>
+          ) : null}
+
+          <div className="mt-5 flex gap-2">
+            <Button
+              className="h-11 flex-1"
+              disabled={isGoogleSubmitting}
+              type="submit"
+            >
+              {isGoogleSubmitting ? '가입 중' : '동의하고 가입하기'}
+            </Button>
+            <Button
+              className="h-11"
+              disabled={isGoogleSubmitting}
+              onClick={cancelGoogleSignup}
+              type="button"
+              variant="secondary"
+            >
+              취소
+            </Button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
   if (step === 'role') {
     return (
       <div>
         <div className="flex flex-col gap-1.5">
-          <p className="text-[13px] text-stone-400">회원가입 1 / 2</p>
-          <h1 className="text-2xl font-bold text-stone-900">
+          <p className="type-control text-stone-400">회원가입 1 / 2</p>
+          <h1 className="type-page-title font-bold text-stone-900">
             어떤 역할로 사용하시나요?
           </h1>
-          <p className="text-sm text-stone-400">
-            가입 후에도 설정에서 변경할 수 있어요
-          </p>
         </div>
 
         <div
@@ -287,10 +384,10 @@ export function SignupPage() {
                   <option.icon aria-hidden="true" size={21} strokeWidth={1.8} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <strong className="block text-[15.5px] font-bold text-stone-900">
+                  <strong className="block type-section-title font-bold text-stone-900">
                     {option.label}
                   </strong>
-                  <span className="mt-0.5 block text-[13px] leading-5 text-stone-600">
+                  <span className="mt-0.5 block type-control leading-5 text-stone-600">
                     {option.description}
                   </span>
                 </span>
@@ -319,7 +416,7 @@ export function SignupPage() {
           <ArrowRight aria-hidden="true" size={15} />
         </Button>
 
-        <p className="mt-6 text-center text-sm text-stone-600">
+        <p className="mt-6 text-center type-body text-stone-600">
           이미 계정이 있다면{' '}
           <Link
             to={routes.login}
@@ -335,13 +432,13 @@ export function SignupPage() {
   return (
     <div>
       <div className="flex flex-col gap-1.5">
-        <p className="text-[13px] text-stone-400">
+        <p className="type-control text-stone-400">
           회원가입 2 / 2 ·{' '}
           <strong className="font-semibold text-brand-600">
             {selectedRoleLabel}
           </strong>
         </p>
-        <h1 className="text-2xl font-bold text-stone-900">
+        <h1 className="type-page-title font-bold text-stone-900">
           계정 정보를 입력하세요
         </h1>
       </div>
@@ -350,14 +447,14 @@ export function SignupPage() {
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <label
-              className="text-[13px] font-semibold text-stone-800"
+              className="type-control font-semibold text-stone-800"
               htmlFor="signup-name"
             >
               이름
             </label>
             {errors.name ? (
               <p
-                className="text-xs font-medium text-rose-700"
+                className="type-caption font-medium text-rose-700"
                 id="signup-name-error"
                 role="alert"
               >
@@ -380,14 +477,14 @@ export function SignupPage() {
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <label
-              className="text-[13px] font-semibold text-stone-800"
+              className="type-control font-semibold text-stone-800"
               htmlFor="signup-email"
             >
               이메일
             </label>
             {errors.email ? (
               <p
-                className="text-xs font-medium text-rose-700"
+                className="type-caption font-medium text-rose-700"
                 id="signup-email-error"
                 role="alert"
               >
@@ -412,7 +509,7 @@ export function SignupPage() {
             emailAvailability !== 'idle' ? (
               <span
                 className={[
-                  'pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[11px] font-semibold',
+                  'pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 type-micro font-semibold',
                   emailAvailability === 'available'
                     ? 'text-emerald-700'
                     : 'text-stone-500',
@@ -427,14 +524,14 @@ export function SignupPage() {
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <label
-              className="text-[13px] font-semibold text-stone-800"
+              className="type-control font-semibold text-stone-800"
               htmlFor="signup-password"
             >
               비밀번호
             </label>
             {errors.password ? (
               <p
-                className="text-xs font-medium text-rose-700"
+                className="type-caption font-medium text-rose-700"
                 id="signup-password-error"
                 role="alert"
               >
@@ -444,9 +541,7 @@ export function SignupPage() {
           </div>
           <div className="relative mt-1">
             <input
-              aria-describedby={
-                errors.password ? 'signup-password-error' : 'password-strength'
-              }
+              aria-describedby={errors.password ? 'signup-password-error' : undefined}
               aria-invalid={errors.password ? true : undefined}
               autoComplete="new-password"
               className={fieldClassName(Boolean(errors.password), 'pr-11')}
@@ -460,8 +555,10 @@ export function SignupPage() {
               aria-label={
                 isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'
               }
-              className="absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              aria-pressed={isPasswordVisible}
+              className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
               onClick={() => setIsPasswordVisible((visible) => !visible)}
+              title={isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'}
               type="button"
             >
               {isPasswordVisible ? (
@@ -472,9 +569,13 @@ export function SignupPage() {
             </button>
           </div>
           <div
-            aria-live="polite"
-            className="mt-2 flex items-center gap-1.5"
+            aria-label="비밀번호 안전도"
+            aria-valuemax={4}
+            aria-valuemin={0}
+            aria-valuenow={passwordStrength.score}
+            className="mt-2 flex w-full items-center gap-1.5"
             id="password-strength"
+            role="progressbar"
           >
             {Array.from({ length: 4 }, (_, index) => (
               <span
@@ -487,28 +588,20 @@ export function SignupPage() {
                 key={index}
               />
             ))}
-            <span
-              className={[
-                'ml-1.5 min-w-9 text-right text-[11px] font-semibold',
-                passwordStrength.labelClassName,
-              ].join(' ')}
-            >
-              {passwordStrength.label}
-            </span>
           </div>
         </div>
 
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <label
-              className="text-[13px] font-semibold text-stone-800"
+              className="type-control font-semibold text-stone-800"
               htmlFor="signup-confirm-password"
             >
               비밀번호 확인
             </label>
             {confirmPasswordError ? (
               <p
-                className="text-xs font-medium text-rose-700"
+                className="type-caption font-medium text-rose-700"
                 id="signup-confirm-password-error"
                 role="alert"
               >
@@ -541,10 +634,12 @@ export function SignupPage() {
                   ? '비밀번호 확인 숨기기'
                   : '비밀번호 확인 표시'
               }
-              className="absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              aria-pressed={isConfirmPasswordVisible}
+              className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
               onClick={() =>
                 setIsConfirmPasswordVisible((visible) => !visible)
               }
+              title={isConfirmPasswordVisible ? '비밀번호 확인 숨기기' : '비밀번호 확인 표시'}
               type="button"
             >
               {isConfirmPasswordVisible ? (
@@ -556,84 +651,8 @@ export function SignupPage() {
           </div>
         </div>
 
-        <div className="relative" ref={affiliationContainerRef}>
-          <label
-            className="text-[13px] font-semibold text-stone-800"
-            htmlFor="signup-affiliation"
-          >
-            소속{' '}
-            <span className="font-normal text-stone-400">(선택)</span>
-          </label>
-          <div className="relative mt-1">
-            <input
-              aria-autocomplete="list"
-              aria-controls="affiliation-options"
-              aria-expanded={isAffiliationOpen}
-              autoComplete="organization"
-              className={fieldClassName(false, 'pr-10')}
-              id="signup-affiliation"
-              onChange={(event) => {
-                setAffiliation(event.target.value)
-                setIsAffiliationOpen(true)
-              }}
-              onFocus={() => setIsAffiliationOpen(true)}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') setIsAffiliationOpen(false)
-              }}
-              placeholder="학교 · 기관"
-              role="combobox"
-              value={affiliation}
-            />
-            <ChevronUp
-              aria-hidden="true"
-              className={[
-                'pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-stone-400 transition-transform',
-                isAffiliationOpen ? '' : 'rotate-180',
-              ].join(' ')}
-              size={15}
-            />
-          </div>
-
-          {isAffiliationOpen ? (
-            <div
-              className="absolute top-[calc(100%+5px)] right-0 left-0 z-20 overflow-hidden rounded-lg border border-stone-200 bg-white p-1 shadow-lg"
-              id="affiliation-options"
-              role="listbox"
-            >
-              {filteredAffiliations.map((item, index) => (
-                <button
-                  className={[
-                    'flex h-9 w-full items-center rounded-md px-3 text-left text-[13px] text-stone-700 hover:bg-stone-50',
-                    index === 0 ? 'bg-stone-100 font-semibold text-stone-900' : '',
-                  ].join(' ')}
-                  key={item.name}
-                  onClick={() => {
-                    setAffiliation(item.name)
-                    setIsAffiliationOpen(false)
-                  }}
-                  role="option"
-                  type="button"
-                >
-                  {item.name}
-                  <span className="ml-auto text-[11px] font-normal text-stone-400">
-                    {item.type}
-                  </span>
-                </button>
-              ))}
-              <div className="mx-2 my-1 h-px bg-stone-100" />
-              <button
-                className="flex h-9 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-brand-700 hover:bg-brand-50"
-                onClick={() => setIsAffiliationOpen(false)}
-                type="button"
-              >
-                + “{affiliation.trim() || '소속'}” 직접 입력
-              </button>
-            </div>
-          ) : null}
-        </div>
-
         <div className="grid gap-2 pt-1">
-          <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-5 text-stone-600">
+          <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
             <input
               checked={hasAcceptedTerms}
               className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"
@@ -648,17 +667,8 @@ export function SignupPage() {
               <span className="font-semibold text-rose-600">*</span>
             </span>
           </label>
-          <label className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-5 text-stone-600">
-            <input
-              checked={acceptsLearningEmails}
-              className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"
-              onChange={(event) => setAcceptsLearningEmails(event.target.checked)}
-              type="checkbox"
-            />
-            학습 소식 이메일 수신 (선택)
-          </label>
           {termsError ? (
-            <p className="text-xs font-medium text-rose-700" role="alert">
+            <p className="type-caption font-medium text-rose-700" role="alert">
               {termsError}
             </p>
           ) : null}
@@ -692,7 +702,7 @@ export function SignupPage() {
       </form>
 
       {serverError ? (
-        <p className="mt-3 text-sm font-medium text-rose-700" role="alert">
+        <p className="mt-3 type-body font-medium text-rose-700" role="alert">
           {serverError}
         </p>
       ) : null}
@@ -718,7 +728,7 @@ function getEmailAvailabilityLabel(
 
 function fieldClassName(hasError: boolean, spacingClassName: string): string {
   return [
-    'block h-11 w-full rounded-[10px] border bg-white px-3.5 text-sm text-stone-950',
+    'block h-11 w-full rounded-[10px] border bg-white px-3.5 type-body text-stone-950',
     'placeholder:text-stone-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100',
     hasError ? 'border-rose-400' : 'border-stone-300',
     spacingClassName,
@@ -727,15 +737,11 @@ function fieldClassName(hasError: boolean, spacingClassName: string): string {
 
 function getPasswordStrength(password: string): {
   barClassName: string
-  label: string
-  labelClassName: string
   score: number
 } {
   if (!password) {
     return {
       barClassName: 'bg-stone-300',
-      label: '',
-      labelClassName: 'text-stone-400',
       score: 0,
     }
   }
@@ -750,8 +756,6 @@ function getPasswordStrength(password: string): {
   if (score >= 3) {
     return {
       barClassName: 'bg-emerald-600',
-      label: '안전',
-      labelClassName: 'text-emerald-700',
       score,
     }
   }
@@ -759,16 +763,12 @@ function getPasswordStrength(password: string): {
   if (score === 2) {
     return {
       barClassName: 'bg-amber-500',
-      label: '보통',
-      labelClassName: 'text-amber-700',
       score,
     }
   }
 
   return {
     barClassName: 'bg-rose-500',
-    label: '약함',
-    labelClassName: 'text-rose-700',
     score: Math.max(1, score),
   }
 }

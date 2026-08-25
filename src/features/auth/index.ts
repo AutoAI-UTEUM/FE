@@ -1,7 +1,14 @@
-export { AUTH_IDLE_TIMEOUT_MS, AuthProvider } from './AuthProvider'
+export {
+  AUTH_IDLE_TIMEOUT_MS,
+  AUTH_RESTORE_TIMEOUT_MS,
+  AuthProvider,
+} from './AuthProvider'
 export { RequireAuth } from './RequireAuth'
 export { RequireInstructor } from './RequireInstructor'
+export { GoogleSignInButton } from './GoogleSignInButton'
 export { useAuth } from './useAuth'
+export { createUserSettingsRepository } from './userSettingsRepository'
+export type { AiAnswerStyle, UserPreferences } from './userSettingsRepository'
 export { getRoleLabel, isInstructorRole } from './authRoles'
 export type { AuthContextValue, AuthUser } from './authContext'
 export type {
@@ -17,6 +24,7 @@ export {
   hasFormErrors,
   validateLoginForm,
   validateSignupForm,
+  type GoogleAuthValues,
   type LoginFormErrors,
   type LoginFormValues,
   type SignupFormErrors,

@@ -8,6 +8,7 @@ import type {
   LearningSession,
   LearningSessionStatus,
   PendingDiagnosisReference,
+  NoteDraft,
   SessionMessage,
   SessionQuizSummary,
   SessionTurnResult,
@@ -55,6 +56,7 @@ interface SessionMessageDto {
   messageType?: string
   pageNumber?: number
   senderType: 'AI' | 'USER'
+  status?: 'COMPLETED' | 'FAILED' | 'PENDING'
 }
 
 interface CursorPage<T> {
@@ -65,10 +67,22 @@ interface CursorPage<T> {
 
 interface SessionTurnDto {
   messages?: SessionMessageDto[]
+  noteDraft?: unknown
   state?: {
     activeQuizId?: number | string | null
+    currentPage?: number
+    pageStatus?: string
     pendingDiagnosis?: PendingDiagnosisDto | null
   }
+  uiActions?: UiActionDto[]
+}
+
+interface SessionActionDto {
+  activeQuizId?: number | string | null
+  currentPage?: number
+  pageStatus?: string
+  pendingDiagnosis?: PendingDiagnosisDto | null
+  state?: SessionTurnDto['state']
   uiActions?: UiActionDto[]
 }
 
@@ -84,13 +98,15 @@ interface SessionQuizDto {
 }
 
 interface SessionQuizListDto {
-  quizzes: SessionQuizDto[]
+  items?: SessionQuizDto[]
+  quizzes?: SessionQuizDto[]
 }
 
 export interface SessionTurnRequest {
   eventType:
     | 'DIAGNOSIS_ANSWER_SUBMITTED'
     | 'EXPLAIN_CURRENT_PAGE'
+    | 'NOTE_REQUESTED'
     | 'QUIZ_TYPE_SELECTED'
     | 'USER_QUESTION'
   payload: Record<string, unknown>
@@ -98,7 +114,7 @@ export interface SessionTurnRequest {
 }
 
 export interface SessionStreamHandlers {
-  onCompleted?: () => void
+  onCompleted?: (noteDraft?: NoteDraft) => void
   onContentDelta?: (text: string) => void
   onError?: (message: string) => void
   onStatus?: (message: string) => void
@@ -106,6 +122,10 @@ export interface SessionStreamHandlers {
 }
 
 export interface SessionsRepository {
+  cancelTurn: (
+    sessionId: string,
+    signal?: AbortSignal,
+  ) => Promise<boolean>
   complete: (
     sessionId: string,
     signal?: AbortSignal,
@@ -114,6 +134,10 @@ export interface SessionsRepository {
     materialId: string,
     signal?: AbortSignal,
   ) => Promise<LearningSession>
+  declineQuiz: (
+    sessionId: string,
+    signal?: AbortSignal,
+  ) => Promise<SessionTurnResult>
   delete: (sessionId: string, signal?: AbortSignal) => Promise<void>
   getById: (
     sessionId: string,
@@ -128,11 +152,15 @@ export interface SessionsRepository {
     sessionId: string,
     signal?: AbortSignal,
   ) => Promise<SessionQuizSummary[]>
+  startNewConversation: (
+    sessionId: string,
+    signal?: AbortSignal,
+  ) => Promise<{ conversationId: string; startedAt: string }>
   movePage: (
     sessionId: string,
     pageNumber: number,
     signal?: AbortSignal,
-  ) => Promise<{ currentPage: number; uiActions: UiAction[] }>
+  ) => Promise<{ currentPage: number; pageStatus?: string; uiActions: UiAction[] }>
   stream: (
     sessionId: string,
     handlers: SessionStreamHandlers,
@@ -150,6 +178,13 @@ export function createSessionsRepository(
   rawRequest?: AuthenticatedRawRequest,
 ): SessionsRepository {
   return {
+    async cancelTurn(sessionId, signal) {
+      const { data } = await request<{ cancelled: boolean }>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/turns/cancel`,
+        { method: 'POST', signal },
+      )
+      return data.cancelled
+    },
     async complete(sessionId, signal) {
       const { data } = await request<SessionDetailDto>(
         `/api/sessions/${encodeURIComponent(sessionId)}/complete`,
@@ -164,6 +199,21 @@ export function createSessionsRepository(
         signal,
       })
       return mapSession(data)
+    },
+    async declineQuiz(sessionId, signal) {
+      const { data } = await request<SessionActionDto>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/quiz-decline`,
+        { method: 'POST', signal },
+      )
+      const state = data.state ?? data
+      return {
+        activeQuizId: mapNullableId(state, 'activeQuizId'),
+        currentPage: state.currentPage,
+        messages: [],
+        pageStatus: state.pageStatus,
+        pendingDiagnosis: mapNullableDiagnosis(state),
+        uiActions: mapUiActions(data.uiActions),
+      }
     },
     async delete(sessionId, signal) {
       await request<unknown>(
@@ -204,7 +254,7 @@ export function createSessionsRepository(
         `/api/sessions/${encodeURIComponent(sessionId)}/quizzes`,
         { signal },
       )
-      return data.quizzes.map((quiz) => ({
+      return (data.quizzes ?? data.items ?? []).map((quiz) => ({
         createdAt: quiz.createdAt,
         maxScore: quiz.maxScore,
         passed: quiz.passed,
@@ -215,9 +265,23 @@ export function createSessionsRepository(
         title: quiz.title,
       }))
     },
+    async startNewConversation(sessionId, signal) {
+      const { data } = await request<{
+        conversationId: number | string
+        startedAt: string
+      }>(`/api/sessions/${encodeURIComponent(sessionId)}/conversations`, {
+        method: 'POST',
+        signal,
+      })
+      return {
+        conversationId: String(data.conversationId),
+        startedAt: data.startedAt,
+      }
+    },
     async movePage(sessionId, pageNumber, signal) {
       const { data } = await request<{
         currentPage: number
+        pageStatus?: string
         uiActions?: UiActionDto[]
       }>(`/api/sessions/${encodeURIComponent(sessionId)}/page`, {
         body: { pageNumber },
@@ -226,6 +290,7 @@ export function createSessionsRepository(
       })
       return {
         currentPage: data.currentPage,
+        pageStatus: data.pageStatus,
         uiActions: mapUiActions(data.uiActions),
       }
     },
@@ -270,9 +335,12 @@ export function createSessionsRepository(
         },
       )
       return {
-        activeQuizId: toOptionalString(data.state?.activeQuizId),
+        activeQuizId: mapNullableId(data.state, 'activeQuizId'),
+        currentPage: data.state?.currentPage,
         messages: (data.messages ?? []).map(mapMessage),
-        pendingDiagnosis: mapPendingDiagnosis(data.state?.pendingDiagnosis),
+        noteDraft: mapNoteDraft(data.noteDraft),
+        pageStatus: data.state?.pageStatus,
+        pendingDiagnosis: mapNullableDiagnosis(data.state),
         uiActions: mapUiActions(data.uiActions),
       }
     },
@@ -308,7 +376,7 @@ function handleStreamMessage(
   }
 
   if (eventType === 'completed') {
-    handlers.onCompleted?.()
+    handlers.onCompleted?.(mapNoteDraft(payload.noteDraft))
     return
   }
 
@@ -364,6 +432,7 @@ function mapMessage(message: SessionMessageDto): SessionMessage {
   return {
     ...message,
     id: String(message.messageId),
+    status: message.status ?? 'COMPLETED',
   }
 }
 
@@ -371,9 +440,21 @@ const UI_ACTION_EVENTS = [
   'COMPLETE_SESSION',
   'EXPLAIN_CURRENT_PAGE',
   'MOVE_NEXT_PAGE',
+  'NOTE_REQUESTED',
   'SHOW_QUIZ_TYPE_SELECT',
   'WAIT',
 ] as const
+
+function mapNoteDraft(value: unknown): NoteDraft | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const draft = value as Record<string, unknown>
+  if (typeof draft.title !== 'string' || typeof draft.content !== 'string') {
+    return undefined
+  }
+  const title = draft.title.trim().slice(0, 60)
+  const content = draft.content.trim()
+  return title && content ? { content, title } : undefined
+}
 
 function toUiActionEvent(value: string | undefined): UiActionEvent | undefined {
   return UI_ACTION_EVENTS.find((event) => event === value)
@@ -448,6 +529,25 @@ function toOptionalString(
   value: number | string | null | undefined,
 ): string | undefined {
   return value === null || value === undefined ? undefined : String(value)
+}
+
+function mapNullableId(
+  state: SessionTurnDto['state'],
+  key: 'activeQuizId',
+): string | null | undefined {
+  if (!state || !Object.prototype.hasOwnProperty.call(state, key)) return undefined
+  return state[key] === null ? null : toOptionalString(state[key])
+}
+
+function mapNullableDiagnosis(
+  state: SessionTurnDto['state'],
+): PendingDiagnosisReference | null | undefined {
+  if (!state || !Object.prototype.hasOwnProperty.call(state, 'pendingDiagnosis')) {
+    return undefined
+  }
+  return state.pendingDiagnosis === null
+    ? null
+    : mapPendingDiagnosis(state.pendingDiagnosis)
 }
 
 function toApiId(value: string): number | string {

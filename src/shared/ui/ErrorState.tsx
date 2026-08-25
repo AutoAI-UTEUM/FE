@@ -16,8 +16,8 @@ export function ErrorState({ action, description, title }: ErrorStateProps) {
       <span className="flex size-10 items-center justify-center rounded-lg bg-rose-50 text-rose-700">
         <CircleAlert aria-hidden="true" size={19} />
       </span>
-      <h1 className="mt-4 text-xl font-bold text-stone-950">{title}</h1>
-      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-stone-600">
+      <h1 className="mt-4 type-dialog-title font-bold text-stone-950">{title}</h1>
+      <p className="mx-auto mt-2 max-w-xl type-body leading-6 text-stone-600">
         {description}
       </p>
       {action ? <div className="mt-5 flex justify-center">{action}</div> : null}

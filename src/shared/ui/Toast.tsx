@@ -54,7 +54,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
         {toasts.map((toast) => (
           <div
             className={cx(
-              'pointer-events-auto flex items-start justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-sm font-medium shadow-sm',
+              'pointer-events-auto flex items-start justify-between gap-3 rounded-lg border px-3.5 py-2.5 type-body font-medium shadow-sm',
               toneClasses[toast.tone],
             )}
             key={toast.id}

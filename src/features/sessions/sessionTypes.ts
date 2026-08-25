@@ -25,8 +25,14 @@ export type UiActionEvent =
   | 'COMPLETE_SESSION'
   | 'EXPLAIN_CURRENT_PAGE'
   | 'MOVE_NEXT_PAGE'
+  | 'NOTE_REQUESTED'
   | 'SHOW_QUIZ_TYPE_SELECT'
   | 'WAIT'
+
+export interface NoteDraft {
+  content: string
+  title: string
+}
 
 export type UiAction =
   | {
@@ -58,12 +64,16 @@ export interface SessionMessage {
   messageType?: string
   pageNumber?: number
   senderType: 'AI' | 'USER'
+  status?: 'COMPLETED' | 'FAILED' | 'PENDING'
 }
 
 export interface SessionTurnResult {
-  activeQuizId?: string
+  activeQuizId?: string | null
+  currentPage?: number
   messages: SessionMessage[]
-  pendingDiagnosis?: PendingDiagnosisReference
+  noteDraft?: NoteDraft
+  pageStatus?: string
+  pendingDiagnosis?: PendingDiagnosisReference | null
   uiActions: UiAction[]
 }
 

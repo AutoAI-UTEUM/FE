@@ -6,6 +6,7 @@ import type {
   AuthenticatedRequest,
 } from './auth'
 import { createMaterialsRepository } from './materials'
+import { createDocumentChatRepository } from './documentChat'
 import { createMemoryRepository } from './memory'
 import { createQuizRepository } from './quiz'
 import { createSessionsRepository } from './sessions'
@@ -15,6 +16,33 @@ afterEach(() => {
 })
 
 describe('remote feature repositories', () => {
+  it('uses the material and quiz document chat endpoints', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(success({ answer: '자료 답변', warnings: [] }))
+      .mockResolvedValueOnce(success({ answer: '퀴즈 답변', warnings: [] }))
+    const repository = createDocumentChatRepository(request as AuthenticatedRequest)
+    const history = [{ content: '앞 질문', role: 'USER' as const }]
+
+    await expect(repository.ask('10', 'material', '자료 질문', history)).resolves.toEqual({
+      answer: '자료 답변',
+      warnings: [],
+    })
+    await expect(repository.ask('10', 'quiz', '복습 질문', history)).resolves.toEqual({
+      answer: '퀴즈 답변',
+      warnings: [],
+    })
+    expect(request).toHaveBeenNthCalledWith(1, '/api/materials/10/doc-chat', {
+      body: { history, question: '자료 질문' },
+      method: 'POST',
+      signal: undefined,
+    })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/materials/10/quiz-chat', {
+      body: { history, question: '복습 질문' },
+      method: 'POST',
+      signal: undefined,
+    })
+  })
+
   it('maps paged materials and uploads multipart data', async () => {
     const request = vi
       .fn()
@@ -43,6 +71,14 @@ describe('remote feature repositories', () => {
           title: '새 자료.pdf',
         }),
       )
+      .mockResolvedValueOnce(
+        success({
+          createdAt: '2026-07-27T00:00:00Z',
+          materialId: 11,
+          processingStatus: 'PROCESSING',
+          title: '변경한 자료',
+        }),
+      )
     const repository = createMaterialsRepository(request as AuthenticatedRequest)
 
     await expect(repository.list()).resolves.toMatchObject([
@@ -55,7 +91,7 @@ describe('remote feature repositories', () => {
     )
 
     const file = new File(['pdf'], '새 자료.pdf', { type: 'application/pdf' })
-    await expect(repository.upload(file)).resolves.toMatchObject({
+    await expect(repository.upload(file, { title: '새 자료' })).resolves.toMatchObject({
       id: '11',
       status: 'PROCESSING',
     })
@@ -65,7 +101,17 @@ describe('remote feature repositories', () => {
     }
     expect(uploadOptions.method).toBe('POST')
     expect(uploadOptions.body.get('file')).toBe(file)
-    expect(uploadOptions.body.get('title')).toBe('새 자료.pdf')
+    expect(uploadOptions.body.get('title')).toBe('새 자료')
+
+    await expect(repository.rename('11', ' 변경한 자료 ')).resolves.toMatchObject({
+      id: '11',
+      title: '변경한 자료',
+    })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/materials/11', {
+      body: { title: '변경한 자료' },
+      method: 'PATCH',
+      signal: undefined,
+    })
   })
 
   it('loads authenticated PDF files as binary data', async () => {
@@ -87,12 +133,51 @@ describe('remote feature repositories', () => {
     })
   })
 
+  it('maps structured material failure metadata', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      createdAt: '2026-08-10T00:00:00Z',
+      failureReason: 'PAGE_LIMIT_EXCEEDED',
+      materialId: 12,
+      processingStatus: 'FAILED',
+      title: 'too-long.pdf',
+      traceId: 'upload-trace-12',
+    }))
+    const repository = createMaterialsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getById('12')).resolves.toMatchObject({
+      failureReason: 'PAGE_LIMIT_EXCEEDED',
+      id: '12',
+      status: 'FAILED',
+      traceId: 'upload-trace-12',
+    })
+  })
+
+  it('loads material overview using the material-scoped endpoint', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      content: '## 목차\n\n- 핵심 개념',
+      materialId: 10,
+      status: 'READY',
+      updatedAt: '2026-08-15T00:00:00Z',
+    }))
+    const repository = createMaterialsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getOverview('10')).resolves.toEqual({
+      content: '## 목차\n\n- 핵심 개념',
+      materialId: '10',
+      status: 'READY',
+      updatedAt: '2026-08-15T00:00:00Z',
+    })
+    expect(request).toHaveBeenCalledWith('/api/materials/10/overview', {
+      signal: undefined,
+    })
+  })
+
   it('parses session SSE content events', async () => {
     const encoder = new TextEncoder()
     const rawRequest = vi.fn().mockResolvedValue(
       new Response(
         encoder.encode(
-          'event: status\ndata: {"stage":"GENERATING"}\n\nevent: content_delta\ndata: {"text":"실시간 답변"}\n\nevent: ui_action\ndata: {"action":{"type":"MOVE_NEXT_PAGE","content":"다음 쪽으로 이동"}}\n\nevent: completed\ndata: {}\n\n',
+          'event: status\ndata: {"stage":"GENERATING"}\n\nevent: content_delta\ndata: {"text":"실시간 답변"}\n\nevent: ui_action\ndata: {"action":{"type":"MOVE_NEXT_PAGE","content":"다음 쪽으로 이동"}}\n\nevent: completed\ndata: {"noteDraft":{"title":"핵심 정리","content":"## 개념\\n\\n- 적용 사례"}}\n\n',
         ),
         { headers: { 'Content-Type': 'text/event-stream' } },
       ),
@@ -118,14 +203,22 @@ describe('remote feature repositories', () => {
         label: '다음 쪽으로 이동',
       }),
     )
-    expect(handlers.onCompleted).toHaveBeenCalledOnce()
+    expect(handlers.onCompleted).toHaveBeenCalledWith({
+      content: '## 개념\n\n- 적용 사례',
+      title: '핵심 정리',
+    })
   })
 
   it('sends session page moves and learning turns using the contract paths', async () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(
-        success({ currentPage: 4, uiActions: [] }),
+        success({ currentPage: 4, pageStatus: 'NOT_EXPLAINED', uiActions: [] }),
+      )
+      .mockResolvedValueOnce(
+        success({
+          uiActions: [{ content: '다음 페이지로 이동할까요?', noEvent: 'WAIT', type: 'BINARY_DECISION', yesEvent: 'MOVE_NEXT_PAGE' }],
+        }),
       )
       .mockResolvedValueOnce(
         success({
@@ -135,16 +228,22 @@ describe('remote feature repositories', () => {
               createdAt: '2026-07-27T00:00:00Z',
               messageId: 501,
               senderType: 'AI',
+              status: 'COMPLETED',
             },
           ],
-          state: {},
-          uiActions: [],
+          noteDraft: { title: '턴 노트', content: '**핵심** 내용' },
+          state: { currentPage: 3, pageStatus: 'IN_PROGRESS' },
+          uiActions: [{ content: '노트로 정리할까요?', noEvent: 'WAIT', type: 'BINARY_DECISION', yesEvent: 'NOTE_REQUESTED' }],
         }),
+      )
+      .mockResolvedValueOnce(
+        success({ conversationId: 9, startedAt: '2026-08-03T00:00:00Z' }),
       )
     const repository = createSessionsRepository(request as AuthenticatedRequest)
 
     await expect(repository.movePage('100', 4)).resolves.toMatchObject({
       currentPage: 4,
+      pageStatus: 'NOT_EXPLAINED',
     })
     expect(request).toHaveBeenNthCalledWith(
       1,
@@ -155,6 +254,16 @@ describe('remote feature repositories', () => {
       }),
     )
 
+    await expect(repository.declineQuiz('100')).resolves.toMatchObject({
+      messages: [],
+      uiActions: [{ kind: 'BINARY_DECISION', yesEvent: 'MOVE_NEXT_PAGE' }],
+    })
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      '/api/sessions/100/quiz-decline',
+      { method: 'POST', signal: undefined },
+    )
+
     await expect(
       repository.submitTurn('100', {
         eventType: 'USER_QUESTION',
@@ -162,10 +271,14 @@ describe('remote feature repositories', () => {
         requestId: 'request-1',
       }),
     ).resolves.toMatchObject({
-      messages: [{ id: '501', senderType: 'AI' }],
+      currentPage: 3,
+      messages: [{ id: '501', senderType: 'AI', status: 'COMPLETED' }],
+      noteDraft: { content: '**핵심** 내용', title: '턴 노트' },
+      pageStatus: 'IN_PROGRESS',
+      uiActions: [{ kind: 'BINARY_DECISION', noEvent: 'WAIT', yesEvent: 'NOTE_REQUESTED' }],
     })
     expect(request).toHaveBeenNthCalledWith(
-      2,
+      3,
       '/api/sessions/100/turns',
       expect.objectContaining({
         body: {
@@ -176,6 +289,83 @@ describe('remote feature repositories', () => {
         method: 'POST',
       }),
     )
+
+    await expect(repository.startNewConversation('100')).resolves.toEqual({
+      conversationId: '9',
+      startedAt: '2026-08-03T00:00:00Z',
+    })
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      '/api/sessions/100/conversations',
+      { method: 'POST', signal: undefined },
+    )
+  })
+
+  it('cancels the active learning turn through the server contract', async () => {
+    const request = vi.fn().mockResolvedValue(success({ cancelled: true }))
+    const repository = createSessionsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.cancelTurn('100')).resolves.toBe(true)
+    expect(request).toHaveBeenCalledWith('/api/sessions/100/turns/cancel', {
+      method: 'POST',
+      signal: undefined,
+    })
+  })
+
+  it('preserves explicit nulls that clear quiz and diagnosis state', async () => {
+    const request = vi.fn().mockResolvedValue(
+      success({
+        messages: [],
+        state: { activeQuizId: null, pendingDiagnosis: null },
+        uiActions: [],
+      }),
+    )
+    const repository = createSessionsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.submitTurn('100', {
+      eventType: 'USER_QUESTION',
+      payload: { message: '계속 학습할게' },
+      requestId: 'clear-state-1',
+    })).resolves.toMatchObject({
+      activeQuizId: null,
+      pendingDiagnosis: null,
+    })
+  })
+
+  it('maps the non-paged session quiz history response', async () => {
+    const request = vi.fn().mockResolvedValue(
+      success({
+        quizzes: [
+          {
+            createdAt: '2026-07-27T00:00:00Z',
+            maxScore: 100,
+            passed: false,
+            quizId: 50,
+            quizType: 'MCQ',
+            score: 48,
+            submitted: true,
+            title: '학습 확인 퀴즈',
+          },
+        ],
+      }),
+    )
+    const repository = createSessionsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.listQuizzes('100')).resolves.toEqual([
+      {
+        createdAt: '2026-07-27T00:00:00Z',
+        maxScore: 100,
+        passed: false,
+        quizId: '50',
+        quizType: 'MCQ',
+        score: 48,
+        submitted: true,
+        title: '학습 확인 퀴즈',
+      },
+    ])
+    expect(request).toHaveBeenCalledWith('/api/sessions/100/quizzes', {
+      signal: undefined,
+    })
   })
 
   it('maps the non-paged session quiz history response', async () => {
@@ -288,7 +478,7 @@ describe('remote feature repositories', () => {
       .mockResolvedValueOnce(
         success({
           gradingResult: {
-            items: [{ feedback: '정답입니다.', questionId: 'q1' }],
+            items: [{ feedback: '정답입니다.', maxScore: 100, questionId: 'q1', score: 40, verdict: 'PARTIAL' }],
           },
           maxScore: 100,
           passed: false,
@@ -319,6 +509,7 @@ describe('remote feature repositories', () => {
       repository.submit(quiz!, { q1: 'a' }),
     ).resolves.toMatchObject({
       diagnosisEntry: { diagnosisId: '30', sessionId: '100' },
+      feedback: [{ maxScore: 100, message: '정답입니다.', questionId: 'q1', score: 40, verdict: 'PARTIAL' }],
       score: 40,
     })
     expect(request).toHaveBeenNthCalledWith(
@@ -326,6 +517,73 @@ describe('remote feature repositories', () => {
       '/api/quizzes/50/submit',
       expect.objectContaining({ method: 'POST' }),
     )
+  })
+
+  it('creates selectable O/X choices with the documented boolean answer values', async () => {
+    const request = vi.fn().mockResolvedValue(
+      success({
+        questions: [
+          {
+            maxScore: 100,
+            questionId: 'q-ox',
+            questionText: '이 설명은 맞습니까?',
+          },
+        ],
+        quizId: 51,
+        quizType: 'OX',
+        sessionId: 100,
+        submitted: false,
+        title: 'OX 확인 퀴즈',
+      }),
+    )
+    const repository = createQuizRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getById('51')).resolves.toMatchObject({
+      questions: [
+        {
+          choices: [
+            { id: 'true', label: 'O' },
+            { id: 'false', label: 'X' },
+          ],
+          kind: 'OX',
+        },
+      ],
+    })
+  })
+
+  it('loads the current learner quiz submission with answers and grading details', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      items: [{
+        correctAnswer: 'true',
+        explanation: '정답은 O입니다.',
+        feedback: '정답입니다.',
+        maxScore: 100,
+        questionId: 'q-ox',
+        score: 100,
+        submittedAnswer: 'true',
+        verdict: 'CORRECT',
+      }],
+      maxScore: 100,
+      passed: true,
+      quizId: 51,
+      score: 100,
+      submissionId: 201,
+      submittedAt: '2026-08-12T00:00:00Z',
+    }))
+    const repository = createQuizRepository(request as AuthenticatedRequest)
+
+    await expect(repository.getSubmission('51')).resolves.toMatchObject({
+      feedback: [{
+        correctAnswer: 'true',
+        explanation: '정답은 O입니다.',
+        questionId: 'q-ox',
+        submittedAnswer: 'true',
+        verdict: 'CORRECT',
+      }],
+      passed: true,
+      score: 100,
+    })
+    expect(request).toHaveBeenCalledWith('/api/quizzes/51/submission', { signal: undefined })
   })
 
   it('loads learner memory using the material query parameter', async () => {

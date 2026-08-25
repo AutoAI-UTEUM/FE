@@ -2,6 +2,7 @@ import { apiRequest, ApiClientError } from '../../shared/api'
 import type { AuthUser } from './authContext'
 import { AuthValidationError } from './authErrors'
 import type {
+  GoogleAuthValues,
   LoginFormValues,
   SignupFormErrors,
   SignupFormValues,
@@ -18,6 +19,7 @@ export interface AuthRepository {
     signal?: AbortSignal,
   ) => Promise<boolean>
   getMe: (accessToken: string, signal?: AbortSignal) => Promise<AuthUser>
+  loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthSessionResult>
   login: (values: LoginFormValues) => Promise<AuthSessionResult>
   logout: () => Promise<void>
   refresh: (signal?: AbortSignal) => Promise<string>
@@ -29,16 +31,22 @@ interface LoginResponseDto {
   expiresIn: number
   tokenType: string
   user: {
+    affiliation?: string
+    avatarUrl?: string
     email: string
     id: number
+    learningEmailOptIn?: boolean
     name: string
     role: string
   }
 }
 
 interface UserResponseDto {
+  affiliation?: string
+  avatarUrl?: string
   email: string
   id?: number
+  learningEmailOptIn?: boolean
   name: string
   role?: string
   userId?: number
@@ -83,6 +91,25 @@ const repository: AuthRepository = {
     }
   },
 
+  async loginWithGoogle(values) {
+    const { data } = await apiRequest<LoginResponseDto>('/api/auth/google', {
+      body: {
+        affiliation: values.affiliation?.trim() || undefined,
+        idToken: values.idToken,
+        learningEmailOptIn: values.learningEmailOptIn,
+        privacyVersion: values.privacyVersion,
+        role: values.role,
+        termsVersion: values.termsVersion,
+      },
+      method: 'POST',
+    })
+
+    return {
+      accessToken: data.accessToken,
+      user: mapUser(data.user),
+    }
+  },
+
   async logout() {
     await apiRequest<unknown>('/api/auth/logout', { method: 'POST' })
   },
@@ -100,10 +127,14 @@ const repository: AuthRepository = {
     try {
       await apiRequest<UserResponseDto>('/api/auth/signup', {
         body: {
+          affiliation: values.affiliation?.trim() || undefined,
           email: values.email.trim().toLowerCase(),
+          learningEmailOptIn: values.learningEmailOptIn ?? false,
           name: values.name.trim(),
           password: values.password,
+          privacyVersion: '2026-07-01',
           role: values.role,
+          termsVersion: '2026-07-01',
         },
         method: 'POST',
       })
@@ -119,8 +150,11 @@ export function getAuthRepository(): AuthRepository {
 
 function mapUser(user: UserResponseDto): AuthUser {
   return {
+    affiliation: user.affiliation,
+    avatarUrl: user.avatarUrl,
     email: user.email,
     id: user.id ?? user.userId,
+    learningEmailOptIn: user.learningEmailOptIn,
     name: user.name,
     role: user.role,
   }
@@ -159,7 +193,7 @@ function mapRemoteAuthError(
     : error
 }
 
-const FORM_FIELDS = ['email', 'name', 'password', 'role'] as const
+const FORM_FIELDS = ['affiliation', 'email', 'name', 'password', 'role'] as const
 
 function isFieldDetail(
   detail: unknown,

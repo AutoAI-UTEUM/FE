@@ -4,6 +4,9 @@ import type {
   AuthenticatedRequest,
 } from '../auth'
 import type {
+  MaterialFailureReason,
+  MaterialOverview,
+  MaterialOverviewStatus,
   MaterialStatus,
   StudyMaterial,
 } from './materialTypes'
@@ -11,12 +14,20 @@ import type {
 interface MaterialDto {
   activeSessionId?: number | string | null
   createdAt: string
-  failureReason?: string | null
+  failureReason?: MaterialFailureReason | null
   fileSizeBytes?: number | null
   materialId: number | string
   pageCount?: number | null
   processingStatus: MaterialStatus
   title: string
+  traceId?: string | null
+}
+
+interface MaterialOverviewDto {
+  content?: string | null
+  materialId: number | string
+  status: MaterialOverviewStatus
+  updatedAt?: string | null
 }
 
 export interface MaterialsRepository {
@@ -29,9 +40,26 @@ export interface MaterialsRepository {
     materialId: string,
     signal?: AbortSignal,
   ) => Promise<Blob>
+  getOverview: (
+    materialId: string,
+    signal?: AbortSignal,
+  ) => Promise<MaterialOverview | null>
   list: (signal?: AbortSignal) => Promise<StudyMaterial[]>
   refreshStatuses: (signal?: AbortSignal) => Promise<StudyMaterial[]>
-  upload: (file: File, signal?: AbortSignal) => Promise<StudyMaterial>
+  rename: (
+    materialId: string,
+    title: string,
+    signal?: AbortSignal,
+  ) => Promise<StudyMaterial>
+  upload: (
+    file: File,
+    options: {
+      classroomId?: string
+      signal?: AbortSignal
+      title: string
+      weekNumber?: number
+    },
+  ) => Promise<StudyMaterial>
 }
 
 export function createMaterialsRepository(
@@ -83,21 +111,50 @@ export function createMaterialsRepository(
       }
       return response.blob()
     },
+    async getOverview(materialId, signal) {
+      try {
+        const { data } = await request<MaterialOverviewDto>(
+          `/api/materials/${encodeURIComponent(materialId)}/overview`,
+          { signal },
+        )
+        return mapMaterialOverview(data)
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 404) {
+          return null
+        }
+        throw error
+      }
+    },
     async list(signal) {
       return requestMaterials(request, signal)
     },
     async refreshStatuses(signal) {
       return requestMaterials(request, signal)
     },
-    async upload(file, signal) {
+    async rename(materialId, title, signal) {
+      const { data } = await request<MaterialDto>(
+        `/api/materials/${encodeURIComponent(materialId)}`,
+        {
+          body: { title: title.trim() },
+          method: 'PATCH',
+          signal,
+        },
+      )
+      return mapMaterial(data)
+    },
+    async upload(file, options) {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('title', file.name)
+      formData.append('title', options.title.trim())
+      if (options?.classroomId && options.weekNumber) {
+        formData.append('classroomId', options.classroomId)
+        formData.append('weekNumber', String(options.weekNumber))
+      }
 
       const { data } = await request<MaterialDto>('/api/materials', {
         body: formData,
         method: 'POST',
-        signal,
+        signal: options?.signal,
       })
       return mapMaterial(data)
     },
@@ -128,5 +185,15 @@ function mapMaterial(material: MaterialDto): StudyMaterial {
     pageCount: material.pageCount ?? undefined,
     status: material.processingStatus,
     title: material.title,
+    traceId: material.traceId ?? undefined,
+  }
+}
+
+function mapMaterialOverview(overview: MaterialOverviewDto): MaterialOverview {
+  return {
+    content: overview.content ?? undefined,
+    materialId: String(overview.materialId),
+    status: overview.status,
+    updatedAt: overview.updatedAt ?? undefined,
   }
 }

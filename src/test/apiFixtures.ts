@@ -48,6 +48,25 @@ export async function handleApiFixtureRequest(
   }
 
   if (
+    request.method === 'POST' &&
+    /^\/api\/materials\/\d+\/(doc-chat|quiz-chat)$/.test(path)
+  ) {
+    const body = await readJson<{
+      history?: Array<{ content: string; role: string }>
+      question?: string
+    }>(request)
+    const isQuizReview = path.endsWith('/quiz-chat')
+    return apiSuccess({
+      answer: isQuizReview
+        ? `제출한 퀴즈를 기준으로 '${body.question ?? ''}'을 다시 설명할게요.`
+        : `자료 전체를 기준으로 '${body.question ?? ''}'에 답변할게요.`,
+      warnings: body.history && body.history.length > 10
+        ? [{ message: '최근 대화를 중심으로 답변했습니다.', type: 'CONTEXT_TRUNCATED' }]
+        : [],
+    })
+  }
+
+  if (
     request.method === 'GET' &&
     /^\/api\/sessions\/\d+\/stream$/.test(path)
   ) {
@@ -93,7 +112,29 @@ export async function handleApiFixtureRequest(
         email: body.email,
         id: 1,
         name: 'learner',
-              role: 'LEARNER',
+        role: body.email.startsWith('instructor') ? 'INSTRUCTOR' : 'LEARNER',
+      },
+    })
+  }
+
+  if (request.method === 'POST' && path === '/api/auth/google') {
+    const body = await readJson<{ idToken: string; role?: string }>(request)
+    if (body.idToken === 'new-google-id-token' && !body.role) {
+      return apiFailure(
+        'SIGNUP_REQUIRED',
+        '신규 회원은 가입 정보가 필요합니다.',
+        409,
+      )
+    }
+    return apiSuccess({
+      accessToken: 'google-access-token',
+      expiresIn: 3600,
+      tokenType: 'Bearer',
+      user: {
+        email: 'google@example.com',
+        id: 2,
+        name: 'Google 사용자',
+        role: body.role ?? 'LEARNER',
       },
     })
   }
@@ -141,8 +182,182 @@ export async function handleApiFixtureRequest(
     })
   }
 
+  if (request.method === 'PATCH' && path === '/api/users/me') {
+    const body = await readJson<{ affiliation?: string; name?: string }>(request)
+    return apiSuccess({
+      affiliation: body.affiliation,
+      email: 'learner@example.com',
+      id: 1,
+      name: body.name ?? 'learner',
+      role: 'LEARNER',
+    })
+  }
+
+  if (request.method === 'GET' && path === '/api/users/me/preferences') {
+    return apiSuccess({
+      aiAnswerStyle: 'NORMAL',
+      newMaterialNotification: true,
+      studyReminder: false,
+    })
+  }
+
+  if (request.method === 'PATCH' && path === '/api/users/me/preferences') {
+    return apiSuccess(await readJson(request))
+  }
+
+  if (
+    request.method === 'GET' &&
+    path === '/api/users/me/notifications?page=0&size=20'
+  ) {
+    return apiSuccess(paged([]))
+  }
+
+  if (
+    request.method === 'PATCH' &&
+    /^\/api\/users\/me\/notifications\/\d+\/read$/.test(path)
+  ) {
+    return apiSuccess({
+      body: '확인할 알림입니다.',
+      createdAt: '2026-08-20T00:00:00Z',
+      link: {},
+      notificationId: Number(path.split('/')[5]),
+      readAt: '2026-08-20T00:01:00Z',
+      title: '알림',
+      type: 'NOTICE_PUBLISHED',
+    })
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    /^\/api\/users\/me\/notifications\/\d+$/.test(path)
+  ) {
+    return apiSuccess(null)
+  }
+
+  if (request.method === 'POST' && path === '/api/feedback') {
+    return apiSuccess({ createdAt: '2026-08-15T00:00:00Z', feedbackId: 1 })
+  }
+
+  if (
+    request.method === 'GET' &&
+    path === '/api/classrooms?page=0&size=100&sort=RECENT'
+  ) {
+    return apiSuccess(paged([]))
+  }
+
+  if (request.method === 'GET' && path === '/api/classrooms/12') {
+    return apiSuccess({
+      classroomId: 12,
+      color: 'BLUE',
+      endDate: '2026-08-16',
+      instructorName: '강의자',
+      learnerCount: 1,
+      name: '자료구조',
+      pendingRequestCount: 0,
+      progressRate: 0,
+      startDate: '2026-08-03',
+      status: 'ACTIVE',
+      weekCount: 2,
+    })
+  }
+
+  if (request.method === 'GET' && path === '/api/classrooms/12/weeks') {
+    return apiSuccess({
+      items: [
+        {
+          displayOrder: 1,
+          materials: [
+            {
+              materialId: 10,
+              pageCount: 5,
+              processingStatus: 'READY',
+              title: '시험 대비 요약.pdf',
+              uploadedAt: '2026-07-22T00:00:00Z',
+            },
+          ],
+          status: 'PUBLISHED',
+          title: '핵심 개념',
+          weekId: 91,
+          weekNumber: 1,
+        },
+        {
+          displayOrder: 2,
+          materials: [
+            {
+              materialId: 11,
+              processingStatus: 'PROCESSING',
+              title: '강의 노트 5주차.pdf',
+              uploadedAt: '2026-07-23T00:00:00Z',
+            },
+          ],
+          status: 'SCHEDULED',
+          title: '심화 학습',
+          weekId: 92,
+          weekNumber: 2,
+        },
+      ].reverse(),
+    })
+  }
+
+  if (
+    request.method === 'GET' &&
+    path.startsWith('/api/users/me/schedule?')
+  ) {
+    return apiSuccess({ items: [] })
+  }
+
+  if (request.method === 'POST' && path === '/api/users/me/schedule') {
+    const body = await readJson<{ endsAt: string; hasTime: boolean; startsAt: string; title: string }>(request)
+    return apiSuccess({ ...body, kind: 'PERSONAL', scheduleId: 'personal-1' })
+  }
+
+  if (request.method === 'PATCH' && path === '/api/users/me/schedule/personal-1') {
+    const body = await readJson<{ endsAt?: string; hasTime?: boolean; startsAt?: string; title?: string }>(request)
+    return apiSuccess({
+      endsAt: body.endsAt ?? '2099-08-03T10:00:00.000Z',
+      hasTime: body.hasTime ?? true,
+      kind: 'PERSONAL',
+      scheduleId: 'personal-1',
+      startsAt: body.startsAt ?? '2099-08-03T09:00:00.000Z',
+      title: body.title ?? '개인 일정',
+    })
+  }
+
+  if (request.method === 'DELETE' && path === '/api/users/me/schedule/personal-1') {
+    return apiSuccess(null)
+  }
+
+  if (request.method === 'GET' && /^\/api\/classrooms\/\d+\/analytics$/.test(path)) {
+    return apiSuccess({
+      aiQuestionCountLast7Days: 0,
+      averageProgressRate: 0,
+      inactiveLearnerCountLast7Days: 0,
+      lastUpdatedAt: '2026-08-04T12:00:00Z',
+      learnerCount: 0,
+      materials: [],
+      questionsByPage: [],
+    })
+  }
+
+  if (request.method === 'GET' && /^\/api\/classrooms\/\d+\/students\?/.test(path)) {
+    return apiSuccess(paged([]))
+  }
+
   if (request.method === 'GET' && path === '/api/materials?page=0&size=20') {
     return apiSuccess(paged(materialListFixture))
+  }
+
+  if (
+    request.method === 'GET' &&
+    /^\/api\/materials\/\d+\/overview$/.test(path)
+  ) {
+    const materialId = Number(path.match(/^\/api\/materials\/(\d+)\/overview$/)?.[1] ?? 0)
+    return apiSuccess({
+      content: null,
+      materialId,
+      status: 'PENDING',
+      updatedAt: null,
+    })
   }
 
   if (request.method === 'POST' && path === '/api/materials') {
@@ -220,6 +435,10 @@ export async function handleApiFixtureRequest(
     return apiSuccess({ quizzes: quizHistoryFixture })
   }
 
+  if (request.method === 'GET' && path === '/api/sessions/103/quizzes') {
+    return apiSuccess({ quizzes: [] })
+  }
+
   if (request.method === 'GET' && path === '/api/users/me/memory?materialId=10') {
     return apiSuccess(memoryFixture(10))
   }
@@ -236,6 +455,10 @@ export async function handleApiFixtureRequest(
     return apiSuccess(sessionFixtures[100])
   }
 
+  if (request.method === 'GET' && path === '/api/sessions/103') {
+    return apiSuccess(sessionFixtures[103])
+  }
+
   if (
     request.method === 'GET' &&
     path === '/api/sessions/100/messages?size=50'
@@ -243,13 +466,40 @@ export async function handleApiFixtureRequest(
     return apiSuccess({ hasMore: false, items: [], nextCursor: null })
   }
 
+  if (request.method === 'GET' && path === '/api/sessions/103/messages?size=50') {
+    return apiSuccess({ hasMore: false, items: [], nextCursor: null })
+  }
+
   if (request.method === 'PATCH' && path === '/api/sessions/100/page') {
     const body = await readJson<{ pageNumber: number }>(request)
-    return apiSuccess({ currentPage: body.pageNumber, uiActions: [] })
+    return apiSuccess({
+      currentPage: body.pageNumber,
+      uiActions: [
+        {
+          content: '현재 페이지를 설명할까요?',
+          noEvent: 'WAIT',
+          type: 'BINARY_DECISION',
+          yesEvent: 'EXPLAIN_CURRENT_PAGE',
+        },
+      ],
+    })
   }
 
   if (request.method === 'POST' && path === '/api/sessions/100/turns') {
     return turnResponse(await readJson<{ eventType?: string }>(request))
+  }
+
+  if (request.method === 'POST' && path === '/api/sessions/100/quiz-decline') {
+    return apiSuccess({
+      uiActions: [
+        {
+          content: '다음 페이지로 이동할까요?',
+          noEvent: 'WAIT',
+          type: 'BINARY_DECISION',
+          yesEvent: 'MOVE_NEXT_PAGE',
+        },
+      ],
+    })
   }
 
   if (request.method === 'POST' && path === '/api/sessions/100/complete') {
@@ -266,8 +516,58 @@ export async function handleApiFixtureRequest(
     return apiSuccess(quizFixture)
   }
 
+  if (request.method === 'GET' && path === '/api/quizzes/51') {
+    return apiSuccess({
+      questions: [
+        {
+          maxScore: 100,
+          questionId: 'ox-1',
+          questionText: '현재 설명은 참입니까?',
+        },
+      ],
+      quizId: 51,
+      quizType: 'OX',
+      sessionId: 100,
+      submitted: false,
+      title: 'OX 확인 퀴즈',
+    })
+  }
+
   if (request.method === 'POST' && path === '/api/quizzes/50/submit') {
     return apiSuccess(quizSubmitFixture)
+  }
+
+  if (request.method === 'GET' && path === '/api/quizzes/50/submission') {
+    return apiSuccess({
+      items: [
+        {
+          correctAnswer: 'mcq-a',
+          explanation: '새 개념은 정의부터 확인해야 합니다.',
+          feedback: '개념의 정의를 먼저 확인하는 것이 맞습니다.',
+          maxScore: 50,
+          questionId: 'question-mcq',
+          score: 50,
+          submittedAnswer: 'mcq-a',
+          verdict: 'CORRECT',
+        },
+        {
+          correctAnswer: 'review-a',
+          explanation: '이해가 낮은 페이지를 복습해야 합니다.',
+          feedback: '복습 순서를 다시 확인해 보세요.',
+          maxScore: 50,
+          questionId: 'question-review',
+          score: 0,
+          submittedAnswer: 'review-b',
+          verdict: 'WRONG',
+        },
+      ],
+      maxScore: 100,
+      passed: false,
+      quizId: 50,
+      score: 48,
+      submissionId: 200,
+      submittedAt: '2026-07-28T00:10:00Z',
+    })
   }
 
   return apiFailure('NOT_FOUND', `${request.method} ${path}`, 404)
@@ -462,7 +762,7 @@ function turnResponse(body: { eventType?: string }): Response {
       uiActions: [
         {
           content: '퀴즈를 진행할까요?',
-          noEvent: 'MOVE_NEXT_PAGE',
+          noEvent: 'WAIT',
           type: 'BINARY_DECISION',
           yesEvent: 'SHOW_QUIZ_TYPE_SELECT',
         },
@@ -488,7 +788,7 @@ function turnResponse(body: { eventType?: string }): Response {
         senderType: 'AI',
       },
     ],
-    state: {},
+    state: { currentPage: 2, pageStatus: 'IN_PROGRESS' },
     uiActions: [],
   })
 }
@@ -601,6 +901,17 @@ const sessionFixtures: Record<number, Record<string, unknown> | undefined> = {
     ],
     updatedAt: '2026-07-28T00:00:00Z',
   },
+  103: {
+    activeQuizId: 50,
+    currentPage: 2,
+    materialId: 10,
+    materialTitle: '시험 대비 요약.pdf',
+    pageStatus: 'QUIZ_READY',
+    sessionId: 103,
+    status: 'ACTIVE',
+    uiActions: [],
+    updatedAt: '2026-08-06T00:00:00Z',
+  },
 }
 
 const messageHistoryFixture = [
@@ -652,8 +963,18 @@ const quizSubmitFixture = {
   gradingResult: {
     items: [
       {
-        feedback: '채점이 완료되었습니다.',
-        questionId: 'question-short',
+        feedback: '개념의 정의를 먼저 확인하는 것이 맞습니다.',
+        maxScore: 50,
+        questionId: 'question-mcq',
+        score: 50,
+        verdict: 'CORRECT',
+      },
+      {
+        feedback: '복습 순서를 다시 확인해 보세요.',
+        maxScore: 50,
+        questionId: 'question-review',
+        score: 0,
+        verdict: 'WRONG',
       },
     ],
   },

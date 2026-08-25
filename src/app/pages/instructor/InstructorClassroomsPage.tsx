@@ -1,26 +1,119 @@
-import { BookOpen, KeyRound, Plus, Search, X } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  BookOpen,
+  FileText,
+  Minus,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 
+import { useAuth } from '../../../features/auth'
+import {
+  createClassroomsRepository,
+  type Classroom,
+  type ClassroomColor,
+  type ClassroomMaterial,
+  type CreateClassroomInput,
+} from '../../../features/classrooms'
+import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, EmptyState, PageContainer, useToast } from '../../../shared/ui'
+import {
+  Button,
+  EmptyState,
+  PageContainer,
+  PageHeader,
+  useToast,
+} from '../../../shared/ui'
+import {
+  classroomDetailPath,
+  classroomEditPath,
+  learningStatusPath,
+  materialViewerPath,
+} from '../../routes'
 
-const CLASSROOM_COLORS = [
-  { className: 'bg-brand-600', label: '파랑', value: 'blue' },
-  { className: 'bg-orange-600', label: '주황', value: 'orange' },
-  { className: 'bg-emerald-600', label: '초록', value: 'green' },
-  { className: 'bg-violet-600', label: '보라', value: 'violet' },
-] as const
+type CreateClassroomDraft = CreateClassroomInput & { weekCount: number }
+
+interface SearchableMaterial extends ClassroomMaterial {
+  classroomId: string
+  classroomName: string
+}
+
+interface DisplayClassroom extends Classroom {
+  searchMaterials: SearchableMaterial[]
+}
+
+interface SearchResult {
+  id: string
+  kind: 'classroom' | 'material'
+  path: string
+  subtitle: string
+  title: string
+}
 
 export function InstructorClassroomsPage() {
   usePageTitle('내 강의실')
+  const { apiRequest } = useAuth()
   const { show: showToast } = useToast()
+  const navigate = useNavigate()
+  const [classrooms, setClassrooms] = useState<DisplayClassroom[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [inviteCodeRegenerationTarget, setInviteCodeRegenerationTarget] = useState<DisplayClassroom | null>(null)
+  const [isRegeneratingInviteCode, setIsRegeneratingInviteCode] = useState(false)
   const [query, setQuery] = useState('')
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const repository = useMemo(
+    () => createClassroomsRepository(apiRequest),
+    [apiRequest],
+  )
+
+  async function loadClassrooms(search = '') {
+    setIsLoading(true)
+    setError(null)
+    try {
+      setClassrooms(
+        await loadCardDetails(await repository.list(search), repository),
+      )
+    } catch (requestError) {
+      setError(getRequestErrorMessage(requestError))
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
+    let cancelled = false
+    repository
+      .list()
+      .then((items) => loadCardDetails(items, repository))
+      .then((items) => {
+        if (!cancelled) setClassrooms(items)
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(getRequestErrorMessage(requestError))
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [repository])
+
+  useEffect(() => {
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setIsSearchOpen(true)
@@ -28,115 +121,623 @@ export function InstructorClassroomsPage() {
       if (event.key === 'Escape') {
         setIsCreateOpen(false)
         setIsSearchOpen(false)
+        if (!isRegeneratingInviteCode) setInviteCodeRegenerationTarget(null)
       }
     }
-
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
-  }, [])
+  }, [isRegeneratingInviteCode])
 
   useEffect(() => {
     if (isSearchOpen) searchInputRef.current?.focus()
   }, [isSearchOpen])
 
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('ko-KR')
+    if (!normalizedQuery) return []
+
+    const classroomResults = classrooms
+      .filter((classroom) =>
+        classroom.name.toLocaleLowerCase('ko-KR').includes(normalizedQuery),
+      )
+      .map((classroom) => ({
+        id: classroom.id,
+        kind: 'classroom' as const,
+        path: classroomDetailPath(classroom.id),
+        subtitle: `학습자 ${classroom.learnerCount}명 · ${classroom.status === 'ACTIVE' ? '운영 중' : '종료'}`,
+        title: classroom.name,
+      }))
+
+    const seenMaterialIds = new Set<string>()
+    const materialResults = classrooms.flatMap((classroom) =>
+      classroom.searchMaterials
+        .filter((material) =>
+          material.title
+            .toLocaleLowerCase('ko-KR')
+            .includes(normalizedQuery),
+        )
+        .filter((material) => {
+          if (seenMaterialIds.has(material.id)) return false
+          seenMaterialIds.add(material.id)
+          return true
+        })
+        .map((material) => ({
+          id: material.id,
+          kind: 'material' as const,
+          path: materialViewerPath(material.id),
+          subtitle: `${classroom.name} · PDF 자료`,
+          title: material.title,
+        })),
+    )
+
+    return [...classroomResults, ...materialResults]
+  }, [classrooms, query])
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (searchResults.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setSelectedSearchIndex((index) => (index + 1) % searchResults.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSelectedSearchIndex(
+        (index) => (index - 1 + searchResults.length) % searchResults.length,
+      )
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      navigate(searchResults[selectedSearchIndex].path)
+      setIsSearchOpen(false)
+    }
+  }
+
+  async function copyInviteCode(classroom: Classroom) {
+    try {
+      const code =
+        classroom.inviteCode ||
+        (await repository.getInviteCode(classroom.id))
+      await navigator.clipboard.writeText(code)
+      showToast('초대 코드를 복사했습니다.', 'success')
+    } catch (requestError) {
+      showToast(getRequestErrorMessage(requestError), 'danger')
+    }
+  }
+
+  async function regenerateInviteCode(classroom: Classroom) {
+    if (isRegeneratingInviteCode) return
+    setIsRegeneratingInviteCode(true)
+    try {
+      const code = await repository.regenerateInviteCode(classroom.id)
+      setClassrooms((items) =>
+        items.map((item) =>
+          item.id === classroom.id ? { ...item, inviteCode: code } : item,
+        ),
+      )
+      setInviteCodeRegenerationTarget(null)
+
+      try {
+        await navigator.clipboard.writeText(code)
+        showToast('새 초대 코드를 발급하고 복사했습니다.', 'success')
+      } catch {
+        showToast('새 초대 코드를 발급했습니다. 새 코드를 직접 복사해 주세요.', 'success')
+      }
+    } catch (requestError) {
+      showToast(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      setIsRegeneratingInviteCode(false)
+    }
+  }
+
   return (
     <PageContainer>
-      <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-[22px] font-bold text-stone-950">내 강의실</h1>
-          <p className="text-xs text-stone-400">
-            {getAcademicTermLabel()} · 운영 중 0개
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            aria-label="강의실 검색"
-            className="flex h-10 min-w-56 flex-1 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left text-sm text-stone-400 hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:min-w-72 xl:flex-none"
-            onClick={() => setIsSearchOpen(true)}
-            type="button"
-          >
-            <Search aria-hidden="true" size={15} />
-            <span className="flex-1">강의실 검색</span>
-            <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 text-[10px]">
-              ⌘K
-            </kbd>
-          </button>
-          <Button className="h-10" onClick={() => setIsCreateOpen(true)}>
-            <Plus aria-hidden="true" size={15} />
-            강의실 만들기
-          </Button>
-        </div>
-      </header>
-
-      <EmptyState
-        description="새 강의실을 만들면 운영 현황과 초대 코드를 확인할 수 있습니다."
-        title="아직 운영 중인 강의실이 없습니다"
+      <PageHeader
+        title="내 강의실"
+        actions={
+          <>
+            <button
+              aria-label="강의실 검색"
+              className="flex h-10 min-w-56 flex-1 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:min-w-72 xl:flex-none"
+              onClick={() => setIsSearchOpen(true)}
+              type="button"
+            >
+              <Search aria-hidden="true" size={15} />
+              <span className="flex-1">강의실 검색</span>
+              <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 type-micro">
+                ⌘K
+              </kbd>
+            </button>
+            <Button className="h-10" onClick={() => setIsCreateOpen(true)}>
+              <Plus aria-hidden="true" size={15} />
+              강의실 만들기
+            </Button>
+          </>
+        }
       />
 
-      {isSearchOpen ? (
-        <div
-          aria-label="강의실 검색"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
-          role="dialog"
+      {error ? (
+        <EmptyState
+          action={
+            <Button onClick={() => void loadClassrooms()} variant="secondary">
+              다시 시도
+            </Button>
+          }
+          description={error}
+          title="강의실을 불러오지 못했습니다"
+        />
+      ) : null}
+      {!error && isLoading ? (
+        <p className="py-16 text-center type-body text-stone-500" role="status">
+          강의실을 불러오는 중입니다.
+        </p>
+      ) : null}
+      {!error && !isLoading && classrooms.length === 0 ? (
+        <EmptyState
+          description="새 강의실을 만들면 운영 현황과 초대 코드를 확인할 수 있습니다."
+          title="아직 운영 중인 강의실이 없습니다"
+        />
+      ) : null}
+      {!error && classrooms.length > 0 ? (
+        <section
+          aria-label="운영 강의실"
+          className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
         >
-          <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
-            <div className="flex h-14 items-center gap-3 border-b border-stone-100 px-4">
-              <Search aria-hidden="true" className="text-stone-400" size={16} />
-              <input
-                aria-label="검색어"
-                className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm text-stone-900 outline-none placeholder:text-stone-400"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="강의실 또는 자료 검색"
-                ref={searchInputRef}
-                value={query}
-              />
-              <button
-                aria-label="검색 닫기"
-                className="flex h-7 items-center justify-center rounded-md border border-stone-200 px-2 text-[10px] font-semibold text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                onClick={() => setIsSearchOpen(false)}
-                type="button"
-              >
-                esc
-              </button>
-            </div>
-            <div className="min-h-52 px-4 py-4">
-              <p className="text-xs font-semibold text-stone-400">강의실</p>
-              <div className="flex min-h-32 flex-col items-center justify-center text-center">
-                <BookOpen aria-hidden="true" className="text-stone-300" size={22} />
-                <p className="mt-3 text-sm font-semibold text-stone-800">
-                  {query.trim()
-                    ? '일치하는 검색 결과가 없습니다'
-                    : '검색어를 입력하세요'}
-                </p>
-                <p className="mt-1 text-xs text-stone-400">
-                  운영 중인 강의실과 등록 자료를 함께 찾습니다.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-stone-100 px-4 py-2.5 text-[10px] font-medium text-stone-400">
-              <span>↑↓ 이동</span>
-              <span>↵ 열기</span>
-              <span className="ml-auto">⌘K로 어디서든 열기</span>
-            </div>
-          </div>
-        </div>
+          {classrooms.map((classroom) => (
+            <ClassroomCard
+              classroom={classroom}
+              key={classroom.id}
+              onCopy={() => void copyInviteCode(classroom)}
+              onRegenerate={() => setInviteCodeRegenerationTarget(classroom)}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {isSearchOpen ? (
+        <SearchDialog
+          onClose={() => setIsSearchOpen(false)}
+          onKeyDown={handleSearchKeyDown}
+          onQueryChange={(nextQuery) => {
+            setQuery(nextQuery)
+            setSelectedSearchIndex(0)
+          }}
+          onSelect={(path) => {
+            setIsSearchOpen(false)
+            navigate(path)
+          }}
+          query={query}
+          results={searchResults}
+          searchInputRef={searchInputRef}
+          selectedIndex={selectedSearchIndex}
+          setSelectedIndex={setSelectedSearchIndex}
+        />
       ) : null}
 
       {isCreateOpen ? (
         <CreateClassroomDialog
           onClose={() => setIsCreateOpen(false)}
-          onSubmit={() =>
-            showToast(
-              '현재 강의실 생성 기능을 사용할 수 없습니다.',
-              'info',
-            )
-          }
+          onSubmit={async (draft) => {
+            try {
+              const { weekCount, ...classroomInput } = draft
+              const created = await repository.create(classroomInput)
+              let createdWeekCount = 0
+              for (let index = 0; index < weekCount; index += 1) {
+                try {
+                  await repository.createWeek(created.id, {
+                    title: `${index + 1}주차`,
+                    weekNumber: index + 1,
+                  })
+                  createdWeekCount += 1
+                } catch {
+                  break
+                }
+              }
+              setIsCreateOpen(false)
+              const failed = weekCount - createdWeekCount
+              showToast(
+                failed
+                  ? `강의실은 만들었지만 ${failed}개 주차 생성에 실패했습니다.`
+                  : `${weekCount}개 주차와 강의실을 만들었습니다.`,
+                failed ? 'danger' : 'success',
+              )
+              await loadClassrooms()
+            } catch (requestError) {
+              showToast(getRequestErrorMessage(requestError), 'danger')
+            }
+          }}
+        />
+      ) : null}
+
+      {inviteCodeRegenerationTarget ? (
+        <InviteCodeRegenerationDialog
+          classroom={inviteCodeRegenerationTarget}
+          isSubmitting={isRegeneratingInviteCode}
+          onClose={() => setInviteCodeRegenerationTarget(null)}
+          onConfirm={() => void regenerateInviteCode(inviteCodeRegenerationTarget)}
         />
       ) : null}
     </PageContainer>
   )
+}
+
+function InviteCodeRegenerationDialog({
+  classroom,
+  isSubmitting,
+  onClose,
+  onConfirm,
+}: {
+  classroom: Classroom
+  isSubmitting: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      aria-labelledby="invite-code-regeneration-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose()
+      }}
+      role="dialog"
+    >
+      <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="type-caption font-semibold text-amber-700">초대 코드 변경</p>
+            <h2 className="mt-1 type-dialog-title font-bold text-stone-950" id="invite-code-regeneration-title">
+              초대 코드를 재발급할까요?
+            </h2>
+          </div>
+          <button
+            aria-label="초대 코드 재발급 닫기"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSubmitting}
+            onClick={onClose}
+            type="button"
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="type-body leading-6 text-amber-900">
+            재발급하면 <strong>현재 초대 코드 {classroom.inviteCode ?? ''}</strong>는 즉시 폐기되며 더 이상 사용할 수 없습니다.
+          </p>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button disabled={isSubmitting} onClick={onClose} variant="secondary">취소</Button>
+          <Button disabled={isSubmitting} onClick={onConfirm}>
+            {isSubmitting ? '재발급 중' : '재발급 확인'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ClassroomCard({
+  classroom,
+  onCopy,
+  onRegenerate,
+}: {
+  classroom: Classroom
+  onCopy: () => void
+  onRegenerate: () => void
+}) {
+  const isActive = classroom.status === 'ACTIVE'
+  const progress = Math.min(100, Math.max(0, classroom.progressRate))
+  const tone = getClassroomTone(classroom.color)
+
+  return (
+    <article
+      className={`flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 ${isActive ? '' : 'opacity-60'}`}
+    >
+      <div className="flex items-start gap-4">
+        <span
+          className={`flex size-11 shrink-0 items-center justify-center rounded-lg type-body font-bold ${tone}`}
+        >
+          {classroom.name.slice(0, 1)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <Link
+            className="block truncate type-card-title font-bold text-stone-950 hover:text-brand-700"
+            to={classroomDetailPath(classroom.id)}
+          >
+            {classroom.name}
+          </Link>
+          <p className="mt-0.5 truncate type-micro text-stone-400">
+            학습자 {classroom.learnerCount}명 · 자료{' '}
+            {classroom.materialCount ?? 0}개
+          </p>
+        </div>
+        <span
+          className={
+            isActive
+              ? 'rounded-full bg-[#E7F6EC] px-2 py-1 type-micro font-semibold text-[#12833E]'
+              : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'
+          }
+        >
+          {isActive ? '운영 중' : '종료'}
+        </span>
+      </div>
+      <div className="mt-4 flex min-h-14 items-center gap-3 rounded-lg bg-stone-50 px-4 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="type-micro text-stone-400">초대코드</p>
+          <strong className="block truncate font-mono type-section-title tracking-wide text-stone-900">
+            {isActive
+              ? (classroom.inviteCode ?? '코드 확인')
+              : '비활성화됨'}
+          </strong>
+        </div>
+        {isActive ? (
+          <>
+            <button
+              aria-label={`${classroom.name} 초대 코드 복사`}
+              className="inline-flex h-9 items-center rounded-md border border-stone-200 bg-white px-3 type-compact-action font-semibold text-brand-700 hover:bg-brand-50"
+              onClick={onCopy}
+              title="초대 코드 복사"
+              type="button"
+            >
+              복사
+            </button>
+            <button
+              aria-label={`${classroom.name} 초대 코드 재발급`}
+              className="inline-flex h-9 items-center rounded-md border border-stone-200 bg-white px-3 type-compact-action font-semibold text-stone-600 hover:bg-stone-100"
+              onClick={onRegenerate}
+              title="초대 코드 재발급"
+              type="button"
+            >
+              재발급
+            </button>
+          </>
+        ) : null}
+      </div>
+      <div className="mt-4">
+        <div className="flex items-center justify-between type-micro">
+          <span className="text-stone-400">평균 진도</span>
+          <strong className={isActive ? 'text-brand-700' : 'text-stone-400'}>
+            {progress}%
+          </strong>
+        </div>
+        <div className="mt-2 h-1.5 rounded-full bg-stone-100">
+          <div
+            className={`h-full rounded-full ${isActive ? 'bg-brand-600' : 'bg-stone-400'}`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+      <div className={`mt-auto grid gap-2 pt-4 ${isActive ? 'grid-cols-[1fr_1fr_auto]' : 'grid-cols-[1fr_auto]'}`}>
+        <Link className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50" to={classroomDetailPath(classroom.id)}>
+          {isActive ? '자료 관리' : '보관된 자료 보기'}
+        </Link>
+        {isActive ? (
+          <Link
+            className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50"
+            to={learningStatusPath(classroom.id)}
+          >
+            학습현황
+          </Link>
+        ) : null}
+        <Link
+          className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50"
+          to={classroomEditPath(classroom.id)}
+        >
+          설정
+        </Link>
+      </div>
+    </article>
+  )
+}
+
+function SearchDialog({
+  onClose,
+  onKeyDown,
+  onQueryChange,
+  onSelect,
+  query,
+  results,
+  searchInputRef,
+  selectedIndex,
+  setSelectedIndex,
+}: {
+  onClose: () => void
+  onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
+  onQueryChange: (query: string) => void
+  onSelect: (path: string) => void
+  query: string
+  results: SearchResult[]
+  searchInputRef: React.RefObject<HTMLInputElement | null>
+  selectedIndex: number
+  setSelectedIndex: (index: number) => void
+}) {
+  const classroomResults = results.filter((result) => result.kind === 'classroom')
+  const materialResults = results.filter((result) => result.kind === 'material')
+
+  return (
+    <div
+      aria-label="강의실 검색"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
+      role="dialog"
+    >
+      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
+        <div className="flex h-14 items-center gap-3 border-b border-stone-100 px-4">
+          <Search aria-hidden="true" className="text-stone-400" size={16} />
+          <input
+            aria-activedescendant={
+              results.length > 0
+                ? `classroom-search-result-${selectedIndex}`
+                : undefined
+            }
+            aria-controls="classroom-search-results"
+            aria-label="검색어"
+            className="h-full min-w-0 flex-1 border-0 bg-transparent type-body text-stone-900 outline-none placeholder:text-stone-400"
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="강의실 또는 자료 검색"
+            ref={searchInputRef}
+            role="combobox"
+            value={query}
+          />
+          <button
+            aria-label="검색 닫기"
+            className="flex h-7 items-center justify-center rounded-md border border-stone-200 px-2 type-micro font-semibold text-stone-400"
+            onClick={onClose}
+            type="button"
+          >
+            esc
+          </button>
+        </div>
+        <div className="min-h-52 px-2 py-3" id="classroom-search-results" role="listbox">
+          {!query.trim() ? (
+            <SearchEmpty
+              description="강의실 이름이나 등록한 자료명을 입력하세요."
+              title="검색어를 입력하세요"
+            />
+          ) : null}
+          {query.trim() && results.length === 0 ? (
+            <SearchEmpty
+              description="다른 검색어로 다시 시도해 보세요."
+              title="일치하는 검색 결과가 없습니다"
+            />
+          ) : null}
+          <SearchResultGroup
+            label="강의실"
+            onSelect={onSelect}
+            results={classroomResults}
+            selectedIndex={selectedIndex}
+            setSelectedIndex={setSelectedIndex}
+            startIndex={0}
+          />
+          <SearchResultGroup
+            label="자료"
+            onSelect={onSelect}
+            results={materialResults}
+            selectedIndex={selectedIndex}
+            setSelectedIndex={setSelectedIndex}
+            startIndex={classroomResults.length}
+          />
+        </div>
+        {results.length > 0 ? (
+          <div className="flex gap-4 border-t border-stone-100 px-4 py-2.5 type-micro font-medium text-stone-400">
+            <span>↑↓ 이동</span>
+            <span>↵ 열기</span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function SearchResultGroup({
+  label,
+  onSelect,
+  results,
+  selectedIndex,
+  setSelectedIndex,
+  startIndex,
+}: {
+  label: string
+  onSelect: (path: string) => void
+  results: SearchResult[]
+  selectedIndex: number
+  setSelectedIndex: (index: number) => void
+  startIndex: number
+}) {
+  if (results.length === 0) return null
+  return (
+    <section aria-label={label} className="mb-2 last:mb-0">
+      <p className="px-2 pb-1.5 type-micro font-semibold text-stone-400">
+        {label}
+      </p>
+      {results.map((result, index) => {
+        const globalIndex = startIndex + index
+        const isSelected = globalIndex === selectedIndex
+        return (
+          <button
+            aria-selected={isSelected}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left ${isSelected ? 'bg-stone-100' : 'hover:bg-stone-50'}`}
+            id={`classroom-search-result-${globalIndex}`}
+            key={`${result.kind}-${result.id}`}
+            onClick={() => onSelect(result.path)}
+            onMouseEnter={() => setSelectedIndex(globalIndex)}
+            role="option"
+            type="button"
+          >
+            <span className={`flex size-7 items-center justify-center rounded-md ${result.kind === 'classroom' ? 'bg-brand-50 text-brand-700' : 'bg-rose-50 text-rose-600'}`}>
+              {result.kind === 'classroom' ? (
+                <BookOpen aria-hidden="true" size={14} />
+              ) : (
+                <FileText aria-hidden="true" size={14} />
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <strong className="block truncate type-body text-stone-900">
+                {result.title}
+              </strong>
+              <span className="block truncate type-micro text-stone-400">
+                {result.subtitle}
+              </span>
+            </span>
+          </button>
+        )
+      })}
+    </section>
+  )
+}
+
+function SearchEmpty({
+  description,
+  title,
+}: {
+  description: string
+  title: string
+}) {
+  return (
+    <div className="flex min-h-44 flex-col items-center justify-center text-center">
+      <Search aria-hidden="true" className="text-stone-300" size={22} />
+      <p className="mt-3 type-body font-semibold text-stone-800">{title}</p>
+      <p className="mt-1 type-caption text-stone-400">{description}</p>
+    </div>
+  )
+}
+
+async function loadCardDetails(
+  classrooms: Classroom[],
+  repository: ReturnType<typeof createClassroomsRepository>,
+): Promise<DisplayClassroom[]> {
+  return Promise.all(
+    classrooms.map(async (classroom) => {
+      const [inviteResult, weeksResult] = await Promise.allSettled([
+        classroom.status === 'ACTIVE'
+          ? repository.getInviteCode(classroom.id)
+          : Promise.resolve(undefined),
+        repository.listWeeks(classroom.id),
+      ])
+      const weeks = weeksResult.status === 'fulfilled' ? weeksResult.value : []
+      return {
+        ...classroom,
+        inviteCode:
+          inviteResult.status === 'fulfilled'
+            ? inviteResult.value
+            : classroom.inviteCode,
+        materialCount: weeks.reduce(
+          (sum, week) => sum + week.materials.length,
+          weeksResult.status === 'fulfilled' ? 0 : (classroom.materialCount ?? 0),
+        ),
+        searchMaterials: weeks.flatMap((week) =>
+          week.materials.map((material) => ({
+            ...material,
+            classroomId: classroom.id,
+            classroomName: classroom.name,
+          })),
+        ),
+      }
+    }),
+  )
+}
+
+function getClassroomTone(_color: ClassroomColor): string {
+  void _color
+  return 'bg-brand-50 text-brand-700'
 }
 
 function CreateClassroomDialog({
@@ -144,17 +745,36 @@ function CreateClassroomDialog({
   onSubmit,
 }: {
   onClose: () => void
-  onSubmit: () => void
+  onSubmit: (draft: CreateClassroomDraft) => Promise<void> | void
 }) {
-  const [color, setColor] =
-    useState<(typeof CLASSROOM_COLORS)[number]['value']>('blue')
+  const [description, setDescription] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [name, setName] = useState('')
-  const [weeks, setWeeks] = useState(15)
+  const [startDate, setStartDate] = useState('')
+  const [weekCount, setWeekCount] = useState(15)
+  const submitLockRef = useRef(false)
+  const endDate = getEndDate(startDate, weekCount)
+  const canSubmit = Boolean(name.trim() && startDate && weekCount > 0)
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!name.trim()) return
-    onSubmit()
+    if (!canSubmit || submitLockRef.current) return
+
+    submitLockRef.current = true
+    setIsSubmitting(true)
+    try {
+      await onSubmit({
+        color: 'BLUE',
+        description: description.trim(),
+        endDate,
+        name: name.trim(),
+        startDate,
+        weekCount,
+      })
+    } finally {
+      submitLockRef.current = false
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -168,94 +788,94 @@ function CreateClassroomDialog({
         className="w-full max-w-lg rounded-xl border border-stone-200 bg-white p-6 shadow-2xl"
         onSubmit={submit}
       >
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-bold text-stone-950" id="create-classroom-title">
+        <div className="flex items-center justify-between">
+          <h2 className="type-dialog-title font-bold" id="create-classroom-title">
             강의실 만들기
           </h2>
           <button
-            aria-label="강의실 만들기 닫기"
-            className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            aria-label="닫기"
+            className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100"
+            disabled={isSubmitting}
             onClick={onClose}
             type="button"
           >
-            <X aria-hidden="true" size={16} />
+            <X size={16} />
           </button>
         </div>
-
-        <label className="mt-5 block text-[13px] font-semibold text-stone-800">
+        <label className="mt-5 block type-body font-semibold">
           강의실 이름
           <input
             autoFocus
-            className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 text-sm outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+            className="mt-1 h-11 w-full rounded-lg border border-stone-300 px-3.5"
             onChange={(event) => setName(event.target.value)}
             placeholder="강의실 이름을 입력하세요"
             value={name}
           />
         </label>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="text-[13px] font-semibold text-stone-800">
-            학기
-            <select className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
-              <option>{getAcademicTermLabel()}</option>
-            </select>
-          </label>
-          <label className="text-[13px] font-semibold text-stone-800">
-            주차 수 <span className="font-normal text-stone-400">(수업 차수)</span>
-            <input
-              className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 text-sm outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
-              max={24}
-              min={1}
-              onChange={(event) => setWeeks(Number(event.target.value))}
-              type="number"
-              value={weeks}
-            />
-          </label>
-        </div>
-
-        <fieldset className="mt-4">
-          <legend className="text-[13px] font-semibold text-stone-800">색상</legend>
-          <div className="mt-2 flex h-11 items-center gap-2 rounded-lg border border-stone-300 px-3">
-            {CLASSROOM_COLORS.map((option) => (
-              <button
-                aria-label={option.label}
-                aria-pressed={color === option.value}
-                className={`size-5 rounded-md ${option.className} ${
-                  color === option.value
-                    ? 'ring-2 ring-stone-900 ring-offset-2'
-                    : ''
-                }`}
-                key={option.value}
-                onClick={() => setColor(option.value)}
-                type="button"
+        <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <p className="type-body font-semibold">수업 기간</p>
+          <div className="mt-2 grid gap-4 sm:grid-cols-[1fr_auto]">
+            <label className="type-body font-semibold">
+              수업 시작일
+              <input
+                className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3"
+                onChange={(event) => setStartDate(event.target.value)}
+                type="date"
+                value={startDate}
               />
-            ))}
+            </label>
+            <div>
+              <span className="type-body font-semibold">주차 수</span>
+              <div className="mt-1 flex h-11 items-center rounded-lg border border-stone-300 bg-white p-1">
+                <button
+                  aria-label="주차 수 줄이기"
+                  className="flex size-8 items-center justify-center rounded-md hover:bg-stone-100"
+                  disabled={weekCount <= 1}
+                  onClick={() =>
+                    setWeekCount((value) => Math.max(1, value - 1))
+                  }
+                  type="button"
+                >
+                  <Minus size={14} />
+                </button>
+                <output className="min-w-12 text-center type-body font-bold">
+                  {weekCount}주
+                </output>
+                <button
+                  aria-label="주차 수 늘리기"
+                  className="flex size-8 items-center justify-center rounded-md hover:bg-stone-100"
+                  disabled={weekCount >= 52}
+                  onClick={() =>
+                    setWeekCount((value) => Math.min(52, value + 1))
+                  }
+                  type="button"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
           </div>
-        </fieldset>
-
-        <label className="mt-4 block text-[13px] font-semibold text-stone-800">
+        </div>
+        <p className="mt-2 min-h-5 type-caption text-stone-500">
+          {endDate
+            ? `${endDate}까지 · ${weekCount}개 주차가 자동 생성됩니다.`
+            : '시작일을 선택하면 종료일과 주차 수를 계산합니다.'}
+        </p>
+        <label className="mt-4 block type-body font-semibold">
           설명 <span className="font-normal text-stone-400">(선택)</span>
           <textarea
-            className="mt-1 min-h-24 w-full resize-none rounded-lg border border-stone-300 bg-white px-3.5 py-3 text-sm outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+            className="mt-1 min-h-24 w-full resize-none rounded-lg border border-stone-300 p-3"
+            onChange={(event) => setDescription(event.target.value)}
             placeholder="학습자에게 보이는 한 줄 소개"
+            value={description}
           />
         </label>
-
-        <div className="mt-4 flex items-start gap-3 rounded-lg bg-stone-50 px-4 py-3 text-xs leading-5 text-stone-500">
-          <KeyRound aria-hidden="true" className="mt-0.5 shrink-0 text-amber-500" size={15} />
-          <span>
-            초대 코드는 만들기 완료 후 자동 발급돼요.
-            <br />
-            강의실 카드에서 언제든 복사·재발급할 수 있어요.
-          </span>
-        </div>
-
         <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose} variant="ghost">
+          <Button disabled={isSubmitting} onClick={onClose} variant="ghost">
             취소
           </Button>
-          <Button disabled={!name.trim()} type="submit">
-            만들기
+          <Button disabled={!canSubmit || isSubmitting} type="submit">
+            {isSubmitting ? '만드는 중' : '만들기'}
           </Button>
         </div>
       </form>
@@ -263,7 +883,9 @@ function CreateClassroomDialog({
   )
 }
 
-function getAcademicTermLabel(date = new Date()): string {
-  const semester = date.getMonth() < 8 ? 1 : 2
-  return `${date.getFullYear()}년 ${semester}학기`
+function getEndDate(startDate: string, weekCount: number): string {
+  if (!startDate || weekCount < 1) return ''
+  const date = new Date(`${startDate}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + weekCount * 7 - 1)
+  return date.toISOString().slice(0, 10)
 }

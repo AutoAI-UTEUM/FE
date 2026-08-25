@@ -3,14 +3,18 @@ import type { PropsWithChildren } from 'react'
 type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
 export interface BadgeProps {
+  size?: 'compact' | 'default'
   tone?: BadgeTone
 }
 
-export function Badge({ children, tone = 'neutral' }: PropsWithChildren<BadgeProps>) {
+export function Badge({ children, size = 'default', tone = 'neutral' }: PropsWithChildren<BadgeProps>) {
   return (
     <span
       className={[
-        'inline-flex min-h-6 items-center rounded-lg border px-2 py-0.5 text-xs font-semibold',
+        'inline-flex items-center border type-caption font-semibold',
+        size === 'compact'
+          ? 'min-h-5 rounded-md px-1.5'
+          : 'min-h-6 rounded-lg px-2 py-0.5',
         toneClasses[tone],
       ].join(' ')}
     >
