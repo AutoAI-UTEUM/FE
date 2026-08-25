@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { Link } from 'react-router-dom'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
@@ -55,8 +56,16 @@ export function SessionPageViewer({
   const [pageAspectRatio, setPageAspectRatio] = useState(DEFAULT_PAGE_ASPECT_RATIO)
   const [pageFitMode, setPageFitMode] = useState<PageFitMode>('page')
   const [isOutlineVisible, setIsOutlineVisible] = useState(false)
+  const [isPanning, setIsPanning] = useState(false)
   const viewerRef = useRef<HTMLElement | null>(null)
   const pageContainerRef = useRef<HTMLDivElement | null>(null)
+  const panRef = useRef<{
+    pointerId: number
+    scrollLeft: number
+    scrollTop: number
+    startX: number
+    startY: number
+  } | null>(null)
   const progress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
   const viewerGridClassName = cx(
     'grid min-h-0 flex-1',
@@ -136,6 +145,37 @@ export function SessionPageViewer({
   function applyPageFit(mode: Exclude<PageFitMode, 'page'>) {
     setZoom(100)
     setPageFitMode(mode)
+  }
+
+  function startPagePan(event: ReactPointerEvent<HTMLDivElement>) {
+    if (zoom <= 100 || event.button !== 0) return
+    panRef.current = {
+      pointerId: event.pointerId,
+      scrollLeft: event.currentTarget.scrollLeft,
+      scrollTop: event.currentTarget.scrollTop,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    setIsPanning(true)
+    event.preventDefault()
+  }
+
+  function movePagePan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = panRef.current
+    if (!pan || pan.pointerId !== event.pointerId) return
+    event.currentTarget.scrollLeft = pan.scrollLeft - (event.clientX - pan.startX)
+    event.currentTarget.scrollTop = pan.scrollTop - (event.clientY - pan.startY)
+  }
+
+  function endPagePan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = panRef.current
+    if (!pan || pan.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    panRef.current = null
+    setIsPanning(false)
   }
 
   return (
@@ -258,10 +298,21 @@ export function SessionPageViewer({
               totalPages={totalPages}
             />
           ) : null}
-          <div
-            className="relative flex min-h-0 items-center justify-center overflow-hidden bg-white p-6"
-            ref={pageContainerRef}
-          >
+          <div className="relative min-h-0 min-w-0 overflow-hidden bg-white">
+            <div
+              aria-label="확대된 PDF 이동 영역"
+              className={cx(
+                'h-full min-h-0 overflow-auto overscroll-contain p-6',
+                zoom > 100 && 'touch-none select-none cursor-grab',
+                isPanning && 'cursor-grabbing',
+              )}
+              onPointerCancel={endPagePan}
+              onPointerDown={startPagePan}
+              onPointerMove={movePagePan}
+              onPointerUp={endPagePan}
+              ref={pageContainerRef}
+            >
+              <div className="flex h-max min-h-full w-max min-w-full items-center justify-center">
               <Page
                 className="overflow-hidden rounded-sm bg-white shadow-[0_2px_14px_rgba(0,0,0,0.08)]"
                 pageNumber={currentPage}
@@ -269,6 +320,8 @@ export function SessionPageViewer({
                 renderTextLayer
                 width={pageWidth * (zoom / 100)}
               />
+              </div>
+            </div>
             <PageNavigation
               currentPage={currentPage}
               isPending={isPending}

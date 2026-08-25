@@ -86,6 +86,30 @@ describe('SessionPageViewer', () => {
     expect(screen.getByText('110%')).toBeInTheDocument()
   })
 
+  it('allows an enlarged PDF to be dragged in both directions', async () => {
+    render(
+      <SessionPageViewer
+        currentPage={1}
+        file={new Blob(['%PDF-1.4'], { type: 'application/pdf' })}
+        materialTitle="학습 자료.pdf"
+        onMovePage={vi.fn()}
+        totalPages={1}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '확대' }))
+    const panArea = await screen.findByLabelText('확대된 PDF 이동 영역')
+    expect(panArea).toHaveClass('cursor-grab', 'overflow-auto')
+
+    Object.defineProperty(panArea, 'scrollLeft', { configurable: true, value: 80, writable: true })
+    Object.defineProperty(panArea, 'scrollTop', { configurable: true, value: 60, writable: true })
+    fireEvent.pointerDown(panArea, { button: 0, clientX: 100, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(panArea, { clientX: 70, clientY: 75, pointerId: 1 })
+    expect(panArea).toHaveProperty('scrollLeft', 110)
+    expect(panArea).toHaveProperty('scrollTop', 85)
+    fireEvent.pointerUp(panArea, { pointerId: 1 })
+  })
+
   it('locks page and classroom navigation while an AI answer is pending', () => {
     const onMovePage = vi.fn()
     render(

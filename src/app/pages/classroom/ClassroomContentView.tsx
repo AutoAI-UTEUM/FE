@@ -1,5 +1,5 @@
 import { Bell, BookOpen, ClipboardList, LoaderCircle, MoreHorizontal, RefreshCw, Upload } from 'lucide-react'
-import type { DragEvent } from 'react'
+import { useState, type DragEvent } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
 import { Badge, Button, EmptyState } from '../../../shared/ui'
@@ -68,6 +68,7 @@ export function ClassroomContentPanel({
   setDragging: (weekNumber: number | null) => void
 }) {
   const title = selectedWeekNumber === null ? '전체 콘텐츠' : selectedWeek?.title ?? ''
+  const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null)
 
   function dragOver(event: DragEvent<HTMLElement>) {
     if (!canManage || selectedWeekNumber === null) return
@@ -95,22 +96,24 @@ export function ClassroomContentPanel({
     <div aria-label="리소스 목록" className="min-h-0 flex-1 space-y-2 lg:overflow-y-auto" role="region">
       {globalItems.length > 0
         ? filter === 'all' || filter === 'notice'
-          ? <div className="space-y-2">{globalItems.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div>
-          : <details className="border-y border-stone-200 py-2" open><summary className="flex min-h-10 cursor-pointer list-none items-center px-1"><span className="type-body font-bold text-stone-900">전체 항목</span></summary><div className="space-y-2 pt-2">{globalItems.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div></details>
+          ? <div className="space-y-2">{globalItems.map((item) => <ContentRow canManage={canManage} isMenuOpen={openMenuItemId === item.id} item={item} key={item.id} onItem={onItem} onMenuToggle={() => setOpenMenuItemId((current) => current === item.id ? null : item.id)} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div>
+          : <details className="border-y border-stone-200 py-2" open><summary className="flex min-h-10 cursor-pointer list-none items-center px-1"><span className="type-body font-bold text-stone-900">전체 항목</span></summary><div className="space-y-2 pt-2">{globalItems.map((item) => <ContentRow canManage={canManage} isMenuOpen={openMenuItemId === item.id} item={item} key={item.id} onItem={onItem} onMenuToggle={() => setOpenMenuItemId((current) => current === item.id ? null : item.id)} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div></details>
         : null}
 
       <section aria-label={title} className={`space-y-2 rounded-lg transition ${draggingWeek === selectedWeekNumber && selectedWeekNumber !== null ? 'ring-2 ring-brand-100' : ''}`}>
         {processingMaterialTitle ? <div className="flex min-h-14 items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-2.5" role="status"><LoaderCircle aria-hidden="true" className="shrink-0 animate-spin text-brand-700" size={18} /><div className="min-w-0"><p className="type-body font-bold text-brand-900">수업을 생성하는 중입니다</p><p className="truncate type-caption text-brand-700">{displayTitle(processingMaterialTitle)} · 완료되면 목록에 표시됩니다.</p></div></div> : null}
-        {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} item={item} key={item.id} onItem={onItem} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />) : processingMaterialTitle || globalItems.length > 0 ? null : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
+        {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} isMenuOpen={openMenuItemId === item.id} item={item} key={item.id} onItem={onItem} onMenuToggle={() => setOpenMenuItemId((current) => current === item.id ? null : item.id)} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />) : processingMaterialTitle || globalItems.length > 0 ? null : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
       </section>
     </div>
   </div>
 }
 
-function ContentRow({ canManage, item, onItem, onRemoveMaterial, onRenameMaterial, openingMaterialId }: {
+function ContentRow({ canManage, isMenuOpen, item, onItem, onMenuToggle, onRemoveMaterial, onRenameMaterial, openingMaterialId }: {
   canManage: boolean
+  isMenuOpen: boolean
   item: ClassroomContentItem
   onItem: (item: ClassroomContentItem) => void
+  onMenuToggle: () => void
   onRemoveMaterial: (weekNumber: number, materialId: string, title: string) => Promise<void>
   onRenameMaterial: (material: { id: string; title: string }) => void
   openingMaterialId: string | null
@@ -131,7 +134,7 @@ function ContentRow({ canManage, item, onItem, onRemoveMaterial, onRenameMateria
       </span>
     </button>
     {item.kind === 'material' && openingMaterialId === item.source.id ? <span className="type-caption text-brand-700">수업 여는 중</span> : null}
-    {canManage && item.kind === 'material' ? <details className="relative shrink-0"><summary aria-label={`${item.title} 작업 메뉴`} className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"><MoreHorizontal size={16} /></summary><div className="absolute top-9 right-0 z-20 w-28 rounded-lg border border-stone-200 bg-white p-1 shadow-lg"><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => onRenameMaterial({ id: item.source.id, title: item.title })} type="button">이름 변경</button><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => void onRemoveMaterial(item.weekNumber, item.source.id, item.title)} type="button">주차에서 제거</button></div></details> : <span className="flex size-8 shrink-0 items-center justify-center"><MoreHorizontal className="text-stone-300" size={16} /></span>}
+    {canManage && item.kind === 'material' ? <div className="relative shrink-0"><button aria-expanded={isMenuOpen} aria-label={`${item.title} 작업 메뉴`} className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700" onClick={onMenuToggle} type="button"><MoreHorizontal size={16} /></button>{isMenuOpen ? <div className="absolute top-9 right-0 z-20 w-28 rounded-lg border border-stone-200 bg-white p-1 shadow-lg" role="menu"><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => { onMenuToggle(); onRenameMaterial({ id: item.source.id, title: item.title }) }} role="menuitem" type="button">이름 변경</button><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => { onMenuToggle(); void onRemoveMaterial(item.weekNumber, item.source.id, item.title) }} role="menuitem" type="button">주차에서 제거</button></div> : null}</div> : <span className="flex size-8 shrink-0 items-center justify-center"><MoreHorizontal className="text-stone-300" size={16} /></span>}
   </div>
 }
 

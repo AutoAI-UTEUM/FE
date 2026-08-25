@@ -17,7 +17,6 @@ afterEach(() => {
 function ChatHarness({
   conversationAction,
   currentPage,
-  materialId,
   materialOverview,
   onExplainCurrentPage,
   onExplainNextPage,
@@ -29,7 +28,6 @@ function ChatHarness({
 }: {
   conversationAction?: ReactNode
   currentPage?: number
-  materialId?: string
   materialOverview?: MaterialOverview | null
   onExplainCurrentPage?: () => void
   onExplainNextPage?: () => void
@@ -45,7 +43,6 @@ function ChatHarness({
       chat={chat}
       conversationAction={conversationAction}
       currentPage={currentPage}
-      materialId={materialId}
       materialOverview={materialOverview}
       onExplainCurrentPage={onExplainCurrentPage}
       onExplainNextPage={onExplainNextPage}
@@ -64,14 +61,14 @@ describe('ChatPanel', () => {
     expect(await screen.findByLabelText('질문')).toBeInTheDocument()
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       '개요',
-      'AI 채팅',
+      '학습',
       '내 퀴즈',
       '내 노트',
     ])
     screen.getAllByRole('tab').forEach((tab) => {
       expect(tab).toHaveClass('type-section-title')
     })
-    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: '학습' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: '개요' })).toHaveAttribute('aria-selected', 'false')
     expect(screen.queryByRole('button', { name: '대화 새로 시작' })).not.toBeInTheDocument()
 
@@ -82,7 +79,7 @@ describe('ChatPanel', () => {
     expect(screen.queryByLabelText('질문')).not.toBeInTheDocument()
   })
 
-  it('opens the full-material question API in a separate shared chat tab', async () => {
+  it('does not expose a separate material-question tab in the study viewer', async () => {
     const request = vi.fn().mockResolvedValue({
       data: { answer: '자료 전체 답변입니다.', warnings: [] },
       message: '요청이 성공했습니다.',
@@ -90,23 +87,14 @@ describe('ChatPanel', () => {
     })
     render(
       <ChatHarness
-        materialId="10"
         repository={createRepository()}
         request={request as AuthenticatedRequest}
       />,
     )
 
-    fireEvent.click(await screen.findByRole('tab', { name: '자료 질문' }))
-    fireEvent.change(screen.getByLabelText('자료 질문'), {
-      target: { value: '전체 흐름을 알려줘' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '자료 질문 보내기' }))
-
-    expect(await screen.findByText('자료 전체 답변입니다.')).toBeInTheDocument()
-    expect(request).toHaveBeenCalledWith('/api/materials/10/doc-chat', expect.objectContaining({
-      body: { history: [], question: '전체 흐름을 알려줘' },
-      method: 'POST',
-    }))
+    expect(await screen.findByRole('tab', { name: '학습' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '자료 질문' })).not.toBeInTheDocument()
+    expect(request).not.toHaveBeenCalledWith('/api/materials/10/doc-chat', expect.anything())
   })
 
   it('uses the same 16px layout for quiz and note empty states', async () => {
@@ -508,7 +496,7 @@ describe('ChatPanel', () => {
     const initialLog = await screen.findByRole('log')
     initialLog.scrollTop = 0
     fireEvent.click(screen.getByRole('tab', { name: '내 퀴즈' }))
-    fireEvent.click(screen.getByRole('tab', { name: 'AI 채팅' }))
+    fireEvent.click(screen.getByRole('tab', { name: '학습' }))
 
     expect(screen.getByRole('log')).toHaveProperty('scrollTop', 640)
   })
@@ -666,7 +654,7 @@ $$`,
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '노트를 저장하지 못했습니다. 학습 자료를 찾을 수 없습니다.',
     )
-    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: '학습' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: '내 노트' })).toHaveAttribute('aria-selected', 'false')
   })
 
