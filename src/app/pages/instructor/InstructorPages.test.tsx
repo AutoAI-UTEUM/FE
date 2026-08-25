@@ -136,6 +136,68 @@ function stubClassroomsApi(
         status: 200,
       })
 
+    if (url.includes('/students/9/learning-analytics')) return envelope({
+      lastUpdatedAt: '2026-08-25T05:00:00Z',
+      materials: [
+        {
+          lastViewedAt: '2026-08-25T04:30:00Z',
+          lastViewedPage: 8,
+          materialId: 10,
+          progressRate: 64,
+          title: 'watermarking.pdf',
+          viewed: true,
+          weekNumber: 1,
+        },
+        {
+          lastViewedAt: null,
+          lastViewedPage: null,
+          materialId: 11,
+          progressRate: 0,
+          title: '참고자료.pdf',
+          viewed: false,
+          weekNumber: 2,
+        },
+      ],
+      questionsByPage: [
+        {
+          materialId: 10,
+          materialTitle: 'watermarking.pdf',
+          pageNumber: 8,
+          questionCount: 3,
+          weekNumber: 1,
+        },
+      ],
+      quizzes: [
+        {
+          materialId: 10,
+          materialTitle: 'watermarking.pdf',
+          maxScore: 5,
+          pageNumber: 8,
+          passed: true,
+          quizId: 51,
+          quizType: 'MCQ',
+          score: 4,
+          submitted: true,
+          submittedAt: '2026-08-25T04:40:00Z',
+          title: '핵심 확인',
+          weekNumber: 1,
+        },
+        {
+          materialId: 11,
+          materialTitle: '참고자료.pdf',
+          maxScore: null,
+          pageNumber: 2,
+          passed: null,
+          quizId: 52,
+          quizType: 'OX',
+          score: null,
+          submitted: false,
+          submittedAt: null,
+          title: '미응시 퀴즈',
+          weekNumber: 2,
+        },
+      ],
+    })
     if (url.includes('/analytics')) return envelope({
       aiQuestionCountLast7Days: 17,
       averageProgressRate: 38,
@@ -665,14 +727,25 @@ describe('instructor pages', () => {
     expect(profileButton).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(profileButton)
     expect(screen.getByRole('region', { name: '김학습 상세 학습 현황' })).toBeInTheDocument()
-    expect(screen.getByText('자료별 학습 현황')).toBeInTheDocument()
+    expect(await screen.findByText('자료별 학습 현황')).toBeInTheDocument()
     expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
     expect(screen.getByText('퀴즈 현황')).toBeInTheDocument()
-    expect(screen.getByText('현재 평균 진도 64%')).toBeInTheDocument()
-    expect(screen.getByText('최근 7일 질문 6건')).toBeInTheDocument()
-    expect(screen.getByText('퀴즈 현황 API 연동 대기')).toBeInTheDocument()
+    expect(screen.getAllByText('watermarking.pdf').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('참고자료.pdf').length).toBeGreaterThan(0)
+    expect(screen.getByText('미열람')).toBeInTheDocument()
+    expect(screen.getByText('아직 열람하지 않은 자료입니다.')).toBeInTheDocument()
+    expect(screen.getAllByText(/8페이지/).length).toBeGreaterThan(0)
+    expect(screen.getByText('3건')).toBeInTheDocument()
+    expect(screen.getByText('통과')).toBeInTheDocument()
+    expect(screen.getByText('미응시')).toBeInTheDocument()
+    expect(screen.getByText('아직 응시하지 않았습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('undefined')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '김학습 프로필 상세 접기' }))
     expect(screen.queryByRole('region', { name: '김학습 상세 학습 현황' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '김학습 프로필 상세 펼치기' }))
+    expect(screen.getAllByText('watermarking.pdf').length).toBeGreaterThan(0)
+    expect(fetchMock.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/students/9/learning-analytics'))).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '김학습 프로필 상세 접기' }))
 
     const studentList = screen.getByRole('region', { name: '수강생별 학습 현황 목록' })
     const getStudentOrder = () => within(studentList)

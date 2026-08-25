@@ -39,6 +39,63 @@ describe('classrooms repository', () => {
     ])
   })
 
+  it('loads student learning analytics and preserves unviewed and unsubmitted states', async () => {
+    const request = vi.fn().mockResolvedValue({
+      data: {
+        lastUpdatedAt: '2026-08-25T05:00:00Z',
+        materials: [
+          {
+            lastViewedAt: null,
+            lastViewedPage: null,
+            materialId: 10,
+            progressRate: 0,
+            title: '1주차.pdf',
+            viewed: false,
+            weekNumber: 1,
+          },
+        ],
+        questionsByPage: [
+          {
+            materialId: 11,
+            materialTitle: '2주차.pdf',
+            pageNumber: 7,
+            questionCount: 3,
+            weekNumber: 2,
+          },
+        ],
+        quizzes: [
+          {
+            materialId: 10,
+            materialTitle: '1주차.pdf',
+            maxScore: null,
+            pageNumber: 4,
+            passed: null,
+            quizId: 51,
+            quizType: 'MCQ',
+            score: null,
+            submitted: false,
+            submittedAt: null,
+            title: '핵심 확인',
+            weekNumber: 1,
+          },
+        ],
+      },
+    })
+    const repository = createClassroomsRepository(request as AuthenticatedRequest)
+
+    await expect(
+      repository.getStudentLearningAnalytics('12', '9'),
+    ).resolves.toEqual(expect.objectContaining({
+      materials: [expect.objectContaining({ id: '10', lastViewedPage: null, viewed: false })],
+      questionsByPage: [expect.objectContaining({ materialId: '11', questionCount: 3 })],
+      quizzes: [expect.objectContaining({ id: '51', maxScore: null, submitted: false })],
+    }))
+    expect(request).toHaveBeenCalledWith(
+      '/api/classrooms/12/students/9/learning-analytics?questionPeriod=LAST_7_DAYS',
+      { signal: undefined },
+    )
+  })
+
   it('sends only public partial-update fields', async () => {
     const request = vi.fn().mockResolvedValue({ data: classroomDto })
     const repository = createClassroomsRepository(request as AuthenticatedRequest)
