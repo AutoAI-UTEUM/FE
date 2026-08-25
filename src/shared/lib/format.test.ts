@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatDate,
   formatDateTime,
+  formatDetailedRelativeActivityDate,
   formatFileSize,
   formatRelativeActivityDate,
 } from './format'
@@ -34,5 +35,16 @@ describe('format helpers', () => {
     expect(formatRelativeActivityDate('2026-08-12T23:00:00+09:00', now)).toBe('어제')
     expect(formatRelativeActivityDate('2026-08-10T23:30:00+09:00', now)).toBe('3일 전')
     expect(formatRelativeActivityDate(undefined, now)).toBe('기록 없음')
+  })
+
+  it('adds minute and hour detail for activity from today', () => {
+    const now = new Date('2026-08-13T15:30:00+09:00')
+
+    expect(formatDetailedRelativeActivityDate('2026-08-13T15:29:45+09:00', now)).toBe('방금 전')
+    expect(formatDetailedRelativeActivityDate('2026-08-13T15:07:00+09:00', now)).toBe('23분 전')
+    expect(formatDetailedRelativeActivityDate('2026-08-13T12:10:00+09:00', now)).toBe('3시간 전')
+    expect(formatDetailedRelativeActivityDate('2026-08-12T23:59:00+09:00', now)).toBe('어제')
+    expect(formatDetailedRelativeActivityDate('2026-08-10T23:30:00+09:00', now)).toBe('3일 전')
+    expect(formatDetailedRelativeActivityDate(undefined, now)).toBe('기록 없음')
   })
 })

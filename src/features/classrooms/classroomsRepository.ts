@@ -94,6 +94,42 @@ export interface ClassroomAnalytics {
   }>
 }
 
+export type StudentQuestionPeriod = 'ALL' | 'LAST_7_DAYS'
+
+export interface ClassroomStudentLearningAnalytics {
+  lastUpdatedAt: string
+  materials: Array<{
+    id: string
+    lastViewedAt: string | null
+    lastViewedPage: number | null
+    progressRate: number
+    title: string
+    viewed: boolean
+    weekNumber: number | null
+  }>
+  questionsByPage: Array<{
+    materialId: string
+    materialTitle: string
+    pageNumber: number
+    questionCount: number
+    weekNumber: number | null
+  }>
+  quizzes: Array<{
+    id: string
+    materialId: string
+    materialTitle: string
+    maxScore: number | null
+    pageNumber: number | null
+    passed: boolean | null
+    quizType: 'ESSAY' | 'MCQ' | 'OX' | 'SHORT'
+    score: number | null
+    submitted: boolean
+    submittedAt: string | null
+    title: string
+    weekNumber: number | null
+  }>
+}
+
 export interface ClassroomNotice {
   classroomId: string
   content: string
@@ -176,6 +212,40 @@ interface ClassroomAnalyticsDto {
   learnerCount: number
   materials: Array<{ averageProgressRate: number; materialId: number; title: string; viewerCount: number; viewRate: number }>
   questionsByPage: Array<{ materialId: number; pageNumber: number; questionCount: number }>
+}
+
+interface ClassroomStudentLearningAnalyticsDto {
+  lastUpdatedAt: string
+  materials?: Array<{
+    lastViewedAt?: string | null
+    lastViewedPage?: number | null
+    materialId: number
+    progressRate?: number
+    title: string
+    viewed?: boolean
+    weekNumber?: number | null
+  }>
+  questionsByPage?: Array<{
+    materialId: number
+    materialTitle: string
+    pageNumber: number
+    questionCount?: number
+    weekNumber?: number | null
+  }>
+  quizzes?: Array<{
+    materialId: number
+    materialTitle: string
+    maxScore?: number | null
+    pageNumber?: number | null
+    passed?: boolean | null
+    quizId: number
+    quizType: 'ESSAY' | 'MCQ' | 'OX' | 'SHORT'
+    score?: number | null
+    submitted?: boolean
+    submittedAt?: string | null
+    title: string
+    weekNumber?: number | null
+  }>
 }
 
 interface NoticeDto {
@@ -265,6 +335,19 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
         { signal },
       )
       return mapAnalytics(data)
+    },
+    async getStudentLearningAnalytics(
+      id: string,
+      studentId: string,
+      questionPeriod: StudentQuestionPeriod = 'LAST_7_DAYS',
+      signal?: AbortSignal,
+    ) {
+      const params = new URLSearchParams({ questionPeriod })
+      const { data } = await request<ClassroomStudentLearningAnalyticsDto>(
+        `/api/classrooms/${encodeURIComponent(id)}/students/${encodeURIComponent(studentId)}/learning-analytics?${params}`,
+        { signal },
+      )
+      return mapStudentLearningAnalytics(data)
     },
     async listStudents(
       id: string,
@@ -366,6 +449,44 @@ function mapAnalytics(value: ClassroomAnalyticsDto): ClassroomAnalytics {
     ...value,
     materials: value.materials.map((item) => ({ ...item, id: String(item.materialId) })),
     questionsByPage: value.questionsByPage.map((item) => ({ ...item, materialId: String(item.materialId) })),
+  }
+}
+
+function mapStudentLearningAnalytics(
+  value: ClassroomStudentLearningAnalyticsDto,
+): ClassroomStudentLearningAnalytics {
+  return {
+    lastUpdatedAt: value.lastUpdatedAt,
+    materials: (value.materials ?? []).map((item) => ({
+      id: String(item.materialId),
+      lastViewedAt: item.lastViewedAt ?? null,
+      lastViewedPage: item.lastViewedPage ?? null,
+      progressRate: item.progressRate ?? 0,
+      title: item.title,
+      viewed: item.viewed ?? false,
+      weekNumber: item.weekNumber ?? null,
+    })),
+    questionsByPage: (value.questionsByPage ?? []).map((item) => ({
+      materialId: String(item.materialId),
+      materialTitle: item.materialTitle,
+      pageNumber: item.pageNumber,
+      questionCount: item.questionCount ?? 0,
+      weekNumber: item.weekNumber ?? null,
+    })),
+    quizzes: (value.quizzes ?? []).map((item) => ({
+      id: String(item.quizId),
+      materialId: String(item.materialId),
+      materialTitle: item.materialTitle,
+      maxScore: item.maxScore ?? null,
+      pageNumber: item.pageNumber ?? null,
+      passed: item.passed ?? null,
+      quizType: item.quizType,
+      score: item.score ?? null,
+      submitted: item.submitted ?? false,
+      submittedAt: item.submittedAt ?? null,
+      title: item.title,
+      weekNumber: item.weekNumber ?? null,
+    })),
   }
 }
 

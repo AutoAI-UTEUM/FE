@@ -109,7 +109,7 @@ Google 요청은 GIS credential을 `idToken`으로 전송한다. `409 SIGNUP_REQ
 기존과 동일한 HttpOnly cookie 정책을 유지한다. 비밀번호 재설정 요청은 계정 존재
 여부를 노출하지 않는 동일 응답을 반환해야 한다.
 
-## 부분 연결. 수강생 목록 / 학습자별 상세 API 필요
+## 연결 완료: 수강생 목록 / 학습자별 상세 현황
 
 2026-08-11 기준 `GET /api/classrooms/{classroomId}/students`에 다음 지표와
 검색·정렬 query가 배포되어 FE에 연결됐다.
@@ -123,12 +123,13 @@ Google 요청은 GIS credential을 `idToken`으로 전송한다. `409 SIGNUP_REQ
 
 목록 query는 `q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`를 사용한다.
 
-목록의 요약 지표는 현재 배포 API에 연결돼 있다. 다만 기존
+목록의 요약 지표는 현재 배포 API에 연결돼 있다. 기존
 `GET /api/classrooms/{classroomId}/analytics`의 `materials`와
 `questionsByPage`는 **강의실 전체 학습자 집계**이므로, 프로필을 펼쳐
-특정 학습자의 상세 현황을 표시하는 데 사용할 수 없다.
+특정 학습자의 상세 현황에는 사용하지 않는다.
 
-다음 학습자 상세 집계 API가 필요하다.
+2026-08-25 배포된 다음 학습자 상세 집계 API를 프로필을 처음 펼칠 때 호출하고,
+같은 화면에서는 학습자별 응답을 캐시해 다시 펼칠 때 중복 호출하지 않는다.
 
 ```http
 GET /api/classrooms/{classroomId}/students/{studentId}/learning-analytics?questionPeriod=LAST_7_DAYS
@@ -136,14 +137,12 @@ GET /api/classrooms/{classroomId}/students/{studentId}/learning-analytics?questi
 
 ```json
 {
-  "studentId": 9,
   "lastUpdatedAt": "2026-08-25T03:00:00Z",
   "materials": [
     {
       "materialId": 10,
       "title": "lecture-01.pdf",
       "weekNumber": 1,
-      "pageCount": 40,
       "lastViewedPage": 28,
       "progressRate": 70,
       "viewed": true,
@@ -164,7 +163,10 @@ GET /api/classrooms/{classroomId}/students/{studentId}/learning-analytics?questi
       "quizId": 51,
       "materialId": 10,
       "materialTitle": "lecture-01.pdf",
+      "weekNumber": 1,
       "title": "1주차 복습 퀴즈",
+      "quizType": "MCQ",
+      "pageNumber": 12,
       "submitted": true,
       "score": 8,
       "maxScore": 10,
@@ -175,11 +177,12 @@ GET /api/classrooms/{classroomId}/students/{studentId}/learning-analytics?questi
 }
 ```
 
-`materials`는 강의실에 연결된 전체 PDF를 포함해 미열람 자료도
-`viewed=false`, `progressRate=0`으로 구분할 수 있어야 한다. `questionsByPage`는
-자료 제목과 주차를 함께 반환해 페이지의 소속을 FE가 표시할 수 있어야 한다.
-`quizzes`의 미응시 항목은 `submitted=false`, 점수·통과·제출 시각은 `null`로
-반환한다. 권한과 403/404 오류 계약은 기존 강의실 분석 API와 동일하게 적용한다.
+`questionPeriod`는 `LAST_7_DAYS`와 `ALL`을 지원하며 FE는 현재 최근 질문 수에 맞춰
+`LAST_7_DAYS`를 사용한다. `materials`의 미열람 자료는 `viewed=false`,
+`progressRate=0`, 마지막 페이지·시각은 `null`로 표시한다. `questionsByPage`는 자료
+제목·주차·페이지를 함께 표시한다. `quizzes`의 미응시 항목은 `submitted=false`,
+점수·통과·제출 시각이 `null`이어도 안전하게 렌더링한다. 권한과 403/404 오류 계약은
+기존 강의실 분석 API와 동일하다.
 
 ## 연결 완료: 인앱 알림
 

@@ -44,6 +44,24 @@ export function formatRelativeActivityDate(
   return `${differenceInDays}일 전`
 }
 
+export function formatDetailedRelativeActivityDate(
+  iso: string | undefined,
+  now = new Date(),
+): string {
+  if (!iso) return '기록 없음'
+
+  const activityDate = new Date(iso)
+  if (Number.isNaN(activityDate.getTime())) return '기록 없음'
+
+  const differenceInDays = getKoreanCalendarDay(now) - getKoreanCalendarDay(activityDate)
+  if (differenceInDays > 0) return formatRelativeActivityDate(iso, now)
+
+  const elapsedMinutes = Math.max(0, Math.floor((now.getTime() - activityDate.getTime()) / (60 * 1000)))
+  if (elapsedMinutes < 1) return '방금 전'
+  if (elapsedMinutes < 60) return `${elapsedMinutes}분 전`
+  return `${Math.floor(elapsedMinutes / 60)}시간 전`
+}
+
 export function formatFileSize(bytes: number | undefined): string {
   if (bytes === undefined || Number.isNaN(bytes)) return '-'
   if (bytes < 1024) return `${bytes}B`
