@@ -30,6 +30,7 @@ const InstructorStudentReportsPage = lazy(() => import('./pages/instructor/Instr
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
 const LearnerNotesPage = lazy(() => import('./pages/learner/LearnerNotesPage').then((module) => ({ default: module.LearnerNotesPage })))
 const LearnerNoteCreatePage = lazy(() => import('./pages/learner/LearnerNotesPage').then((module) => ({ default: module.LearnerNoteCreatePage })))
+const LearnerNoteEditPage = lazy(() => import('./pages/learner/LearnerNotesPage').then((module) => ({ default: module.LearnerNoteEditPage })))
 const LearnerReviewQuizzesPage = lazy(() => import('./pages/learner/LearnerReviewQuizzesPage').then((module) => ({ default: module.LearnerReviewQuizzesPage })))
 const MaterialViewerRedirectPage = lazy(() => import('./pages/MaterialViewerRedirectPage').then((module) => ({ default: module.MaterialViewerRedirectPage })))
 const MaterialsPage = lazy(() => import('./pages/MaterialsPage').then((module) => ({ default: module.MaterialsPage })))
@@ -72,6 +73,7 @@ export function AppRoutes() {
           <Route path={routes.classroomCalendar} element={<InstructorCalendarPage />} />
           <Route path={routes.notes} element={<LearnerNotesPage />} />
           <Route path={routes.newNote} element={<LearnerNoteCreatePage />} />
+          <Route path={routes.editNote} element={<LearnerNoteEditPage />} />
           <Route path={routes.reviewQuizzes} element={<LearnerReviewQuizzesPage />} />
           <Route path={routes.exams} element={<ExamsPage />} />
           <Route path={routes.examDetail} element={<LegacyExamDetailRedirect />} />

@@ -1,6 +1,6 @@
 import { ArrowLeft, ChevronDown, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
 import { createNotesRepository, type Note } from '../../../features/notes'
@@ -19,7 +19,7 @@ import {
   PageHeader,
   useToast,
 } from '../../../shared/ui'
-import { routes, sessionDetailPath } from '../../routes'
+import { noteEditPath, routes, sessionDetailPath } from '../../routes'
 
 const NotionBlockEditor = lazy(
   () => import('../../../shared/ui/NotionBlockEditor'),
@@ -82,6 +82,7 @@ function getNotePreview(content: string): NotePreview {
 
 export function LearnerNotesPage() {
   usePageTitle('내 노트')
+  const navigate = useNavigate()
   const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
   const sessionsRepository = useMemo(
@@ -101,15 +102,11 @@ export function LearnerNotesPage() {
     readManualNotes(manualNotesStorageKey),
   )
   const [query, setQuery] = useState('')
-  const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [editingContent, setEditingContent] = useState('')
-  const [editingDocument, setEditingDocument] = useState<string | undefined>()
   const [expandedNoteKeys, setExpandedNoteKeys] = useState<Set<string>>(
     () => new Set(),
   )
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
 
   async function load() {
     setIsLoading(true)
@@ -198,43 +195,6 @@ export function LearnerNotesPage() {
       window.localStorage.setItem(manualNotesStorageKey, JSON.stringify(next))
       return next
     })
-  }
-
-  async function saveNote(item: LearnerNoteItem) {
-    if (!editingContent.trim() || isSaving) return
-    setIsSaving(true)
-    try {
-      if (item.kind === 'manual') {
-        const updatedAt = new Date().toISOString()
-        persistManualNotes((current) =>
-          current.map((note) =>
-            note.id === item.note.id
-              ? {
-                  ...note,
-                  content: editingContent.trim(),
-                  document: editingDocument,
-                  updatedAt,
-                }
-              : note,
-          ),
-        )
-      } else {
-        const updated = await notesRepository.update(item.note.id, editingContent.trim())
-        setSessionItems((current) =>
-          current.map((currentItem) =>
-            currentItem.note.id === item.note.id
-              ? { ...currentItem, note: updated }
-              : currentItem,
-          ),
-        )
-      }
-      setEditingKey(null)
-      showToast('노트를 수정했습니다.', 'success')
-    } catch (requestError) {
-      showToast(getRequestErrorMessage(requestError), 'danger')
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   async function deleteNote(item: LearnerNoteItem) {
@@ -364,7 +324,6 @@ export function LearnerNotesPage() {
                   const content = getNoteContent(item)
                   const preview = getNotePreview(content)
                   const isExpanded = expandedNoteKeys.has(noteKey)
-                  const isEditing = editingKey === noteKey
                   const contentId = `note-content-${noteKey}`
                   const noteMeta = item.kind === 'manual'
                     ? '직접 작성'
@@ -376,103 +335,50 @@ export function LearnerNotesPage() {
                   return (
                     <section key={noteKey}>
                       <div className="flex min-w-0 items-center gap-2 px-4 py-3">
-                        {isEditing ? (
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate type-control font-bold text-stone-900">{preview.title}</p>
-                            <p className="mt-0.5 type-micro text-stone-400">{noteMeta}</p>
-                          </div>
-                        ) : (
-                          <button
-                            aria-controls={contentId}
-                            aria-expanded={isExpanded}
-                            aria-label={`${preview.title} 노트 ${isExpanded ? '접기' : '펼치기'}`}
-                            className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1 text-left"
-                            onClick={() => toggleNote(noteKey)}
-                            type="button"
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate type-control font-bold text-stone-900">{preview.title}</span>
-                              <span className="mt-0.5 block type-micro text-stone-400">{noteMeta}</span>
-                            </span>
-                            <ChevronDown
-                              aria-hidden="true"
-                              className={`shrink-0 text-stone-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                              size={15}
-                            />
-                          </button>
-                        )}
-                        {isEditing ? (
-                          <>
-                            <Button
-                              onClick={() => setEditingKey(null)}
-                              size="sm"
-                              variant="ghost"
-                            >
-                              취소
-                            </Button>
-                            <Button
-                              disabled={!editingContent.trim() || isSaving}
-                              onClick={() => void saveNote(item)}
-                              size="sm"
-                            >
-                              저장
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              aria-label="노트 수정"
-                              className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                              onClick={() => {
-                                setEditingKey(noteKey)
-                                setEditingContent(content)
-                                setEditingDocument(
-                                  item.kind === 'manual' ? item.note.document : undefined,
-                                )
-                              }}
-                              type="button"
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              aria-label="노트 삭제"
-                              className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
-                              onClick={() => void deleteNote(item)}
-                              type="button"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </>
-                        )}
+                        <button
+                          aria-controls={contentId}
+                          aria-expanded={isExpanded}
+                          aria-label={`${preview.title} 노트 ${isExpanded ? '접기' : '펼치기'}`}
+                          className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1 text-left"
+                          onClick={() => toggleNote(noteKey)}
+                          type="button"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate type-control font-bold text-stone-900">{preview.title}</span>
+                            <span className="mt-0.5 block type-micro text-stone-400">{noteMeta}</span>
+                          </span>
+                          <ChevronDown
+                            aria-hidden="true"
+                            className={`shrink-0 text-stone-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            size={15}
+                          />
+                        </button>
+                        <button
+                          aria-label="노트 수정"
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                          onClick={() => navigate(noteEditPath(item.kind, item.note.id))}
+                          type="button"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          aria-label="노트 삭제"
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
+                          onClick={() => void deleteNote(item)}
+                          type="button"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
 
-                      {isEditing ? (
-                        <div className="border-t border-stone-100 p-4">
-                          <Suspense fallback={<EditorLoadingState />}>
-                            <NotionBlockEditor
-                              ariaLabel="노트 내용 수정"
-                              initialDocument={
-                                item.kind === 'manual' ? item.note.document : undefined
-                              }
-                              initialValue={content}
-                              key={noteKey}
-                              onChange={(markdown, document) => {
-                                setEditingContent(markdown)
-                                setEditingDocument(document)
-                              }}
-                            />
-                          </Suspense>
-                        </div>
-                      ) : (
-                        <div id={contentId}>
-                          {isExpanded && preview.body ? (
-                            <MarkdownContent
-                              className="border-t border-stone-100 px-4 py-4 text-stone-700"
-                              content={preview.body}
-                            />
-                          ) : null}
-                        </div>
-                      )}
+                      <div id={contentId}>
+                        {isExpanded && preview.body ? (
+                          <MarkdownContent
+                            className="border-t border-stone-100 px-4 py-4 text-stone-700"
+                            content={preview.body}
+                          />
+                        ) : null}
+                      </div>
                     </section>
                   )
                 })}
@@ -552,6 +458,157 @@ export function LearnerNoteCreatePage() {
           />
         </Suspense>
       </section>
+    </PageContainer>
+  )
+}
+
+export function LearnerNoteEditPage() {
+  usePageTitle('노트 수정')
+  const navigate = useNavigate()
+  const { noteId = '', noteKind = '' } = useParams()
+  const { apiRequest, user } = useAuth()
+  const { show: showToast } = useToast()
+  const notesRepository = useMemo(
+    () => createNotesRepository(apiRequest),
+    [apiRequest],
+  )
+  const sessionsRepository = useMemo(
+    () => createSessionsRepository(apiRequest),
+    [apiRequest],
+  )
+  const storageKey = useMemo(
+    () => getManualNotesStorageKey(user?.id ?? user?.email ?? 'anonymous'),
+    [user?.email, user?.id],
+  )
+  const [content, setContent] = useState('')
+  const [document, setDocument] = useState<string | undefined>()
+  const [sourceLabel, setSourceLabel] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadNote() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        if (noteKind === 'manual') {
+          const note = readManualNotes(storageKey).find((item) => item.id === noteId)
+          if (!note) throw new Error('수정할 노트를 찾을 수 없습니다.')
+          if (!cancelled) {
+            setContent(note.content)
+            setDocument(note.document)
+            setSourceLabel('개인 노트')
+          }
+          return
+        }
+
+        if (noteKind !== 'session') throw new Error('잘못된 노트 경로입니다.')
+        const sessions = (await sessionsRepository.list()).filter(
+          (session) => session.status !== 'DELETED',
+        )
+        const notesBySession = await Promise.all(
+          sessions.map(async (session) => ({
+            notes: await notesRepository.listForSession(session.id).catch(() => []),
+            session,
+          })),
+        )
+        const match = notesBySession
+          .flatMap(({ notes, session }) => notes.map((note) => ({ note, session })))
+          .find((item) => item.note.id === noteId)
+        if (!match) throw new Error('수정할 노트를 찾을 수 없습니다.')
+        if (!cancelled) {
+          setContent(match.note.content)
+          setDocument(undefined)
+          setSourceLabel(match.session.materialTitle)
+        }
+      } catch (requestError) {
+        if (!cancelled) setError(getRequestErrorMessage(requestError))
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    void loadNote()
+    return () => {
+      cancelled = true
+    }
+  }, [noteId, noteKind, notesRepository, sessionsRepository, storageKey])
+
+  async function saveNote() {
+    if (!content.trim() || isSaving) return
+    setIsSaving(true)
+    try {
+      if (noteKind === 'manual') {
+        const notes = readManualNotes(storageKey)
+        if (!notes.some((note) => note.id === noteId)) {
+          throw new Error('수정할 노트를 찾을 수 없습니다.')
+        }
+        const updatedAt = new Date().toISOString()
+        window.localStorage.setItem(
+          storageKey,
+          JSON.stringify(notes.map((note) => note.id === noteId
+            ? { ...note, content: content.trim(), document, updatedAt }
+            : note)),
+        )
+      } else if (noteKind === 'session') {
+        await notesRepository.update(noteId, content.trim())
+      } else {
+        throw new Error('잘못된 노트 경로입니다.')
+      }
+      showToast('노트를 수정했습니다.', 'success')
+      navigate(routes.notes)
+    } catch (requestError) {
+      showToast(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <PageContainer>
+      <PageHeader
+        actions={
+          <div className="flex items-center gap-2">
+            <ButtonLink to={routes.notes} variant="secondary">
+              <ArrowLeft aria-hidden="true" size={15} />
+              목록으로
+            </ButtonLink>
+            <Button disabled={isLoading || !content.trim() || isSaving} onClick={() => void saveNote()}>
+              {isSaving ? '저장 중' : '변경사항 저장'}
+            </Button>
+          </div>
+        }
+        title="노트 수정"
+        titleAccessory={sourceLabel ? <p className="type-caption text-stone-400">{sourceLabel}</p> : undefined}
+      />
+      {isLoading ? <EditorLoadingState /> : null}
+      {!isLoading && error ? (
+        <EmptyState
+          action={<ButtonLink to={routes.notes}>목록으로</ButtonLink>}
+          description={error}
+          title="노트를 불러오지 못했습니다"
+        />
+      ) : null}
+      {!isLoading && !error ? (
+        <section className="min-h-[calc(100dvh-13rem)] rounded-lg border border-stone-200 bg-white p-5">
+          <Suspense fallback={<EditorLoadingState />}>
+            <NotionBlockEditor
+              ariaLabel="노트 내용 수정"
+              className="min-h-[calc(100dvh-16rem)]"
+              initialDocument={document}
+              initialValue={content}
+              key={`${noteKind}-${noteId}`}
+              onChange={(markdown, nextDocument) => {
+                setContent(markdown)
+                setDocument(nextDocument)
+              }}
+            />
+          </Suspense>
+        </section>
+      ) : null}
     </PageContainer>
   )
 }

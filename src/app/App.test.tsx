@@ -53,8 +53,10 @@ describe('AppRoutes', () => {
 
     expect(await screen.findAllByText('으뜸')).not.toHaveLength(0)
     expect(await screen.findAllByText('Uteum')).not.toHaveLength(0)
-    expect(screen.getByText(/같은 강의,/)).toHaveClass('type-auth-intro')
-    expect(screen.getByText(/나에게 맞춘 학습\./)).toHaveClass('type-auth-intro')
+    const intro = screen.getByText(/같은 강의,/)
+    expect(intro).toHaveClass('type-auth-intro')
+    expect(intro).toHaveTextContent(/같은 강의,\s*나에게 맞춘 학습\.\s*그래서, 으뜸\./)
+    expect(screen.getByText('그래서, 으뜸.')).toHaveClass('text-[#5B8DEF]')
     expect(screen.getByText(/이해 속도에 맞춰 설명하고 점검하는/)).toHaveClass('type-auth-description')
     expect(
       screen.queryByText(
