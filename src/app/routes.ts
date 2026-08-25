@@ -22,6 +22,7 @@ export const routes = {
   legacyClassroomEdit: '/classrooms/:classroomId/edit',
   calendar: '/calendar',
   notes: '/notes',
+  newNote: '/notes/new',
   reviewQuizzes: '/review-quizzes',
   exams: '/exams',
   examDetail: '/exams/:examId',

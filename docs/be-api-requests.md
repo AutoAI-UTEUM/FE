@@ -20,16 +20,35 @@ FE repository에 반영했다. 아래에는 **화면은 존재하지만 여전�
 | 로그인·회원가입 | 가입, 이메일 중복 확인, 로그인, refresh, 로그아웃, Google GIS 로그인 FE 계약 | 비밀번호 재설정, Google 로그인 BE 배포 확인 |
 | 설정 | 프로필, 아바타, 환경설정, 회원 탈퇴 | `studyReminder`·새 자료 알림의 실제 이메일/인앱 전달과 읽음 상태 |
 | 강의실 목록 | 생성, 조회, 수정, 종료, 영구 삭제, 초대 코드 | 종료 강의실 재활성화, 서버 검색·추가 정렬 |
-| 강의실 강의 | 주차, PDF 자료, 공지, 시험 CRUD | 주차별 공지, 공지 예약 게시, PPT/PPTX, 처리 실패 상세 |
+| 강의실 강의 | 주차, PDF 자료, 일반 파일·링크 자료, 공지, 시험 CRUD | PPT/PPTX AI 추출, 처리 실패 상세 |
 | 수강생·입장 요청 | 목록, 제외, 개별 승인·거절, 수강생별 진도·최근 7일 AI 질문, 서버 검색·정렬 | 일괄 승인 |
 | 학습 현황·리포트 | 자료별 현황, 페이지별 질문 수, 수강생별 지표, 리포트 기준·생성·조회 | 리포트 Q&A는 Phase 3 |
 | 캘린더·알림 패널 | 개인 일정 CRUD, 강의실 일정 통합 조회 | 실제 알림 전송, 읽음·삭제·전달 이력 |
-| 자료·세션·PDF·채팅 | 업로드, 세션, 페이지 이동, 대화, 노트, 퀴즈 | 자연어 학습 명령 정규화, 교정 후 재평가 퀴즈 |
+| 자료·세션·PDF·채팅 | 업로드, 세션, 페이지 이동, 대화, 턴 취소, 노트, 퀴즈 | 자연어 학습 명령 정규화, 교정 후 재평가 퀴즈 |
 | 시험 | 시험 CRUD, 제출·결과, AI 문항 초안 | 현재 노출 UI 기준 추가 필수 API 없음 |
 
 테마, 패널 너비, 검색창 입력값, 드롭다운 선택 상태처럼 한 기기에서만 필요한 UI
 상태는 서버 API 요청 대상에서 제외한다. 메시지 공유는 Web Share API를 사용하고 지원하지
 않는 환경에서는 복사로 대체하므로 BE API가 필요하지 않다.
+
+## 연결 완료: 강의실 일반 자료·학습 턴 취소
+
+2026-08-25 dev Swagger에서 공개된 다음 계약을 FE 강의실 콘텐츠와 학습 채팅에
+연결했다.
+
+```http
+POST   /api/classrooms/{classroomId}/resources
+GET    /api/classrooms/{classroomId}/resources
+GET    /api/resources/{resourceId}/file
+PATCH  /api/resources/{resourceId}
+DELETE /api/resources/{resourceId}
+POST   /api/sessions/{sessionId}/turns/cancel
+```
+
+일반 자료는 파일·웹 링크 등록, 서버 목록 복원, 파일 미리보기·다운로드, 제목·주차
+수정과 삭제를 지원한다. AI 질문은 정책대로 PDF 수업 자료만 지원한다. 학습 채팅은
+답변 생성 중 `답변 중단` 버튼을 표시하고, 서버 취소 성공 시 로컬 SSE·대기 요청도
+함께 종료한다.
 
 ## 연결 완료: 퀴즈 제안 거절
 
@@ -90,7 +109,7 @@ Google 요청은 GIS credential을 `idToken`으로 전송한다. `409 SIGNUP_REQ
 기존과 동일한 HttpOnly cookie 정책을 유지한다. 비밀번호 재설정 요청은 계정 존재
 여부를 노출하지 않는 동일 응답을 반환해야 한다.
 
-## 연결 완료. 수강생별 학습 현황
+## 부분 연결. 수강생 목록 / 학습자별 상세 API 필요
 
 2026-08-11 기준 `GET /api/classrooms/{classroomId}/students`에 다음 지표와
 검색·정렬 query가 배포되어 FE에 연결됐다.
@@ -104,17 +123,63 @@ Google 요청은 GIS credential을 `idToken`으로 전송한다. `409 SIGNUP_REQ
 
 목록 query는 `q`, `sort=RECENT_ACTIVITY|NAME|LOW_PROGRESS`를 사용한다.
 
-학습 현황 화면의 세 영역은 모두 현재 배포 API에 연결돼 있다.
+목록의 요약 지표는 현재 배포 API에 연결돼 있다. 다만 기존
+`GET /api/classrooms/{classroomId}/analytics`의 `materials`와
+`questionsByPage`는 **강의실 전체 학습자 집계**이므로, 프로필을 펼쳐
+특정 학습자의 상세 현황을 표시하는 데 사용할 수 없다.
 
-- 자료별 학습 현황: `GET /api/classrooms/{classroomId}/analytics`의 `materials`
-- 페이지별 질문 수: 같은 응답의 `questionsByPage`
-- 수강생별 학습 현황: `GET /api/classrooms/{classroomId}/students`의
-  `averageProgressRate`, `aiQuestionCountLast7Days`, `lastActiveAt`
+다음 학습자 상세 집계 API가 필요하다.
 
-따라서 이 화면을 위해 새로 필요한 API는 없다. 다만 실제 질문이 존재하는 강의실에서
-`aiQuestionCountLast7Days`와 `questionsByPage`가 계속 0으로 반환되면 신규 계약이 아니라
-BE 집계 로직 점검 대상으로 처리한다. `qa_threads`의 강의실 연결 자료 범위와 USER 메시지
-생성 시각이 최근 7일 집계에 포함되는지 확인이 필요하다.
+```http
+GET /api/classrooms/{classroomId}/students/{studentId}/learning-analytics?questionPeriod=LAST_7_DAYS
+```
+
+```json
+{
+  "studentId": 9,
+  "lastUpdatedAt": "2026-08-25T03:00:00Z",
+  "materials": [
+    {
+      "materialId": 10,
+      "title": "lecture-01.pdf",
+      "weekNumber": 1,
+      "pageCount": 40,
+      "lastViewedPage": 28,
+      "progressRate": 70,
+      "viewed": true,
+      "lastViewedAt": "2026-08-24T08:00:00Z"
+    }
+  ],
+  "questionsByPage": [
+    {
+      "materialId": 10,
+      "materialTitle": "lecture-01.pdf",
+      "weekNumber": 1,
+      "pageNumber": 12,
+      "questionCount": 4
+    }
+  ],
+  "quizzes": [
+    {
+      "quizId": 51,
+      "materialId": 10,
+      "materialTitle": "lecture-01.pdf",
+      "title": "1주차 복습 퀴즈",
+      "submitted": true,
+      "score": 8,
+      "maxScore": 10,
+      "passed": true,
+      "submittedAt": "2026-08-24T08:10:00Z"
+    }
+  ]
+}
+```
+
+`materials`는 강의실에 연결된 전체 PDF를 포함해 미열람 자료도
+`viewed=false`, `progressRate=0`으로 구분할 수 있어야 한다. `questionsByPage`는
+자료 제목과 주차를 함께 반환해 페이지의 소속을 FE가 표시할 수 있어야 한다.
+`quizzes`의 미응시 항목은 `submitted=false`, 점수·통과·제출 시각은 `null`로
+반환한다. 권한과 403/404 오류 계약은 기존 강의실 분석 API와 동일하게 적용한다.
 
 ## 연결 완료: 인앱 알림
 

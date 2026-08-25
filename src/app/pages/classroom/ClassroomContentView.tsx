@@ -5,7 +5,7 @@ import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features
 import { Badge, Button, EmptyState } from '../../../shared/ui'
 import type { ClassroomContentFilter, ClassroomContentItem } from './classroomContentModel'
 
-type ResourceKey = 'exams' | 'notices' | 'weeks'
+type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
 
 export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, startDate, weeks }: {
   endDate: string
@@ -173,7 +173,10 @@ function displayTitle(value: string): string {
 }
 
 function resourceLabel(key: ResourceKey): string {
-  return key === 'weeks' ? '수업' : key === 'notices' ? '공지' : '시험'
+  if (key === 'weeks') return '수업'
+  if (key === 'notices') return '공지'
+  if (key === 'resources') return '일반 자료'
+  return '시험'
 }
 
 function railButtonClass(selected: boolean): string {

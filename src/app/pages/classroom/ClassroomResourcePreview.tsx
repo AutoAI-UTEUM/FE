@@ -1,12 +1,15 @@
 import {
   ArrowLeft,
   Bot,
+  Download,
   ExternalLink,
   File,
   FileText,
   Image,
   Link as LinkIcon,
+  Pencil,
   Send,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react'
@@ -18,15 +21,23 @@ import type { ClassroomResourcePreviewValue } from './classroomContentModel'
 
 export type { ClassroomResourcePreviewValue } from './classroomContentModel'
 
+export type ClassroomResourceUploadInput =
+  | { file: File; title: string; type: 'FILE'; weekNumber: number | null }
+  | { title: string; type: 'LINK'; url: string; weekNumber: number | null }
+
+const MAX_RESOURCE_FILE_BYTES = 45 * 1024 * 1024
+
 export function ClassroomResourceUploadDialog({
   initialWeekNumber,
+  isUploading = false,
   onClose,
-  onPreview,
+  onUpload,
   weeks,
 }: {
   initialWeekNumber?: number
+  isUploading?: boolean
   onClose: () => void
-  onPreview: (resource: ClassroomResourcePreviewValue) => void
+  onUpload: (resource: ClassroomResourceUploadInput) => Promise<boolean>
   weeks: ClassroomWeek[]
 }) {
   const orderedWeeks = useMemo(
@@ -34,15 +45,18 @@ export function ClassroomResourceUploadDialog({
     [weeks],
   )
   const [mode, setMode] = useState<'file' | 'link'>('file')
-  const [weekNumber, setWeekNumber] = useState(
+  const [weekNumber, setWeekNumber] = useState<number | null>(
     initialWeekNumber ?? orderedWeeks[0]?.weekNumber ?? 1,
   )
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
   const titleError = title.trim() ? null : '자료 제목을 입력하세요.'
+  const fileError = file && file.size > MAX_RESOURCE_FILE_BYTES
+    ? '파일은 최대 45MB까지 업로드할 수 있습니다.'
+    : null
   const urlError = mode === 'link' && url ? validateWebUrl(url) : null
-  const canPreview = !titleError && (mode === 'file' ? Boolean(file) : Boolean(url) && !urlError)
+  const canPreview = !titleError && !fileError && (mode === 'file' ? Boolean(file) : Boolean(url) && !urlError)
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -57,33 +71,25 @@ export function ClassroomResourceUploadDialog({
     if (nextFile) setTitle(removeFileExtension(nextFile.name))
   }
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!canPreview) return
+    if (!canPreview || isUploading) return
 
     if (mode === 'link') {
-      onPreview({
-        source: { kind: 'link', url: normalizeWebUrl(url) },
+      await onUpload({
         title: title.trim(),
+        type: 'LINK',
+        url: normalizeWebUrl(url),
         weekNumber,
       })
       return
     }
 
     if (!file) return
-    const previewKind = getFilePreviewKind(file)
-    const canCreateObjectUrl = typeof URL.createObjectURL === 'function'
-    onPreview({
-      source: {
-        fileName: file.name,
-        fileSize: file.size,
-        kind: 'file',
-        objectUrl: canCreateObjectUrl && previewKind !== 'document'
-          ? URL.createObjectURL(file)
-          : undefined,
-        previewKind,
-      },
+    await onUpload({
+      file,
       title: title.trim(),
+      type: 'FILE',
       weekNumber,
     })
   }
@@ -136,9 +142,10 @@ export function ClassroomResourceUploadDialog({
           주차 선택
           <select
             className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body"
-            onChange={(event) => setWeekNumber(Number(event.target.value))}
-            value={weekNumber}
+            onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)}
+            value={weekNumber ?? ''}
           >
+            <option value="">전체 항목</option>
             {orderedWeeks.map((week) => (
               <option key={week.id} value={week.weekNumber}>
                 {week.weekNumber}주차 · {week.title}
@@ -173,6 +180,7 @@ export function ClassroomResourceUploadDialog({
             />
           </label>
         )}
+        {fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}
         {urlError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{urlError}</p> : null}
 
         <label className="mt-4 block type-control font-semibold text-stone-800">
@@ -180,7 +188,7 @@ export function ClassroomResourceUploadDialog({
           <input
             aria-invalid={Boolean(titleError)}
             className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            maxLength={255}
+            maxLength={200}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="자료 제목을 입력하세요."
             value={title}
@@ -189,7 +197,9 @@ export function ClassroomResourceUploadDialog({
 
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={onClose} variant="secondary">취소</Button>
-          <Button disabled={!canPreview} type="submit">자료 확인</Button>
+          <Button disabled={!canPreview || isUploading} type="submit">
+            {isUploading ? '업로드 중' : '업로드'}
+          </Button>
         </div>
       </form>
     </div>
@@ -197,10 +207,16 @@ export function ClassroomResourceUploadDialog({
 }
 
 export function ClassroomResourcePreviewPanel({
+  canManage = false,
+  onDelete,
+  onEdit,
   onClose,
   resource,
   weekTitle,
 }: {
+  canManage?: boolean
+  onDelete?: () => void
+  onEdit?: () => void
   onClose: () => void
   resource: ClassroomResourcePreviewValue
   weekTitle?: string
@@ -222,8 +238,22 @@ export function ClassroomResourcePreviewPanel({
             <Badge tone="neutral">자료</Badge>
           </div>
           <p className="truncate type-caption text-stone-500">
-            {weekTitle ?? `${resource.weekNumber}주차`}
+            {weekTitle ?? (resource.weekNumber === null ? '전체 항목' : `${resource.weekNumber}주차`)}
           </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {resource.source.kind === 'file' && resource.source.objectUrl ? (
+            <a
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 type-caption font-semibold text-stone-700 hover:bg-stone-50"
+              download={resource.source.fileName}
+              href={resource.source.objectUrl}
+            >
+              <Download aria-hidden="true" size={13} />
+              다운로드
+            </a>
+          ) : null}
+          {canManage && onEdit ? <Button onClick={onEdit} size="sm" variant="secondary"><Pencil size={13} />수정</Button> : null}
+          {canManage && onDelete ? <Button onClick={onDelete} size="sm" variant="secondary"><Trash2 size={13} />삭제</Button> : null}
         </div>
       </header>
 
@@ -239,8 +269,8 @@ export function ClassroomResourcePreviewPanel({
               <span className="mx-auto flex size-10 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
                 <Bot aria-hidden="true" size={19} />
               </span>
-              <p className="mt-3 type-body font-semibold text-stone-700">자료에 대해 질문해 보세요.</p>
-              <p className="mt-1 type-caption text-stone-400">질문 기능을 준비 중입니다.</p>
+              <p className="mt-3 type-body font-semibold text-stone-700">일반 자료 질문 미지원</p>
+              <p className="mt-1 type-caption text-stone-400">AI 질문이 필요한 자료는 PDF 수업으로 등록해 주세요.</p>
             </div>
           </div>
           <div className="shrink-0 border-t border-stone-200 p-3">
@@ -265,6 +295,77 @@ export function ClassroomResourcePreviewPanel({
         </aside>
       </div>
     </article>
+  )
+}
+
+export function ClassroomResourceEditDialog({
+  onClose,
+  onSave,
+  resource,
+  weeks,
+}: {
+  onClose: () => void
+  onSave: (input: { title: string; weekNumber: number | null }) => Promise<boolean>
+  resource: ClassroomResourcePreviewValue
+  weeks: ClassroomWeek[]
+}) {
+  const [title, setTitle] = useState(resource.title)
+  const [weekNumber, setWeekNumber] = useState<number | null>(resource.weekNumber)
+  const [isSaving, setIsSaving] = useState(false)
+  const orderedWeeks = useMemo(
+    () => [...weeks].sort((left, right) => left.weekNumber - right.weekNumber),
+    [weeks],
+  )
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !isSaving) onClose()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [isSaving, onClose])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!title.trim() || isSaving) return
+    setIsSaving(true)
+    try {
+      if (await onSave({ title: title.trim(), weekNumber })) onClose()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div
+      aria-label="일반 자료 수정"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4"
+      onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) onClose() }}
+      role="dialog"
+    >
+      <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="type-dialog-title font-bold text-stone-950">일반 자료 수정</h2>
+          <button aria-label="일반 자료 수정 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isSaving} onClick={onClose} type="button"><X size={17} /></button>
+        </div>
+        <label className="mt-5 block type-control font-semibold text-stone-800">
+          주차 선택
+          <select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)} value={weekNumber ?? ''}>
+            <option value="">전체 항목</option>
+            {orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}
+          </select>
+        </label>
+        <label className="mt-4 block type-control font-semibold text-stone-800">
+          자료 제목
+          <input className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={200} onChange={(event) => setTitle(event.target.value)} value={title} />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button disabled={isSaving} onClick={onClose} variant="secondary">취소</Button>
+          <Button disabled={!title.trim() || isSaving} type="submit">{isSaving ? '저장 중' : '저장'}</Button>
+        </div>
+      </form>
+    </div>
   )
 }
 
@@ -319,12 +420,6 @@ function ResourceViewer({ resource }: { resource: ClassroomResourcePreviewValue 
       </div>
     </section>
   )
-}
-
-function getFilePreviewKind(file: File): 'document' | 'image' | 'pdf' {
-  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) return 'pdf'
-  if (file.type.startsWith('image/')) return 'image'
-  return 'document'
 }
 
 function removeFileExtension(value: string): string {

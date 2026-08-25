@@ -124,11 +124,9 @@ function StudentLearningTable({ className, students }: { className?: string; stu
         role="region"
         tabIndex={0}
       >
-        <div className="min-w-[650px]">
-          <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+        <div className="min-w-[460px]">
+          <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(260px,1fr)_140px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
             <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
-            <StudentSortHeader activeSort={sort} label="평균 진도율" onSelect={selectSort} sortKey="progress" />
-            <StudentSortHeader activeSort={sort} className="justify-center" label="최근 질문 수" onSelect={selectSort} sortKey="questions" />
             <StudentSortHeader activeSort={sort} className="justify-center" label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
           </div>
           {visibleStudents.length === 0 ? (
@@ -139,7 +137,7 @@ function StudentLearningTable({ className, students }: { className?: string; stu
             const isExpanded = expandedStudentId === student.id
             const detailId = `student-learning-detail-${student.id}`
             return <article aria-label={`${student.name} 학습 현황`} className="border-b border-stone-100 last:border-0" key={student.id}>
-              <div className="grid min-h-16 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 px-5">
+              <div className="grid min-h-16 grid-cols-[minmax(260px,1fr)_140px] items-center gap-3 px-5">
                 <button
                   aria-controls={detailId}
                   aria-expanded={isExpanded}
@@ -152,8 +150,6 @@ function StudentLearningTable({ className, students }: { className?: string; stu
                   <span className="min-w-0 flex-1"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></span>
                   <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
                 </button>
-                <StudentProgress value={student.averageProgressRate} />
-                <span className="text-center type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
                 <span className="text-center type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
               </div>
               {isExpanded ? <StudentLearningDetails detailId={detailId} student={student} /> : null}
@@ -194,7 +190,7 @@ function StudentDetailCard({ description, icon: Icon, summary, title }: { descri
   return <article className="rounded-lg border border-stone-200 bg-white p-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><Icon aria-hidden="true" size={15} /></span><h3 className="type-control font-bold text-stone-900">{title}</h3></div><p className="mt-3 type-control font-semibold text-stone-700">{summary}</p><p className="mt-1 type-caption leading-5 text-stone-400">{description}</p></article>
 }
 
-type StudentSortKey = 'name' | 'progress' | 'questions' | 'recentActivity'
+type StudentSortKey = 'name' | 'recentActivity'
 type StudentSortDirection = 'asc' | 'desc'
 type StudentSort = { direction: StudentSortDirection; key: StudentSortKey }
 
@@ -253,7 +249,7 @@ function LearningStatusHelp() {
         className="pointer-events-none absolute top-[calc(100%+7px)] left-0 z-30 w-72 rounded-md bg-stone-900 px-3 py-2 type-micro leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         role="tooltip"
       >
-        평균 진도율은 전체 자료, 최근 질문 수는 최근 7일을 기준으로 합니다. 학습자 프로필을 누르면 자료별 학습·페이지별 질문·퀴즈 현황이 펼쳐집니다.
+        학습자 프로필을 누르면 자료별 학습·페이지별 질문·퀴즈 현황이 펼쳐집니다. 상세 지표는 학습자별 집계를 기준으로 표시됩니다.
       </span>
     </span>
   )
@@ -263,27 +259,12 @@ function compareStudents(left: ClassroomStudent, right: ClassroomStudent, sort: 
   let comparison: number
   if (sort.key === 'name') {
     comparison = left.name.localeCompare(right.name, 'ko-KR')
-  } else if (sort.key === 'progress') {
-    if (left.averageProgressRate === undefined && right.averageProgressRate !== undefined) return 1
-    if (left.averageProgressRate !== undefined && right.averageProgressRate === undefined) return -1
-    comparison = (left.averageProgressRate ?? 0) - (right.averageProgressRate ?? 0)
-  } else if (sort.key === 'questions') {
-    comparison = left.aiQuestionCountLast7Days - right.aiQuestionCountLast7Days
   } else {
     comparison = getActivityTime(left) - getActivityTime(right)
   }
 
   if (comparison === 0) comparison = left.name.localeCompare(right.name, 'ko-KR')
   return sort.direction === 'asc' ? comparison : -comparison
-}
-
-function StudentProgress({ value }: { value?: number }) {
-  if (value === undefined) return <span className="type-control text-stone-400">-</span>
-  return <div className="flex items-center gap-3"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100"><span className="block h-full rounded-full bg-brand-600" style={{ width: `${clampPercentage(value)}%` }} /></div><strong className="w-9 text-right type-caption text-stone-700">{value}%</strong></div>
-}
-
-function clampPercentage(value: number): number {
-  return Math.max(0, Math.min(100, value))
 }
 
 function getActivityTime(student: ClassroomStudent): number {

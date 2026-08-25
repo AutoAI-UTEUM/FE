@@ -62,6 +62,27 @@ describe('ClassroomDetailPage instructor materials', () => {
       if (url.pathname === '/api/classrooms/12/exams') {
         return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
       }
+      if (url.pathname === '/api/classrooms/12/resources' && (!init?.method || init.method === 'GET')) {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      if (url.pathname === '/api/classrooms/12/resources' && init?.method === 'POST') {
+        return success({
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          createdAt: '2026-08-02T00:00:00Z',
+          fileName: '수업 참고자료.docx',
+          resourceId: 31,
+          sizeBytes: 8,
+          title: '수업 참고자료',
+          type: 'FILE',
+          url: null,
+          weekNumber: 1,
+        })
+      }
+      if (url.pathname === '/api/resources/31/file') {
+        return new Response('document', {
+          headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+        })
+      }
       if (url.pathname === '/api/materials' && init?.method === 'POST') {
         const body = init.body as FormData
         uploadedValues = {
@@ -179,9 +200,9 @@ describe('ClassroomDetailPage instructor materials', () => {
       target: { files: [resourceFile] },
     })
     expect(within(resourceDialog).getByRole('textbox', { name: '자료 제목' })).toHaveValue('수업 참고자료')
-    fireEvent.click(within(resourceDialog).getByRole('button', { name: '자료 확인' }))
+    fireEvent.click(within(resourceDialog).getByRole('button', { name: '업로드' }))
 
-    expect(screen.getByRole('heading', { name: '수업 참고자료' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '수업 참고자료' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '문서 자료 뷰어' })).toHaveTextContent('수업 참고자료.docx')
     expect(screen.getByRole('complementary', { name: '자료 질문' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '자료 질문 입력' })).toBeDisabled()

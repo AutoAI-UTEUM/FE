@@ -167,7 +167,7 @@ describe('QuizPage', () => {
     expect(screen.getByText('복습 순서를 다시 확인해 보세요.')).toBeInTheDocument()
   })
 
-  it('connects the shared quiz review chat after submission', async () => {
+  it('shows the planned-update notice for quiz review after submission', async () => {
     render(
       <TestAuthProvider>
         <MemoryRouter>
@@ -190,9 +190,8 @@ describe('QuizPage', () => {
     )
 
     const input = await screen.findByLabelText('퀴즈 복습 질문')
-    fireEvent.change(input, { target: { value: '이 문항은 왜 틀렸어?' } })
-    fireEvent.click(screen.getByRole('button', { name: '퀴즈 복습 질문 보내기' }))
-
-    expect(await screen.findByText(/'이 문항은 왜 틀렸어\?'을 다시 설명할게요/)).toBeInTheDocument()
+    expect(input).toBeDisabled()
+    expect(screen.getAllByText('추후 업데이트 예정')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '퀴즈 복습 기능 준비 중' })).toBeDisabled()
   })
 })
