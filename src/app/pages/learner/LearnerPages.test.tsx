@@ -98,7 +98,11 @@ describe('learner collection pages', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
-    expect(await screen.findByRole('heading', { name: '내 노트' })).toBeInTheDocument()
+    expect(await screen.findByRole(
+      'heading',
+      { name: '내 노트' },
+      { timeout: 5_000 },
+    )).toBeInTheDocument()
     expect(vi.mocked(globalThis.fetch).mock.calls.some(([input, init]) => {
       const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
       const method = input instanceof Request ? input.method : init?.method

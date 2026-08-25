@@ -1,0 +1,115 @@
+# Required GitHub Secrets:
+# - PROD_SSH_HOST
+# - DEV_SSH_USER / DEV_SSH_KEY (shared deployment account and key)
+# - VITE_GOOGLE_CLIENT_ID
+name: Deploy FE production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-fe-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy-fe-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_API_BASE_URL: /api
+      VITE_API_CAPABILITIES: reports
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build
+
+      - name: Resolve expected entry asset
+        id: build_metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          entry_asset="$({
+            sed -nE 's#.*<script[^>]+src="([^"]+)"[^>]*></script>.*#\1#p' dist/index.html
+          } | head -n 1)"
+          test -n "$entry_asset"
+          if [[ "$entry_asset" != /* ]]; then
+            entry_asset="/$entry_asset"
+          fi
+          echo "entry_asset=$entry_asset" >> "$GITHUB_OUTPUT"
+
+      - name: Copy dist to production server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.PROD_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: dist/*
+          target: /tmp/fe-dist-production
+          strip_components: 1
+          rm: true
+          overwrite: true
+
+      - name: Apply to production frontend volume
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            set -eu
+            test -f /tmp/fe-dist-production/index.html
+            docker run --rm \
+              -v edupilot-frontend-static:/html \
+              -v /tmp/fe-dist-production:/src:ro \
+              alpine sh -c "rm -rf /html/* && cp -r /src/* /html/"
+            rm -rf /tmp/fe-dist-production
+
+      - name: Smoke test production
+        shell: bash
+        env:
+          EXPECTED_ENTRY: ${{ steps.build_metadata.outputs.entry_asset }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 6); do
+            live_html="$(curl --fail --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              "https://uteum.com/?deploy=${GITHUB_SHA}&attempt=${attempt}")"
+            if printf '%s' "$live_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY"; then
+              curl --fail --silent --show-error \
+                "https://uteum.com${EXPECTED_ENTRY}" > /dev/null
+              echo "Production FE deployed with expected entry: $EXPECTED_ENTRY"
+              exit 0
+            fi
+            echo "Smoke attempt $attempt/6 failed: expected $EXPECTED_ENTRY"
+            sleep 5
+          done
+          exit 1
