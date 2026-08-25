@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
@@ -92,6 +92,55 @@ describe('InstructorReportCriteriaPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('자료 내용을 분석하지 못했습니다.')
     expect(screen.getByRole('button', { name: '지표 생성' })).toBeEnabled()
+  })
+
+  it('edits a custom criterion through the PATCH API', async () => {
+    let patchBody: Record<string, unknown> | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+
+      if (method === 'GET' && url.pathname === '/api/classrooms/12/report-criteria') {
+        return success({ items: [criterionFixture] })
+      }
+      if (method === 'GET' && url.pathname === '/api/classrooms/12/report-criteria/generation') {
+        return success({ message: '', registeredCount: 0, status: 'IDLE' })
+      }
+      if (method === 'PATCH' && url.pathname === '/api/classrooms/12/report-criteria/21') {
+        patchBody = input instanceof Request
+          ? await input.clone().json() as Record<string, unknown>
+          : JSON.parse(String(init?.body)) as Record<string, unknown>
+        return success({
+          ...criterionFixture,
+          criterionId: 22,
+          description: '수정된 설명',
+          name: '수정된 기준',
+          rubric: { summary: '수정된 평가 내용' },
+          version: 'v2',
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderPage()
+    expect(await screen.findByText('자동 생성 기준')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '리포트 평가 기준 관리' })).toBeInTheDocument()
+    expect(screen.getByText('리포트에 사용할 평가 기준을 추가하거나 수정하고 활성 상태를 관리하세요.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '수정' }))
+
+    const editForm = screen.getByRole('form', { name: '자동 생성 기준 수정' })
+    fireEvent.change(within(editForm).getByRole('textbox', { name: '이름' }), { target: { value: '수정된 기준' } })
+    fireEvent.change(within(editForm).getByRole('textbox', { name: '설명' }), { target: { value: '수정된 설명' } })
+    fireEvent.change(within(editForm).getByRole('textbox', { name: '평가 기준' }), { target: { value: '수정된 평가 내용' } })
+    fireEvent.click(within(editForm).getByRole('button', { name: '변경사항 저장' }))
+
+    expect(await screen.findByText('수정된 기준')).toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: '자동 생성 기준 수정' })).not.toBeInTheDocument()
+    expect(patchBody).toMatchObject({
+      description: '수정된 설명',
+      name: '수정된 기준',
+      rubric: { summary: '수정된 평가 내용' },
+    })
   })
 })
 

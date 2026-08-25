@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FileSearch,
   LoaderCircle,
+  Pencil,
   Plus,
   Search,
   Settings2,
@@ -325,8 +326,13 @@ export function InstructorReportCriteriaPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [rubric, setRubric] = useState('')
+  const [editingCriterion, setEditingCriterion] = useState<ReportCriterion | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editRubric, setEditRubric] = useState('')
   const [isLoading, setIsLoading] = useState(reportsEnabled)
   const [isSaving, setIsSaving] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const [isStartingGeneration, setIsStartingGeneration] = useState(false)
   const [generation, setGeneration] = useState<ReportCriteriaGeneration | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -489,18 +495,82 @@ export function InstructorReportCriteriaPage() {
     } catch (requestError) { setError(getRequestErrorMessage(requestError)) }
   }
 
+  function startEditingCriterion(criterion: ReportCriterion) {
+    if (criterion.id === null || criterion.builtin) return
+    setEditingCriterion(criterion)
+    setEditName(criterion.name)
+    setEditDescription(criterion.description)
+    setEditRubric(criterion.rubric)
+    setError(null)
+  }
+
+  function cancelEditingCriterion() {
+    if (isUpdating) return
+    setEditingCriterion(null)
+    setEditName('')
+    setEditDescription('')
+    setEditRubric('')
+  }
+
+  async function updateCriterion(event: FormEvent) {
+    event.preventDefault()
+    if (
+      editingCriterion?.id === null
+      || !editingCriterion
+      || !editName.trim()
+      || !editDescription.trim()
+      || !editRubric.trim()
+      || isUpdating
+    ) return
+    const previousCriterionId = editingCriterion.id
+    setIsUpdating(true)
+    setError(null)
+    try {
+      const updated = await repository.updateCriterion(classroomId, previousCriterionId, {
+        description: editDescription.trim(),
+        name: editName.trim(),
+        rubric: editRubric.trim(),
+      })
+      setCriteria((items) => items.map((item) => item.id === previousCriterionId ? updated : item))
+      setEditingCriterion(null)
+      setEditName('')
+      setEditDescription('')
+      setEditRubric('')
+      show('평가 기준을 수정했습니다.', 'success')
+    } catch (requestError) {
+      setError(requestError instanceof ApiClientError && requestError.status === 409
+        ? '기본 평가 기준 또는 기존 커스텀 기준과 이름이 중복됩니다.'
+        : getRequestErrorMessage(requestError))
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const isGenerating = isStartingGeneration || generation?.status === 'RUNNING'
 
-  return <PageContainer>
-    <PageHeader actions={<><Button disabled={isGenerating} onClick={() => void generateCriteria()} variant="secondary">{isGenerating ? <LoaderCircle className="animate-spin" size={14} /> : <Sparkles size={14} />}{isGenerating ? '생성 중' : '지표 생성'}</Button><ButtonLink to={classroomReportsPath(classroomId)} variant="secondary">리포트</ButtonLink></>} title="평가 기준" />
+  return <ClassroomWorkspaceContainer>
     {!reportsEnabled ? <ReportsUnavailableState /> : null}
     {reportsEnabled && isLoading ? <LoadingState message="평가 기준을 불러오는 중입니다." /> : null}
-    {reportsEnabled && !isLoading ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="overflow-hidden rounded-lg border border-stone-200 bg-white"><div className="border-b border-stone-200 bg-stone-50 px-5 py-3"><h2 className="type-body font-bold">활성 커스텀 기준 {activeCustomCriterionCount}/{CUSTOM_CRITERIA_LIMIT}</h2></div>{criteria.length === 0 ? <EmptyState description="기본 평가 기준은 서버 정책에 따라 제공되며 강의실별 기준을 추가할 수 있습니다." title="추가 평가 기준이 없습니다" /> : criteria.map((criterion) => <div className="flex items-start gap-4 border-b border-stone-100 px-5 py-4 last:border-0" key={criterion.id ?? `builtin-${criterion.key}`}><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><strong className="type-body">{criterion.name}</strong><Badge tone={criterion.active ? 'success' : 'neutral'}>{criterion.active ? '사용 중' : '비활성'}</Badge>{criterion.builtin ? <Badge tone="neutral">기본</Badge> : null}</div><p className="mt-1 type-caption leading-5 text-stone-500">{criterion.description}</p><p className="mt-2 type-micro text-stone-400">최소 근거 {criterion.minimumEvidence}개 · 버전 {criterion.version || '-'}</p></div>{criterion.builtin ? null : <Button onClick={() => void toggleCriterion(criterion)} size="sm" variant="secondary">{criterion.active ? '비활성화' : '활성화'}</Button>}</div>)}</section>
-      <form className="h-fit rounded-lg border border-stone-200 bg-white p-5" onSubmit={createCriterion}><div className="flex items-center gap-2"><Plus size={16} /><h2 className="type-section-title font-bold">기준 추가</h2></div><label className="mt-4 block type-control font-semibold">이름<input className="mt-1 h-10 w-full rounded-lg border border-stone-300 px-3 type-body" maxLength={60} onChange={(event) => setName(event.target.value)} value={name} /></label><label className="mt-4 block type-control font-semibold">설명<textarea className="mt-1 min-h-20 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setDescription(event.target.value)} value={description} /></label><label className="mt-4 block type-control font-semibold">평가 기준<textarea className="mt-1 min-h-28 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setRubric(event.target.value)} value={rubric} /></label><Button className="mt-4 w-full" disabled={!name.trim() || !description.trim() || !rubric.trim() || isSaving || activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT} type="submit">{isSaving ? '저장 중' : '기준 추가'}</Button>{activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT ? <p className="mt-2 type-caption text-amber-700">활성 커스텀 평가 기준은 최대 {CUSTOM_CRITERIA_LIMIT}개입니다.</p> : null}</form>
-    </div> : null}
-    {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}
-  </PageContainer>
+    {reportsEnabled && !isLoading ? <section aria-label="리포트 평가 기준 관리" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-stone-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><h2 className="type-body font-bold text-stone-900">평가 기준</h2><p className="mt-0.5 type-caption text-stone-400">리포트에 사용할 평가 기준을 추가하거나 수정하고 활성 상태를 관리하세요.</p></div>
+        <div className="flex shrink-0 gap-2"><Button disabled={isGenerating} onClick={() => void generateCriteria()} variant="secondary">{isGenerating ? <LoaderCircle className="animate-spin" size={14} /> : <Sparkles size={14} />}{isGenerating ? '생성 중' : '지표 생성'}</Button><ButtonLink to={classroomReportsPath(classroomId)} variant="secondary">리포트로 돌아가기</ButtonLink></div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-5 [scrollbar-gutter:stable]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="overflow-hidden rounded-lg border border-stone-200 bg-white"><div className="border-b border-stone-200 bg-stone-50 px-5 py-3"><h3 className="type-body font-bold">활성 커스텀 기준 {activeCustomCriterionCount}/{CUSTOM_CRITERIA_LIMIT}</h3></div>{criteria.length === 0 ? <EmptyState description="기본 평가 기준은 서버 정책에 따라 제공되며 강의실별 기준을 추가할 수 있습니다." title="추가 평가 기준이 없습니다" /> : criteria.map((criterion) => {
+        const isEditing = editingCriterion?.id === criterion.id
+        return <div className="border-b border-stone-100 px-5 py-4 last:border-0" key={criterion.id ?? `builtin-${criterion.key}`}>
+          <div className="flex items-start gap-4"><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><strong className="type-body">{criterion.name}</strong><Badge tone={criterion.active ? 'success' : 'neutral'}>{criterion.active ? '사용 중' : '비활성'}</Badge>{criterion.builtin ? <Badge tone="neutral">기본</Badge> : null}</div><p className="mt-1 type-caption leading-5 text-stone-500">{criterion.description}</p><p className="mt-2 type-micro text-stone-400">최소 근거 {criterion.minimumEvidence}개 · 버전 {criterion.version || '-'}</p></div>{criterion.builtin ? null : <div className="flex shrink-0 gap-2"><Button disabled={isUpdating} onClick={() => startEditingCriterion(criterion)} size="sm" variant="secondary"><Pencil aria-hidden="true" size={13} />수정</Button><Button disabled={isUpdating} onClick={() => void toggleCriterion(criterion)} size="sm" variant="secondary">{criterion.active ? '비활성화' : '활성화'}</Button></div>}</div>
+          {isEditing ? <form aria-label={`${criterion.name} 수정`} className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4" onSubmit={updateCriterion}><div className="grid gap-3 md:grid-cols-2"><label className="block type-control font-semibold">이름<input autoFocus className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" maxLength={100} onChange={(event) => setEditName(event.target.value)} value={editName} /></label><label className="block type-control font-semibold">설명<input className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" maxLength={500} onChange={(event) => setEditDescription(event.target.value)} value={editDescription} /></label></div><label className="mt-3 block type-control font-semibold">평가 기준<textarea className="mt-1 min-h-24 w-full resize-y rounded-lg border border-stone-300 bg-white px-3 py-2 type-body" onChange={(event) => setEditRubric(event.target.value)} value={editRubric} /></label><div className="mt-3 flex justify-end gap-2"><Button disabled={isUpdating} onClick={cancelEditingCriterion} size="sm" type="button" variant="secondary">취소</Button><Button disabled={!editName.trim() || !editDescription.trim() || !editRubric.trim() || isUpdating} size="sm" type="submit">{isUpdating ? '저장 중' : '변경사항 저장'}</Button></div></form> : null}
+        </div>
+          })}</section>
+          <form className="h-fit rounded-lg border border-stone-200 bg-white p-5" onSubmit={createCriterion}><div className="flex items-center gap-2"><Plus size={16} /><h3 className="type-section-title font-bold">기준 추가</h3></div><label className="mt-4 block type-control font-semibold">이름<input className="mt-1 h-10 w-full rounded-lg border border-stone-300 px-3 type-body" maxLength={60} onChange={(event) => setName(event.target.value)} value={name} /></label><label className="mt-4 block type-control font-semibold">설명<textarea className="mt-1 min-h-20 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setDescription(event.target.value)} value={description} /></label><label className="mt-4 block type-control font-semibold">평가 기준<textarea className="mt-1 min-h-28 w-full resize-none rounded-lg border border-stone-300 px-3 py-2 type-body" onChange={(event) => setRubric(event.target.value)} value={rubric} /></label><Button className="mt-4 w-full" disabled={!name.trim() || !description.trim() || !rubric.trim() || isSaving || activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT} type="submit">{isSaving ? '저장 중' : '기준 추가'}</Button>{activeCustomCriterionCount >= CUSTOM_CRITERIA_LIMIT ? <p className="mt-2 type-caption text-amber-700">활성 커스텀 평가 기준은 최대 {CUSTOM_CRITERIA_LIMIT}개입니다.</p> : null}</form>
+        </div>
+        {error ? <p className="mt-4 type-body text-rose-700" role="alert">{error}</p> : null}
+      </div>
+    </section> : null}
+  </ClassroomWorkspaceContainer>
 }
 
 function getCriteriaGenerationErrorMessage(error: unknown): string {
