@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ClassroomContentPanel, ClassroomContentRail } from './ClassroomContentView'
@@ -186,7 +186,70 @@ describe('ClassroomContentView week periods', () => {
     expect(screen.queryByRole('heading', { name: '전체 콘텐츠' })).not.toBeInTheDocument()
     expect(screen.getByText('테스트 공지').closest('details')).not.toBeInTheDocument()
   })
+
+  it('keeps only one material action menu open at a time', () => {
+    render(
+      <ClassroomContentPanel
+        canManage
+        draggingWeek={null}
+        errors={{}}
+        filter="material"
+        globalItems={[]}
+        isUploading={false}
+        items={[firstMaterial, secondMaterial]}
+        onAdd={vi.fn()}
+        onDrop={vi.fn()}
+        onFilter={vi.fn()}
+        onItem={vi.fn()}
+        onRemoveMaterial={vi.fn()}
+        onRenameMaterial={vi.fn()}
+        onRetry={vi.fn()}
+        openingMaterialId={null}
+        processingMaterialTitle={null}
+        selectedWeek={reorderedWeeks[0]}
+        selectedWeekNumber={2}
+        setDragging={vi.fn()}
+      />,
+    )
+
+    const firstMenuButton = screen.getByRole('button', { name: '첫 번째 수업.pdf 작업 메뉴' })
+    const secondMenuButton = screen.getByRole('button', { name: '두 번째 수업.pdf 작업 메뉴' })
+    fireEvent.click(firstMenuButton)
+    expect(firstMenuButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByRole('menu')).toHaveLength(1)
+
+    fireEvent.click(secondMenuButton)
+    expect(firstMenuButton).toHaveAttribute('aria-expanded', 'false')
+    expect(secondMenuButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByRole('menu')).toHaveLength(1)
+  })
 })
+
+const firstMaterial: ClassroomContentItem = {
+  id: 'material-10',
+  kind: 'material',
+  occurredAt: '2026-08-02T00:00:00Z',
+  source: {
+    id: '10',
+    status: 'READY',
+    title: '첫 번째 수업.pdf',
+    uploadedAt: '2026-08-02T00:00:00Z',
+  },
+  title: '첫 번째 수업.pdf',
+  weekNumber: 2,
+  weekOrder: 2,
+}
+
+const secondMaterial: ClassroomContentItem = {
+  ...firstMaterial,
+  id: 'material-11',
+  source: {
+    ...firstMaterial.source,
+    id: '11',
+    title: '두 번째 수업.pdf',
+  },
+  title: '두 번째 수업.pdf',
+}
 
 const globalNotice: ClassroomContentItem = {
   id: 'notice-20',

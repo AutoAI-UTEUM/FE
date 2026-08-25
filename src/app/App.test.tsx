@@ -137,7 +137,7 @@ describe('AppRoutes', () => {
       await screen.findByRole('heading', { name: '학습 공간' }),
     ).toBeInTheDocument()
     expect(screen.getByText('시험 대비 요약.pdf 학습 화면입니다.')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'AI 채팅' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '학습' })).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-14')
     expect(screen.getByRole('main')).toHaveClass('lg:h-dvh', 'overflow-hidden', 'p-0')
     expect(await screen.findByRole('region', { name: 'PDF 뷰어' })).toHaveClass(

@@ -252,7 +252,8 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(weekListCalls).toBeGreaterThanOrEqual(2)
     expect(screen.queryByRole('region', { name: '전체 콘텐츠' })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '이름 변경' }))
+    fireEvent.click(screen.getByRole('button', { name: 'lecture.pdf 작업 메뉴' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '이름 변경' }))
     const renameDialog = screen.getByRole('dialog', { name: '자료 이름 변경' })
     fireEvent.change(within(renameDialog).getByRole('textbox', { name: '자료 제목' }), {
       target: { value: '최적화 강의' },

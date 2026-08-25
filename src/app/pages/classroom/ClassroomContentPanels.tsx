@@ -227,13 +227,13 @@ export function ExamContentPanel({
 
   const editable = !exam || exam.status === 'DRAFT'
 
-  return <form className="rounded-lg border border-stone-200 bg-white" onSubmit={save}>
-    <div className="flex min-h-14 items-center gap-3 border-b border-stone-200 px-5">
+  return <form className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white" onSubmit={save}>
+    <div className="flex min-h-14 shrink-0 items-center gap-3 border-b border-stone-200 px-5">
       <button aria-label="목록으로 돌아가기" className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100" onClick={onClose} type="button"><ArrowLeft size={16} /></button>
       <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="type-section-title font-bold text-stone-950">{exam ? '시험 관리' : '시험 만들기'}</h2>{exam ? <Badge tone={exam.status === 'DRAFT' ? 'neutral' : exam.status === 'PUBLISHED' ? 'success' : 'warning'}>{exam.status === 'DRAFT' ? '초안' : exam.status === 'PUBLISHED' ? '공개' : '종료'}</Badge> : null}</div><p className="type-caption text-stone-500">{draft.weekNumber ? `${draft.weekNumber}주차 시험` : '전체 시험'}</p></div>
     </div>
-    <div className="p-5">{editable ? <ExamEditor onChange={setDraft} value={draft} /> : <div className="py-16 text-center"><h3 className="type-section-title font-bold text-stone-900">{exam?.title}</h3><p className="mt-2 type-body text-stone-500">공개되거나 종료된 시험은 상세 화면에서 응시 및 제출 현황을 확인합니다.</p></div>}</div>
-    <div className="flex min-h-16 items-center justify-between border-t border-stone-200 px-5">
+    <div aria-label="시험 편집 영역" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]" role="region" tabIndex={0}>{editable ? <ExamEditor onChange={setDraft} value={draft} /> : <div className="py-16 text-center"><h3 className="type-section-title font-bold text-stone-900">{exam?.title}</h3><p className="mt-2 type-body text-stone-500">공개되거나 종료된 시험은 상세 화면에서 응시 및 제출 현황을 확인합니다.</p></div>}</div>
+    <div className="flex min-h-16 shrink-0 items-center justify-between border-t border-stone-200 px-5">
       {exam?.status === 'DRAFT' ? <Button className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={disabled || isSubmitting} onClick={() => void remove()} type="button" variant="secondary"><Trash2 size={14} />삭제</Button> : <span />}
       <div className="flex gap-2">{editable ? <Button disabled={disabled || !isExamDraftValid(draft) || isSubmitting} type="submit"><Save size={14} />{isSubmitting ? '저장 중' : exam ? '변경사항 저장' : '초안 저장'}</Button> : null}{exam?.status === 'DRAFT' ? <Button disabled={disabled || !isExamDraftValid(draft) || isSubmitting} onClick={() => void publish()} type="button"><Send size={14} />시험 공개</Button> : null}</div>
     </div>

@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { NoticeContentPanel, NoticeDetailPanel } from './ClassroomContentPanels'
+import { ToastProvider } from '../../../shared/ui'
+import { ExamContentPanel, NoticeContentPanel, NoticeDetailPanel } from './ClassroomContentPanels'
 
 afterEach(cleanup)
 
@@ -73,6 +74,29 @@ describe('NoticeDetailPanel', () => {
     )
 
     expect(screen.queryByRole('button', { name: '편집하기' })).not.toBeInTheDocument()
+  })
+})
+
+describe('ExamContentPanel', () => {
+  it('한다면 안에서 시험 편집 영역만 스크롤한다', () => {
+    render(
+      <ToastProvider>
+        <ExamContentPanel
+          classroomId="12"
+          disabled={false}
+          exam={null}
+          initialWeekNumber={3}
+          onClose={vi.fn()}
+          onDeleted={vi.fn()}
+          onSaved={vi.fn()}
+          repository={{} as never}
+        />
+      </ToastProvider>,
+    )
+
+    const editorRegion = screen.getByRole('region', { name: '시험 편집 영역' })
+    expect(editorRegion).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
+    expect(editorRegion.closest('form')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col', 'overflow-hidden')
   })
 })
 

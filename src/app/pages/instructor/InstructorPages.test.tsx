@@ -142,7 +142,15 @@ function stubClassroomsApi(
       inactiveLearnerCountLast7Days: 4,
       lastUpdatedAt: '2026-08-04T06:00:00Z',
       learnerCount: 42,
-      materials: [],
+      materials: [
+        {
+          averageProgressRate: 72,
+          materialId: 10,
+          title: 'watermarking.pdf',
+          viewerCount: 3,
+          viewRate: 100,
+        },
+      ],
       questionsByPage: [
         { materialId: 10, pageNumber: 3, questionCount: 8 },
         { materialId: 10, pageNumber: 7, questionCount: 4 },
@@ -632,25 +640,36 @@ describe('instructor pages', () => {
     expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
     expect(screen.queryByText('관찰 데이터 축적 중')).not.toBeInTheDocument()
     expect(await screen.findByText('최근 질문 수')).toBeInTheDocument()
-    expect(screen.getByLabelText('최근 질문 수 집계 기준')).toBeInTheDocument()
-    expect(screen.getByRole('tooltip')).toHaveTextContent('최근 7일 기준')
+    expect(screen.getByRole('button', { name: '수강생별 학습 현황 안내' })).toBeInTheDocument()
+    expect(screen.getByRole('tooltip')).toHaveTextContent('최근 질문 수는 최근 7일')
+    expect(screen.getByRole('tooltip')).toHaveTextContent('학습자 프로필을 누르면')
     expect(screen.getByRole('tooltip')).toHaveClass('top-[calc(100%+7px)]')
     expect(screen.getByRole('tooltip')).not.toHaveClass('bottom-[calc(100%+7px)]')
     expect(screen.getByText('6건')).toHaveClass('text-center')
     expect(screen.queryByLabelText('학습 현황 요약')).not.toBeInTheDocument()
-    expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
-    expect(screen.getByText('p.3')).toBeInTheDocument()
-    expect(screen.getByText('질문 8건')).toBeInTheDocument()
-    expect(screen.getByLabelText('3쪽 질문 8건').firstElementChild).toHaveStyle({ width: '100%' })
-    expect(screen.getByLabelText('7쪽 질문 4건').firstElementChild).toHaveStyle({ width: '50%' })
+    expect(screen.queryByLabelText('강의실 전체 학습 집계')).not.toBeInTheDocument()
+    expect(screen.queryByText('자료별 학습 현황')).not.toBeInTheDocument()
+    expect(screen.queryByText('페이지별 질문 수')).not.toBeInTheDocument()
+    expect(screen.queryByText('퀴즈 현황')).not.toBeInTheDocument()
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
     expect(screen.queryByText('3명')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('수강생별 학습 현황').parentElement).toHaveClass('lg:grid-cols-2', '2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)]')
-    expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-col', 'lg:col-span-2', '2xl:col-span-1')
+    expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col')
     expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass('min-h-0', 'flex-1', 'overflow-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
     expect(screen.getByRole('button', { name: '이름 오름차순 정렬' }).parentElement).toHaveClass('sticky', 'top-0')
     expect(screen.getByRole('button', { name: '이름 오름차순 정렬' })).toHaveClass('pl-11')
     expect(screen.getByText('64%')).toBeInTheDocument()
+
+    const profileButton = screen.getByRole('button', { name: '김학습 프로필 상세 펼치기' })
+    expect(profileButton).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(profileButton)
+    expect(screen.getByRole('region', { name: '김학습 상세 학습 현황' })).toBeInTheDocument()
+    expect(screen.getByText('자료별 학습 현황')).toBeInTheDocument()
+    expect(screen.getByText('페이지별 질문 수')).toBeInTheDocument()
+    expect(screen.getByText('퀴즈 현황')).toBeInTheDocument()
+    expect(screen.getByText('현재 평균 진도 64%')).toBeInTheDocument()
+    expect(screen.getByText('퀴즈 현황 API 연동 대기')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '김학습 프로필 상세 접기' }))
+    expect(screen.queryByRole('region', { name: '김학습 상세 학습 현황' })).not.toBeInTheDocument()
 
     const studentList = screen.getByRole('region', { name: '수강생별 학습 현황 목록' })
     const getStudentOrder = () => within(studentList)

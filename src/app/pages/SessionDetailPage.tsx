@@ -839,7 +839,7 @@ export function SessionDetailPage() {
           </Suspense>
 
           <div
-            aria-label="PDF와 AI 채팅 너비 조절"
+            aria-label="PDF와 학습 패널 너비 조절"
             aria-orientation="vertical"
             aria-valuemax={Math.round(chatPanelMaxWidth)}
             aria-valuemin={MIN_CHAT_PANEL_WIDTH}
@@ -852,7 +852,7 @@ export function SessionDetailPage() {
             onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
             role="separator"
             tabIndex={0}
-            title="드래그하여 PDF와 채팅 너비 조절, 두 번 클릭하여 동일 너비로 복원"
+            title="드래그하여 PDF와 학습 패널 너비 조절, 두 번 클릭하여 동일 너비로 복원"
           >
             <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
           </div>
@@ -877,7 +877,6 @@ export function SessionDetailPage() {
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"
-            materialId={activeSession.materialId}
             materialOverview={materialOverview}
             conversationAction={hasConversationAction ? (
               <div className="grid gap-2">
@@ -968,7 +967,7 @@ function QuizChatLockPanel({
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-stone-200 bg-white"
     >
       <div className="flex h-13 shrink-0 items-center border-b border-stone-200 px-4">
-        <h2 className="type-control font-semibold text-stone-700">AI 채팅</h2>
+        <h2 className="type-control font-semibold text-stone-700">학습</h2>
       </div>
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
         <span className="flex size-11 items-center justify-center rounded-full bg-stone-100 text-stone-500">
@@ -976,7 +975,7 @@ function QuizChatLockPanel({
         </span>
         <h3 className="mt-4 type-section-title font-bold text-stone-950">퀴즈 응시 중</h3>
         <p className="mt-2 max-w-xs type-body leading-6 text-stone-500">
-          공정한 학습 확인을 위해 제출 전에는 AI 채팅을 볼 수 없습니다.
+          공정한 학습 확인을 위해 제출 전에는 학습 내용을 볼 수 없습니다.
         </p>
         <p className="mt-1 type-caption text-stone-400">
           퀴즈를 제출하면 대화 내용과 입력창이 다시 표시됩니다.

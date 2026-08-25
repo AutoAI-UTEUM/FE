@@ -3,6 +3,8 @@ import {
   ArrowUp,
   ArrowUpDown,
   BarChart3,
+  ChevronDown,
+  ClipboardCheck,
   FileQuestion,
   Info,
   Search,
@@ -16,7 +18,6 @@ import {
   createClassroomsRepository,
   rememberClassroomId,
   type Classroom,
-  type ClassroomAnalytics,
   type ClassroomStudent,
 } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
@@ -33,7 +34,6 @@ export function InstructorLearningStatusPage() {
   const { classroomId = '' } = useParams()
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
   const [classroom, setClassroom] = useState<Classroom | null>(null)
-  const [analytics, setAnalytics] = useState<ClassroomAnalytics | null>(null)
   const [students, setStudents] = useState<ClassroomStudent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -42,15 +42,13 @@ export function InstructorLearningStatusPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const [classrooms, nextAnalytics, nextStudents] = await Promise.all([
+      const [classrooms, nextStudents] = await Promise.all([
         repository.list(),
-        repository.getAnalytics(classroomId),
         repository.listStudents(classroomId, { sort: 'RECENT_ACTIVITY' }),
       ])
       const nextClassroom = classrooms.find((item) => item.id === classroomId) ?? classrooms[0]
       if (!nextClassroom) throw new Error('강의실 정보를 확인할 수 없습니다.')
       setClassroom(nextClassroom)
-      setAnalytics(nextAnalytics)
       setStudents(nextStudents)
     } catch (requestError) {
       setError(getRequestErrorMessage(requestError))
@@ -76,73 +74,15 @@ export function InstructorLearningStatusPage() {
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader activeTab="learning" classroom={classroom} />
 
-      <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(260px,0.9fr)_minmax(240px,0.75fr)_minmax(680px,1.35fr)] 2xl:grid-rows-[minmax(0,1fr)]">
-        <MaterialAnalyticsPanel analytics={analytics} />
-        <QuestionAnalyticsPanel analytics={analytics} />
-        <StudentLearningTable className="lg:col-span-2 2xl:col-span-1" students={students} />
-      </section>
+      <StudentLearningTable students={students} />
     </ClassroomWorkspaceContainer>
-  )
-}
-
-function MaterialAnalyticsPanel({ analytics, className }: { analytics: ClassroomAnalytics | null; className?: string }) {
-  if (!analytics || analytics.materials.length === 0) {
-    return <EmptyAnalyticsPanel className={className} description="자료 열람이 시작되면 조회율과 평균 진도가 표시됩니다." icon={BarChart3} title="자료별 학습 현황" />
-  }
-
-  return (
-    <article className={cx('flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
-      <div className="shrink-0 border-b border-stone-100 px-5 py-4"><h2 className="type-body font-bold text-stone-900">자료별 학습 현황</h2></div>
-      <div className="min-h-0 flex-1 divide-y divide-stone-100 overflow-y-auto overscroll-contain">
-        {analytics.materials.map((material) => (
-          <div className="px-5 py-3.5" key={material.id}>
-            <div className="mb-2 flex items-center justify-between gap-4">
-              <strong className="min-w-0 truncate type-control text-stone-900">{material.title}</strong>
-              <span className="shrink-0 type-caption text-stone-500">조회율 {material.viewRate}% · 평균 진도 {material.averageProgressRate}%</span>
-            </div>
-            <div aria-label={`${material.title} 평균 진도 ${material.averageProgressRate}%`} className="h-1.5 overflow-hidden rounded-full bg-stone-100">
-              <span className="block h-full rounded-full bg-brand-600" style={{ width: `${clampPercentage(material.averageProgressRate)}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </article>
-  )
-}
-
-function QuestionAnalyticsPanel({ analytics, className }: { analytics: ClassroomAnalytics | null; className?: string }) {
-  const questions = [...(analytics?.questionsByPage ?? [])]
-    .sort((left, right) => right.questionCount - left.questionCount)
-    .slice(0, 6)
-
-  if (questions.length === 0) {
-    return <EmptyAnalyticsPanel className={className} description="학습자가 질문한 횟수를 관련 페이지별로 표시합니다." icon={FileQuestion} title="페이지별 질문 수" />
-  }
-
-  const maximum = Math.max(...questions.map((item) => item.questionCount), 1)
-  return (
-    <article className={cx('flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
-      <div className="shrink-0 border-b border-stone-100 px-5 py-4"><h2 className="type-body font-bold text-stone-900">페이지별 질문 수</h2></div>
-      <div className="min-h-0 flex-1 divide-y divide-stone-100 overflow-y-auto overscroll-contain">
-        {questions.map((item) => (
-          <div className="px-5 py-3.5" key={`${item.materialId}-${item.pageNumber}`}>
-            <div className="mb-2 flex items-center justify-between gap-4">
-              <strong className="type-control text-stone-900">p.{item.pageNumber}</strong>
-              <span className="shrink-0 type-caption text-stone-500">질문 {item.questionCount}건</span>
-            </div>
-            <div aria-label={`${item.pageNumber}쪽 질문 ${item.questionCount}건`} className="h-1.5 overflow-hidden rounded-full bg-stone-100">
-              <span className="block h-full rounded-full bg-brand-600" style={{ width: `${item.questionCount / maximum * 100}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </article>
   )
 }
 
 function StudentLearningTable({ className, students }: { className?: string; students: ClassroomStudent[] }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sort, setSort] = useState<StudentSort>({ direction: 'desc', key: 'recentActivity' })
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
   const visibleStudents = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
     return students
@@ -159,9 +99,12 @@ function StudentLearningTable({ className, students }: { className?: string; stu
   }
 
   return (
-    <section aria-label="수강생별 학습 현황" className={cx('flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
+    <section aria-label="수강생별 학습 현황" className={cx('flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
       <div className="flex shrink-0 flex-col gap-3 border-b border-stone-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
+          <LearningStatusHelp />
+        </div>
         <label className="relative block w-full sm:w-56">
           <span className="sr-only">수강생 검색</span>
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
@@ -185,31 +128,70 @@ function StudentLearningTable({ className, students }: { className?: string; stu
           <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
             <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
             <StudentSortHeader activeSort={sort} label="평균 진도율" onSelect={selectSort} sortKey="progress" />
-            <div className="flex items-center justify-center gap-1">
-              <StudentSortHeader activeSort={sort} className="justify-center" label="최근 질문 수" onSelect={selectSort} sortKey="questions" />
-              <RecentQuestionCountHelp />
-            </div>
+            <StudentSortHeader activeSort={sort} className="justify-center" label="최근 질문 수" onSelect={selectSort} sortKey="questions" />
             <StudentSortHeader activeSort={sort} className="justify-center" label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
           </div>
           {visibleStudents.length === 0 ? (
             <div className="flex min-h-40 items-center justify-center type-body text-stone-400">
               {students.length === 0 ? '표시할 수강생이 없습니다.' : '검색 결과가 없습니다.'}
             </div>
-          ) : visibleStudents.map((student) => (
-            <article aria-label={`${student.name} 학습 현황`} className="grid min-h-14 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 border-b border-stone-100 px-5 last:border-0" key={student.id}>
-              <div className="flex min-w-0 items-center gap-3">
-                <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
-                <div className="min-w-0"><strong className="block truncate type-control text-stone-900">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></div>
+          ) : visibleStudents.map((student) => {
+            const isExpanded = expandedStudentId === student.id
+            const detailId = `student-learning-detail-${student.id}`
+            return <article aria-label={`${student.name} 학습 현황`} className="border-b border-stone-100 last:border-0" key={student.id}>
+              <div className="grid min-h-16 grid-cols-[minmax(180px,1.25fr)_minmax(150px,1fr)_132px_120px] items-center gap-3 px-5">
+                <button
+                  aria-controls={detailId}
+                  aria-expanded={isExpanded}
+                  aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
+                  className="group flex min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  onClick={() => setExpandedStudentId((current) => current === student.id ? null : student.id)}
+                  type="button"
+                >
+                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
+                  <span className="min-w-0 flex-1"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></span>
+                  <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
+                </button>
+                <StudentProgress value={student.averageProgressRate} />
+                <span className="text-center type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
+                <span className="text-center type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
               </div>
-              <StudentProgress value={student.averageProgressRate} />
-              <span className="text-center type-control text-stone-600">{student.aiQuestionCountLast7Days}건</span>
-              <span className="text-center type-control text-stone-600">{formatRelativeActivityDate(student.lastActiveAt)}</span>
+              {isExpanded ? <StudentLearningDetails detailId={detailId} student={student} /> : null}
             </article>
-          ))}
+          })}
         </div>
       </div>
     </section>
   )
+}
+
+function StudentLearningDetails({ detailId, student }: { detailId: string; student: ClassroomStudent }) {
+  return (
+    <section aria-label={`${student.name} 상세 학습 현황`} className="grid gap-3 border-t border-stone-100 bg-stone-50/80 p-4 md:grid-cols-3" id={detailId}>
+      <StudentDetailCard
+        description="자료별 열람 여부와 진도는 학습자 상세 API 연결 후 표시됩니다."
+        icon={BarChart3}
+        summary={student.averageProgressRate === undefined ? '평균 진도 집계 전' : `현재 평균 진도 ${student.averageProgressRate}%`}
+        title="자료별 학습 현황"
+      />
+      <StudentDetailCard
+        description="어떤 자료의 몇 페이지에서 질문했는지는 학습자 상세 API 연결 후 표시됩니다."
+        icon={FileQuestion}
+        summary={`최근 7일 질문 ${student.aiQuestionCountLast7Days}건`}
+        title="페이지별 질문 수"
+      />
+      <StudentDetailCard
+        description="퀴즈별 응시 여부, 점수, 통과 여부는 신규 API 연결 후 표시됩니다."
+        icon={ClipboardCheck}
+        summary="퀴즈 현황 API 연동 대기"
+        title="퀴즈 현황"
+      />
+    </section>
+  )
+}
+
+function StudentDetailCard({ description, icon: Icon, summary, title }: { description: string; icon: typeof Users; summary: string; title: string }) {
+  return <article className="rounded-lg border border-stone-200 bg-white p-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><Icon aria-hidden="true" size={15} /></span><h3 className="type-control font-bold text-stone-900">{title}</h3></div><p className="mt-3 type-control font-semibold text-stone-700">{summary}</p><p className="mt-1 type-caption leading-5 text-stone-400">{description}</p></article>
 }
 
 type StudentSortKey = 'name' | 'progress' | 'questions' | 'recentActivity'
@@ -257,20 +239,21 @@ function StudentSortHeader({
   )
 }
 
-function RecentQuestionCountHelp() {
+function LearningStatusHelp() {
   return (
     <span className="group relative inline-flex shrink-0 items-center">
-      <Info
-        aria-label="최근 질문 수 집계 기준"
-        className="cursor-help text-stone-400 outline-none focus:text-stone-700"
-        size={13}
-        tabIndex={0}
-      />
+      <button
+        aria-label="수강생별 학습 현황 안내"
+        className="flex size-6 cursor-help items-center justify-center rounded-full text-stone-400 outline-none hover:bg-stone-100 hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-brand-500"
+        type="button"
+      >
+        <Info aria-hidden="true" size={14} />
+      </button>
       <span
-        className="pointer-events-none absolute top-[calc(100%+7px)] left-1/2 z-30 w-max -translate-x-1/2 rounded-md bg-stone-900 px-2 py-1 type-micro font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        className="pointer-events-none absolute top-[calc(100%+7px)] left-0 z-30 w-72 rounded-md bg-stone-900 px-3 py-2 type-micro leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         role="tooltip"
       >
-        최근 7일 기준
+        평균 진도율은 전체 자료, 최근 질문 수는 최근 7일을 기준으로 합니다. 학습자 프로필을 누르면 자료별 학습·페이지별 질문·퀴즈 현황이 펼쳐집니다.
       </span>
     </span>
   )
@@ -297,19 +280,6 @@ function compareStudents(left: ClassroomStudent, right: ClassroomStudent, sort: 
 function StudentProgress({ value }: { value?: number }) {
   if (value === undefined) return <span className="type-control text-stone-400">-</span>
   return <div className="flex items-center gap-3"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100"><span className="block h-full rounded-full bg-brand-600" style={{ width: `${clampPercentage(value)}%` }} /></div><strong className="w-9 text-right type-caption text-stone-700">{value}%</strong></div>
-}
-
-function EmptyAnalyticsPanel({ className, description, icon: Icon, title }: { className?: string; description: string; icon: typeof Users; title: string }) {
-  return (
-    <article className={cx('flex h-full min-h-64 flex-col rounded-lg border border-stone-200 bg-white', className)}>
-      <div className="border-b border-stone-100 px-5 py-4"><h2 className="type-body font-bold text-stone-900">{title}</h2></div>
-      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-stone-100 text-stone-400"><Icon aria-hidden="true" size={19} /></span>
-        <p className="mt-3 type-body font-semibold text-stone-800">표시할 학습 데이터가 없습니다</p>
-        <p className="mt-1 type-caption leading-5 text-stone-400">{description}</p>
-      </div>
-    </article>
-  )
 }
 
 function clampPercentage(value: number): number {

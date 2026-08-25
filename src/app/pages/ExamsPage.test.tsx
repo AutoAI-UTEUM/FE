@@ -74,7 +74,9 @@ describe('ExamsPage creation entry', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: '시험 만들기' })).toBeInTheDocument()
+    const composerTitle = await screen.findByRole('heading', { name: '시험 만들기' })
+    expect(composerTitle).toBeInTheDocument()
+    expect(composerTitle.closest('form')).toHaveClass('max-h-[calc(100dvh-3rem)]', 'overflow-y-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
     expect(screen.getByLabelText('강의실 선택')).toHaveValue('12')
     expect(screen.getByLabelText('주차 (선택)')).toHaveValue(3)
   })
