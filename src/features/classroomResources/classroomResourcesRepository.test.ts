@@ -33,7 +33,9 @@ describe('classroomResourcesRepository', () => {
     })
     await repository.update('31', { title: '수정 자료', weekNumber: null })
     await repository.delete('31')
-    await expect(repository.getFile('31')).resolves.toBeInstanceOf(Blob)
+    const file = await repository.getFile('31')
+    expect(file.size).toBe(4)
+    await expect(file.text()).resolves.toBe('file')
 
     expect(request).toHaveBeenNthCalledWith(1, '/api/classrooms/12/resources?page=0&size=100', { signal: undefined })
     expect(request).toHaveBeenNthCalledWith(2, '/api/classrooms/12/resources', {
