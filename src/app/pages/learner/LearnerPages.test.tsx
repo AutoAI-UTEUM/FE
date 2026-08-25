@@ -1,10 +1,10 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import { TestAuthProvider } from '../../../test/TestAuthProvider'
-import { LearnerNoteCreatePage, LearnerNotesPage } from './LearnerNotesPage'
+import { LearnerNoteCreatePage, LearnerNoteEditPage, LearnerNotesPage } from './LearnerNotesPage'
 import { LearnerReviewQuizzesPage } from './LearnerReviewQuizzesPage'
 
 afterEach(() => {
@@ -77,6 +77,66 @@ describe('learner collection pages', () => {
     )
   })
 
+  it('opens the existing note editor as a full page', async () => {
+    mockLearnerCollectionApi({ noteContent: '# 공식\n\n기존 노트 내용' })
+    render(
+      <MemoryRouter initialEntries={['/notes']}>
+        <TestAuthProvider>
+          <Routes>
+            <Route path="/notes" element={<LearnerNotesPage />} />
+            <Route path="/notes/:noteKind/:noteId/edit" element={<LearnerNoteEditPage />} />
+          </Routes>
+        </TestAuthProvider>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '노트 수정' }))
+
+    expect(await screen.findByRole('heading', { name: '노트 수정' })).toBeInTheDocument()
+    expect(await screen.findByText('시험 대비 요약.pdf')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '변경사항 저장' })).toBeEnabled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
+    expect(await screen.findByRole('heading', { name: '내 노트' })).toBeInTheDocument()
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([input, init]) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : init?.method
+      return url.pathname === '/api/notes/1' && method === 'PATCH'
+    })).toBe(true)
+  })
+
+  it('loads and saves a manual note from the full-page editor', async () => {
+    window.localStorage.setItem('edupilot:manual-notes:1', JSON.stringify([
+      {
+        content: '# 개인 정리\n\n기존 내용',
+        createdAt: '2026-08-01T00:00:00Z',
+        id: 'manual-1',
+        updatedAt: '2026-08-01T00:00:00Z',
+      },
+    ]))
+    render(
+      <MemoryRouter initialEntries={['/notes/manual/manual-1/edit']}>
+        <TestAuthProvider>
+          <Routes>
+            <Route path="/notes" element={<p>노트 목록</p>} />
+            <Route path="/notes/:noteKind/:noteId/edit" element={<LearnerNoteEditPage />} />
+          </Routes>
+        </TestAuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('개인 노트')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '변경사항 저장' }))
+
+    expect(await screen.findByText('노트 목록')).toBeInTheDocument()
+    const [savedNote] = JSON.parse(
+      window.localStorage.getItem('edupilot:manual-notes:1') ?? '[]',
+    ) as Array<{ content: string; updatedAt: string }>
+    expect(savedNote.content).toBe('# 개인 정리\n\n기존 내용')
+    expect(savedNote.updatedAt).not.toBe('2026-08-01T00:00:00Z')
+  })
+
   it('groups multiple notes saved from the same material', async () => {
     mockLearnerCollectionApi({
       noteContents: ['# 핵심 공식\n\n첫 번째 노트', '# 오답 정리\n\n두 번째 노트'],
@@ -107,7 +167,7 @@ describe('learner collection pages', () => {
 function mockLearnerCollectionApi(
   options: { noteContent?: string; noteContents?: string[]; notesUnavailable?: boolean } = {},
 ) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(
       input instanceof Request ? input.url : String(input),
       'http://localhost',
@@ -146,6 +206,15 @@ function mockLearnerCollectionApi(
         size: 100,
         totalElements: noteContents.length,
         totalPages: noteContents.length > 0 ? 1 : 0,
+      })
+    }
+
+    if (url.pathname === '/api/notes/1' && (input instanceof Request ? input.method : init?.method) === 'PATCH') {
+      return success({
+        content: options.noteContent ?? '# 공식\n\n기존 노트 내용',
+        noteId: 1,
+        pageNumber: 1,
+        sourceMessageId: 501,
       })
     }
 

@@ -23,6 +23,7 @@ export const routes = {
   calendar: '/calendar',
   notes: '/notes',
   newNote: '/notes/new',
+  editNote: '/notes/:noteKind/:noteId/edit',
   reviewQuizzes: '/review-quizzes',
   exams: '/exams',
   examDetail: '/exams/:examId',
@@ -37,6 +38,10 @@ export const routes = {
   quizDetail: '/quizzes/:quizId',
   diagnosis: '/sessions/:sessionId/diagnosis/:diagnosisId',
 } as const
+
+export function noteEditPath(noteKind: 'manual' | 'session', noteId: string | number): string {
+  return `/notes/${noteKind}/${encodeURIComponent(String(noteId))}/edit`
+}
 
 export function classroomDetailPath(classroomId: string | number): string {
   return `/classrooms/${classroomId}`

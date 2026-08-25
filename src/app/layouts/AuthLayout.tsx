@@ -32,6 +32,8 @@ export function AuthLayout() {
             같은 강의,
             <br />
             나에게 맞춘 학습.
+            <br />
+            <span className="text-[#5B8DEF]">그래서, {SERVICE_NAME}.</span>
           </p>
           <p className="max-w-sm type-auth-description text-[#A6ACBB]">
             이해 속도에 맞춰 설명하고 점검하는
