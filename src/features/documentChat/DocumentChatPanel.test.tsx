@@ -55,11 +55,8 @@ describe('DocumentChatPanel', () => {
     })
   })
 
-  it('uses the quiz endpoint and locks duplicate submissions while waiting', async () => {
-    let resolveRequest: ((value: ApiSuccess<{ answer: string; warnings: never[] }>) => void) | undefined
-    const request = vi.fn().mockImplementation(() => new Promise((resolve) => {
-      resolveRequest = resolve
-    }))
+  it('announces that quiz review is coming later and keeps its input disabled', () => {
+    const request = vi.fn()
     render(
       <DocumentChatPanel
         materialId="10"
@@ -69,16 +66,11 @@ describe('DocumentChatPanel', () => {
     )
 
     const input = screen.getByLabelText('퀴즈 복습 질문')
-    fireEvent.change(input, { target: { value: '왜 틀렸어?' } })
-    fireEvent.click(screen.getByRole('button', { name: '퀴즈 복습 질문 보내기' }))
-
-    expect(screen.getByText('답변을 준비하고 있습니다…')).toBeInTheDocument()
+    expect(screen.getAllByText('추후 업데이트 예정')).toHaveLength(2)
+    expect(screen.getByText('퀴즈 복습 기능을 준비 중입니다')).toBeInTheDocument()
     expect(input).toBeDisabled()
-    expect(request).toHaveBeenCalledOnce()
-    expect(request).toHaveBeenCalledWith('/api/materials/10/quiz-chat', expect.any(Object))
-
-    resolveRequest?.(success({ answer: '정답 풀이입니다.', warnings: [] }))
-    expect(await screen.findByText('정답 풀이입니다.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '퀴즈 복습 기능 준비 중' })).toBeDisabled()
+    expect(request).not.toHaveBeenCalled()
   })
 
   it('shows a specific processing error and allows the failed question to retry', async () => {

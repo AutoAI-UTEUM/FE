@@ -1,5 +1,6 @@
-import { ChevronDown, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
 import { createNotesRepository, type Note } from '../../../features/notes'
@@ -18,7 +19,7 @@ import {
   PageHeader,
   useToast,
 } from '../../../shared/ui'
-import { sessionDetailPath } from '../../routes'
+import { routes, sessionDetailPath } from '../../routes'
 
 const NotionBlockEditor = lazy(
   () => import('../../../shared/ui/NotionBlockEditor'),
@@ -48,6 +49,13 @@ interface ManualNoteItem {
 interface NotePreview {
   body: string
   title: string
+}
+
+interface LearnerNoteGroup {
+  id: string
+  items: LearnerNoteItem[]
+  label: string
+  session?: LearningSession
 }
 
 function getNotePreview(content: string): NotePreview {
@@ -96,9 +104,6 @@ export function LearnerNotesPage() {
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
   const [editingDocument, setEditingDocument] = useState<string | undefined>()
-  const [draftContent, setDraftContent] = useState('# 새 노트\n\n')
-  const [draftDocument, setDraftDocument] = useState<string | undefined>()
-  const [isComposerOpen, setIsComposerOpen] = useState(false)
   const [expandedNoteKeys, setExpandedNoteKeys] = useState<Set<string>>(
     () => new Set(),
   )
@@ -182,6 +187,10 @@ export function LearnerNotesPage() {
       return content.includes(normalized) || source.includes(normalized)
     })
   }, [allItems, query])
+  const groupedItems = useMemo(
+    () => groupNoteItems(filteredItems),
+    [filteredItems],
+  )
 
   function persistManualNotes(updater: (current: ManualNote[]) => ManualNote[]) {
     setManualNotes((current) => {
@@ -256,28 +265,6 @@ export function LearnerNotesPage() {
     })
   }
 
-  function openComposer() {
-    setDraftContent('# 새 노트\n\n')
-    setDraftDocument(undefined)
-    setIsComposerOpen(true)
-  }
-
-  function createManualNote() {
-    if (!draftContent.trim()) return
-    const now = new Date().toISOString()
-    const note: ManualNote = {
-      content: draftContent.trim(),
-      createdAt: now,
-      document: draftDocument,
-      id: createClientId(),
-      updatedAt: now,
-    }
-    persistManualNotes((current) => [note, ...current])
-    setExpandedNoteKeys((current) => new Set(current).add(`manual-${note.id}`))
-    setIsComposerOpen(false)
-    showToast('노트를 추가했습니다.', 'success')
-  }
-
   return (
     <PageContainer>
       <PageHeader
@@ -307,10 +294,10 @@ export function LearnerNotesPage() {
                 </button>
               ) : null}
             </label>
-            <Button onClick={openComposer}>
+            <ButtonLink to={routes.newNote}>
               <Plus aria-hidden="true" size={15} />
               새 노트
-            </Button>
+            </ButtonLink>
           </div>
         }
         title="내 노트"
@@ -331,7 +318,7 @@ export function LearnerNotesPage() {
       ) : null}
       {!isLoading && !error && filteredItems.length === 0 ? (
         <EmptyState
-          action={!query.trim() ? <Button onClick={openComposer}>새 노트 작성</Button> : undefined}
+          action={!query.trim() ? <ButtonLink to={routes.newNote}>새 노트 작성</ButtonLink> : undefined}
           description={
             query.trim()
               ? '다른 검색어로 다시 찾아보세요.'
@@ -343,229 +330,229 @@ export function LearnerNotesPage() {
 
       {!error && filteredItems.length > 0 ? (
         <section aria-label="저장한 노트" className="grid gap-3 lg:grid-cols-2">
-          {filteredItems.map((item) => {
-            const noteKey = getNoteKey(item)
-            const content = getNoteContent(item)
-            const preview = getNotePreview(content)
-            const isExpanded = expandedNoteKeys.has(noteKey)
-            const isEditing = editingKey === noteKey
-            const contentId = `note-content-${noteKey}`
-
-            return (
-              <article
-                className="min-w-0 rounded-lg border border-stone-200 bg-white"
-                key={noteKey}
-              >
-                <div className="flex flex-wrap items-center gap-2 border-b border-stone-100 px-4 py-3">
-                  <div className="mr-auto min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <p
-                        className="min-w-0 truncate type-control font-bold text-stone-900"
-                        title={getNoteSourceLabel(item)}
-                      >
-                        {getNoteSourceLabel(item)}
-                      </p>
-                      {item.kind === 'session' && item.note.pageNumber ? (
-                        <span className="shrink-0 type-micro text-stone-400">
-                          {item.note.pageNumber}페이지
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-0.5 type-micro text-stone-400">
-                      {item.kind === 'manual'
-                        ? '직접 작성'
-                        : item.note.sourceMessageId
-                          ? 'AI 답변 저장'
-                          : '내 메모'}
-                    </p>
-                  </div>
-                  {item.kind === 'session' ? (
+          {groupedItems.map((group) => (
+            <article
+              aria-label={`${group.label} 노트 모음`}
+              className="min-w-0 self-start overflow-hidden rounded-lg border border-stone-200 bg-white"
+              key={group.id}
+            >
+              <header className="flex min-h-14 items-center gap-3 border-b border-stone-200 bg-stone-50/70 px-4 py-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-brand-700 shadow-sm ring-1 ring-stone-200">
+                  <FileText aria-hidden="true" size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate type-body font-bold text-stone-950" title={group.label}>
+                    {group.label}
+                  </h2>
+                  <p className="type-micro text-stone-400">노트 {group.items.length}개</p>
+                </div>
+                {group.session ? (
                     <ButtonLink
                       className="!min-h-7 !gap-1 !rounded-md !px-2 !py-1 type-micro"
                       size="sm"
-                      to={sessionDetailPath(item.session.id)}
+                      to={sessionDetailPath(group.session.id)}
                       variant="secondary"
                     >
                       <FileText aria-hidden="true" size={12} />
                       자료로 이동
                     </ButtonLink>
                   ) : null}
-                  {isEditing ? (
-                    <>
-                      <Button
-                        onClick={() => setEditingKey(null)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        취소
-                      </Button>
-                      <Button
-                        disabled={!editingContent.trim() || isSaving}
-                        onClick={() => void saveNote(item)}
-                        size="sm"
-                      >
-                        저장
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        aria-label="노트 수정"
-                        className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                        onClick={() => {
-                          setEditingKey(noteKey)
-                          setEditingContent(content)
-                          setEditingDocument(
-                            item.kind === 'manual' ? item.note.document : undefined,
-                          )
-                        }}
-                        type="button"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        aria-label="노트 삭제"
-                        className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
-                        onClick={() => void deleteNote(item)}
-                        type="button"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </>
-                  )}
-                </div>
+              </header>
+              <div className="divide-y divide-stone-100">
+                {group.items.map((item) => {
+                  const noteKey = getNoteKey(item)
+                  const content = getNoteContent(item)
+                  const preview = getNotePreview(content)
+                  const isExpanded = expandedNoteKeys.has(noteKey)
+                  const isEditing = editingKey === noteKey
+                  const contentId = `note-content-${noteKey}`
+                  const noteMeta = item.kind === 'manual'
+                    ? '직접 작성'
+                    : [
+                        item.note.pageNumber ? `${item.note.pageNumber}페이지` : null,
+                        item.note.sourceMessageId ? 'AI 답변 저장' : '내 메모',
+                      ].filter(Boolean).join(' · ')
 
-                {isEditing ? (
-                  <div className="p-4">
-                    <Suspense fallback={<EditorLoadingState />}>
-                      <NotionBlockEditor
-                        ariaLabel="노트 내용 수정"
-                        initialDocument={
-                          item.kind === 'manual' ? item.note.document : undefined
-                        }
-                        initialValue={content}
-                        key={noteKey}
-                        onChange={(markdown, document) => {
-                          setEditingContent(markdown)
-                          setEditingDocument(document)
-                        }}
-                      />
-                    </Suspense>
-                  </div>
-                ) : (
-                  <div>
-                    <button
-                      aria-controls={contentId}
-                      aria-expanded={isExpanded}
-                      aria-label={`${preview.title} 노트 ${
-                        isExpanded ? '접기' : '펼치기'
-                      }`}
-                      className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-stone-50"
-                      onClick={() => toggleNote(noteKey)}
-                      type="button"
-                    >
-                      <span className="min-w-0 flex-1 truncate type-body font-bold text-stone-900">
-                        {preview.title}
-                      </span>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className={`shrink-0 text-stone-400 transition-transform ${
-                          isExpanded ? 'rotate-180' : ''
-                        }`}
-                        size={16}
-                      />
-                    </button>
-                    <div id={contentId}>
-                      {isExpanded && preview.body ? (
-                        <MarkdownContent
-                          className="border-t border-stone-100 px-4 py-4 text-stone-700"
-                          content={preview.body}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-              </article>
-            )
-          })}
+                  return (
+                    <section key={noteKey}>
+                      <div className="flex min-w-0 items-center gap-2 px-4 py-3">
+                        {isEditing ? (
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate type-control font-bold text-stone-900">{preview.title}</p>
+                            <p className="mt-0.5 type-micro text-stone-400">{noteMeta}</p>
+                          </div>
+                        ) : (
+                          <button
+                            aria-controls={contentId}
+                            aria-expanded={isExpanded}
+                            aria-label={`${preview.title} 노트 ${isExpanded ? '접기' : '펼치기'}`}
+                            className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1 text-left"
+                            onClick={() => toggleNote(noteKey)}
+                            type="button"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate type-control font-bold text-stone-900">{preview.title}</span>
+                              <span className="mt-0.5 block type-micro text-stone-400">{noteMeta}</span>
+                            </span>
+                            <ChevronDown
+                              aria-hidden="true"
+                              className={`shrink-0 text-stone-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                              size={15}
+                            />
+                          </button>
+                        )}
+                        {isEditing ? (
+                          <>
+                            <Button
+                              onClick={() => setEditingKey(null)}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              disabled={!editingContent.trim() || isSaving}
+                              onClick={() => void saveNote(item)}
+                              size="sm"
+                            >
+                              저장
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              aria-label="노트 수정"
+                              className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                              onClick={() => {
+                                setEditingKey(noteKey)
+                                setEditingContent(content)
+                                setEditingDocument(
+                                  item.kind === 'manual' ? item.note.document : undefined,
+                                )
+                              }}
+                              type="button"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              aria-label="노트 삭제"
+                              className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
+                              onClick={() => void deleteNote(item)}
+                              type="button"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <div className="border-t border-stone-100 p-4">
+                          <Suspense fallback={<EditorLoadingState />}>
+                            <NotionBlockEditor
+                              ariaLabel="노트 내용 수정"
+                              initialDocument={
+                                item.kind === 'manual' ? item.note.document : undefined
+                              }
+                              initialValue={content}
+                              key={noteKey}
+                              onChange={(markdown, document) => {
+                                setEditingContent(markdown)
+                                setEditingDocument(document)
+                              }}
+                            />
+                          </Suspense>
+                        </div>
+                      ) : (
+                        <div id={contentId}>
+                          {isExpanded && preview.body ? (
+                            <MarkdownContent
+                              className="border-t border-stone-100 px-4 py-4 text-stone-700"
+                              content={preview.body}
+                            />
+                          ) : null}
+                        </div>
+                      )}
+                    </section>
+                  )
+                })}
+              </div>
+            </article>
+          ))}
         </section>
       ) : null}
 
-      {isComposerOpen ? (
-        <ManualNoteDialog
-          content={draftContent}
-          document={draftDocument}
-          onChange={(markdown, document) => {
-            setDraftContent(markdown)
-            setDraftDocument(document)
-          }}
-          onClose={() => setIsComposerOpen(false)}
-          onSubmit={createManualNote}
-        />
-      ) : null}
     </PageContainer>
   )
 }
 
-function ManualNoteDialog({
-  content,
-  document,
-  onChange,
-  onClose,
-  onSubmit,
-}: {
-  content: string
-  document?: string
-  onChange: (markdown: string, document: string) => void
-  onClose: () => void
-  onSubmit: () => void
-}) {
+export function LearnerNoteCreatePage() {
+  usePageTitle('새 노트 작성')
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const { show: showToast } = useToast()
+  const storageKey = useMemo(
+    () => getManualNotesStorageKey(user?.id ?? user?.email ?? 'anonymous'),
+    [user?.email, user?.id],
+  )
+  const [content, setContent] = useState('# 새 노트\n\n')
+  const [document, setDocument] = useState<string | undefined>()
+
+  function saveNote() {
+    if (!content.trim()) return
+    const now = new Date().toISOString()
+    const note: ManualNote = {
+      content: content.trim(),
+      createdAt: now,
+      document,
+      id: createClientId(),
+      updatedAt: now,
+    }
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify([note, ...readManualNotes(storageKey)]),
+    )
+    showToast('노트를 추가했습니다.', 'success')
+    navigate(routes.notes)
+  }
+
   return (
-    <div
-      aria-labelledby="manual-note-title"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 py-6"
-      role="dialog"
-    >
-      <section className="flex max-h-full w-full max-w-3xl flex-col rounded-xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="type-dialog-title font-bold text-stone-950" id="manual-note-title">
-              새 노트
-            </h2>
-            <p className="mt-1 type-caption text-stone-500">
-              제목, 토글, 구분선, 목록을 사용해 자유롭게 정리하세요.
-            </p>
+    <PageContainer>
+      <PageHeader
+        actions={
+          <div className="flex items-center gap-2">
+            <ButtonLink to={routes.notes} variant="secondary">
+              <ArrowLeft aria-hidden="true" size={15} />
+              목록으로
+            </ButtonLink>
+            <Button disabled={!content.trim()} onClick={saveNote}>
+              저장
+            </Button>
           </div>
-          <button
-            aria-label="새 노트 닫기"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" size={16} />
-          </button>
-        </div>
+        }
+        title="새 노트 작성"
+        titleAccessory={
+          <p className="type-caption text-stone-400">
+            제목, 토글, 구분선, 목록을 사용해 자유롭게 정리하세요.
+          </p>
+        }
+      />
+      <section className="min-h-[calc(100dvh-13rem)] rounded-lg border border-stone-200 bg-white p-5">
         <Suspense fallback={<EditorLoadingState />}>
           <NotionBlockEditor
             ariaLabel="새 노트 내용"
-            className="min-h-[420px]"
+            className="min-h-[calc(100dvh-16rem)]"
             initialDocument={document}
             initialValue={content}
             key="manual-note-composer"
-            onChange={onChange}
+            onChange={(markdown, nextDocument) => {
+              setContent(markdown)
+              setDocument(nextDocument)
+            }}
           />
         </Suspense>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose} variant="ghost">
-            취소
-          </Button>
-          <Button disabled={!content.trim()} onClick={onSubmit}>
-            저장
-          </Button>
-        </div>
       </section>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -590,6 +577,29 @@ function getNoteContent(item: LearnerNoteItem): string {
 
 function getNoteSourceLabel(item: LearnerNoteItem): string {
   return item.kind === 'manual' ? '개인 노트' : item.session.materialTitle
+}
+
+function groupNoteItems(items: LearnerNoteItem[]): LearnerNoteGroup[] {
+  const groups = new Map<string, LearnerNoteGroup>()
+
+  items.forEach((item) => {
+    const groupId = item.kind === 'manual'
+      ? 'manual'
+      : `material-${item.session.materialId ?? item.session.materialTitle}`
+    const current = groups.get(groupId)
+    if (current) {
+      current.items.push(item)
+      return
+    }
+    groups.set(groupId, {
+      id: groupId,
+      items: [item],
+      label: getNoteSourceLabel(item),
+      session: item.kind === 'session' ? item.session : undefined,
+    })
+  })
+
+  return [...groups.values()]
 }
 
 function getManualNotesStorageKey(userId: string | number): string {

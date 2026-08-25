@@ -379,17 +379,34 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * 페이지별 utility class에 관계없이 모든 클릭 가능한 컨트롤의 커서를 통일한다.
+ * `!important`는 컴포넌트에 남아 있는 cursor utility가 전역 동작을 덮지 않게 한다.
+ */
 button:not(:disabled),
-input:is([type="button"], [type="reset"], [type="submit"]):not(:disabled),
+input:is([type="button"], [type="reset"], [type="submit"], [type="checkbox"], [type="radio"]):not(:disabled),
+input[type="file"]::file-selector-button,
+a[href]:not([aria-disabled="true"]),
+summary,
 [role="button"]:not([aria-disabled="true"]),
-a[href] {
-  cursor: pointer;
+[role="menuitem"]:not([aria-disabled="true"]),
+[role="option"]:not([aria-disabled="true"]),
+[role="radio"]:not([aria-disabled="true"]),
+[role="switch"]:not([aria-disabled="true"]),
+[role="tab"]:not([aria-disabled="true"]) {
+  cursor: pointer !important;
 }
 
 button:disabled,
-input:is([type="button"], [type="reset"], [type="submit"]):disabled,
-[role="button"][aria-disabled="true"] {
-  cursor: not-allowed;
+input:is([type="button"], [type="reset"], [type="submit"], [type="checkbox"], [type="radio"]):disabled,
+a[aria-disabled="true"],
+[role="button"][aria-disabled="true"],
+[role="menuitem"][aria-disabled="true"],
+[role="option"][aria-disabled="true"],
+[role="radio"][aria-disabled="true"],
+[role="switch"][aria-disabled="true"],
+[role="tab"][aria-disabled="true"] {
+  cursor: not-allowed !important;
 }
 
 ::selection {

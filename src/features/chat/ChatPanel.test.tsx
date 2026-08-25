@@ -222,6 +222,7 @@ describe('ChatPanel', () => {
           message: '이 페이지의 핵심은 무엇인가요?',
         },
       }),
+      expect.any(AbortSignal),
     )
   })
 
@@ -275,6 +276,7 @@ describe('ChatPanel', () => {
           message: '일반적인 개념만 설명해 주세요.',
         },
       }),
+      expect.any(AbortSignal),
     ))
   })
 
@@ -317,6 +319,30 @@ describe('ChatPanel', () => {
     expect(screen.getByRole('button', { name: '응답 대기 중' })).toBeDisabled()
 
     resolveTurn?.({ messages: [], uiActions: [] })
+  })
+
+  it('cancels a pending answer from the chat loading UI', async () => {
+    const cancelTurn = vi.fn().mockResolvedValue(true)
+    const submitTurn = vi.fn().mockImplementation(
+      (_sessionId, _turn, signal?: AbortSignal) => new Promise((_, reject) => {
+        signal?.addEventListener('abort', () => reject(new ApiClientError({
+          code: 'REQUEST_ABORTED',
+          message: '요청이 취소되었습니다.',
+        })), { once: true })
+      }),
+    )
+    const repository = createRepository({ cancelTurn, submitTurn })
+    render(<ChatHarness repository={repository} />)
+
+    const input = await screen.findByLabelText('질문')
+    fireEvent.change(input, { target: { value: '설명을 길게 해주세요.' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '답변 중단' }))
+
+    await waitFor(() => expect(cancelTurn).toHaveBeenCalledWith('100'))
+    expect(await screen.findByText('답변 생성을 중단했습니다.')).toBeInTheDocument()
+    await waitFor(() => expect(input).toBeEnabled())
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
   })
 
   it('waits for the existing turn without retrying when the server returns TURN_IN_PROGRESS', async () => {
@@ -730,6 +756,7 @@ function createRepository(
   overrides: Partial<SessionsRepository> = {},
 ): SessionsRepository {
   return {
+    cancelTurn: vi.fn().mockResolvedValue(true),
     complete: vi.fn(),
     create: vi.fn(),
     declineQuiz: vi.fn(),

@@ -14,6 +14,7 @@ import type { ChatMessage } from './chatTypes'
 export interface SessionChat {
   appendLocalMessage: (message: ChatMessage) => void
   appendMessages: (messages: SessionMessage[]) => void
+  cancelTurn: () => Promise<boolean>
   clearNoteDraft: () => void
   clearUiActions: () => void
   historyError: string | null
@@ -54,6 +55,10 @@ export function useSessionChat(
   const streamingMessageIdRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   const isTurnPendingRef = useRef(false)
+  const cancellationRequestedRef = useRef(false)
+  const activePollControllerRef = useRef<AbortController | null>(null)
+  const activeStreamControllerRef = useRef<AbortController | null>(null)
+  const activeTurnControllerRef = useRef<AbortController | null>(null)
 
   const updateMessages = useCallback((updater: (current: ChatMessage[]) => ChatMessage[]) => {
     setMessages((current) => {
@@ -141,10 +146,14 @@ export function useSessionChat(
         })
       }
       isTurnPendingRef.current = true
+      cancellationRequestedRef.current = false
       setIsTurnPending(true)
       setStreamNotice('실시간 응답을 연결하는 중입니다.')
       setStreamUiActions([])
       const streamController = new AbortController()
+      const turnController = new AbortController()
+      activeStreamControllerRef.current = streamController
+      activeTurnControllerRef.current = turnController
       const streamMessageId = `stream-${turn.requestId}`
       const knownMessageIds = new Set(messagesRef.current
         .filter((message) => message.role === 'assistant' && message.status === 'sent')
@@ -213,7 +222,7 @@ export function useSessionChat(
         })
 
       try {
-        const result = await repository.submitTurn(sessionId, turn)
+        const result = await repository.submitTurn(sessionId, turn, turnController.signal)
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
         if (result.noteDraft) setNoteDraft(result.noteDraft)
@@ -221,6 +230,20 @@ export function useSessionChat(
         setStreamNotice(null)
         return result
       } catch (error) {
+        if (
+          cancellationRequestedRef.current
+          && error instanceof ApiClientError
+          && error.code === 'REQUEST_ABORTED'
+        ) {
+          updateMessages((current) => current.filter(
+            (message) => message.id !== streamMessageId,
+          ))
+          setStreamNotice(null)
+          return {
+            messages: [],
+            uiActions: [],
+          }
+        }
         if (isTurnInProgressError(error)) {
           // 거부된 중복 질문은 실패/재시도 대상으로 남기지 않는다.
           updateMessages((current) => current.filter(
@@ -229,6 +252,7 @@ export function useSessionChat(
           setStreamNotice(TURN_IN_PROGRESS_NOTICE)
 
           const pollController = new AbortController()
+          activePollControllerRef.current = pollController
           const recoveredHistoryPromise = pollForCompletedTurn(
             repository,
             sessionId,
@@ -280,12 +304,42 @@ export function useSessionChat(
       } finally {
         streamController.abort()
         await streamPromise
+        if (activePollControllerRef.current) activePollControllerRef.current.abort()
+        activePollControllerRef.current = null
+        activeStreamControllerRef.current = null
+        activeTurnControllerRef.current = null
+        cancellationRequestedRef.current = false
         isTurnPendingRef.current = false
         setIsTurnPending(false)
       }
     },
     [appendMessages, reloadHistory, repository, sessionId, updateMessages],
   )
+
+  const cancelTurn = useCallback(async () => {
+    if (!isTurnPendingRef.current) return false
+    setStreamNotice('답변 생성을 중단하는 중입니다.')
+    try {
+      const cancelled = await repository.cancelTurn(sessionId)
+      if (!cancelled) {
+        setStreamNotice('서버에서 이미 답변을 마무리하고 있습니다.')
+        return false
+      }
+      cancellationRequestedRef.current = true
+      activePollControllerRef.current?.abort()
+      activeStreamControllerRef.current?.abort()
+      activeTurnControllerRef.current?.abort()
+      const streamingMessageId = streamingMessageIdRef.current
+      if (streamingMessageId) {
+        updateMessages((current) => current.filter((message) => message.id !== streamingMessageId))
+      }
+      streamingMessageIdRef.current = null
+      return true
+    } catch (error) {
+      setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+      throw error
+    }
+  }, [repository, sessionId, updateMessages])
 
   const startNewConversation = useCallback(async () => {
     if (isTurnPending) return
@@ -308,6 +362,7 @@ export function useSessionChat(
   ) => {
     if (isTurnPendingRef.current) return undefined
     isTurnPendingRef.current = true
+    cancellationRequestedRef.current = false
     setIsTurnPending(true)
     setStreamNotice(TURN_IN_PROGRESS_NOTICE)
 
@@ -316,6 +371,8 @@ export function useSessionChat(
       .map((message) => message.id))
     const streamController = new AbortController()
     const pollController = new AbortController()
+    activeStreamControllerRef.current = streamController
+    activePollControllerRef.current = pollController
     let resolveStreamCompleted: (() => void) | undefined
     const streamCompleted = new Promise<void>((resolve) => {
       resolveStreamCompleted = resolve
@@ -370,6 +427,9 @@ export function useSessionChat(
       streamController.abort()
       await streamPromise
       setStreamNotice(null)
+      activePollControllerRef.current = null
+      activeStreamControllerRef.current = null
+      cancellationRequestedRef.current = false
       isTurnPendingRef.current = false
       setIsTurnPending(false)
     }
@@ -378,6 +438,7 @@ export function useSessionChat(
   return {
     appendLocalMessage,
     appendMessages,
+    cancelTurn,
     clearNoteDraft,
     clearUiActions,
     historyError,

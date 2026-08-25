@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Save,
   Share2,
+  Square,
   Trash2,
   XCircle,
 } from 'lucide-react'
@@ -103,6 +104,8 @@ export function ChatPanel({
   const [notes, setNotes] = useState<Note[]>([])
   const [notesError, setNotesError] = useState<string | null>(null)
   const [messageActionStatus, setMessageActionStatus] = useState('')
+  const [turnStatus, setTurnStatus] = useState('')
+  const [isCancellingTurn, setIsCancellingTurn] = useState(false)
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const turnSubmissionLockRef = useRef(false)
@@ -165,6 +168,7 @@ export function ChatPanel({
     })
     setQuestion('')
     setError(null)
+    setTurnStatus('')
 
     try {
       if (onExplainNextPage && isExplainNextPageCommand(trimmedQuestion)) {
@@ -255,6 +259,22 @@ export function ChatPanel({
       .find((message) => message.role === 'assistant')
     if (!lastAnswer) return
     void saveNote(lastAnswer.content, lastAnswer.pageNumber, lastAnswer.id)
+  }
+
+  async function cancelTurn() {
+    if (!chat.isTurnPending || isCancellingTurn) return
+    setIsCancellingTurn(true)
+    setError(null)
+    try {
+      const cancelled = await chat.cancelTurn()
+      setTurnStatus(cancelled
+        ? '답변 생성을 중단했습니다.'
+        : '답변이 이미 마무리되어 중단하지 못했습니다.')
+    } catch (requestError) {
+      setError(`답변을 중단하지 못했습니다. ${getRequestErrorMessage(requestError)}`)
+    } finally {
+      setIsCancellingTurn(false)
+    }
   }
 
   async function saveNote(content: string, pageNumber?: number, sourceMessageId?: string): Promise<boolean> {
@@ -449,13 +469,22 @@ export function ChatPanel({
 
         {chat.isTurnPending ? (
           <div
-            className="mr-auto flex max-w-[90%] items-center gap-2 rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5"
+            className="mr-auto flex max-w-[94%] items-center gap-2 rounded-xl rounded-bl-[4px] bg-stone-100 px-3.5 py-2.5"
             role="status"
           >
             <LoaderCircle aria-hidden="true" className="shrink-0 animate-spin text-brand-600" size={15} />
-            <p className="type-chat-body text-stone-500">
+            <p className="min-w-0 flex-1 type-chat-body text-stone-500">
               {chat.streamNotice ?? '답변을 작성하는 중입니다…'}
             </p>
+            <button
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-300 bg-white px-2 type-caption font-semibold text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400"
+              disabled={isCancellingTurn}
+              onClick={() => void cancelTurn()}
+              type="button"
+            >
+              <Square aria-hidden="true" fill="currentColor" size={9} />
+              {isCancellingTurn ? '중단 중' : '답변 중단'}
+            </button>
           </div>
         ) : null}
 
@@ -526,6 +555,11 @@ export function ChatPanel({
         {error ? (
           <p className="mt-1.5 type-caption font-medium text-rose-700" role="alert">
             {error}
+          </p>
+        ) : null}
+        {turnStatus && !error ? (
+          <p className="mt-1.5 type-caption font-medium text-stone-500" role="status">
+            {turnStatus}
           </p>
         ) : null}
       </form>

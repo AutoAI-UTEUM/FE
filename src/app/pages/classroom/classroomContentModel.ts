@@ -17,19 +17,19 @@ export type ClassroomResourceSource =
     }
 
 export interface ClassroomResourcePreviewValue {
+  id: string
   source: ClassroomResourceSource
   title: string
-  weekNumber: number
+  weekNumber: number | null
 }
 
 export interface ClassroomResource extends ClassroomResourcePreviewValue {
-  id: string
   uploadedAt: string
 }
 
 export type ClassroomContentItem =
   | { id: string; kind: 'material'; occurredAt: string; source: ClassroomMaterial; title: string; weekNumber: number; weekOrder: number }
-  | { id: string; kind: 'resource'; occurredAt: string; source: ClassroomResource; title: string; weekNumber: number; weekOrder: number }
+  | { id: string; kind: 'resource'; occurredAt: string; source: ClassroomResource; title: string; weekNumber: number | null; weekOrder: number | null }
   | { id: string; kind: 'notice'; occurredAt: string; source: ClassroomNotice; title: string; weekNumber: number | null; weekOrder: number | null }
   | { id: string; kind: 'exam'; occurredAt: string; source: Exam; title: string; weekNumber: number | null; weekOrder: number | null }
 
@@ -60,7 +60,7 @@ export function buildClassroomContent(
       source: resource,
       title: resource.title,
       weekNumber: resource.weekNumber,
-      weekOrder: resource.weekNumber,
+      weekOrder: resolveWeekOrder(resource.weekNumber, weekOrderByNumber),
     })),
     ...notices.map((notice): ClassroomContentItem => ({
       id: `notice-${notice.id}`,

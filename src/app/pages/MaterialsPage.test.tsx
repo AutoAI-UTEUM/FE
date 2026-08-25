@@ -199,6 +199,18 @@ describe('MaterialsPage', () => {
   it(
     'uses the full file name as the editable default title',
     async () => {
+      installApiFixtureServer((request) => {
+        const url = new URL(request.url)
+        if (request.method === 'POST' && url.pathname === '/api/materials') {
+          return apiSuccess({
+            createdAt: '2026-08-25T00:00:00Z',
+            materialId: 13,
+            processingStatus: 'PROCESSING',
+            title: 'uploaded.pdf',
+          })
+        }
+        return undefined
+      })
       renderMaterialsPage()
       await screen.findByText('시험 대비 요약.pdf')
 

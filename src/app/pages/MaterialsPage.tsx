@@ -101,7 +101,7 @@ export function MaterialsPage() {
   const refreshInBackground = useCallback(async () => {
     try {
       const nextMaterials = await repository.refreshStatuses()
-      setMaterials(nextMaterials)
+      setMaterials((current) => mergeServerMaterials(nextMaterials, current))
     } catch {
       // 백그라운드 폴링 실패는 무시 — 에러는 수동 새로고침에서만 표시
     }
@@ -173,7 +173,7 @@ export function MaterialsPage() {
   async function refreshProcessingStatuses() {
     try {
       const nextMaterials = await repository.refreshStatuses()
-      setMaterials(nextMaterials)
+      setMaterials((current) => mergeServerMaterials(nextMaterials, current))
       setLoadError(null)
     } catch (error) {
       setLoadError(getRequestErrorMessage(error))
@@ -458,6 +458,17 @@ export function MaterialsPage() {
       ) : null}
     </PageContainer>
   )
+}
+
+function mergeServerMaterials(
+  serverMaterials: StudyMaterial[],
+  currentMaterials: StudyMaterial[],
+): StudyMaterial[] {
+  const serverIds = new Set(serverMaterials.map((material) => material.id))
+  const pendingUploads = currentMaterials.filter(
+    (material) => material.status === 'PROCESSING' && !serverIds.has(material.id),
+  )
+  return [...pendingUploads, ...serverMaterials]
 }
 
 function StatusBadge({ status }: { status: MaterialStatus }) {

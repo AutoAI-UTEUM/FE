@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../features/auth'
+import {
+  createClassroomResourcesRepository,
+  type ClassroomResourceRecord,
+  type CreateClassroomResourceInput,
+} from '../../features/classroomResources'
 import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice, type ClassroomNoticeInput, type ClassroomWeek } from '../../features/classrooms'
 import { createExamsRepository, type Exam } from '../../features/exams'
 import { createMaterialsRepository, getMaterialFailureMessage, MAX_MATERIAL_TITLE_LENGTH, RenameMaterialDialog, validateMaterialTitle, validateMaterialUpload } from '../../features/materials'
@@ -15,6 +20,7 @@ import { examDetailPath, sessionDetailPath } from '../routes'
 import { ClassroomContentPanel, ClassroomContentRail } from './classroom/ClassroomContentView'
 import { ExamContentPanel, NoticeContentPanel, NoticeDetailPanel } from './classroom/ClassroomContentPanels'
 import {
+  ClassroomResourceEditDialog,
   ClassroomResourcePreviewPanel,
   ClassroomResourceUploadDialog,
   type ClassroomResourcePreviewValue,
@@ -23,7 +29,7 @@ import { buildClassroomContent, filterClassroomContent, getGlobalClassroomConten
 import { ClassroomWorkspaceContainer } from './classroom/ClassroomWorkspaceContainer'
 import { ClassroomHeaderInfoBar, ClassroomWorkspaceHeader } from './classroom/ClassroomWorkspaceHeader'
 
-type ResourceKey = 'exams' | 'notices' | 'weeks'
+type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
 
 export function ClassroomDetailPage() {
   usePageTitle('강의실 콘텐츠')
@@ -33,6 +39,10 @@ export function ClassroomDetailPage() {
   const { apiRequest, rawApiRequest, user } = useAuth()
   const { show: showToast } = useToast()
   const classroomsRepository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
+  const classroomResourcesRepository = useMemo(
+    () => createClassroomResourcesRepository(apiRequest, rawApiRequest),
+    [apiRequest, rawApiRequest],
+  )
   const examsRepository = useMemo(() => createExamsRepository(apiRequest), [apiRequest])
   const materialsRepository = useMemo(() => createMaterialsRepository(apiRequest, rawApiRequest), [apiRequest, rawApiRequest])
   const sessionsRepository = useMemo(() => createSessionsRepository(apiRequest), [apiRequest])
@@ -48,8 +58,10 @@ export function ClassroomDetailPage() {
   const [uploadInitialFile, setUploadInitialFile] = useState<File | null>(null)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isResourceUploadDialogOpen, setIsResourceUploadDialogOpen] = useState(false)
+  const [isResourceUploading, setIsResourceUploading] = useState(false)
   const [resourceTargetWeek, setResourceTargetWeek] = useState<number | null>(null)
   const [resourcePreview, setResourcePreview] = useState<ClassroomResourcePreviewValue | null>(null)
+  const [editingResource, setEditingResource] = useState<ClassroomResourcePreviewValue | null>(null)
   const [resources, setResources] = useState<ClassroomResource[]>([])
   const [draggingWeek, setDraggingWeek] = useState<number | null>(null)
   const [pendingMaterial, setPendingMaterial] = useState<{ id: string; title: string; weekNumber: number } | null>(null)
@@ -57,7 +69,6 @@ export function ClassroomDetailPage() {
   const [renamingMaterial, setRenamingMaterial] = useState<{ id: string; title: string } | null>(null)
   const materialRefreshInFlightRef = useRef(false)
   const resourceObjectUrlsRef = useRef(new Set<string>())
-  const resourceSequenceRef = useRef(0)
   const uploadInFlightRef = useRef(false)
   const isInstructor = isInstructorRole(user?.role)
   const isReadOnly = classroom?.status === 'COMPLETED'
@@ -71,11 +82,15 @@ export function ClassroomDetailPage() {
       }
       if (key === 'notices') setNotices(await classroomsRepository.listNotices(classroomId))
       if (key === 'exams') setExams(await examsRepository.list(classroomId))
+      if (key === 'resources') {
+        const loadedResources = await classroomResourcesRepository.list(classroomId)
+        setResources(loadedResources.map(mapClassroomResource))
+      }
       setResourceErrors((current) => ({ ...current, [key]: undefined }))
     } catch (error) {
       setResourceErrors((current) => ({ ...current, [key]: getRequestErrorMessage(error) }))
     }
-  }, [classroomId, classroomsRepository, examsRepository])
+  }, [classroomId, classroomResourcesRepository, classroomsRepository, examsRepository])
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -83,7 +98,12 @@ export function ClassroomDetailPage() {
     try {
       const nextClassroom = await classroomsRepository.get(classroomId)
       setClassroom(nextClassroom)
-      await Promise.all([loadResource('weeks'), loadResource('notices'), loadResource('exams')])
+      await Promise.all([
+        loadResource('weeks'),
+        loadResource('notices'),
+        loadResource('exams'),
+        loadResource('resources'),
+      ])
     } catch (error) {
       setClassroomError(getRequestErrorMessage(error))
     } finally {
@@ -108,6 +128,7 @@ export function ClassroomDetailPage() {
           loadResource('weeks'),
           loadResource('notices'),
           loadResource('exams'),
+          loadResource('resources'),
         ])
       }
     }
@@ -266,6 +287,78 @@ export function ClassroomDetailPage() {
     }
   }
 
+  async function openClassroomResource(resource: ClassroomResource) {
+    if (resource.source.kind === 'link' || resource.source.objectUrl) {
+      setResourcePreview(resource)
+      return
+    }
+    try {
+      const blob = await classroomResourcesRepository.getFile(resource.id)
+      const objectUrl = typeof URL.createObjectURL === 'function'
+        ? URL.createObjectURL(blob)
+        : undefined
+      if (objectUrl) resourceObjectUrlsRef.current.add(objectUrl)
+      const loadedResource: ClassroomResource = {
+        ...resource,
+        source: { ...resource.source, objectUrl },
+      }
+      setResources((current) => current.map((item) => item.id === resource.id ? loadedResource : item))
+      setResourcePreview(loadedResource)
+    } catch (error) {
+      showToast(getRequestErrorMessage(error), 'danger')
+    }
+  }
+
+  async function uploadClassroomResource(input: CreateClassroomResourceInput): Promise<boolean> {
+    if (!canManage || isResourceUploading) return false
+    setIsResourceUploading(true)
+    try {
+      const created = mapClassroomResource(await classroomResourcesRepository.create(classroomId, input))
+      setResources((current) => [created, ...current])
+      setIsResourceUploadDialogOpen(false)
+      showToast('일반 자료를 등록했습니다.', 'success')
+      await openClassroomResource(created)
+      return true
+    } catch (error) {
+      showToast(getRequestErrorMessage(error), 'danger')
+      return false
+    } finally {
+      setIsResourceUploading(false)
+    }
+  }
+
+  async function updateClassroomResource(input: { title: string; weekNumber: number | null }): Promise<boolean> {
+    if (!canManage || !editingResource) return false
+    try {
+      const updated = mapClassroomResource(await classroomResourcesRepository.update(editingResource.id, input))
+      const currentSource = resources.find((item) => item.id === updated.id)?.source
+      const merged = currentSource?.kind === 'file' && updated.source.kind === 'file'
+        ? { ...updated, source: { ...updated.source, objectUrl: currentSource.objectUrl } }
+        : updated
+      setResources((current) => current.map((item) => item.id === merged.id ? merged : item))
+      setResourcePreview((current) => current?.id === merged.id ? merged : current)
+      setEditingResource(null)
+      showToast('일반 자료를 수정했습니다.', 'success')
+      return true
+    } catch (error) {
+      showToast(getRequestErrorMessage(error), 'danger')
+      return false
+    }
+  }
+
+  async function deleteClassroomResource(resource: ClassroomResourcePreviewValue) {
+    if (!canManage || !window.confirm(`'${resource.title}' 자료를 삭제할까요?`)) return
+    try {
+      await classroomResourcesRepository.delete(resource.id)
+      setResources((current) => current.filter((item) => item.id !== resource.id))
+      setResourcePreview((current) => current?.id === resource.id ? null : current)
+      setEditingResource((current) => current?.id === resource.id ? null : current)
+      showToast('일반 자료를 삭제했습니다.', 'success')
+    } catch (error) {
+      showToast(getRequestErrorMessage(error), 'danger')
+    }
+  }
+
   async function saveNotice(input: ClassroomNoticeInput, noticeId?: string) {
     try {
       const saved = noticeId
@@ -322,6 +415,9 @@ export function ClassroomDetailPage() {
         {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: selectedNotice ? `notice-${selectedNotice.id}` : null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
         {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}
         {resourcePreview ? <ClassroomResourcePreviewPanel
+          canManage={canManage}
+          onDelete={() => void deleteClassroomResource(resourcePreview)}
+          onEdit={() => setEditingResource(resourcePreview)}
           onClose={() => setResourcePreview(null)}
           resource={resourcePreview}
           weekTitle={weeks.find((week) => week.weekNumber === resourcePreview.weekNumber)?.title}
@@ -352,7 +448,7 @@ export function ClassroomDetailPage() {
           onFilter={(nextFilter) => updateQuery({ filter: nextFilter === 'all' ? null : nextFilter })}
           onItem={(item) => {
             if (item.kind === 'material') void openMaterial(item.source.id)
-            if (item.kind === 'resource') setResourcePreview(item.source)
+            if (item.kind === 'resource') void openClassroomResource(item.source)
             if (item.kind === 'notice') updateQuery({ panel: `notice-${item.source.id}` })
             if (item.kind === 'exam') {
               if (isInstructor) updateQuery({ panel: `exam-${item.source.id}` })
@@ -379,25 +475,52 @@ export function ClassroomDetailPage() {
     {isUploadDialogOpen ? <UploadMaterialDialog initialFile={uploadInitialFile ?? undefined} initialWeekNumber={uploadTargetWeek ?? undefined} isUploading={isUploading} onClose={() => { setIsUploadDialogOpen(false); setUploadInitialFile(null) }} onUpload={uploadMaterial} weeks={weeks} /> : null}
     {isResourceUploadDialogOpen ? <ClassroomResourceUploadDialog
       initialWeekNumber={resourceTargetWeek ?? undefined}
+      isUploading={isResourceUploading}
       onClose={() => setIsResourceUploadDialogOpen(false)}
-      onPreview={(resource) => {
-        resourceSequenceRef.current += 1
-        const uploadedResource: ClassroomResource = {
-          ...resource,
-          id: `local-${resourceSequenceRef.current}`,
-          uploadedAt: new Date().toISOString(),
-        }
-        if (uploadedResource.source.kind === 'file' && uploadedResource.source.objectUrl) {
-          resourceObjectUrlsRef.current.add(uploadedResource.source.objectUrl)
-        }
-        setResources((current) => [uploadedResource, ...current])
-        setResourcePreview(uploadedResource)
-        setIsResourceUploadDialogOpen(false)
-      }}
+      onUpload={uploadClassroomResource}
+      weeks={weeks}
+    /> : null}
+    {editingResource ? <ClassroomResourceEditDialog
+      onClose={() => setEditingResource(null)}
+      onSave={updateClassroomResource}
+      resource={editingResource}
       weeks={weeks}
     /> : null}
     {renamingMaterial ? <RenameMaterialDialog initialTitle={renamingMaterial.title} onClose={() => setRenamingMaterial(null)} onSave={renameMaterial} /> : null}
   </ClassroomWorkspaceContainer>
+}
+
+function mapClassroomResource(resource: ClassroomResourceRecord): ClassroomResource {
+  if (resource.type === 'LINK') {
+    return {
+      id: resource.id,
+      source: { kind: 'link', url: resource.url ?? '' },
+      title: resource.title,
+      uploadedAt: resource.createdAt,
+      weekNumber: resource.weekNumber,
+    }
+  }
+  return {
+    id: resource.id,
+    source: {
+      fileName: resource.fileName ?? resource.title,
+      fileSize: resource.sizeBytes ?? 0,
+      kind: 'file',
+      previewKind: getResourcePreviewKind(resource.contentType, resource.fileName),
+    },
+    title: resource.title,
+    uploadedAt: resource.createdAt,
+    weekNumber: resource.weekNumber,
+  }
+}
+
+function getResourcePreviewKind(
+  contentType?: string,
+  fileName?: string,
+): 'document' | 'image' | 'pdf' {
+  if (contentType === 'application/pdf' || fileName?.toLowerCase().endsWith('.pdf')) return 'pdf'
+  if (contentType?.startsWith('image/')) return 'image'
+  return 'document'
 }
 
 async function copyInviteCode(classroom: Classroom, repository: ReturnType<typeof createClassroomsRepository>, setClassroom: (updater: (current: Classroom | null) => Classroom | null) => void, showToast: (message: string, tone: 'danger' | 'success') => void) {

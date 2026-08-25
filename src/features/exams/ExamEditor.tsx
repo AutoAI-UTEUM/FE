@@ -19,17 +19,17 @@ export function ExamEditor({ onChange, value }: ExamEditorProps) {
   }
 
   return <div className="space-y-5">
-    <div className="grid gap-4 sm:grid-cols-2">
-      <label className="sm:col-span-2 type-control font-semibold text-stone-700">시험 제목
+    <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(8rem,0.7fr)_auto]">
+      <label className="min-w-0 type-control font-semibold text-stone-700">시험 제목
         <input className="mt-1 h-11 w-full rounded-lg border border-stone-300 px-3 type-body" maxLength={200} onChange={(event) => onChange({ ...value, title: event.target.value })} value={value.title} />
       </label>
       <label className="type-control font-semibold text-stone-700">주차 (선택)
         <input className="mt-1 h-11 w-full rounded-lg border border-stone-300 px-3 type-body" min={1} onChange={(event) => onChange({ ...value, weekNumber: event.target.value ? Number(event.target.value) : undefined })} type="number" value={value.weekNumber ?? ''} />
       </label>
-      <label className="flex items-end gap-2 pb-3 type-control font-semibold text-stone-700">
+      <label className="flex h-11 items-center gap-2 self-end whitespace-nowrap type-control font-semibold text-stone-700">
         <input checked={value.allowRetake} className="size-4 accent-brand-700" onChange={(event) => onChange({ ...value, allowRetake: event.target.checked })} type="checkbox" /> 재응시 허용
       </label>
-      <label className="sm:col-span-2 type-control font-semibold text-stone-700">설명 (선택)
+      <label className="md:col-span-3 type-control font-semibold text-stone-700">설명 (선택)
         <textarea className="mt-1 min-h-24 w-full resize-none rounded-lg border border-stone-300 px-3 py-2.5 type-body" maxLength={500} onChange={(event) => onChange({ ...value, description: event.target.value })} value={value.description ?? ''} />
       </label>
     </div>

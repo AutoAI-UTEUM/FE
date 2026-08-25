@@ -122,6 +122,10 @@ export interface SessionStreamHandlers {
 }
 
 export interface SessionsRepository {
+  cancelTurn: (
+    sessionId: string,
+    signal?: AbortSignal,
+  ) => Promise<boolean>
   complete: (
     sessionId: string,
     signal?: AbortSignal,
@@ -174,6 +178,13 @@ export function createSessionsRepository(
   rawRequest?: AuthenticatedRawRequest,
 ): SessionsRepository {
   return {
+    async cancelTurn(sessionId, signal) {
+      const { data } = await request<{ cancelled: boolean }>(
+        `/api/sessions/${encodeURIComponent(sessionId)}/turns/cancel`,
+        { method: 'POST', signal },
+      )
+      return data.cancelled
+    },
     async complete(sessionId, signal) {
       const { data } = await request<SessionDetailDto>(
         `/api/sessions/${encodeURIComponent(sessionId)}/complete`,

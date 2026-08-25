@@ -301,6 +301,17 @@ describe('remote feature repositories', () => {
     )
   })
 
+  it('cancels the active learning turn through the server contract', async () => {
+    const request = vi.fn().mockResolvedValue(success({ cancelled: true }))
+    const repository = createSessionsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.cancelTurn('100')).resolves.toBe(true)
+    expect(request).toHaveBeenCalledWith('/api/sessions/100/turns/cancel', {
+      method: 'POST',
+      signal: undefined,
+    })
+  })
+
   it('preserves explicit nulls that clear quiz and diagnosis state', async () => {
     const request = vi.fn().mockResolvedValue(
       success({
