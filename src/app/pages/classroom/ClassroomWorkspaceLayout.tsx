@@ -24,6 +24,7 @@ export function ClassroomWorkspaceLayout() {
   const usesDesktopFixedContentViewport = [
     `/classrooms/${classroomId}/analytics`,
     `/classrooms/${classroomId}/reports`,
+    `/classrooms/${classroomId}/report-criteria`,
   ].includes(normalizedPathname)
 
   const load = useCallback(async () => {
