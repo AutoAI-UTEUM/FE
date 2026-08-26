@@ -730,6 +730,7 @@ describe('instructor pages', () => {
     expect(screen.queryByText('페이지별 질문 수')).not.toBeInTheDocument()
     expect(screen.queryByText('퀴즈 현황')).not.toBeInTheDocument()
     expect(screen.getByText('수강생별 학습 현황')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '수강생 목록 새로고침' })).toBeEnabled()
     expect(screen.queryByText('3명')).not.toBeInTheDocument()
     expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col')
     expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass('min-h-0', 'flex-1', 'overflow-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
@@ -744,6 +745,15 @@ describe('instructor pages', () => {
     expect(screen.getByText('6건')).toBeInTheDocument()
     expect(screen.getByLabelText('퀴즈 1건')).toBeInTheDocument()
 
+    const getStudentListRequestCount = () => fetchMock.mock.calls.filter(([input]) => {
+      const url = String(input instanceof Request ? input.url : input)
+      return url.includes('/students?')
+    }).length
+    expect(getStudentListRequestCount()).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: '수강생 목록 새로고침' }))
+    await waitFor(() => expect(getStudentListRequestCount()).toBe(2))
+    expect(screen.getByRole('button', { name: '수강생 목록 새로고침' })).toBeEnabled()
+
     const profileButton = screen.getByRole('button', { name: '김학습 프로필 상세 펼치기' })
     expect(profileButton).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(profileButton)
@@ -757,6 +767,7 @@ describe('instructor pages', () => {
     expect(screen.getAllByText('5건').length).toBeGreaterThan(0)
     expect(screen.getByText('4/5')).toBeInTheDocument()
     expect(screen.getAllByText('통과').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('통과')[0]).toHaveClass('whitespace-nowrap', 'min-w-14')
     expect(screen.getByLabelText('퀴즈 1건')).toBeInTheDocument()
     expect(screen.getByText('미응시')).toBeInTheDocument()
     expect(screen.queryByText('undefined')).not.toBeInTheDocument()

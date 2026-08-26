@@ -154,4 +154,16 @@ describe('reports repository', () => {
       { signal: undefined },
     )
   })
+
+  it('deletes a custom report criterion by its list id', async () => {
+    const request = vi.fn().mockResolvedValueOnce({ data: null })
+    const repository = createReportsRepository(request as AuthenticatedRequest)
+
+    await repository.deleteCriterion('12', 'criterion/21')
+
+    expect(request).toHaveBeenCalledWith(
+      '/api/classrooms/12/report-criteria/criterion%2F21',
+      { method: 'DELETE' },
+    )
+  })
 })

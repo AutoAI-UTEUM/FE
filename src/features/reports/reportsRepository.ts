@@ -233,6 +233,12 @@ export function createReportsRepository(request: AuthenticatedRequest) {
       )
       return mapCriterion(data)
     },
+    async deleteCriterion(classroomId: string, criterionId: string) {
+      await request<null>(
+        `/api/classrooms/${encodeURIComponent(classroomId)}/report-criteria/${encodeURIComponent(criterionId)}`,
+        { method: 'DELETE' },
+      )
+    },
     async generateCriteria(classroomId: string) {
       await request<unknown>(
         `/api/classrooms/${encodeURIComponent(classroomId)}/report-criteria/generate`,

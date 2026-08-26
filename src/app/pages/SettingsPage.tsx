@@ -187,7 +187,7 @@ export function SettingsContent({ className }: { className?: string } = {}) {
   return (
     <>
       <div className={cx('flex flex-col gap-5 lg:flex-row lg:gap-0', className)}>
-        <nav aria-label="설정 메뉴" className="flex gap-1 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:pr-4">
+        <nav aria-label="설정 메뉴" className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0 lg:pr-4">
           {SECTIONS.map((item) => (
             <button
               aria-current={section === item.id ? 'page' : undefined}
@@ -212,7 +212,7 @@ export function SettingsContent({ className }: { className?: string } = {}) {
           ))}
         </nav>
 
-        <div className="min-w-0 flex-1 space-y-4 lg:border-l lg:border-stone-200 lg:pl-5">
+        <div className="min-h-0 min-w-0 flex-1 space-y-4 lg:overflow-y-auto lg:border-l lg:border-stone-200 lg:pl-5 lg:pr-1">
           {section === 'profile' ? (
             <ProfileSection
               affiliation={affiliation}

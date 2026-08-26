@@ -11,6 +11,7 @@ import { useSessionChat } from './useSessionChat'
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -25,6 +26,7 @@ function ChatHarness({
   request,
   repository,
   sessionId = '100',
+  textSizeOwnerId,
 }: {
   conversationAction?: ReactNode
   currentPage?: number
@@ -36,6 +38,7 @@ function ChatHarness({
   request?: AuthenticatedRequest
   repository: SessionsRepository
   sessionId?: string
+  textSizeOwnerId?: number | string
 }) {
   const chat = useSessionChat(repository, sessionId)
   return (
@@ -50,11 +53,33 @@ function ChatHarness({
       onTurnCompleted={onTurnCompleted}
       request={request}
       sessionId={sessionId}
+      textSizeOwnerId={textSizeOwnerId}
     />
   )
 }
 
 describe('ChatPanel', () => {
+  it('changes the learning text size and restores it for the same user', async () => {
+    const { unmount } = render(
+      <ChatHarness repository={createRepository()} textSizeOwnerId={7} />,
+    )
+
+    const sizeGroup = await screen.findByRole('group', { name: '학습 텍스트 크기' })
+    const panel = sizeGroup.closest('section')
+    expect(panel).toHaveAttribute('data-learning-text-size', 'medium')
+    expect(screen.getByText('100%')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '학습 텍스트 크게' }))
+    expect(panel).toHaveAttribute('data-learning-text-size', 'large')
+    expect(window.localStorage.getItem('uteum:learning-text-size:7')).toBe('large')
+    expect(screen.getByText('113%')).toBeInTheDocument()
+
+    unmount()
+    render(<ChatHarness repository={createRepository()} textSizeOwnerId={7} />)
+    expect((await screen.findByRole('group', { name: '학습 텍스트 크기' })).closest('section'))
+      .toHaveAttribute('data-learning-text-size', 'large')
+  })
+
   it('adds the overview tab first while keeping AI chat selected by default', async () => {
     render(<ChatHarness repository={createRepository()} />)
 
@@ -316,7 +341,7 @@ describe('ChatPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
 
     expect(screen.getByLabelText('질문')).toBeDisabled()
-    expect(screen.getByRole('button', { name: '응답 대기 중' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '답변 중단' })).toBeEnabled()
 
     resolveTurn?.({ messages: [], uiActions: [] })
   })
@@ -343,6 +368,32 @@ describe('ChatPanel', () => {
     expect(await screen.findByText('답변 생성을 중단했습니다.')).toBeInTheDocument()
     await waitFor(() => expect(input).toBeEnabled())
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+  })
+
+  it('silently ignores a stop request after the answer has already completed', async () => {
+    let resolveTurn: ((value: Awaited<
+      ReturnType<SessionsRepository['submitTurn']>
+    >) => void) | undefined
+    const repository = createRepository({
+      cancelTurn: vi.fn().mockResolvedValue(false),
+      submitTurn: vi.fn().mockImplementation(
+        () => new Promise((resolve) => {
+          resolveTurn = resolve
+        }),
+      ),
+    })
+    render(<ChatHarness repository={repository} />)
+
+    const input = await screen.findByLabelText('질문')
+    fireEvent.change(input, { target: { value: '설명을 길게 해주세요.' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '답변 중단' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '질문 보내기' })).toBeDisabled())
+    expect(screen.queryByText('답변이 이미 마무리되어 중단하지 못했습니다.')).not.toBeInTheDocument()
+
+    resolveTurn?.({ messages: [], uiActions: [] })
+    await waitFor(() => expect(input).toBeEnabled())
   })
 
   it('waits for the existing turn without retrying when the server returns TURN_IN_PROGRESS', async () => {

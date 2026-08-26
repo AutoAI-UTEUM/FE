@@ -291,6 +291,11 @@ export function AppLayout() {
     setIsSettingsOpen(true)
   }
 
+  function openUpdates() {
+    setIsMenuOpen(false)
+    void navigate(routes.updates)
+  }
+
   const profileMenu = (
     <div
       className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
@@ -304,6 +309,15 @@ export function AppLayout() {
       >
         <Settings aria-hidden="true" size={15} />
         설정
+      </button>
+      <button
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        onClick={openUpdates}
+        role="menuitem"
+        type="button"
+      >
+        <CalendarDays aria-hidden="true" size={15} />
+        업데이트
       </button>
       <div className="mx-2 my-1 h-px bg-stone-100" />
       <button
@@ -592,7 +606,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
       }}
       role="dialog"
     >
-      <section className="min-h-[464px] w-full max-w-[600px] rounded-xl border border-stone-200 bg-white p-5 shadow-2xl sm:p-6">
+      <section className="flex h-[min(520px,calc(100dvh-3rem))] min-h-0 w-full max-w-[560px] flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-2xl sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-4">
           <h2 className="type-dialog-title font-bold text-stone-950" id="settings-dialog-title">
             설정
@@ -606,7 +620,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             <X aria-hidden="true" size={16} />
           </button>
         </div>
-        <SettingsContent />
+        <SettingsContent className="min-h-0 flex-1" />
       </section>
     </div>
   )

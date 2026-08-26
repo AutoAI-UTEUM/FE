@@ -60,7 +60,6 @@ export function DocumentChatPanel({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const requestLockRef = useRef(false)
   const copy = getDocumentChatCopy(mode)
-  const isComingSoon = mode === 'quiz'
 
   useEffect(() => () => controllerRef.current?.abort(), [])
 
@@ -78,7 +77,6 @@ export function DocumentChatPanel({
   }, [question])
 
   async function sendQuestion(text: string, retryMessageId?: string) {
-    if (isComingSoon) return
     const trimmedQuestion = text.trim()
     if (!trimmedQuestion || trimmedQuestion.length > MAX_QUESTION_LENGTH) return
     if (requestLockRef.current || isPending) return
@@ -172,15 +170,7 @@ export function DocumentChatPanel({
             <span className="flex size-11 items-center justify-center rounded-full bg-brand-50 text-brand-700">
               <Bot aria-hidden="true" size={20} />
             </span>
-            {isComingSoon ? (
-              <span className="mt-3 rounded-full bg-stone-100 px-3 py-1 type-caption font-semibold text-stone-600">
-                추후 업데이트 예정
-              </span>
-            ) : null}
-            <h3 className={cx(
-              'type-section-title font-bold text-stone-900',
-              isComingSoon ? 'mt-2' : 'mt-3',
-            )}>{copy.emptyTitle}</h3>
+            <h3 className="mt-3 type-section-title font-bold text-stone-900">{copy.emptyTitle}</h3>
             <p className="mt-1 max-w-xs type-control leading-5 text-stone-500">{copy.emptyDescription}</p>
           </div>
         ) : null}
@@ -229,7 +219,6 @@ export function DocumentChatPanel({
       </div>
 
       <form
-        aria-disabled={isComingSoon || undefined}
         className="shrink-0 border-t border-stone-100 p-3"
         onSubmit={handleSubmit}
       >
@@ -242,7 +231,7 @@ export function DocumentChatPanel({
             aria-describedby={`document-chat-count-${mode}-${materialId}`}
             aria-invalid={error ? true : undefined}
             className="min-h-8 max-h-36 flex-1 resize-none bg-transparent px-1.5 py-1.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
-            disabled={isPending || isComingSoon}
+            disabled={isPending}
             id={`document-chat-${mode}-${materialId}`}
             maxLength={MAX_QUESTION_LENGTH}
             onChange={(event) => {
@@ -256,9 +245,9 @@ export function DocumentChatPanel({
             value={question}
           />
           <button
-            aria-label={isComingSoon ? '퀴즈 복습 기능 준비 중' : isPending ? '응답 대기 중' : copy.sendLabel}
+            aria-label={isPending ? '응답 대기 중' : copy.sendLabel}
             className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-stone-300"
-            disabled={isComingSoon || isPending || question.trim().length === 0}
+            disabled={isPending || question.trim().length === 0}
             type="submit"
           >
             <ArrowUp aria-hidden="true" size={16} />
@@ -267,7 +256,7 @@ export function DocumentChatPanel({
         <div className="mt-1.5 flex items-start justify-between gap-3">
           <p className="type-caption font-medium text-rose-700" role={error ? 'alert' : undefined}>{error}</p>
           <span className="shrink-0 type-micro tabular-nums text-stone-400" id={`document-chat-count-${mode}-${materialId}`}>
-            {isComingSoon ? '준비 중' : `${question.length}/${MAX_QUESTION_LENGTH}`}
+            {question.length}/{MAX_QUESTION_LENGTH}
           </span>
         </div>
       </form>
@@ -301,11 +290,11 @@ function getDocumentChatCopy(mode: DocumentChatMode) {
   if (mode === 'quiz') {
     return {
       ariaLabel: '퀴즈 복습 챗',
-      description: '추후 업데이트 예정',
-      emptyDescription: '더 나은 퀴즈 복습 경험을 준비하고 있습니다.',
-      emptyTitle: '퀴즈 복습 기능을 준비 중입니다',
+      description: '제출한 퀴즈와 자료 내용 기준',
+      emptyDescription: '제출한 답과 해설, 학습 자료를 바탕으로 답변합니다.',
+      emptyTitle: '푼 퀴즈에 대해 질문해 보세요',
       inputLabel: '퀴즈 복습 질문',
-      placeholder: '퀴즈 복습 기능은 추후 업데이트 예정입니다.',
+      placeholder: '푼 퀴즈에 대해 질문…',
       sendLabel: '퀴즈 복습 질문 보내기',
       title: '퀴즈 복습',
     }

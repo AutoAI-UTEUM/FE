@@ -38,6 +38,7 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => 
 const QuizPage = lazy(() => import('./pages/QuizPage').then((module) => ({ default: module.QuizPage })))
 const SessionDetailPage = lazy(() => import('./pages/SessionDetailPage').then((module) => ({ default: module.SessionDetailPage })))
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
+const UpdatesPage = lazy(() => import('./pages/UpdatesPage').then((module) => ({ default: module.UpdatesPage })))
 
 export function AppRoutes() {
   return (
@@ -69,6 +70,7 @@ export function AppRoutes() {
           <Route path={routes.quizDetail} element={<QuizPage />} />
           <Route path={routes.diagnosis} element={<DiagnosisPage />} />
           <Route path={routes.settings} element={<SettingsPage />} />
+          <Route path={routes.updates} element={<UpdatesPage />} />
           <Route path={routes.calendar} element={<InstructorCalendarPage />} />
           <Route path={routes.classroomCalendar} element={<InstructorCalendarPage />} />
           <Route path={routes.notes} element={<LearnerNotesPage />} />

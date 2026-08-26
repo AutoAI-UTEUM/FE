@@ -65,6 +65,8 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 학습 도우미' }))
     expect(screen.getByLabelText('AI 답변 스타일')).toBeInTheDocument()
+
+    expect(screen.queryByRole('button', { name: '업데이트' })).not.toBeInTheDocument()
   })
 
   it('saves notification and AI preferences immediately', async () => {
