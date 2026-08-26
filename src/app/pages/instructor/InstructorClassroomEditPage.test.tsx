@@ -111,6 +111,7 @@ describe('InstructorClassroomEditPage', () => {
     expect(screen.getByRole('link', { name: '학습현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
     expect(screen.queryByRole('link', { name: '평가 지표' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
+    expect(screen.queryByText('2026. 8. 3. - 2026. 11. 15. · 수강생 1명')).not.toBeInTheDocument()
     const basicSection = screen.getByRole('heading', { name: '기본 정보' }).closest('section')
     const dangerSection = screen.getByRole('heading', { name: '위험 구역' }).closest('section')
     expect(dangerSection).toHaveClass('shrink-0')

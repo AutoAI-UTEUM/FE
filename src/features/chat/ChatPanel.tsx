@@ -5,7 +5,9 @@ import {
   FileText,
   ListChecks,
   LoaderCircle,
+  Minus,
   NotebookPen,
+  Plus,
   RotateCcw,
   Save,
   Share2,
@@ -34,6 +36,14 @@ import { createNotesRepository, type Note } from '../notes'
 import type { SessionQuizSummary, SessionTurnResult } from '../sessions'
 import type { ChatMessage } from './chatTypes'
 import { getChatErrorMessage, type SessionChat } from './useSessionChat'
+import {
+  getAdjacentLearningTextSize,
+  LEARNING_TEXT_SIZE_LABELS,
+  LEARNING_TEXT_SIZE_PERCENTAGES,
+  readLearningTextSize,
+  writeLearningTextSize,
+  type LearningTextSize,
+} from './learningTextSize'
 
 interface ChatPanelProps {
   chat: SessionChat
@@ -59,6 +69,7 @@ interface ChatPanelProps {
   onReloadQuizzes?: () => void
   request?: AuthenticatedRequest
   sessionId: string
+  textSizeOwnerId?: number | string
 }
 
 type ChatPanelTab = 'overview' | 'chat' | 'notes' | 'quizzes'
@@ -97,6 +108,7 @@ export function ChatPanel({
   materialOverview = null,
   request,
   sessionId,
+  textSizeOwnerId,
 }: ChatPanelProps) {
   const [question, setQuestion] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -106,6 +118,9 @@ export function ChatPanel({
   const [messageActionStatus, setMessageActionStatus] = useState('')
   const [turnStatus, setTurnStatus] = useState('')
   const [isCancellingTurn, setIsCancellingTurn] = useState(false)
+  const [learningTextSize, setLearningTextSize] = useState<LearningTextSize>(
+    () => readLearningTextSize(textSizeOwnerId),
+  )
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const turnSubmissionLockRef = useRef(false)
@@ -113,6 +128,14 @@ export function ChatPanel({
     () => request ? createNotesRepository(request) : null,
     [request],
   )
+
+  function changeLearningTextSize(direction: -1 | 1) {
+    setLearningTextSize((current) => {
+      const next = getAdjacentLearningTextSize(current, direction)
+      writeLearningTextSize(textSizeOwnerId, next)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!notesRepository) return
@@ -267,9 +290,7 @@ export function ChatPanel({
     setError(null)
     try {
       const cancelled = await chat.cancelTurn()
-      setTurnStatus(cancelled
-        ? '답변 생성을 중단했습니다.'
-        : '답변이 이미 마무리되어 중단하지 못했습니다.')
+      setTurnStatus(cancelled ? '답변 생성을 중단했습니다.' : '')
     } catch (requestError) {
       setError(`답변을 중단하지 못했습니다. ${getRequestErrorMessage(requestError)}`)
     } finally {
@@ -349,9 +370,10 @@ export function ChatPanel({
   return (
     <section
       className={cx(
-        'flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white',
+        'learning-text-scope flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white',
         className,
       )}
+      data-learning-text-size={learningTextSize}
     >
       <div className="flex h-13 shrink-0 items-center border-b border-stone-200 px-3">
         <div className="flex h-full min-w-0 flex-1 overflow-x-auto" role="tablist">
@@ -377,6 +399,38 @@ export function ChatPanel({
             label="내 노트"
             onSelect={() => setTab('notes')}
           />
+        </div>
+        <div
+          aria-label="학습 텍스트 크기"
+          className="ml-2 flex h-8 shrink-0 items-center rounded-lg border border-stone-200 bg-white"
+          role="group"
+        >
+          <button
+            aria-label="학습 텍스트 작게"
+            className="flex size-8 items-center justify-center rounded-l-lg text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 disabled:text-stone-300"
+            disabled={learningTextSize === 'small'}
+            onClick={() => changeLearningTextSize(-1)}
+            title="글자 작게"
+            type="button"
+          >
+            <Minus aria-hidden="true" size={14} />
+          </button>
+          <span
+            className="min-w-12 border-x border-stone-200 px-1 text-center type-micro font-semibold text-stone-600"
+            title={`학습 텍스트 ${LEARNING_TEXT_SIZE_LABELS[learningTextSize]}`}
+          >
+            {LEARNING_TEXT_SIZE_PERCENTAGES[learningTextSize]}%
+          </span>
+          <button
+            aria-label="학습 텍스트 크게"
+            className="flex size-8 items-center justify-center rounded-r-lg text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 disabled:text-stone-300"
+            disabled={learningTextSize === 'large'}
+            onClick={() => changeLearningTextSize(1)}
+            title="글자 크게"
+            type="button"
+          >
+            <Plus aria-hidden="true" size={14} />
+          </button>
         </div>
         <span className="sr-only">세션 {sessionId}</span>
       </div>
@@ -476,15 +530,6 @@ export function ChatPanel({
             <p className="min-w-0 flex-1 type-chat-body text-stone-500">
               {chat.streamNotice ?? '답변을 작성하는 중입니다…'}
             </p>
-            <button
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-stone-300 bg-white px-2 type-caption font-semibold text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400"
-              disabled={isCancellingTurn}
-              onClick={() => void cancelTurn()}
-              type="button"
-            >
-              <Square aria-hidden="true" fill="currentColor" size={9} />
-              {isCancellingTurn ? '중단 중' : '답변 중단'}
-            </button>
           </div>
         ) : null}
 
@@ -519,7 +564,7 @@ export function ChatPanel({
       <form className="shrink-0 p-3" onSubmit={handleSubmit}>
         <div
           className={cx(
-            'flex items-end gap-2 rounded-xl border bg-stone-50 p-2',
+            'flex items-center gap-2 rounded-xl border bg-stone-50 p-2',
             'focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-100',
             error ? 'border-rose-400' : 'border-stone-200',
           )}
@@ -529,7 +574,7 @@ export function ChatPanel({
           </label>
           <textarea
             aria-invalid={error ? true : undefined}
-            className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
+            className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-0.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
             disabled={chat.isTurnPending}
             id="chat-question"
             onChange={(event) => {
@@ -543,12 +588,24 @@ export function ChatPanel({
             value={question}
           />
           <button
-            aria-label={chat.isTurnPending ? '응답 대기 중' : '질문 보내기'}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:bg-stone-300"
-            disabled={chat.isTurnPending}
-            type="submit"
+            aria-label={chat.isTurnPending && !isCancellingTurn ? '답변 중단' : '질문 보내기'}
+            className={cx(
+              'flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-white',
+              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+              'disabled:cursor-not-allowed disabled:bg-stone-300',
+              chat.isTurnPending && !isCancellingTurn
+                ? 'bg-stone-800 hover:bg-stone-900'
+                : 'bg-brand-600 hover:bg-brand-700',
+            )}
+            disabled={chat.isTurnPending && isCancellingTurn}
+            onClick={chat.isTurnPending && !isCancellingTurn ? () => void cancelTurn() : undefined}
+            type={chat.isTurnPending && !isCancellingTurn ? 'button' : 'submit'}
           >
-            <ArrowUp aria-hidden="true" size={16} />
+            {chat.isTurnPending && !isCancellingTurn ? (
+              <Square aria-hidden="true" fill="currentColor" size={11} />
+            ) : (
+              <ArrowUp aria-hidden="true" size={16} />
+            )}
           </button>
         </div>
 

@@ -74,7 +74,7 @@ export function ClassroomWorkspaceLayout() {
           activeTab={getActiveTab(pathname)}
           classroom={classroom}
           root
-          showClassroomSummary={!usesFixedContentViewport}
+          showClassroomSummary={false}
           titleAccessorySlotRef={setTitleAccessoryTarget}
         />
         <Outlet />

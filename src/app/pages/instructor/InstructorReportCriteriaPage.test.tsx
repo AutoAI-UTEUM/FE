@@ -142,6 +142,70 @@ describe('InstructorReportCriteriaPage', () => {
       rubric: { summary: '수정된 평가 내용' },
     })
   })
+
+  it('deletes only a custom criterion with an id', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let deleteRequests = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+
+      if (method === 'GET' && url.pathname === '/api/classrooms/12/report-criteria') {
+        return success({ items: [builtinCriterionFixture, criterionFixture] })
+      }
+      if (method === 'GET' && url.pathname === '/api/classrooms/12/report-criteria/generation') {
+        return success({ message: '', registeredCount: 0, status: 'IDLE' })
+      }
+      if (method === 'DELETE' && url.pathname === '/api/classrooms/12/report-criteria/21') {
+        deleteRequests += 1
+        return success(null)
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderPage()
+    expect(await screen.findByText('자동 생성 기준')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '학습 참여 삭제' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '자동 생성 기준 삭제' }))
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      "'자동 생성 기준' 평가 기준을 삭제할까요? 삭제한 기준은 복구할 수 없습니다.",
+    )
+    expect(await screen.findByText('평가 기준을 삭제했습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('자동 생성 기준')).not.toBeInTheDocument()
+    expect(screen.getByText('학습 참여')).toBeInTheDocument()
+    expect(deleteRequests).toBe(1)
+  })
+
+  it.each([
+    [403, 'FORBIDDEN', '평가 기준을 삭제할 권한이 없습니다.'],
+    [404, 'RESOURCE_NOT_FOUND', '이미 삭제되었거나 찾을 수 없는 평가 기준입니다.'],
+  ] as const)('keeps the criterion and shows guidance when deletion returns %i', async (status, code, expected) => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+
+      if (method === 'GET' && url.pathname === '/api/classrooms/12/report-criteria') {
+        return success({ items: [criterionFixture] })
+      }
+      if (method === 'GET' && url.pathname === '/api/classrooms/12/report-criteria/generation') {
+        return success({ message: '', registeredCount: 0, status: 'IDLE' })
+      }
+      if (method === 'DELETE' && url.pathname === '/api/classrooms/12/report-criteria/21') {
+        return failure(code, '평가 기준을 삭제하지 못했습니다.', status)
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '자동 생성 기준 삭제' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(expected)
+    expect(screen.getByText('자동 생성 기준')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '자동 생성 기준 삭제' })).toBeEnabled()
+  })
 })
 
 function renderPage() {
@@ -204,6 +268,20 @@ const criterionFixture = {
   minEvidence: 2,
   name: '자동 생성 기준',
   rubric: { summary: '주요 개념 이해도를 평가합니다.' },
+  version: 'v1',
+  weight: 1,
+}
+
+const builtinCriterionFixture = {
+  active: true,
+  allowedSources: ['SESSION'],
+  builtin: true,
+  criterionId: null,
+  criterionKey: 'engagement',
+  description: '기본 학습 참여 기준',
+  minEvidence: 2,
+  name: '학습 참여',
+  rubric: { summary: '학습 활동 참여도를 평가합니다.' },
   version: 'v1',
   weight: 1,
 }

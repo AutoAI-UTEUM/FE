@@ -174,7 +174,10 @@ describe('AppRoutes', () => {
 
     const settingsDialog = await screen.findByRole('dialog', { name: '설정' })
     expect(settingsDialog).toBeInTheDocument()
-    expect(settingsDialog.firstElementChild).toHaveClass('min-h-[464px]')
+    expect(settingsDialog.firstElementChild).toHaveClass(
+      'h-[min(520px,calc(100dvh-3rem))]',
+      'max-w-[560px]',
+    )
     expect(settingsDialog.firstElementChild).not.toHaveClass('h-[66dvh]', 'max-h-[66dvh]', 'overflow-y-auto')
     expect(within(settingsDialog).getByRole('button', { name: '피드백' })).toBeInTheDocument()
     fireEvent.click(within(settingsDialog).getByRole('button', { name: '화면 모드' }))
@@ -186,6 +189,19 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument()
 
     fireEvent.click(settingsDialog)
+    expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
+  })
+
+  it('opens development updates as a standalone page from the profile menu', async () => {
+    renderRoute('/')
+
+    const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
+    fireEvent.click(profileTrigger)
+    const [updatesMenuItem] = screen.getAllByRole('menuitem', { name: '업데이트' })
+    fireEvent.click(updatesMenuItem)
+
+    expect(await screen.findByRole('heading', { name: '업데이트' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '개발 파트' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
   })
 
@@ -469,6 +485,7 @@ describe('AppRoutes', () => {
       'flex-1',
       'overflow-auto',
     )
+    expect(screen.queryByText(/수강생 \d+명/)).not.toBeInTheDocument()
   })
 
   it('opens reports as a separate classroom workspace', async () => {
@@ -511,6 +528,7 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: '평가 지표' })).toHaveAttribute('href', '/classrooms/12/report-criteria')
     expect(screen.queryByText('분석 대상 학습자')).not.toBeInTheDocument()
     expect(screen.queryByText('학습자를 선택해 새 리포트를 생성하거나 저장된 버전을 확인하세요.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/수강생 \d+명/)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '김학습 리포트 열기' })).toHaveAttribute('href', '/classrooms/12/students/31/reports')
 
     fireEvent.change(screen.getByRole('searchbox', { name: '리포트 학습자 검색' }), {

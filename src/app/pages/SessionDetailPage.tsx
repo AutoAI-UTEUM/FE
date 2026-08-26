@@ -73,7 +73,7 @@ export function SessionDetailPage() {
   usePageTitle('학습 공간')
   const { sessionId } = useParams()
   const navigate = useNavigate()
-  const { apiRequest, rawApiRequest } = useAuth()
+  const { apiRequest, rawApiRequest, user } = useAuth()
   const sessionsRepository = useMemo(
     () => createSessionsRepository(apiRequest, rawApiRequest),
     [apiRequest, rawApiRequest],
@@ -877,6 +877,7 @@ export function SessionDetailPage() {
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"
+            textSizeOwnerId={user?.id ?? user?.email}
             materialOverview={materialOverview}
             conversationAction={hasConversationAction ? (
               <div className="grid gap-2">
