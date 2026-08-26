@@ -87,7 +87,7 @@ jobs:
             docker run --rm \
               -v edupilot-frontend-static:/html \
               -v /tmp/fe-dist:/src:ro \
-              alpine sh -c "rm -rf /html/* && cp -r /src/* /html/"
+              alpine sh -c "set -eu; mkdir -p /html/assets; find /html -mindepth 1 -maxdepth 1 ! -name assets -exec rm -rf {} +; cp -r /src/* /html/; find /html/assets -type f -mtime +7 -delete"
             rm -rf /tmp/fe-dist
 
       - name: Smoke test

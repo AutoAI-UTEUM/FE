@@ -31,6 +31,7 @@ interface AuthProviderProps {
 
 export const AUTH_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 export const AUTH_RESTORE_TIMEOUT_MS = 5_000
+export const AUTH_REFRESH_TIMEOUT_MS = 10_000
 const IDLE_CHECK_INTERVAL_MS = 30_000
 
 interface AuthSession {
@@ -73,21 +74,31 @@ export function AuthProvider({
 
   // access 재발급 — 동시 401이 몰려도 refresh 호출은 하나만 나간다.
   const renewAccessToken = useCallback((): Promise<string | null> => {
-    refreshPromiseRef.current ??= repository
-      .refresh()
-      .then((accessToken) => {
-        const current = sessionRef.current
-        if (current) {
-          const nextSession = { ...current, accessToken }
-          sessionRef.current = nextSession
-          setSession(nextSession)
-        }
-        return accessToken
-      })
-      .catch(() => null)
-      .finally(() => {
-        refreshPromiseRef.current = null
-      })
+    if (!refreshPromiseRef.current) {
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(
+        () => controller.abort(),
+        AUTH_REFRESH_TIMEOUT_MS,
+      )
+
+      refreshPromiseRef.current = repository
+        .refresh(controller.signal)
+        .then((accessToken) => {
+          const current = sessionRef.current
+          if (current) {
+            const nextSession = { ...current, accessToken }
+            sessionRef.current = nextSession
+            setSession(nextSession)
+          }
+          return accessToken
+        })
+        .catch(() => null)
+        .finally(() => {
+          window.clearTimeout(timeoutId)
+          refreshPromiseRef.current = null
+        })
+    }
+
     return refreshPromiseRef.current
   }, [repository])
 
