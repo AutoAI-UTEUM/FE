@@ -413,3 +413,19 @@ a[aria-disabled="true"],
   color: var(--color-brand-900);
   background: var(--color-brand-100);
 }
+
+/* PDF 학습 패널의 질문·답변 글자 크기는 사용자 선택을 우선한다. */
+.learning-text-scope[data-learning-text-size='small'] .type-chat-body {
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+
+.learning-text-scope[data-learning-text-size='medium'] .type-chat-body {
+  font-size: 1rem;
+  line-height: 1.625rem;
+}
+
+.learning-text-scope[data-learning-text-size='large'] .type-chat-body {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}

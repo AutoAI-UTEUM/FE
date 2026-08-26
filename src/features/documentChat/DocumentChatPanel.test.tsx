@@ -55,8 +55,11 @@ describe('DocumentChatPanel', () => {
     })
   })
 
-  it('announces that quiz review is coming later and keeps its input disabled', () => {
-    const request = vi.fn()
+  it('sends quiz review questions to the deployed quiz chat endpoint', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      answer: '제출한 답에서 이 개념을 다시 확인해 보세요.',
+      warnings: [],
+    }))
     render(
       <DocumentChatPanel
         materialId="10"
@@ -66,11 +69,18 @@ describe('DocumentChatPanel', () => {
     )
 
     const input = screen.getByLabelText('퀴즈 복습 질문')
-    expect(screen.getAllByText('추후 업데이트 예정')).toHaveLength(2)
-    expect(screen.getByText('퀴즈 복습 기능을 준비 중입니다')).toBeInTheDocument()
-    expect(input).toBeDisabled()
-    expect(screen.getByRole('button', { name: '퀴즈 복습 기능 준비 중' })).toBeDisabled()
-    expect(request).not.toHaveBeenCalled()
+    expect(screen.getByText('푼 퀴즈에 대해 질문해 보세요')).toBeInTheDocument()
+    expect(input).toBeEnabled()
+
+    fireEvent.change(input, { target: { value: '왜 이 답이 틀렸어?' } })
+    fireEvent.click(screen.getByRole('button', { name: '퀴즈 복습 질문 보내기' }))
+
+    expect(await screen.findByText('제출한 답에서 이 개념을 다시 확인해 보세요.')).toBeInTheDocument()
+    expect(request).toHaveBeenCalledWith('/api/materials/10/quiz-chat', {
+      body: { history: [], question: '왜 이 답이 틀렸어?' },
+      method: 'POST',
+      signal: expect.any(AbortSignal),
+    })
   })
 
   it('shows a specific processing error and allows the failed question to retry', async () => {

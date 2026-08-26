@@ -60,7 +60,7 @@ export function ClassroomWorkspaceHeader({
   activeTab,
   classroom,
   root = false,
-  showClassroomSummary = true,
+  showClassroomSummary,
   showTabs = true,
   titleAccessory,
   titleAccessorySlotRef,
@@ -77,6 +77,7 @@ export function ClassroomWorkspaceHeader({
 }) {
   const workspaceShell = useContext(ClassroomWorkspaceShellContext)
   const { user } = useAuth()
+  const shouldShowClassroomSummary = showClassroomSummary ?? activeTab === 'course'
   const tabs = isInstructorRole(user?.role)
     ? [
         { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
@@ -110,7 +111,7 @@ export function ClassroomWorkspaceHeader({
           actions={actions || actionSlotRef ? <div className="contents" ref={actionSlotRef}>{actions}</div> : undefined}
           title={classroom.name}
           titleAccessory={<>
-            {showClassroomSummary ? <p className="type-control text-stone-500">
+            {shouldShowClassroomSummary ? <p className="type-control text-stone-500">
               {formatClassroomPeriod(classroom.startDate, classroom.endDate)} · 수강생 {classroom.learnerCount}명
             </p> : null}
             {titleAccessory || titleAccessorySlotRef ? <div className="contents" ref={titleAccessorySlotRef}>{titleAccessory}</div> : null}

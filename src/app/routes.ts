@@ -35,6 +35,7 @@ export const routes = {
   sessions: '/sessions',
   sessionDetail: '/sessions/:sessionId',
   settings: '/settings',
+  updates: '/updates',
   quizDetail: '/quizzes/:quizId',
   diagnosis: '/sessions/:sessionId/diagnosis/:diagnosisId',
 } as const

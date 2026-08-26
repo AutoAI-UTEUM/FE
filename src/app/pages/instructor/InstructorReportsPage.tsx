@@ -11,6 +11,7 @@ import {
   Search,
   Settings2,
   Sparkles,
+  Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -330,6 +331,7 @@ export function InstructorReportCriteriaPage() {
   const [isLoading, setIsLoading] = useState(reportsEnabled)
   const [isSaving, setIsSaving] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [deletingCriterionId, setDeletingCriterionId] = useState<string | null>(null)
   const [isStartingGeneration, setIsStartingGeneration] = useState(false)
   const [generation, setGeneration] = useState<ReportCriteriaGeneration | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -485,7 +487,7 @@ export function InstructorReportCriteriaPage() {
   }
 
   async function toggleCriterion(criterion: ReportCriterion) {
-    if (criterion.id === null || criterion.builtin) return
+    if (criterion.id === null || criterion.builtin || deletingCriterionId !== null) return
     try {
       const updated = await repository.updateCriterion(classroomId, criterion.id, { active: !criterion.active })
       setCriteria((items) => items.map((item) => item.id === updated.id ? updated : item))
@@ -493,7 +495,7 @@ export function InstructorReportCriteriaPage() {
   }
 
   function startEditingCriterion(criterion: ReportCriterion) {
-    if (criterion.id === null || criterion.builtin) return
+    if (criterion.id === null || criterion.builtin || deletingCriterionId !== null) return
     setEditingCriterion(criterion)
     setEditName(criterion.name)
     setEditDescription(criterion.description)
@@ -543,6 +545,24 @@ export function InstructorReportCriteriaPage() {
     }
   }
 
+  async function deleteCriterion(criterion: ReportCriterion) {
+    if (criterion.id === null || criterion.builtin || deletingCriterionId !== null) return
+    if (!window.confirm(`'${criterion.name}' 평가 기준을 삭제할까요? 삭제한 기준은 복구할 수 없습니다.`)) return
+
+    setDeletingCriterionId(criterion.id)
+    setError(null)
+    try {
+      await repository.deleteCriterion(classroomId, criterion.id)
+      setCriteria((items) => items.filter((item) => item.id !== criterion.id))
+      if (editingCriterion?.id === criterion.id) cancelEditingCriterion()
+      show('평가 기준을 삭제했습니다.', 'success')
+    } catch (requestError) {
+      setError(getCriterionDeletionErrorMessage(requestError))
+    } finally {
+      setDeletingCriterionId(null)
+    }
+  }
+
   const isGenerating = isStartingGeneration || generation?.status === 'RUNNING'
 
   return <ClassroomWorkspaceContainer>
@@ -558,7 +578,7 @@ export function InstructorReportCriteriaPage() {
           <section className="overflow-hidden rounded-lg border border-stone-200 bg-white"><div className="border-b border-stone-200 bg-stone-50 px-5 py-3"><h3 className="type-body font-bold">활성 커스텀 기준 {activeCustomCriterionCount}/{CUSTOM_CRITERIA_LIMIT}</h3></div>{criteria.length === 0 ? <EmptyState description="기본 평가 기준은 서버 정책에 따라 제공되며 강의실별 기준을 추가할 수 있습니다." title="추가 평가 기준이 없습니다" /> : criteria.map((criterion) => {
         const isEditing = editingCriterion?.id === criterion.id
         return <div className="border-b border-stone-100 px-5 py-4 last:border-0" key={criterion.id ?? `builtin-${criterion.key}`}>
-          <div className="flex items-start gap-4"><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><strong className="type-body">{criterion.name}</strong><Badge tone={criterion.active ? 'success' : 'neutral'}>{criterion.active ? '사용 중' : '비활성'}</Badge>{criterion.builtin ? <Badge tone="neutral">기본</Badge> : null}</div><p className="mt-1 type-caption leading-5 text-stone-500">{criterion.description}</p><p className="mt-2 type-micro text-stone-400">최소 근거 {criterion.minimumEvidence}개 · 버전 {criterion.version || '-'}</p></div>{criterion.builtin ? null : <div className="flex shrink-0 gap-2"><Button disabled={isUpdating} onClick={() => startEditingCriterion(criterion)} size="sm" variant="secondary"><Pencil aria-hidden="true" size={13} />수정</Button><Button disabled={isUpdating} onClick={() => void toggleCriterion(criterion)} size="sm" variant="secondary">{criterion.active ? '비활성화' : '활성화'}</Button></div>}</div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4"><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><strong className="type-body">{criterion.name}</strong><Badge tone={criterion.active ? 'success' : 'neutral'}>{criterion.active ? '사용 중' : '비활성'}</Badge>{criterion.builtin ? <Badge tone="neutral">기본</Badge> : null}</div><p className="mt-1 type-caption leading-5 text-stone-500">{criterion.description}</p><p className="mt-2 type-micro text-stone-400">최소 근거 {criterion.minimumEvidence}개 · 버전 {criterion.version || '-'}</p></div>{criterion.builtin || criterion.id === null ? null : <div className="flex shrink-0 flex-wrap justify-end gap-2"><Button disabled={isUpdating || deletingCriterionId !== null} onClick={() => startEditingCriterion(criterion)} size="sm" variant="secondary"><Pencil aria-hidden="true" size={13} />수정</Button><Button disabled={isUpdating || deletingCriterionId !== null} onClick={() => void toggleCriterion(criterion)} size="sm" variant="secondary">{criterion.active ? '비활성화' : '활성화'}</Button><Button aria-label={`${criterion.name} 삭제`} className="text-rose-700 hover:bg-rose-50 hover:text-rose-800" disabled={isUpdating || deletingCriterionId !== null} onClick={() => void deleteCriterion(criterion)} size="sm" variant="secondary"><Trash2 aria-hidden="true" size={13} />{deletingCriterionId === criterion.id ? '삭제 중' : '삭제'}</Button></div>}</div>
           {isEditing ? <form aria-label={`${criterion.name} 수정`} className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4" onSubmit={updateCriterion}><div className="grid gap-3 md:grid-cols-2"><label className="block type-control font-semibold">이름<input autoFocus className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" maxLength={100} onChange={(event) => setEditName(event.target.value)} value={editName} /></label><label className="block type-control font-semibold">설명<input className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" maxLength={500} onChange={(event) => setEditDescription(event.target.value)} value={editDescription} /></label></div><label className="mt-3 block type-control font-semibold">평가 기준<textarea className="mt-1 min-h-24 w-full resize-y rounded-lg border border-stone-300 bg-white px-3 py-2 type-body" onChange={(event) => setEditRubric(event.target.value)} value={editRubric} /></label><div className="mt-3 flex justify-end gap-2"><Button disabled={isUpdating} onClick={cancelEditingCriterion} size="sm" type="button" variant="secondary">취소</Button><Button disabled={!editName.trim() || !editDescription.trim() || !editRubric.trim() || isUpdating} size="sm" type="submit">{isUpdating ? '저장 중' : '변경사항 저장'}</Button></div></form> : null}
         </div>
           })}</section>
@@ -579,6 +599,14 @@ function getCriteriaGenerationErrorMessage(error: unknown): string {
   return isCapacityError
     ? '기존 지표를 정리한 후 다시 시도해 주세요.'
     : '자료 개요가 준비된 후 이용할 수 있어요.'
+}
+
+function getCriterionDeletionErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    if (error.status === 403) return '평가 기준을 삭제할 권한이 없습니다.'
+    if (error.status === 404) return '이미 삭제되었거나 찾을 수 없는 평가 기준입니다.'
+  }
+  return getRequestErrorMessage(error)
 }
 
 function ReportsUnavailableState() {

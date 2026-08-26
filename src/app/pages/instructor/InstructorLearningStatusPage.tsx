@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Info,
   LoaderCircle,
+  RefreshCw,
   Search,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -72,7 +73,13 @@ export function InstructorLearningStatusPage() {
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader activeTab="learning" classroom={classroom} />
 
-      <StudentLearningTable classroomId={classroom.id} repository={repository} students={students} />
+      <StudentLearningTable
+        classroomId={classroom.id}
+        isRefreshing={isLoading}
+        onRefresh={() => void load()}
+        repository={repository}
+        students={students}
+      />
     </ClassroomWorkspaceContainer>
   )
 }
@@ -80,11 +87,15 @@ export function InstructorLearningStatusPage() {
 function StudentLearningTable({
   className,
   classroomId,
+  isRefreshing,
+  onRefresh,
   repository,
   students,
 }: {
   className?: string
   classroomId: string
+  isRefreshing: boolean
+  onRefresh: () => void
   repository: ReturnType<typeof createClassroomsRepository>
   students: ClassroomStudent[]
 }) {
@@ -160,18 +171,30 @@ function StudentLearningTable({
           <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
           <LearningStatusHelp />
         </div>
-        <label className="relative block w-full sm:w-56">
-          <span className="sr-only">수강생 검색</span>
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
-          <input
-            aria-label="수강생 검색"
-            className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="이름 또는 이메일 검색"
-            type="search"
-            value={searchQuery}
-          />
-        </label>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <button
+            aria-label="수강생 목록 새로고침"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 outline-none transition-colors hover:bg-stone-50 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isRefreshing}
+            onClick={onRefresh}
+            title="수강생 목록 새로고침"
+            type="button"
+          >
+            <RefreshCw aria-hidden="true" className={cx(isRefreshing && 'animate-spin')} size={15} />
+          </button>
+          <label className="relative block min-w-0 flex-1 sm:w-56 sm:flex-none">
+            <span className="sr-only">수강생 검색</span>
+            <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
+            <input
+              aria-label="수강생 검색"
+              className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="이름 또는 이메일 검색"
+              type="search"
+              value={searchQuery}
+            />
+          </label>
+        </div>
       </div>
       <div
         aria-label="수강생별 학습 현황 목록"
@@ -418,7 +441,7 @@ function QuizStatus({ quiz }: { quiz: ClassroomStudentLearningAnalytics['quizzes
     : quiz.passed
       ? 'text-emerald-700'
       : 'text-amber-700'
-  return <span className={cx('w-12 shrink-0 text-right type-caption font-semibold', className)}>{label}</span>
+  return <span className={cx('min-w-14 shrink-0 whitespace-nowrap text-right type-caption font-semibold', className)}>{label}</span>
 }
 
 type StudentSortKey = 'name' | 'progress' | 'question' | 'quiz' | 'recentActivity'
