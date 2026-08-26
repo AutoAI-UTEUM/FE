@@ -62,6 +62,10 @@ export function InstructorCalendarPage() {
 
   const label = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
   const isViewingCurrentMonth = isSameMonth(cursor, today)
+  const visibleMonthEvents = useMemo(
+    () => events.filter((event) => eventIntersectsMonth(event, cursor)),
+    [cursor, events],
+  )
 
   useEffect(() => {
     if (!isPickerOpen) return
@@ -121,83 +125,106 @@ export function InstructorCalendarPage() {
           <>
             <SegmentedControl onChange={setView} value={view} />
             {isInstructor ? (
-              <Button onClick={() => { setEditingEvent(null); setIsComposerOpen(true) }} size="sm">
+              <Button
+                aria-label="일정 추가"
+                onClick={() => { setEditingEvent(null); setIsComposerOpen(true) }}
+                size="sm"
+              >
                 <Plus aria-hidden="true" size={14} />
-                일정 추가
+                개인 일정
               </Button>
             ) : null}
           </>
         }
         title="캘린더"
-        titleAccessory={
-          <div className="flex items-center gap-1.5" ref={pickerRef}>
-            <button
-              aria-label="이전 기간"
-              className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
-              onClick={() => move(-1)}
-              type="button"
-            >
-              <ChevronLeft aria-hidden="true" size={15} />
-            </button>
-            <div className="relative">
+      />
+
+      <div className="grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <section
+          aria-label="캘린더 본문"
+          className="flex min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
+        >
+          <div className="grid min-h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-stone-200 px-3 sm:px-4">
+            <span aria-hidden="true" />
+            <div className="flex items-center gap-2" ref={pickerRef}>
               <button
-                aria-expanded={isPickerOpen}
-                aria-haspopup="dialog"
-                aria-label="연도와 월 선택"
-                className="flex h-8 min-w-32 items-center justify-center gap-1.5 rounded-lg px-2.5 type-body font-bold text-stone-900 hover:bg-stone-100 sm:min-w-36"
-                onClick={togglePicker}
+                aria-label="이전 기간"
+                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                onClick={() => move(-1)}
                 type="button"
               >
-                {label}
-                <ChevronDown aria-hidden="true" size={14} />
+                <ChevronLeft aria-hidden="true" size={15} />
               </button>
-              {isPickerOpen ? (
-                <MonthYearPicker
-                  onChangeYear={setPickerYear}
-                  onSelectMonth={selectMonth}
-                  selectedMonth={cursor.getMonth()}
-                  selectedYear={cursor.getFullYear()}
-                  year={pickerYear}
-                />
-              ) : null}
+              <div className="relative">
+                <button
+                  aria-expanded={isPickerOpen}
+                  aria-haspopup="dialog"
+                  aria-label="연도와 월 선택"
+                  className="flex h-8 min-w-28 items-center justify-center gap-1.5 rounded-lg px-2 type-body font-bold text-stone-900 hover:bg-stone-100 sm:min-w-36"
+                  onClick={togglePicker}
+                  type="button"
+                >
+                  {label}
+                  <ChevronDown aria-hidden="true" size={14} />
+                </button>
+                {isPickerOpen ? (
+                  <MonthYearPicker
+                    onChangeYear={setPickerYear}
+                    onSelectMonth={selectMonth}
+                    selectedMonth={cursor.getMonth()}
+                    selectedYear={cursor.getFullYear()}
+                    year={pickerYear}
+                  />
+                ) : null}
+              </div>
+              <button
+                aria-label="다음 기간"
+                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                onClick={() => move(1)}
+                type="button"
+              >
+                <ChevronRight aria-hidden="true" size={15} />
+              </button>
             </div>
-            <button
-              aria-label="다음 기간"
-              className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
-              onClick={() => move(1)}
-              type="button"
-            >
-              <ChevronRight aria-hidden="true" size={15} />
-            </button>
             {!isViewingCurrentMonth && view !== 'list' ? (
-              <Button onClick={moveToCurrentMonth} size="sm" variant="secondary">
+              <Button
+                className="justify-self-end"
+                onClick={moveToCurrentMonth}
+                size="sm"
+                variant="secondary"
+              >
                 이번 달
               </Button>
             ) : null}
           </div>
-        }
-      />
 
-      {view === 'month' ? (
-        <MonthView
-          cursor={cursor}
-          events={events}
-          onWheel={handleMonthWheel}
+          {view === 'month' ? (
+            <MonthView
+              cursor={cursor}
+              events={events}
+              onWheel={handleMonthWheel}
+              onSelectEvent={setSelectedEvent}
+              today={today}
+            />
+          ) : null}
+          {view === 'week' ? (
+            <WeekView
+              cursor={cursor}
+              events={events}
+              onSelectEvent={setSelectedEvent}
+              today={today}
+            />
+          ) : null}
+          {view === 'list' ? (
+            <ListView events={events} onSelectEvent={setSelectedEvent} />
+          ) : null}
+        </section>
+
+        <MonthlySchedulePanel
+          events={visibleMonthEvents}
           onSelectEvent={setSelectedEvent}
-          today={today}
         />
-      ) : null}
-      {view === 'week' ? (
-        <WeekView
-          cursor={cursor}
-          events={events}
-          onSelectEvent={setSelectedEvent}
-          today={today}
-        />
-      ) : null}
-      {view === 'list' ? (
-        <ListView events={events} onSelectEvent={setSelectedEvent} />
-      ) : null}
+      </div>
 
       {isInstructor && isComposerOpen ? (
         <ScheduleComposer
@@ -357,12 +384,12 @@ function MonthView({
   const cells = getMonthCells(cursor)
 
   return (
-    <section aria-label="월간 캘린더" className="overflow-hidden rounded-lg border border-stone-200 bg-white lg:flex lg:min-h-0 lg:flex-1 lg:flex-col" onWheel={onWheel}>
-      <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50">
+    <section aria-label="월간 캘린더" className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 lg:min-h-0" onWheel={onWheel}>
+      <div className="grid grid-cols-7">
         {WEEKDAY_LABELS.map((label, index) => (
           <div
             className={cx(
-              'px-2 py-2 text-center type-micro font-semibold',
+              'px-2 py-2.5 text-center type-micro font-semibold',
               index === 5
                 ? 'text-sky-700'
                 : index === 6
@@ -376,9 +403,9 @@ function MonthView({
         ))}
       </div>
       <div
-        className="grid grid-cols-7 lg:min-h-0 lg:flex-1"
+        className="grid flex-1 grid-cols-7 gap-1"
         style={{
-          gridTemplateRows: `repeat(${cells.length / 7}, minmax(8rem, 1fr))`,
+          gridTemplateRows: `repeat(${cells.length / 7}, minmax(5.5rem, 1fr))`,
         }}
       >
         {cells.map((date) => {
@@ -388,7 +415,10 @@ function MonthView({
           return (
             <div
               aria-label={`${formatCalendarDate(date)} 일정 ${dayEvents.length}개`}
-              className="min-h-28 min-w-0 border-r border-b border-stone-100 p-2.5 last:border-r-0 sm:min-h-32 lg:min-h-0"
+              className={cx(
+                'min-h-24 min-w-0 rounded-lg border border-stone-200 p-2 sm:min-h-0',
+                isToday ? 'bg-brand-50' : 'bg-stone-50/60',
+              )}
               key={date.toISOString()}
             >
               <span
@@ -436,13 +466,13 @@ function WeekView({
 }) {
   const week = getWeek(cursor)
   return (
-    <section className="grid overflow-hidden rounded-lg border border-stone-200 bg-white md:grid-cols-7">
+    <section className="grid min-h-0 flex-1 gap-1 overflow-auto p-3 sm:p-4 md:grid-cols-7">
       {week.map((date, index) => {
         const dayEvents = getEventsForDay(events, date)
         return (
           <div
             aria-label={`${formatCalendarDate(date)} 일정 ${dayEvents.length}개`}
-            className="min-h-48 min-w-0 border-b border-stone-100 p-3 last:border-b-0 md:border-r md:border-b-0 md:last:border-r-0"
+            className="min-h-48 min-w-0 rounded-lg border border-stone-200 bg-stone-50/60 p-3"
             key={date.toISOString()}
           >
             <div className="flex items-center gap-2">
@@ -494,7 +524,7 @@ function ListView({
 }) {
   if (events.length > 0) {
     return (
-      <section className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+      <section className="min-h-0 flex-1 overflow-auto">
         {events.map((event) => (
           <button
             className="flex min-h-16 w-full items-center gap-3 border-b border-stone-100 px-4 text-left last:border-b-0 hover:bg-stone-50"
@@ -522,7 +552,7 @@ function ListView({
   }
 
   return (
-    <section className="flex min-h-72 flex-col items-center justify-center rounded-lg border border-stone-200 bg-white px-6 text-center">
+    <section className="flex min-h-72 flex-1 flex-col items-center justify-center px-6 text-center">
       <span className="flex size-10 items-center justify-center rounded-lg bg-stone-100 text-stone-400">
         <CalendarDays aria-hidden="true" size={19} />
       </span>
@@ -533,6 +563,55 @@ function ListView({
         공지와 개인 일정이 등록되면 날짜순으로 표시됩니다.
       </p>
     </section>
+  )
+}
+
+function MonthlySchedulePanel({
+  events,
+  onSelectEvent,
+}: {
+  events: CalendarEvent[]
+  onSelectEvent: (event: CalendarEvent) => void
+}) {
+  return (
+    <aside
+      aria-label="이번 달 일정"
+      className="min-h-0 rounded-lg border border-stone-200 bg-white p-4 lg:overflow-auto"
+    >
+      <h2 className="type-body font-bold text-stone-900">이번 달 일정</h2>
+      {events.length > 0 ? (
+        <div className="mt-4 grid gap-1">
+          {events.map((event) => (
+            <button
+              aria-label={`${event.title}, ${formatScheduleDateTime(event.startsAt)}`}
+              className="flex w-full items-start gap-3 rounded-lg px-1 py-2.5 text-left hover:bg-stone-50"
+              key={event.id}
+              onClick={() => onSelectEvent(event)}
+              type="button"
+            >
+              <span className="mt-0.5 shrink-0 rounded-md bg-stone-100 px-2 py-1 type-micro font-bold text-stone-500">
+                {formatScheduleMonthDay(event.startsAt)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <strong className="block truncate type-caption font-semibold text-stone-900">
+                  {event.title}
+                </strong>
+                <span
+                  className={cx(
+                    'mt-1 block type-micro font-semibold',
+                    event.kind === 'NOTICE' ? 'text-amber-700' : 'text-brand-700',
+                  )}
+                >
+                  {getCalendarEventKindLabel(event.kind)}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 type-caption text-stone-400">등록된 일정이 없습니다.</p>
+      )}
+    </aside>
   )
 }
 
@@ -835,6 +914,23 @@ function formatScheduleDate(iso: string): string {
   return new Intl.DateTimeFormat('ko-KR', {
     dateStyle: 'medium',
   }).format(new Date(iso))
+}
+
+function formatScheduleMonthDay(iso: string): string {
+  const date = new Date(iso)
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function eventIntersectsMonth(event: CalendarEvent, cursor: Date): boolean {
+  const monthStart = startOfMonth(cursor)
+  const nextMonthStart = new Date(
+    monthStart.getFullYear(),
+    monthStart.getMonth() + 1,
+    1,
+  )
+  const eventStart = new Date(event.startsAt)
+  const eventEnd = new Date(event.endsAt || event.startsAt)
+  return eventStart < nextMonthStart && eventEnd >= monthStart
 }
 
 function formatEventRange(event: CalendarEvent): string {

@@ -71,6 +71,7 @@ export interface ClassroomStudent {
   joinedAt: string
   lastActiveAt?: string
   name: string
+  quizSubmissionCount?: number
   status: string
 }
 
@@ -200,6 +201,7 @@ interface ClassroomStudentDto {
   lastActiveAt?: string
   name: string
   progressRate?: number
+  quizSubmissionCount?: number
   status: string
   studentId: number
 }

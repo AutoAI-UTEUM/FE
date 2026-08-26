@@ -2,14 +2,10 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  BarChart3,
   ChevronDown,
-  ClipboardCheck,
-  FileQuestion,
   Info,
   LoaderCircle,
   Search,
-  Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -24,7 +20,7 @@ import {
 } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
-import { formatDetailedRelativeActivityDate, formatRelativeActivityDate } from '../../../shared/lib/format'
+import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
@@ -105,8 +101,14 @@ function StudentLearningTable({
       .filter((student) => !normalizedQuery
         || student.name.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
         || student.email.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
-      .sort((left, right) => compareStudents(left, right, sort))
-  }, [searchQuery, sort, students])
+      .sort((left, right) => compareStudents(
+        left,
+        right,
+        sort,
+        analyticsByStudentId,
+        classroomId,
+      ))
+  }, [analyticsByStudentId, classroomId, searchQuery, sort, students])
 
   function selectSort(key: StudentSortKey) {
     setSort((current) => current.key === key
@@ -153,7 +155,7 @@ function StudentLearningTable({
 
   return (
     <section aria-label="수강생별 학습 현황" className={cx('flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
-      <div className="flex shrink-0 flex-col gap-3 border-b border-stone-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-stone-100 px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-1.5">
           <h2 className="type-body font-bold text-stone-900">수강생별 학습 현황</h2>
           <LearningStatusHelp />
@@ -177,37 +179,49 @@ function StudentLearningTable({
         role="region"
         tabIndex={0}
       >
-        <div className="min-w-[460px]">
-          <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(260px,1fr)_140px] items-center gap-3 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+        <div className="min-w-[860px]">
+          <div
+            aria-label="학습 현황 열 제목"
+            className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500"
+          >
             <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
-            <StudentSortHeader activeSort={sort} className="justify-center" label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
+            <StudentSortHeader activeSort={sort} className="justify-self-center" label="진도" onSelect={selectSort} sortKey="progress" />
+            <StudentSortHeader activeSort={sort} className="justify-self-center" label="질문" onSelect={selectSort} sortKey="question" />
+            <StudentSortHeader activeSort={sort} className="justify-self-center" label="퀴즈" onSelect={selectSort} sortKey="quiz" />
+            <StudentSortHeader activeSort={sort} label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
+            <span aria-hidden="true" />
           </div>
-          {visibleStudents.length === 0 ? (
-            <div className="flex min-h-40 items-center justify-center type-body text-stone-400">
-              {students.length === 0 ? '표시할 수강생이 없습니다.' : '검색 결과가 없습니다.'}
-            </div>
-          ) : visibleStudents.map((student) => {
+          <div>
+            {visibleStudents.length === 0 ? (
+              <div className="flex min-h-40 items-center justify-center type-body text-stone-400">
+                {students.length === 0 ? '표시할 수강생이 없습니다.' : '검색 결과가 없습니다.'}
+              </div>
+            ) : visibleStudents.map((student) => {
             const isExpanded = expandedStudentId === student.id
             const detailId = `student-learning-detail-${student.id}`
             const detailKey = `${classroomId}:${student.id}`
-            return <article aria-label={`${student.name} 학습 현황`} className="border-b border-stone-100 last:border-0" key={student.id}>
-              <div className="grid min-h-16 grid-cols-[minmax(260px,1fr)_140px] items-center gap-3 px-5">
-                <button
-                  aria-controls={detailId}
-                  aria-expanded={isExpanded}
-                  aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
-                  className="group flex min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                  onClick={() => toggleStudent(student.id)}
-                  type="button"
-                >
+            const analytics = analyticsByStudentId[detailKey]
+            return <article aria-label={`${student.name} 학습 현황`} className="overflow-hidden border-b border-stone-100 bg-white last:border-b-0" key={student.id}>
+              <button
+                aria-controls={detailId}
+                aria-expanded={isExpanded}
+                aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
+                className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 px-5 text-left outline-none transition-colors hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                onClick={() => toggleStudent(student.id)}
+                type="button"
+              >
+                <span className="flex min-w-0 items-center gap-3">
                   <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
-                  <span className="min-w-0 flex-1"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></span>
-                  <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
-                </button>
-                <span className="text-center type-control text-stone-600">{formatDetailedRelativeActivityDate(student.lastActiveAt)}</span>
-              </div>
+                  <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></span>
+                </span>
+                <StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} />
+                <StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} />
+                <StudentQuizSummary analytics={analytics} student={student} />
+                <StudentSummaryMetric label="최근 학습" value={formatDetailedRelativeActivityDate(student.lastActiveAt)} />
+                <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
+              </button>
               {isExpanded ? <StudentLearningDetails
-                analytics={analyticsByStudentId[detailKey]}
+                analytics={analytics}
                 detailId={detailId}
                 error={detailErrors[detailKey]}
                 isLoading={loadingStudentIds.has(detailKey)}
@@ -215,7 +229,8 @@ function StudentLearningTable({
                 student={student}
               /> : null}
             </article>
-          })}
+            })}
+          </div>
         </div>
       </div>
     </section>
@@ -256,96 +271,134 @@ function StudentLearningDetails({
   }
 
   if (!analytics) return null
-  const maxQuestionCount = Math.max(...analytics.questionsByPage.map((item) => item.questionCount), 1)
+  const questionsByMaterial = aggregateQuestionsByMaterial(analytics.questionsByPage)
+  const maxQuestionCount = Math.max(...questionsByMaterial.map((item) => item.questionCount), 1)
+  const quizGroups = groupQuizzesByMaterial(analytics.quizzes)
 
   return (
-    <section aria-label={`${student.name} 상세 학습 현황`} className="border-t border-stone-100 bg-stone-50/80 p-4" id={detailId}>
-      <div className="grid gap-3 xl:grid-cols-3">
-        <StudentDetailCard icon={BarChart3} title="자료별 학습 현황">
+    <section aria-label={`${student.name} 상세 학습 현황`} className="border-t border-stone-100 bg-white" id={detailId}>
+      <div className="grid divide-y divide-stone-100 xl:grid-cols-[1.15fr_1fr_1fr] xl:divide-x xl:divide-y-0">
+        <StudentDetailSection title="자료별 학습 현황">
           {analytics.materials.length === 0 ? (
             <DetailEmptyState>표시할 학습 자료가 없습니다.</DetailEmptyState>
           ) : (
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 space-y-2.5">
               {analytics.materials.map((material) => (
-                <div className="rounded-md border border-stone-100 bg-stone-50 px-3 py-2.5" key={material.id}>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <strong className="min-w-0 flex-1 truncate type-control text-stone-900" title={material.title}>{material.title}</strong>
-                    {material.weekNumber ? <span className="shrink-0 type-micro text-stone-400">{material.weekNumber}주차</span> : null}
-                    <span className={cx('shrink-0 rounded-full px-2 py-0.5 type-micro font-semibold', material.viewed ? 'bg-brand-50 text-brand-700' : 'bg-stone-100 text-stone-500')}>
-                      {material.viewed ? `${material.progressRate}%` : '미열람'}
-                    </span>
-                  </div>
-                  <div aria-label={`${material.title} 진도 ${material.progressRate}%`} className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-200">
+                <div className="grid grid-cols-[minmax(0,1fr)_64px_36px] items-center gap-3" key={material.id}>
+                  <strong className="truncate type-caption font-semibold text-stone-800" title={material.title}>{material.title}</strong>
+                  <div aria-label={`${material.title} 진도 ${material.progressRate}%`} className="h-1 overflow-hidden rounded-full bg-stone-100">
                     <span className="block h-full rounded-full bg-brand-700" style={{ width: `${Math.min(100, Math.max(0, material.progressRate))}%` }} />
                   </div>
-                  <p className="mt-2 type-micro text-stone-400">
-                    {material.viewed
-                      ? `마지막 학습 ${material.lastViewedPage ?? '-'}페이지 · ${formatRelativeActivityDate(material.lastViewedAt ?? undefined)}`
-                      : '아직 열람하지 않은 자료입니다.'}
-                  </p>
+                  <strong className="text-right type-caption text-stone-900">{material.progressRate}%</strong>
                 </div>
               ))}
             </div>
           )}
-        </StudentDetailCard>
+        </StudentDetailSection>
 
-        <StudentDetailCard icon={FileQuestion} title="페이지별 질문 수">
-          {analytics.questionsByPage.length === 0 ? (
+        <StudentDetailSection title="페이지별 질문 수">
+          {questionsByMaterial.length === 0 ? (
             <DetailEmptyState>최근 7일 동안 작성한 질문이 없습니다.</DetailEmptyState>
           ) : (
             <div className="mt-3 space-y-2.5">
-              {analytics.questionsByPage.map((question) => {
-                return (
-                  <div key={`${question.materialId}-${question.pageNumber}`}>
-                    <div className="flex min-w-0 items-center gap-2 type-micro">
-                      <span className="min-w-0 flex-1 truncate font-semibold text-stone-700" title={question.materialTitle}>{question.materialTitle}</span>
-                      <span className="shrink-0 text-stone-400">{question.weekNumber ? `${question.weekNumber}주차 · ` : ''}{question.pageNumber}페이지</span>
-                      <strong className="w-8 shrink-0 text-right text-brand-700">{question.questionCount}건</strong>
-                    </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-stone-100">
-                      <span className="block h-full rounded-full bg-amber-500" style={{ width: `${(question.questionCount / maxQuestionCount) * 100}%` }} />
-                    </div>
+              {questionsByMaterial.map((question) => (
+                <div className="grid grid-cols-[minmax(0,1fr)_64px_32px] items-center gap-3" key={question.materialId}>
+                  <span className="truncate type-caption font-semibold text-stone-800" title={question.materialTitle}>{question.materialTitle}</span>
+                  <div className="h-1 overflow-hidden rounded-full bg-stone-100">
+                    <span className="block h-full rounded-full bg-amber-500" style={{ width: `${(question.questionCount / maxQuestionCount) * 100}%` }} />
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </StudentDetailCard>
-
-        <StudentDetailCard icon={ClipboardCheck} title="퀴즈 현황">
-          {analytics.quizzes.length === 0 ? (
-            <DetailEmptyState>표시할 퀴즈가 없습니다.</DetailEmptyState>
-          ) : (
-            <div className="mt-3 space-y-2.5">
-              {analytics.quizzes.map((quiz) => (
-                <div className="rounded-md border border-stone-100 bg-stone-50 px-3 py-2.5" key={quiz.id}>
-                  <div className="flex min-w-0 items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <strong className="block truncate type-control text-stone-900" title={quiz.title}>{quiz.title}</strong>
-                      <p className="mt-0.5 truncate type-micro text-stone-400">{quiz.materialTitle}{quiz.pageNumber ? ` · ${quiz.pageNumber}페이지` : ''}</p>
-                    </div>
-                    <QuizStatus quiz={quiz} />
-                  </div>
-                  <p className="mt-2 type-micro font-semibold text-stone-600">
-                    {!quiz.submitted
-                      ? '아직 응시하지 않았습니다.'
-                      : quiz.score !== null && quiz.maxScore !== null
-                        ? `${quiz.score} / ${quiz.maxScore}점`
-                        : '제출 완료 · 채점 정보 없음'}
-                  </p>
+                  <strong className="text-right type-caption text-stone-900">{question.questionCount}건</strong>
                 </div>
               ))}
             </div>
           )}
-        </StudentDetailCard>
+        </StudentDetailSection>
+
+        <StudentDetailSection title="퀴즈 현황">
+          {analytics.quizzes.length === 0 ? (
+            <DetailEmptyState>표시할 퀴즈가 없습니다.</DetailEmptyState>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {quizGroups.map((group) => (
+                <div key={group.materialId}>
+                  <p className="mb-1.5 truncate type-caption text-stone-400" title={group.materialTitle}>{group.materialTitle}</p>
+                  <div className="space-y-1.5">
+                    {group.quizzes.map((quiz) => (
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3" key={quiz.id}>
+                        <strong className="truncate type-caption font-semibold text-stone-800" title={quiz.title}>{quiz.title}</strong>
+                        <span className="type-caption font-semibold text-stone-900">
+                          {quiz.submitted && quiz.score !== null && quiz.maxScore !== null ? `${quiz.score}/${quiz.maxScore}` : '-'}
+                        </span>
+                        <QuizStatus quiz={quiz} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </StudentDetailSection>
       </div>
-      <p className="mt-3 text-right type-micro text-stone-400">최근 업데이트 {formatRelativeActivityDate(analytics.lastUpdatedAt)}</p>
     </section>
   )
 }
 
-function StudentDetailCard({ children, icon: Icon, title }: { children: React.ReactNode; icon: typeof Users; title: string }) {
-  return <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><Icon aria-hidden="true" size={15} /></span><h3 className="type-control font-bold text-stone-900">{title}</h3></div>{children}</article>
+function StudentSummaryMetric({ label, value }: { label: string; value: string }) {
+  return <strong aria-label={`${label} ${value}`} className="whitespace-nowrap text-center type-caption text-stone-900">{value}</strong>
+}
+
+function StudentQuizSummary({
+  analytics,
+  student,
+}: {
+  analytics?: ClassroomStudentLearningAnalytics
+  student: ClassroomStudent
+}) {
+  const quizCount = getStudentQuizCount(student, analytics)
+  return <StudentSummaryMetric label="퀴즈" value={quizCount === undefined ? '-' : `${quizCount}건`} />
+}
+
+function StudentDetailSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return <article className="min-w-0 px-6 py-5"><h3 className="type-control font-bold text-stone-900">{title}</h3>{children}</article>
+}
+
+function aggregateQuestionsByMaterial(questions: ClassroomStudentLearningAnalytics['questionsByPage']) {
+  const aggregated = new Map<string, { materialId: string; materialTitle: string; questionCount: number }>()
+  questions.forEach((question) => {
+    const current = aggregated.get(question.materialId)
+    aggregated.set(question.materialId, {
+      materialId: question.materialId,
+      materialTitle: question.materialTitle,
+      questionCount: (current?.questionCount ?? 0) + question.questionCount,
+    })
+  })
+  return [...aggregated.values()]
+}
+
+function groupQuizzesByMaterial(quizzes: ClassroomStudentLearningAnalytics['quizzes']) {
+  const groups = new Map<string, {
+    materialId: string
+    materialTitle: string
+    quizzes: ClassroomStudentLearningAnalytics['quizzes']
+  }>()
+  quizzes.forEach((quiz) => {
+    const current = groups.get(quiz.materialId)
+    if (current) {
+      current.quizzes.push(quiz)
+      return
+    }
+    groups.set(quiz.materialId, {
+      materialId: quiz.materialId,
+      materialTitle: quiz.materialTitle,
+      quizzes: [quiz],
+    })
+  })
+  return [...groups.values()]
+}
+
+function getStudentQuestionCount(student: ClassroomStudent, analytics?: ClassroomStudentLearningAnalytics): number {
+  if (analytics) return analytics.questionsByPage.reduce((sum, question) => sum + question.questionCount, 0)
+  return student.aiQuestionCountLast7Days
 }
 
 function DetailEmptyState({ children }: { children: React.ReactNode }) {
@@ -361,14 +414,14 @@ function QuizStatus({ quiz }: { quiz: ClassroomStudentLearningAnalytics['quizzes
         ? '복습 필요'
         : '결과 대기'
   const className = !quiz.submitted || quiz.passed === null
-    ? 'bg-stone-100 text-stone-500'
+    ? 'text-stone-400'
     : quiz.passed
-      ? 'bg-emerald-50 text-emerald-700'
-      : 'bg-amber-50 text-amber-700'
-  return <span className={cx('shrink-0 rounded-full px-2 py-1 type-micro font-semibold', className)}>{label}</span>
+      ? 'text-emerald-700'
+      : 'text-amber-700'
+  return <span className={cx('w-12 shrink-0 text-right type-caption font-semibold', className)}>{label}</span>
 }
 
-type StudentSortKey = 'name' | 'recentActivity'
+type StudentSortKey = 'name' | 'progress' | 'question' | 'quiz' | 'recentActivity'
 type StudentSortDirection = 'asc' | 'desc'
 type StudentSort = { direction: StudentSortDirection; key: StudentSortKey }
 
@@ -400,7 +453,7 @@ function StudentSortHeader({
       aria-label={`${label} ${nextDirection} 정렬`}
       aria-pressed={isActive}
       className={cx(
-        'flex min-h-8 items-center gap-1 rounded-md text-left hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600',
+        'inline-flex min-h-8 w-fit items-center gap-1 text-left type-caption font-semibold text-stone-500 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600',
         isActive && 'text-brand-700',
         className,
       )}
@@ -433,16 +486,49 @@ function LearningStatusHelp() {
   )
 }
 
-function compareStudents(left: ClassroomStudent, right: ClassroomStudent, sort: StudentSort): number {
+function compareStudents(
+  left: ClassroomStudent,
+  right: ClassroomStudent,
+  sort: StudentSort,
+  analyticsByStudentId: Record<string, ClassroomStudentLearningAnalytics>,
+  classroomId: string,
+): number {
   let comparison: number
   if (sort.key === 'name') {
     comparison = left.name.localeCompare(right.name, 'ko-KR')
-  } else {
+  } else if (sort.key === 'recentActivity') {
     comparison = getActivityTime(left) - getActivityTime(right)
+  } else {
+    const leftValue = getStudentSortValue(left, sort.key, analyticsByStudentId[`${classroomId}:${left.id}`])
+    const rightValue = getStudentSortValue(right, sort.key, analyticsByStudentId[`${classroomId}:${right.id}`])
+    if (leftValue === undefined || rightValue === undefined) {
+      if (leftValue === rightValue) return left.name.localeCompare(right.name, 'ko-KR')
+      return leftValue === undefined ? 1 : -1
+    }
+    comparison = leftValue - rightValue
   }
 
   if (comparison === 0) comparison = left.name.localeCompare(right.name, 'ko-KR')
   return sort.direction === 'asc' ? comparison : -comparison
+}
+
+function getStudentSortValue(
+  student: ClassroomStudent,
+  key: Exclude<StudentSortKey, 'name' | 'recentActivity'>,
+  analytics?: ClassroomStudentLearningAnalytics,
+): number | undefined {
+  if (key === 'progress') return student.averageProgressRate ?? 0
+  if (key === 'question') return getStudentQuestionCount(student, analytics)
+  return getStudentQuizCount(student, analytics)
+}
+
+function getStudentQuizCount(
+  student: ClassroomStudent,
+  analytics?: ClassroomStudentLearningAnalytics,
+): number | undefined {
+  if (student.quizSubmissionCount !== undefined) return student.quizSubmissionCount
+  if (analytics) return analytics.quizzes.filter((quiz) => quiz.submitted).length
+  return undefined
 }
 
 function getActivityTime(student: ClassroomStudent): number {
