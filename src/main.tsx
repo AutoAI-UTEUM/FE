@@ -4,7 +4,11 @@ import { createRoot } from 'react-dom/client'
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 
 import { App } from './app/App'
+import { AppErrorBoundary } from './app/AppErrorBoundary'
 import './index.css'
+import { registerStaleAssetRecovery } from './shared/runtime/staleAssetRecovery'
+
+registerStaleAssetRecovery()
 
 const rootElement = document.getElementById('root')
 
@@ -14,6 +18,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </StrictMode>,
 )
