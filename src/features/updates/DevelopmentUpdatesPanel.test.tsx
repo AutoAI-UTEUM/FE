@@ -8,7 +8,7 @@ afterEach(() => {
 })
 
 describe('DevelopmentUpdatesPanel', () => {
-  it('shows monthly updates as date-grouped development history', async () => {
+  it('shows monthly updates in a calendar and opens the selected date details', async () => {
     const loadMonth = vi.fn().mockResolvedValue({
       availableParts: ['BE', 'FE'],
       repositoryUrls: {},
@@ -33,6 +33,16 @@ describe('DevelopmentUpdatesPanel', () => {
           sha: '123456a',
           url: 'https://github.com/fe-commit',
         },
+        {
+          author: 'FE 개발자',
+          committedAt: '2026-08-25T02:00:00Z',
+          date: '2026-08-25',
+          message: 'fix: 로그인 화면 정리',
+          part: 'FE',
+          repositoryName: 'FE',
+          sha: '765432b',
+          url: 'https://github.com/fe-login-commit',
+        },
       ],
     })
 
@@ -45,10 +55,15 @@ describe('DevelopmentUpdatesPanel', () => {
 
     expect(await screen.findByText('feat: 리포트 API 추가')).toBeInTheDocument()
     expect(screen.getByText('feat: 업데이트 화면 추가')).toBeInTheDocument()
+    expect(screen.getByRole('grid', { name: '2026년 8월 업데이트 달력' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '8월 26일' })).toBeInTheDocument()
     expect(screen.getByText('수요일')).toBeInTheDocument()
-    expect(screen.getByText('2건')).toBeInTheDocument()
-    expect(screen.queryByRole('grid')).not.toBeInTheDocument()
+    expect(screen.getAllByText('2건')).not.toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('gridcell', { name: '2026년 8월 25일, 업데이트 1건' }))
+    expect(screen.getByRole('heading', { name: '8월 25일' })).toBeInTheDocument()
+    expect(screen.getByText('fix: 로그인 화면 정리')).toBeInTheDocument()
+    expect(screen.queryByText('feat: 리포트 API 추가')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'FE' }))
     expect(screen.queryByText('feat: 리포트 API 추가')).not.toBeInTheDocument()

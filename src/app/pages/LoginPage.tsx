@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -111,18 +111,20 @@ export function LoginPage() {
         </p>
       ) : null}
 
-      <form className="mt-6" noValidate onSubmit={handleSubmit}>
-        <TextInput
-          autoComplete="email"
-          error={errors.email}
-          id="login-email"
-          label="이메일"
-          onChange={(event) => updateValue('email', event.target.value)}
-          placeholder="user@example.com"
-          type="email"
-          value={values.email}
-        />
-        <div className="mt-4">
+      <form className="mt-8" noValidate onSubmit={handleSubmit}>
+        <div className="[&_input]:mt-0 [&_input]:border-[#D7DEEB] [&_input]:bg-[#EEF2FB] [&_label]:sr-only">
+          <TextInput
+            autoComplete="email"
+            error={errors.email}
+            id="login-email"
+            label="이메일"
+            onChange={(event) => updateValue('email', event.target.value)}
+            placeholder="user@example.com"
+            type="email"
+            value={values.email}
+          />
+        </div>
+        <div className="mt-3 [&_input]:mt-0 [&_input]:border-[#D7DEEB] [&_input]:bg-[#EEF2FB] [&_label]:sr-only">
           <div className="relative">
             <TextInput
               autoComplete="current-password"
@@ -147,14 +149,6 @@ export function LoginPage() {
             </button>
           </div>
         </div>
-        <div className="mt-2 flex justify-end type-control">
-          <Link
-            className="text-stone-500 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-            to={routes.forgotPassword}
-          >
-            비밀번호 찾기
-          </Link>
-        </div>
         <Button
           className="mt-6 h-11 w-full"
           disabled={isSubmitting}
@@ -169,7 +163,7 @@ export function LoginPage() {
           {serverError}
         </p>
       ) : null}
-      <div className="mt-2.5">
+      <div className="mt-3">
         <GoogleSignInButton
           disabled={isGoogleSubmitting}
           onCredential={(idToken) => void handleGoogleCredential(idToken)}
@@ -187,16 +181,21 @@ export function LoginPage() {
         </p>
       ) : null}
 
-      <p className="mt-6 text-center type-caption text-stone-500">
-        계정이 없으신가요?{' '}
+      <div className="mt-7 flex items-center justify-center gap-4 type-control text-stone-500">
+        <Link
+          className="hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          to={routes.forgotPassword}
+        >
+          비밀번호 찾기
+        </Link>
+        <span aria-hidden="true" className="h-3 w-px bg-stone-200" />
         <Link
           to={routes.signup}
-          className="inline-flex items-center gap-1 font-semibold text-brand-600 underline-offset-4 hover:underline"
+          className="font-semibold text-stone-900 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         >
           회원가입
-          <ArrowRight aria-hidden="true" size={14} />
         </Link>
-      </p>
+      </div>
     </div>
   )
 }

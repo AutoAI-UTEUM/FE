@@ -212,7 +212,7 @@ export function SettingsContent({ className }: { className?: string } = {}) {
           ))}
         </nav>
 
-        <div className="min-h-0 min-w-0 flex-1 space-y-4 lg:overflow-y-auto lg:border-l lg:border-stone-200 lg:pl-5 lg:pr-1">
+        <div className="min-h-0 min-w-0 flex-1 space-y-4 lg:overflow-y-auto lg:pl-5 lg:pr-1">
           {section === 'profile' ? (
             <ProfileSection
               affiliation={affiliation}
@@ -371,7 +371,7 @@ function AppearanceSection({
           <button
             aria-pressed={mode === option.value}
             className={cx(
-              'flex h-12 items-center gap-2.5 rounded-lg border px-3 type-control font-semibold transition-colors',
+              'flex h-12 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 type-control font-semibold transition-colors',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
               mode === option.value
                 ? 'border-brand-600 bg-brand-50 text-brand-700'

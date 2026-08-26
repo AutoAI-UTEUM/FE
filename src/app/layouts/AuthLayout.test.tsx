@@ -17,12 +17,12 @@ afterEach(() => {
 })
 
 describe('AuthLayout', () => {
-  it('places the backend service status in the secondary footer area', async () => {
+  it('places the backend service status in secondary auth pages', async () => {
     render(
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={['/forgot-password']}>
         <Routes>
           <Route element={<AuthLayout />}>
-            <Route path="/login" element={<h1>로그인 폼</h1>} />
+            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
           </Route>
         </Routes>
       </MemoryRouter>,
@@ -53,6 +53,21 @@ describe('AuthLayout', () => {
     })
   })
 
+  it('uses the focused login layout without the secondary status footer', () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route element={<AuthLayout />}>
+            <Route path="/login" element={<h1>로그인 폼</h1>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
+    expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
+  })
+
   it('stops waiting and reports a service problem when health checks time out', async () => {
     vi.useFakeTimers()
     vi.mocked(globalThis.fetch).mockImplementation((_input, init) =>
@@ -66,10 +81,10 @@ describe('AuthLayout', () => {
     )
 
     render(
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={['/forgot-password']}>
         <Routes>
           <Route element={<AuthLayout />}>
-            <Route path="/login" element={<h1>로그인 폼</h1>} />
+            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
           </Route>
         </Routes>
       </MemoryRouter>,
