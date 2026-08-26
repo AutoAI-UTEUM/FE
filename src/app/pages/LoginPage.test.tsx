@@ -76,7 +76,7 @@ describe('LoginPage', () => {
     expect(passwordInput).toHaveAttribute('type', 'password')
   })
 
-  it('places Google login after local login and shows the signup prompt', async () => {
+  it('places Google login after local login and shows the account links', async () => {
     renderLogin()
 
     const localLogin = screen.getByRole('button', { name: '로그인' })
@@ -104,7 +104,8 @@ describe('LoginPage', () => {
       localLogin.compareDocumentPosition(googleLogin) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(screen.getByText('계정이 없으신가요?')).toBeInTheDocument()
+    expect(screen.queryByText('계정이 없으신가요?')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '비밀번호 찾기' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '회원가입' })).toBeInTheDocument()
     expect(screen.queryByText('또는')).not.toBeInTheDocument()
   })

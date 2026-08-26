@@ -6,7 +6,7 @@ export function UpdatesPage() {
   usePageTitle('업데이트')
 
   return (
-    <PageContainer className="max-w-5xl">
+    <PageContainer>
       <DevelopmentUpdatesPanel />
     </PageContainer>
   )
