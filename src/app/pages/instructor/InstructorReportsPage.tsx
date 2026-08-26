@@ -110,10 +110,7 @@ export function InstructorReportsPage() {
       {reportsEnabled && !isLoading && !error && students.length > 0 ? (
         <section aria-label="학습자 리포트 목록" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white">
           <div className="flex shrink-0 flex-col gap-3 border-b border-stone-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="type-body font-bold text-stone-900">수강생 리포트</h2>
-              <p className="mt-0.5 type-caption text-stone-400">학습자를 선택해 새 리포트를 생성하거나 저장된 버전을 확인하세요.</p>
-            </div>
+            <h2 className="type-body font-bold text-stone-900">수강생 리포트</h2>
             <label className="relative block w-full sm:w-64">
               <span className="sr-only">리포트 학습자 검색</span>
               <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />

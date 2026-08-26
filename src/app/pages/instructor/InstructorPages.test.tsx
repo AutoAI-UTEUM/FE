@@ -166,6 +166,13 @@ function stubClassroomsApi(
           questionCount: 3,
           weekNumber: 1,
         },
+        {
+          materialId: 10,
+          materialTitle: 'watermarking.pdf',
+          pageNumber: 9,
+          questionCount: 2,
+          weekNumber: 1,
+        },
       ],
       quizzes: [
         {
@@ -232,6 +239,7 @@ function stubClassroomsApi(
           joinedAt: '2026-08-01T00:00:00Z',
           lastActiveAt: '2026-08-24T08:00:00Z',
           name: '김학습',
+          quizSubmissionCount: 1,
           status: 'ACTIVE',
           studentId: 9,
         },
@@ -242,6 +250,7 @@ function stubClassroomsApi(
           joinedAt: '2026-08-01T00:00:00Z',
           lastActiveAt: '2026-08-23T08:00:00Z',
           name: '이우수',
+          quizSubmissionCount: 3,
           status: 'ACTIVE',
           studentId: 10,
         },
@@ -252,6 +261,7 @@ function stubClassroomsApi(
           joinedAt: '2026-08-01T00:00:00Z',
           lastActiveAt: '2026-08-22T08:00:00Z',
           name: '박느림',
+          quizSubmissionCount: 0,
           status: 'ACTIVE',
           studentId: 11,
         },
@@ -627,8 +637,12 @@ describe('instructor pages', () => {
       .closest('[data-page-container="standard"]')
 
     expect(viewControls.nextElementSibling).toBe(addButton)
+    expect(addButton).toHaveTextContent('개인 일정')
     expect(page).toHaveClass('lg:h-[calc(100dvh-2.5rem)]', 'lg:overflow-hidden')
     expect(screen.getByRole('region', { name: '월간 캘린더' })).toHaveClass('lg:min-h-0')
+    expect(screen.getByRole('region', { name: '캘린더 본문' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: '이번 달 일정' })).toBeInTheDocument()
+    expect(screen.queryByText(/자동으로 파생/)).not.toBeInTheDocument()
   })
 
   it('uses distinct colors for Saturday and Sunday dates', () => {
@@ -665,7 +679,8 @@ describe('instructor pages', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '일정 추가' })).not.toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: '목록' }))
-    const scheduleItem = screen.getByRole('button', { name: /중간고사 범위 공지/ })
+    const scheduleItem = within(screen.getByRole('region', { name: '캘린더 본문' }))
+      .getByRole('button', { name: /중간고사 범위 공지/ })
     expect(scheduleItem).not.toHaveTextContent(/오전|오후|\d{1,2}:\d{2}/)
     fireEvent.click(scheduleItem)
     expect(
@@ -701,7 +716,7 @@ describe('instructor pages', () => {
     expect(await screen.findByRole('link', { name: '학습현황' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
     expect(screen.queryByText('관찰 데이터 축적 중')).not.toBeInTheDocument()
-    expect(await screen.findByText('최근 학습')).toBeInTheDocument()
+    expect((await screen.findAllByText('최근 학습')).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '수강생별 학습 현황 안내' })).toBeInTheDocument()
     expect(screen.getByRole('tooltip')).toHaveTextContent('학습자 프로필을 누르면')
     expect(screen.getByRole('tooltip')).toHaveTextContent('학습자별 집계')
@@ -718,10 +733,16 @@ describe('instructor pages', () => {
     expect(screen.queryByText('3명')).not.toBeInTheDocument()
     expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col')
     expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass('min-h-0', 'flex-1', 'overflow-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
-    expect(screen.getByRole('button', { name: '이름 오름차순 정렬' }).parentElement).toHaveClass('sticky', 'top-0')
-    expect(screen.getByRole('button', { name: '이름 오름차순 정렬' })).toHaveClass('pl-11')
-    expect(screen.queryByText('64%')).not.toBeInTheDocument()
-    expect(screen.queryByText('6건')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('학습 현황 열 제목')).toHaveClass('sticky', 'top-0')
+    expect(screen.getByLabelText('학습 현황 열 제목')).toHaveTextContent('이름진도질문퀴즈최근 학습')
+    expect(screen.getByRole('button', { name: '최근 학습 오름차순 정렬' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '이름 오름차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '진도 내림차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '질문 내림차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '퀴즈 내림차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText('64%')).toBeInTheDocument()
+    expect(screen.getByText('6건')).toBeInTheDocument()
+    expect(screen.getByLabelText('퀴즈 1건')).toBeInTheDocument()
 
     const profileButton = screen.getByRole('button', { name: '김학습 프로필 상세 펼치기' })
     expect(profileButton).toHaveAttribute('aria-expanded', 'false')
@@ -732,13 +753,12 @@ describe('instructor pages', () => {
     expect(screen.getByText('퀴즈 현황')).toBeInTheDocument()
     expect(screen.getAllByText('watermarking.pdf').length).toBeGreaterThan(0)
     expect(screen.getAllByText('참고자료.pdf').length).toBeGreaterThan(0)
-    expect(screen.getByText('미열람')).toBeInTheDocument()
-    expect(screen.getByText('아직 열람하지 않은 자료입니다.')).toBeInTheDocument()
-    expect(screen.getAllByText(/8페이지/).length).toBeGreaterThan(0)
-    expect(screen.getByText('3건')).toBeInTheDocument()
-    expect(screen.getByText('통과')).toBeInTheDocument()
+    expect(screen.getByLabelText('watermarking.pdf 진도 64%')).toBeInTheDocument()
+    expect(screen.getAllByText('5건').length).toBeGreaterThan(0)
+    expect(screen.getByText('4/5')).toBeInTheDocument()
+    expect(screen.getAllByText('통과').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('퀴즈 1건')).toBeInTheDocument()
     expect(screen.getByText('미응시')).toBeInTheDocument()
-    expect(screen.getByText('아직 응시하지 않았습니다.')).toBeInTheDocument()
     expect(screen.queryByText('undefined')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '김학습 프로필 상세 접기' }))
     expect(screen.queryByRole('region', { name: '김학습 상세 학습 현황' })).not.toBeInTheDocument()
@@ -757,6 +777,12 @@ describe('instructor pages', () => {
     expect(screen.getByRole('button', { name: '최근 학습 오름차순 정렬' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '이름 오름차순 정렬' }))
     expect(getStudentOrder()).toEqual(['김학습 학습 현황', '박느림 학습 현황', '이우수 학습 현황'])
+    fireEvent.click(screen.getByRole('button', { name: '진도 내림차순 정렬' }))
+    expect(getStudentOrder()).toEqual(['이우수 학습 현황', '김학습 학습 현황', '박느림 학습 현황'])
+    fireEvent.click(screen.getByRole('button', { name: '질문 내림차순 정렬' }))
+    expect(getStudentOrder()).toEqual(['이우수 학습 현황', '김학습 학습 현황', '박느림 학습 현황'])
+    fireEvent.click(screen.getByRole('button', { name: '퀴즈 내림차순 정렬' }))
+    expect(getStudentOrder()).toEqual(['이우수 학습 현황', '김학습 학습 현황', '박느림 학습 현황'])
     fireEvent.click(screen.getByRole('button', { name: '최근 학습 내림차순 정렬' }))
     expect(getStudentOrder()).toEqual(['김학습 학습 현황', '이우수 학습 현황', '박느림 학습 현황'])
 
