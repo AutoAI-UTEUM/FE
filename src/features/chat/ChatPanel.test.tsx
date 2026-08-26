@@ -750,6 +750,24 @@ $$`,
     expect(screen.getByRole('button', { name: '내 질문 노트에 저장' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '내 질문 복사' }).closest('article')).toBeNull()
   })
+
+  it('localizes quiz type enums in selection messages', async () => {
+    const repository = createRepository({
+      listMessages: vi.fn().mockResolvedValue([
+        { content: '퀴즈 유형 선택: MCQ', id: 'quiz-type-1', senderType: 'USER' },
+        { content: '퀴즈 유형 선택: OX', id: 'quiz-type-2', senderType: 'USER' },
+        { content: '퀴즈 유형 선택: SHORT', id: 'quiz-type-3', senderType: 'USER' },
+        { content: '퀴즈 유형 선택: ESSAY', id: 'quiz-type-4', senderType: 'USER' },
+      ]),
+    })
+    render(<ChatHarness repository={repository} />)
+
+    expect(await screen.findByText('퀴즈 유형 선택: 객관식')).toBeInTheDocument()
+    expect(screen.getByText('퀴즈 유형 선택: OX')).toBeInTheDocument()
+    expect(screen.getByText('퀴즈 유형 선택: 단답형')).toBeInTheDocument()
+    expect(screen.getByText('퀴즈 유형 선택: 서술형')).toBeInTheDocument()
+    expect(screen.queryByText(/퀴즈 유형 선택: (MCQ|SHORT|ESSAY)/)).not.toBeInTheDocument()
+  })
 })
 
 function createRepository(

@@ -721,6 +721,13 @@ function getQuizKindLabel(quizType: string): string {
   return labels[quizType] ?? quizType
 }
 
+function localizeQuizTypeSelection(content: string): string {
+  return content.replace(
+    /(퀴즈\s*유형\s*선택\s*:\s*)(ESSAY|MCQ|OX|SHORT)\b/gu,
+    (_match, prefix: string, quizType: string) => `${prefix}${getQuizKindLabel(quizType)}`,
+  )
+}
+
 function isExplainCurrentPageCommand(value: string): boolean {
   const normalized = value
     .toLowerCase()
@@ -873,11 +880,12 @@ function MessageBubble({
   const time = message.createdAt ? formatTime(message.createdAt) : ''
 
   if (message.role === 'user') {
+    const displayedContent = localizeQuizTypeSelection(message.content)
     return (
       <div className="flex flex-col items-end gap-1">
         <article className="max-w-[85%] rounded-xl rounded-br-[4px] bg-brand-600 px-3.5 py-2.5 text-white">
           <span className="sr-only">내 질문</span>
-          <p className="break-words type-chat-body">{message.content}</p>
+          <p className="break-words type-chat-body">{displayedContent}</p>
         </article>
         <div className="flex items-center justify-end gap-1">
           {message.status === 'failed' ? <span className="mr-1 type-caption font-semibold text-rose-700">전송 실패</span> : null}
