@@ -2,9 +2,13 @@ import { CircleCheckBig, CircleHelp, CircleX, ChevronLeft, ChevronRight, LoaderC
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -32,6 +36,11 @@ import {
 import { createSessionsRepository, type SessionQuizSummary } from '../../features/sessions'
 import { diagnosisPath, routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+
+const DEFAULT_REVIEW_CHAT_WIDTH = 660
+const MIN_REVIEW_CHAT_WIDTH = 360
+const MIN_QUIZ_PANEL_WIDTH = 360
+const REVIEW_PANEL_RESIZER_WIDTH = 6
 
 export function QuizPage() {
   return <QuizWorkspace />
@@ -81,6 +90,9 @@ export function QuizWorkspace({
     materialId?: string
     sessionId: string
   }>()
+  const [reviewChatWidth, setReviewChatWidth] = useState<number | null>(null)
+  const [reviewChatMaxWidth, setReviewChatMaxWidth] = useState(DEFAULT_REVIEW_CHAT_WIDTH)
+  const reviewWorkspaceRef = useRef<HTMLDivElement | null>(null)
   const questions = quiz?.questions ?? []
   const question = questions[currentQuestionIndex] ?? questions[0]
   const diagnosisEntry = result?.diagnosisEntry
@@ -93,9 +105,31 @@ export function QuizWorkspace({
       ? sessionMaterial.materialId
       : undefined
   )
+  const shouldShowReviewChat = showReviewChat && isReadOnly && Boolean(resolvedMaterialId)
   const currentFeedback = result?.feedback.find(
     (candidate) => candidate.questionId === question?.id,
   )
+
+  useEffect(() => {
+    const workspace = reviewWorkspaceRef.current
+    if (!shouldShowReviewChat || !workspace || typeof ResizeObserver === 'undefined') return
+
+    const updatePanelBounds = () => {
+      const nextMaximum = Math.max(
+        MIN_REVIEW_CHAT_WIDTH,
+        workspace.clientWidth - MIN_QUIZ_PANEL_WIDTH - REVIEW_PANEL_RESIZER_WIDTH,
+      )
+      setReviewChatMaxWidth(nextMaximum)
+      setReviewChatWidth((width) => width === null
+        ? null
+        : Math.min(nextMaximum, Math.max(MIN_REVIEW_CHAT_WIDTH, width)))
+    }
+
+    updatePanelBounds()
+    const observer = new ResizeObserver(updatePanelBounds)
+    observer.observe(workspace)
+    return () => observer.disconnect()
+  }, [shouldShowReviewChat])
 
   useEffect(() => {
     if (!quizId) return
@@ -192,6 +226,46 @@ export function QuizWorkspace({
     }
   }
 
+  function resizeReviewChat(clientX: number) {
+    const workspace = reviewWorkspaceRef.current
+    if (!workspace) return
+    const bounds = workspace.getBoundingClientRect()
+    const nextMaximum = Math.max(
+      MIN_REVIEW_CHAT_WIDTH,
+      bounds.width - MIN_QUIZ_PANEL_WIDTH - REVIEW_PANEL_RESIZER_WIDTH,
+    )
+    const nextWidth = bounds.right - clientX - REVIEW_PANEL_RESIZER_WIDTH / 2
+    setReviewChatMaxWidth(nextMaximum)
+    setReviewChatWidth(Math.min(nextMaximum, Math.max(MIN_REVIEW_CHAT_WIDTH, nextWidth)))
+  }
+
+  function handleReviewResizerPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    resizeReviewChat(event.clientX)
+  }
+
+  function handleReviewResizerPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+    resizeReviewChat(event.clientX)
+  }
+
+  function handleReviewResizerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const delta = event.key === 'ArrowLeft' ? 24 : -24
+    setReviewChatWidth((width) => {
+      const currentWidth = width ?? Math.max(
+        MIN_REVIEW_CHAT_WIDTH,
+        ((reviewWorkspaceRef.current?.clientWidth || DEFAULT_REVIEW_CHAT_WIDTH * 2) - REVIEW_PANEL_RESIZER_WIDTH) / 2,
+      )
+      return Math.min(
+        reviewChatMaxWidth,
+        Math.max(MIN_REVIEW_CHAT_WIDTH, currentWidth + delta),
+      )
+    })
+  }
+
   if (!quizId) {
     return (
       <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
@@ -251,7 +325,18 @@ export function QuizWorkspace({
 
   return (
     <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
-      <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <div
+        aria-label={shouldShowReviewChat ? '퀴즈 복습 작업 영역' : undefined}
+        className={shouldShowReviewChat
+          ? `study-session-content min-h-[940px] min-w-0 overflow-hidden bg-white lg:min-h-0 ${embedded ? 'lg:h-full' : 'lg:h-[calc(100dvh-7rem)]'}`
+          : 'min-w-0'}
+        ref={shouldShowReviewChat ? reviewWorkspaceRef : undefined}
+        role={shouldShowReviewChat ? 'region' : undefined}
+        style={shouldShowReviewChat && reviewChatWidth !== null
+          ? { '--chat-panel-width': `${reviewChatWidth}px` } as CSSProperties
+          : undefined}
+      >
+      <section aria-label="퀴즈 문항" className="h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0">
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
           <div className="flex justify-end">
             <span className="whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
@@ -372,15 +457,36 @@ export function QuizWorkspace({
           </div>
         </form>
       </section>
-      {showReviewChat && isReadOnly && resolvedMaterialId ? (
+      {shouldShowReviewChat ? (
+        <div
+          aria-label="퀴즈와 복습 패널 너비 조절"
+          aria-orientation="vertical"
+          aria-valuemax={Math.round(reviewChatMaxWidth)}
+          aria-valuemin={MIN_REVIEW_CHAT_WIDTH}
+          aria-valuenow={reviewChatWidth === null ? undefined : Math.round(reviewChatWidth)}
+          className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex"
+          onDoubleClick={() => setReviewChatWidth(null)}
+          onKeyDown={handleReviewResizerKeyDown}
+          onPointerDown={handleReviewResizerPointerDown}
+          onPointerMove={handleReviewResizerPointerMove}
+          onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
+          role="separator"
+          tabIndex={0}
+          title="드래그하여 퀴즈와 복습 패널 너비 조절, 두 번 클릭하여 동일 너비로 복원"
+        >
+          <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
+        </div>
+      ) : null}
+      {shouldShowReviewChat && resolvedMaterialId ? (
         <DocumentChatPanel
-          className="mt-4 min-h-[520px]"
+          className="!min-h-0 !rounded-none !border-0"
           key={`${resolvedMaterialId}-quiz`}
           materialId={resolvedMaterialId}
           mode="quiz"
           request={apiRequest}
         />
       ) : null}
+      </div>
     </QuizFrame>
   )
 }
