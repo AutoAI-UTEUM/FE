@@ -191,6 +191,20 @@ describe('QuizPage', () => {
 
     const input = await screen.findByLabelText('퀴즈 복습 질문')
     expect(input).toBeEnabled()
+    const reviewWorkspace = screen.getByRole('region', { name: '퀴즈 복습 작업 영역' })
+    expect(reviewWorkspace).toHaveClass(
+      'study-session-content',
+      'lg:h-full',
+      'overflow-hidden',
+    )
+    expect(within(reviewWorkspace).getByRole('region', { name: '퀴즈 문항' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '퀴즈 복습 챗' })).toHaveClass('!rounded-none', '!border-0')
+    const separator = screen.getByRole('separator', { name: '퀴즈와 복습 패널 너비 조절' })
+    expect(separator).not.toHaveAttribute('aria-valuenow')
+    fireEvent.keyDown(separator, { key: 'ArrowRight' })
+    expect(separator).toHaveAttribute('aria-valuenow')
+    fireEvent.doubleClick(separator)
+    expect(separator).not.toHaveAttribute('aria-valuenow')
     fireEvent.change(input, { target: { value: '틀린 이유를 알려줘' } })
     fireEvent.click(screen.getByRole('button', { name: '퀴즈 복습 질문 보내기' }))
 
