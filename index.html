@@ -39,6 +39,30 @@
         font-size: 14px;
       }
 
+      #app-bootstrap-loading p {
+        color: #6e7382;
+        font-size: 14px;
+        margin: 0;
+        text-align: center;
+      }
+
+      #app-bootstrap-loading button {
+        background: #20263a;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        min-height: 40px;
+        padding: 0 16px;
+      }
+
+      #app-bootstrap-loading button:hover {
+        background: #10141f;
+      }
+
       #app-bootstrap-loading i {
         animation: app-loading-spin 0.8s linear infinite;
         border: 2px solid #e3e6ee;
@@ -64,7 +88,7 @@
   </head>
   <body>
     <div id="root">
-      <div id="app-bootstrap-loading" role="status">
+      <div id="app-bootstrap-loading" aria-live="polite" role="status">
         <div>
           <strong>으뜸</strong>
           <i aria-hidden="true"></i>
@@ -72,6 +96,83 @@
         </div>
       </div>
     </div>
+    <script>
+      ;(() => {
+        const reloadStorageKey = 'uteum:entry-reload-at'
+        const reloadCooldownMs = 60_000
+        const reloadQueryKey = '__uteum_reload'
+
+        const getLoadingElement = () =>
+          document.getElementById('app-bootstrap-loading')
+
+        const getFreshUrl = () => {
+          const url = new URL(window.location.href)
+          url.searchParams.set(reloadQueryKey, String(Date.now()))
+          return url.toString()
+        }
+
+        const showRetry = () => {
+          const loadingElement = getLoadingElement()
+          if (!loadingElement) return
+
+          const content = document.createElement('div')
+          const title = document.createElement('strong')
+          const description = document.createElement('p')
+          const retryButton = document.createElement('button')
+
+          title.textContent = '서비스를 불러오지 못했습니다.'
+          description.textContent =
+            '이전 버전의 파일이 남아 있을 수 있습니다. 다시 시도해 주세요.'
+          retryButton.textContent = '다시 시도'
+          retryButton.type = 'button'
+          retryButton.addEventListener('click', () => {
+            window.location.replace(getFreshUrl())
+          })
+
+          content.append(title, description, retryButton)
+          loadingElement.replaceChildren(content)
+          loadingElement.setAttribute('role', 'alert')
+        }
+
+        window.__uteumEntryLoadFailed = () => {
+          if (!getLoadingElement()) return
+
+          const now = Date.now()
+          let lastReloadAt = 0
+
+          try {
+            lastReloadAt =
+              Number(window.sessionStorage.getItem(reloadStorageKey)) || 0
+          } catch {
+            // A visible retry action still works when storage is unavailable.
+          }
+
+          if (now - lastReloadAt < reloadCooldownMs) {
+            showRetry()
+            return
+          }
+
+          try {
+            window.sessionStorage.setItem(reloadStorageKey, String(now))
+          } catch {
+            // The cache-busting URL is sufficient for a single recovery attempt.
+          }
+
+          window.location.replace(getFreshUrl())
+        }
+
+        window.addEventListener(
+          'error',
+          (event) => {
+            if (event.target instanceof HTMLScriptElement) {
+              window.__uteumEntryLoadFailed()
+            }
+          },
+          true,
+        )
+        window.setTimeout(window.__uteumEntryLoadFailed, 10_000)
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
