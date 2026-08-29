@@ -64,7 +64,13 @@ jobs:
           if [[ "$entry_asset" != /* ]]; then
             entry_asset="/$entry_asset"
           fi
+          style_asset="$(sed -nE 's#.*<link[^>]+href="([^"]+\.css)"[^>]*>.*#\1#p' dist/index.html | head -n 1)"
+          test -n "$style_asset"
+          if [[ "$style_asset" != /* ]]; then
+            style_asset="/$style_asset"
+          fi
           echo "entry_asset=$entry_asset" >> "$GITHUB_OUTPUT"
+          echo "style_asset=$style_asset" >> "$GITHUB_OUTPUT"
 
       - name: Copy dist to production server
         uses: appleboy/scp-action@v1
@@ -97,15 +103,24 @@ jobs:
         shell: bash
         env:
           EXPECTED_ENTRY: ${{ steps.build_metadata.outputs.entry_asset }}
+          EXPECTED_STYLE: ${{ steps.build_metadata.outputs.style_asset }}
         run: |
           set -euo pipefail
           for attempt in $(seq 1 6); do
             live_html="$(curl --fail --silent --show-error \
               -H 'Cache-Control: no-cache' \
-              "https://uteum.com/?deploy=${GITHUB_SHA}&attempt=${attempt}")"
-            if printf '%s' "$live_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY"; then
+              "https://www.uteum.com/?deploy=${GITHUB_SHA}&attempt=${attempt}")"
+            if printf '%s' "$live_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY" \
+              && printf '%s' "$live_html" | grep --fixed-strings --quiet '<link rel="canonical" href="https://www.uteum.com/"' \
+              && printf '%s' "$live_html" | grep --fixed-strings --quiet '<meta property="og:url" content="https://www.uteum.com/"'; then
+              robots="$(curl --fail --silent --show-error "https://www.uteum.com/robots.txt")"
+              sitemap="$(curl --fail --silent --show-error "https://www.uteum.com/sitemap.xml")"
+              printf '%s' "$robots" | grep --fixed-strings --quiet 'Sitemap: https://www.uteum.com/sitemap.xml'
+              printf '%s' "$sitemap" | grep --fixed-strings --quiet '<loc>https://www.uteum.com/</loc>'
               curl --fail --silent --show-error \
-                "https://uteum.com${EXPECTED_ENTRY}" > /dev/null
+                "https://www.uteum.com${EXPECTED_ENTRY}" > /dev/null
+              curl --fail --silent --show-error \
+                "https://www.uteum.com${EXPECTED_STYLE}" > /dev/null
               echo "Production FE deployed with expected entry: $EXPECTED_ENTRY"
               exit 0
             fi
