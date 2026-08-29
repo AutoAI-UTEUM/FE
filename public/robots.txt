@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /api
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /auth/
+Disallow: /classrooms
+Disallow: /materials
+Disallow: /sessions
+Disallow: /quizzes
+Disallow: /exams
+Disallow: /notes
+Disallow: /settings
+Disallow: /updates
+Disallow: /calendar
+Disallow: /learning-status
+Disallow: /announcements
+Disallow: /entrance-requests
+Disallow: /review-quizzes
+
+Sitemap: https://www.uteum.com/sitemap.xml
