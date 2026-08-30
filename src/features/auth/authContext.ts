@@ -43,8 +43,8 @@ export interface AuthContextValue {
   clearGoogleSignup: () => void
   isAuthenticated: boolean
   isInitializing: boolean
-  login: (values: LoginFormValues) => Promise<void>
-  loginWithGoogle: (values: GoogleAuthValues) => Promise<void>
+  login: (values: LoginFormValues) => Promise<AuthUser>
+  loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthUser>
   logoutReason: LogoutReason | null
   logout: () => Promise<void>
   pendingGoogleIdToken: string | null

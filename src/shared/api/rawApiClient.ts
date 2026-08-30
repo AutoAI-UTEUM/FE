@@ -1,6 +1,7 @@
 import { getApiBaseUrl } from '../config/env'
 import { ApiClientError } from './ApiClientError'
 import { isApiFailure } from './contracts'
+import { mapRateLimitError } from './rateLimitError'
 
 export interface RawApiRequestOptions extends RequestInit {
   acceptStatuses?: number[]
@@ -56,11 +57,7 @@ export async function rawApiRequest(
 
 async function mapRawResponseError(response: Response): Promise<ApiClientError> {
   if (response.status === 429) {
-    return new ApiClientError({
-      code: 'RATE_LIMITED',
-      message: '요청이 많아요, 잠시 후 다시 시도해 주세요.',
-      status: 429,
-    })
+    return mapRateLimitError(response)
   }
 
   const payload = await readJson(response)

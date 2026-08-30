@@ -11,6 +11,7 @@ import {
   LogOut,
   NotebookPen,
   Settings,
+  ShieldCheck,
   Trash2,
   UserPlus,
   X,
@@ -25,7 +26,7 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
-import { getRoleLabel, isInstructorRole, useAuth } from '../../features/auth'
+import { getRoleLabel, isAdminRole, isInstructorRole, useAuth } from '../../features/auth'
 import {
   CLASSROOMS_CHANGED_EVENT,
   createClassroomsRepository,
@@ -90,6 +91,7 @@ export function AppLayout() {
     url: string
   } | null>(null)
   const roleLabel = getRoleLabel(user?.role)
+  const isAdmin = isAdminRole(user?.role)
   const isInstructor = isInstructorRole(user?.role)
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
@@ -102,9 +104,12 @@ export function AppLayout() {
   const unreadNotificationCount = notifications.filter(
     (notification) => !notification.readAt,
   ).length
-  const primaryNavigation = useMemo(() => isInstructor
-    ? instructorNavigation
-    : learnerNavigation, [isInstructor])
+  const primaryNavigation = useMemo(() => isAdmin
+    ? adminNavigation
+    : isInstructor
+      ? instructorNavigation
+      : learnerNavigation, [isAdmin, isInstructor])
+  const homeRoute = isAdmin ? routes.admin : routes.classrooms
   const avatarSource = user?.avatarUrl
   const isDirectAvatarSource = avatarSource?.startsWith('blob:')
     || avatarSource?.startsWith('data:')
@@ -147,6 +152,8 @@ export function AppLayout() {
   }, [avatarSource, isDirectAvatarSource, rawApiRequest])
 
   useEffect(() => {
+    if (isAdmin) return
+
     let cancelled = false
     const refresh = () => {
       classroomsRepository
@@ -174,7 +181,7 @@ export function AppLayout() {
       window.removeEventListener(CLASSROOMS_CHANGED_EVENT, refresh)
       window.removeEventListener(JOIN_REQUESTS_CHANGED_EVENT, refresh)
     }
-  }, [classroomsRepository, isInstructor])
+  }, [classroomsRepository, isAdmin, isInstructor])
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -221,6 +228,8 @@ export function AppLayout() {
   }, [isNotificationsOpen])
 
   useEffect(() => {
+    if (isAdmin) return
+
     const controller = new AbortController()
     notificationsRepository.list(controller.signal)
       .then((items) => {
@@ -240,7 +249,7 @@ export function AppLayout() {
         if (!controller.signal.aborted) setIsLoadingNotifications(false)
       })
     return () => controller.abort()
-  }, [notificationReloadKey, notificationsRepository])
+  }, [isAdmin, notificationReloadKey, notificationsRepository])
 
   async function markAllNotificationsRead() {
     const unread = notifications.filter((notification) => !notification.readAt)
@@ -357,7 +366,7 @@ export function AppLayout() {
                 'flex shrink-0 items-center gap-2.5 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
                 isCollapsed && 'lg:justify-center lg:px-0',
               )}
-              to={routes.classrooms}
+              to={homeRoute}
             >
               <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
                 <BookOpenCheck aria-hidden="true" size={16} />
@@ -372,7 +381,7 @@ export function AppLayout() {
                 isCollapsed && 'lg:flex-col',
               )}
             >
-              <div className="relative" ref={notificationsRef}>
+              {!isAdmin ? <div className="relative" ref={notificationsRef}>
                 <button
                   aria-expanded={isNotificationsOpen}
                   aria-haspopup="dialog"
@@ -411,7 +420,7 @@ export function AppLayout() {
                     }}
                   />
                 ) : null}
-              </div>
+              </div> : null}
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex"
@@ -803,6 +812,10 @@ const instructorNavigation: Array<{ icon: LucideIcon; label: string; to: string 
   { icon: LayoutGrid, label: '강의실', to: routes.classrooms },
   { icon: CalendarDays, label: '캘린더', to: routes.calendar },
   { icon: UserPlus, label: '입장 요청', to: routes.entranceRequests },
+]
+
+const adminNavigation: Array<{ icon: LucideIcon; label: string; to: string }> = [
+  { icon: ShieldCheck, label: '관리자', to: routes.admin },
 ]
 
 function classroomDotClassName(_color: Classroom['color']): string {

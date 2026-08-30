@@ -106,6 +106,57 @@ describe('AppRoutes', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('routes administrators to the read-only admin workspace', async () => {
+    renderRoute('/', {
+      email: 'admin@example.com',
+      name: '관리자',
+      role: 'ADMIN',
+    })
+
+    expect(await screen.findByRole('heading', { name: '관리자' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '관리자 메뉴' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '강의실' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /알림/ })).not.toBeInTheDocument()
+  })
+
+  it('shows nullable admin AI token totals as unavailable', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/api/admin/ai-usage/summary') {
+        return apiSuccess({
+          daily: [{ date: '2026-08-30', callCount: 4, successCount: 3, failCount: 1, inputTokens: null, outputTokens: null, reasoningTokens: null }],
+          features: [{ feature: 'TURN', callCount: 4, inputTokens: null, outputTokens: null, reasoningTokens: null }],
+        })
+      }
+      if (url.pathname === '/api/admin/ai-usage/users') {
+        return apiSuccess({ items: [{ userId: 1, email: 'learner@example.com', name: '학습자', status: 'ACTIVE', callCount: 4, inputTokens: null, outputTokens: null, reasoningTokens: null }] })
+      }
+      return undefined
+    })
+
+    renderRoute('/admin', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 사용량' }))
+
+    expect(await screen.findByRole('heading', { name: '일별 사용 추이' })).toBeInTheDocument()
+    expect(screen.getByText('총 토큰').parentElement).toHaveTextContent('-')
+    expect(screen.getByTitle('2026-08-30: 호출 4건, 토큰 -')).toBeInTheDocument()
+  })
+
+  it('guides administrators to sign in again after a 403 response', async () => {
+    installApiFixtureServer((request) => {
+      if (new URL(request.url).pathname === '/api/admin/users') {
+        return apiFailure('FORBIDDEN', '접근 권한이 없습니다.', 403)
+      }
+      return undefined
+    })
+
+    renderRoute('/admin', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
+
+    expect(await screen.findByText(/관리자 권한이 변경되었어요/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '다시 로그인' }))
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+  })
+
   it.each([
     ['학습자', { email: 'learner@example.com', name: '학습자', role: 'LEARNER' as const }],
     ['강의자', { email: 'instructor@example.com', name: '강의자', role: 'INSTRUCTOR' as const }],
