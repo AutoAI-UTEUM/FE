@@ -1,5 +1,6 @@
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, ShieldCheck } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import {
   createAdminRepository,
@@ -18,6 +19,7 @@ import { useAuth } from '../../../features/auth'
 import { ApiClientError } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { Button } from '../../../shared/ui'
+import { routes } from '../../routes'
 
 type AdminTab = 'users' | 'classrooms' | 'ai-usage'
 
@@ -83,7 +85,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
   const [result, setResult] = useState<AdminPageResult<AdminUserSummary> | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<AdminUserDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -101,7 +103,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
         setError(null)
       })
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(adminErrorMessage(reason))
+        if (!controller.signal.aborted) setError(toAdminError(reason))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
@@ -117,7 +119,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
     }
     setExpandedId(userId)
     setDetail(null)
-    void repository.getUser(userId).then(setDetail).catch((reason: unknown) => setError(adminErrorMessage(reason)))
+    void repository.getUser(userId).then(setDetail).catch((reason: unknown) => setError(toAdminError(reason)))
   }
 
   return (
@@ -138,7 +140,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
           <FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 가입순'], ['NAME', '이름순']]} />
         </form>
       </div>
-      {error ? <PanelMessage message={error} tone="error" /> : null}
+      {error ? <AdminErrorMessage error={error} /> : null}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[780px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500">
@@ -177,14 +179,14 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
   const [result, setResult] = useState<AdminPageResult<AdminClassroomSummary> | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<AdminClassroomDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const controller = new AbortController()
     repository.listClassrooms({ page, size: 20, sort }, controller.signal)
       .then((data) => { setResult(data); setError(null) })
-      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(adminErrorMessage(reason)) })
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(toAdminError(reason)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [page, repository, sort])
@@ -193,13 +195,13 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
     if (expandedId === classroomId) { setExpandedId(null); setDetail(null); return }
     setExpandedId(classroomId)
     setDetail(null)
-    void repository.getClassroom(classroomId).then(setDetail).catch((reason: unknown) => setError(adminErrorMessage(reason)))
+    void repository.getClassroom(classroomId).then(setDetail).catch((reason: unknown) => setError(toAdminError(reason)))
   }
 
   return (
     <div className="flex h-full min-h-[560px] flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">전체 강의실</h2><p className="type-caption text-stone-500">{formatCount(result?.totalElements)}개</p></div><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
-      {error ? <PanelMessage message={error} tone="error" /> : null}
+      {error ? <AdminErrorMessage error={error} /> : null}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[720px] border-collapse text-left"><thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500"><tr><th className="px-4 py-3">강의실</th><th className="px-4 py-3">개설자</th><th className="px-4 py-3">인원</th><th className="px-4 py-3">상태</th><th className="px-4 py-3">생성일</th><th className="w-12 px-4 py-3"><span className="sr-only">상세</span></th></tr></thead><tbody>
           {result?.items.map((classroom) => <ClassroomRows classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} onToggle={() => toggleDetail(classroom.id)} />)}
@@ -223,7 +225,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
   const [range, setRange] = useState(initialRange)
   const [summary, setSummary] = useState<AiUsageSummary | null>(null)
   const [users, setUsers] = useState<AiUsageUser[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -232,17 +234,22 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
       repository.getAiUsageSummary(range, controller.signal),
       repository.getAiUsageUsers({ ...range, limit: 20 }, controller.signal),
     ]).then(([nextSummary, nextUsers]) => { setSummary(nextSummary); setUsers(nextUsers); setError(null) })
-      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(adminErrorMessage(reason)) })
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(toAdminError(reason)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [range, repository])
 
-  const totals = (summary?.daily ?? []).reduce((value, day) => ({ calls: value.calls + day.callCount, failures: value.failures + day.failCount, tokens: value.tokens + tokenTotal(day) }), { calls: 0, failures: 0, tokens: 0 })
+  const daily = summary?.daily ?? []
+  const totals = {
+    calls: daily.reduce((total, day) => total + day.callCount, 0),
+    failures: daily.reduce((total, day) => total + day.failCount, 0),
+    tokens: sumNullableTokenTotals(daily),
+  }
 
   return <div className="flex h-full min-h-[560px] flex-col"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">AI 사용량</h2><p className="type-caption text-stone-500">호출 및 토큰 사용 현황</p></div><form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); setRange({ from, to }) }}><label className="type-caption text-stone-500">시작일 <input className="ml-1 h-9 rounded-lg border border-stone-200 px-2 text-stone-800" max={to} onChange={(event) => setFrom(event.target.value)} type="date" value={from} /></label><label className="type-caption text-stone-500">종료일 <input className="ml-1 h-9 rounded-lg border border-stone-200 px-2 text-stone-800" min={from} onChange={(event) => setTo(event.target.value)} type="date" value={to} /></label><Button size="sm" type="submit">조회</Button></form></div>
-    {error ? <PanelMessage message={error} tone="error" /> : null}
+    {error ? <AdminErrorMessage error={error} /> : null}
     <div className="min-h-0 flex-1 overflow-auto"><div className="grid border-b border-stone-200 sm:grid-cols-3"><Metric label="총 호출" value={`${formatCount(totals.calls)}건`} /><Metric label="실패" value={`${formatCount(totals.failures)}건`} /><Metric label="총 토큰" value={formatCount(totals.tokens)} /></div>
-      {loading ? <PanelMessage message="AI 사용량을 불러오는 중입니다." /> : <div className="grid xl:grid-cols-2"><UsageTable summary={summary} /><UsersUsageTable users={users} /></div>}
+      {loading ? <PanelMessage message="AI 사용량을 불러오는 중입니다." /> : <><DailyUsageChart daily={daily} /><div className="grid xl:grid-cols-2"><UsageTable summary={summary} /><UsersUsageTable users={users} /></div></>}
     </div>
   </div>
 }
@@ -255,20 +262,49 @@ function UsersUsageTable({ users }: { users: AiUsageUser[] }) {
   return <div><h3 className="border-b border-stone-100 px-4 py-3 type-control font-bold text-stone-900">사용자별 호출 상위</h3><table className="w-full text-left type-caption"><thead className="bg-[#F7F8FA] text-stone-500"><tr><th className="px-4 py-2">회원</th><th className="px-4 py-2 text-right">호출</th><th className="px-4 py-2 text-right">토큰</th></tr></thead><tbody>{users.map((user) => <tr className="border-b border-stone-100" key={user.userId}><td className="px-4 py-2.5"><p className="font-medium text-stone-800">{user.name}</p><p className="text-stone-400">{user.email}</p></td><td className="px-4 py-2.5 text-right">{formatCount(user.callCount)}</td><td className="px-4 py-2.5 text-right">{formatCount(tokenTotal(user))}</td></tr>)}</tbody></table></div>
 }
 
+function DailyUsageChart({ daily }: { daily: AiUsageSummary['daily'] }) {
+  const maxCalls = Math.max(1, ...daily.map((day) => day.callCount))
+  const knownTokens = daily.map(tokenTotal).filter((value): value is number => value !== null)
+  const maxTokens = Math.max(1, ...knownTokens)
+
+  return (
+    <section className="border-b border-stone-200 px-4 py-4" aria-labelledby="daily-usage-title">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 type-control font-bold text-stone-900" id="daily-usage-title"><BarChart3 aria-hidden="true" size={16} />일별 사용 추이</h3>
+        <div className="flex items-center gap-4 type-caption text-stone-500"><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-brand-700" />호출</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-emerald-500" />토큰</span></div>
+      </div>
+      {daily.length === 0 ? <p className="py-10 text-center type-body text-stone-500">선택한 기간의 사용 기록이 없습니다.</p> : (
+        <div className="overflow-x-auto pb-2">
+          <div className="flex min-w-max items-end gap-2" role="img" aria-label="날짜별 AI 호출 수와 토큰 사용량 막대 차트">
+            {daily.map((day) => {
+              const tokens = tokenTotal(day)
+              return <div className="flex w-14 shrink-0 flex-col items-center" key={day.date} title={`${day.date}: 호출 ${formatCount(day.callCount)}건, 토큰 ${formatCount(tokens)}`}><div className="flex h-28 items-end gap-1"><span className="w-3 rounded-t-sm bg-brand-700" style={{ height: `${Math.max(3, (day.callCount / maxCalls) * 100)}%` }} /><span className="w-3 rounded-t-sm bg-emerald-500" style={{ height: tokens === null ? 0 : `${Math.max(3, (tokens / maxTokens) * 100)}%` }} /></div><span className="mt-2 type-caption text-stone-500">{formatMonthDay(day.date)}</span></div>
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function Metric({ label, value }: { label: string; value: string }) { return <div className="border-b border-stone-100 px-4 py-4 sm:border-r sm:last:border-r-0"><p className="type-caption text-stone-500">{label}</p><p className="mt-1 type-section-title font-bold text-stone-950">{value}</p></div> }
 
 function FilterSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: Array<[string, string]>; value: string }) { return <label><span className="sr-only">{label}</span><select className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600" onChange={(event) => onChange(event.target.value)} value={value}>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label> }
 
 function Pagination({ onChange, page, totalPages }: { onChange: (page: number) => void; page: number; totalPages: number }) { return <div className="flex h-12 items-center justify-end gap-2 border-t border-stone-200 px-4 type-caption text-stone-500"><span>{totalPages === 0 ? 0 : page + 1} / {totalPages}</span><button aria-label="이전 페이지" className="flex size-8 items-center justify-center rounded-md border border-stone-200 disabled:opacity-40" disabled={page <= 0} onClick={() => onChange(page - 1)} type="button"><ChevronLeft size={15} /></button><button aria-label="다음 페이지" className="flex size-8 items-center justify-center rounded-md border border-stone-200 disabled:opacity-40" disabled={page + 1 >= totalPages} onClick={() => onChange(page + 1)} type="button"><ChevronRight size={15} /></button></div> }
 
-function PanelMessage({ message, tone = 'default' }: { message: string; tone?: 'default' | 'error' }) { return <p className={tone === 'error' ? 'border-b border-rose-100 bg-rose-50 px-4 py-3 type-body text-rose-700' : 'px-4 py-10 text-center type-body text-stone-500'} role={tone === 'error' ? 'alert' : 'status'}>{message}</p> }
+function PanelMessage({ action, message, tone = 'default' }: { action?: React.ReactNode; message: string; tone?: 'default' | 'error' }) { return <div className={tone === 'error' ? 'flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-4 py-3 type-body text-rose-700' : 'px-4 py-10 text-center type-body text-stone-500'} role={tone === 'error' ? 'alert' : 'status'}><span>{message}</span>{action}</div> }
+function AdminErrorMessage({ error }: { error: AdminErrorInfo }) { const { logout } = useAuth(); const navigate = useNavigate(); const action = error.forbidden ? <Button onClick={() => { void logout().finally(() => navigate(routes.login, { replace: true })) }} size="sm" variant="secondary">다시 로그인</Button> : undefined; return <PanelMessage action={action} message={error.message} tone="error" /> }
 function StatusBadge({ status }: { status: string }) { const active = status === 'ACTIVE'; return <span className={active ? 'inline-flex rounded-md bg-emerald-50 px-2 py-1 type-caption font-semibold text-emerald-700' : 'inline-flex rounded-md bg-stone-100 px-2 py-1 type-caption font-semibold text-stone-500'}>{active ? '활성' : status === 'DELETED' ? '탈퇴' : status}</span> }
 function roleLabel(role: string) { return role === 'ADMIN' ? '관리자' : role === 'INSTRUCTOR' || role === 'TEACHER' ? '강의자' : '학습자' }
-function formatCount(value: number | undefined) { return (value ?? 0).toLocaleString('ko-KR') }
+function formatCount(value: number | null | undefined) { return value == null ? '-' : value.toLocaleString('ko-KR') }
 function formatDate(value: string) { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(value)) }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }
 function defaultDateRange() { const to = new Date(); const from = new Date(to); from.setDate(from.getDate() - 6); return { from: localDate(from), to: localDate(to) } }
 function localDate(value: Date) { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(value) }
-function adminErrorMessage(error: unknown) { if (error instanceof ApiClientError && error.status === 403) return '관리자 권한이 필요합니다.'; return error instanceof Error ? error.message : '관리자 정보를 불러오지 못했습니다.' }
+type AdminErrorInfo = { forbidden: boolean; message: string }
+function toAdminError(error: unknown): AdminErrorInfo { if (error instanceof ApiClientError && error.status === 403) return { forbidden: true, message: '관리자 권한이 변경되었어요. 다시 로그인하면 현재 권한에 맞는 화면으로 이동합니다.' }; return { forbidden: false, message: error instanceof Error ? error.message : '관리자 정보를 불러오지 못했습니다.' } }
 function featureLabel(feature: string) { return ({ TURN: '학습 대화', DOC_CHAT: '자료 채팅', GRADE: '채점', QUIZ_ASSESSMENT: '퀴즈 평가', DIAGNOSIS: '진단', REPORT: '리포트', EXAM_DRAFT: '시험 초안', OUTLINE: '개요', CAPTIONS: '자막', CRITERIA: '평가 기준', EXTRACT: '문서 추출' } as Record<string, string>)[feature] ?? feature }
-function tokenTotal(value: { inputTokens: number | null; outputTokens: number | null; reasoningTokens: number | null }) { return (value.inputTokens ?? 0) + (value.outputTokens ?? 0) + (value.reasoningTokens ?? 0) }
+function tokenTotal(value: { inputTokens: number | null; outputTokens: number | null; reasoningTokens: number | null }) { const tokens = [value.inputTokens, value.outputTokens, value.reasoningTokens]; return tokens.every((token) => token === null) ? null : tokens.reduce<number>((total, token) => total + (token ?? 0), 0) }
+function sumNullableTokenTotals(values: Array<{ inputTokens: number | null; outputTokens: number | null; reasoningTokens: number | null }>) { const totals = values.map(tokenTotal).filter((value): value is number => value !== null); return totals.length === 0 ? null : totals.reduce((sum, value) => sum + value, 0) }
+function formatMonthDay(value: string) { const [, month, day] = value.split('-'); return `${Number(month)}/${Number(day)}` }
