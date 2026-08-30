@@ -1,6 +1,7 @@
 import { getApiBaseUrl } from '../config/env'
 import { ApiClientError } from './ApiClientError'
 import { isApiFailure, isApiSuccess, type ApiSuccess } from './contracts'
+import { mapRateLimitError } from './rateLimitError'
 
 type JsonBody = Record<string, unknown> | unknown[]
 
@@ -58,11 +59,7 @@ export async function apiRequest<T>(
   }
 
   if (response.status === 429) {
-    throw new ApiClientError({
-      code: 'RATE_LIMITED',
-      message: '요청이 많아요, 잠시 후 다시 시도해 주세요.',
-      status: 429,
-    })
+    throw await mapRateLimitError(response)
   }
 
   const payload = await parseEnvelope(response)
