@@ -8,6 +8,7 @@ import {
   mapAuthErrorToFormErrors,
   useAuth,
   validateLoginForm,
+  isAdminRole,
   type LoginFormErrors,
   type LoginFormValues,
 } from '../../features/auth'
@@ -54,8 +55,8 @@ export function LoginPage() {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await login(values)
-      navigate(routes.classrooms, { replace: true })
+      const user = await login(values)
+      navigate(isAdminRole(user.role) ? routes.admin : routes.classrooms, { replace: true })
     } catch (error) {
       const formErrors = mapAuthErrorToFormErrors(error)
       if (formErrors) setErrors(formErrors as LoginFormErrors)
@@ -76,8 +77,8 @@ export function LoginPage() {
     setGoogleError(null)
 
     try {
-      await loginWithGoogle({ idToken })
-      navigate(routes.classrooms, { replace: true })
+      const user = await loginWithGoogle({ idToken })
+      navigate(isAdminRole(user.role) ? routes.admin : routes.classrooms, { replace: true })
     } catch (error) {
       if (
         error instanceof ApiClientError &&

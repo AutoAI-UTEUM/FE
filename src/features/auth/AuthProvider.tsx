@@ -203,6 +203,7 @@ export function AuthProvider({
     async (values: LoginFormValues) => {
       const result = await repository.login(values)
       beginSession(result.accessToken, result.user)
+      return result.user
     },
     [beginSession, repository],
   )
@@ -212,6 +213,7 @@ export function AuthProvider({
       const result = await repository.loginWithGoogle(values)
       setPendingGoogleIdToken(null)
       beginSession(result.accessToken, result.user)
+      return result.user
     },
     [beginSession, repository],
   )

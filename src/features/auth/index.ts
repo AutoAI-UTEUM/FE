@@ -5,11 +5,13 @@ export {
 } from './AuthProvider'
 export { RequireAuth } from './RequireAuth'
 export { RequireInstructor } from './RequireInstructor'
+export { RequireAdmin } from './RequireAdmin'
+export { RequireNonAdmin } from './RequireNonAdmin'
 export { GoogleSignInButton } from './GoogleSignInButton'
 export { useAuth } from './useAuth'
 export { createUserSettingsRepository } from './userSettingsRepository'
 export type { AiAnswerStyle, UserPreferences } from './userSettingsRepository'
-export { getRoleLabel, isInstructorRole } from './authRoles'
+export { getRoleLabel, isAdminRole, isInstructorRole } from './authRoles'
 export type { AuthContextValue, AuthUser } from './authContext'
 export type {
   AuthenticatedRawRequest,

@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
-import { RequireAuth, RequireInstructor } from '../features/auth'
+import { RequireAdmin, RequireAuth, RequireInstructor, RequireNonAdmin } from '../features/auth'
 import { RouteLoadingScreen } from '../shared/ui'
 import { AppLayout } from './layouts/AppLayout'
 import { LegacyClassroomRouteRedirect, LegacyClassroomSettingsRedirect, LegacyExamDetailRedirect } from './LegacyRouteRedirects'
@@ -39,6 +39,7 @@ const QuizPage = lazy(() => import('./pages/QuizPage').then((module) => ({ defau
 const SessionDetailPage = lazy(() => import('./pages/SessionDetailPage').then((module) => ({ default: module.SessionDetailPage })))
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
 const UpdatesPage = lazy(() => import('./pages/UpdatesPage').then((module) => ({ default: module.UpdatesPage })))
+const AdminPage = lazy(() => import('./pages/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
 
 export function AppRoutes() {
   return (
@@ -62,6 +63,10 @@ export function AppRoutes() {
 
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
+          <Route element={<RequireAdmin />}>
+            <Route path={routes.admin} element={<AdminPage />} />
+          </Route>
+          <Route element={<RequireNonAdmin />}>
           <Route path={routes.classrooms} element={<ClassroomsPage />} />
           <Route path={routes.materials} element={<MaterialsPage />} />
           <Route path={routes.materialViewer} element={<MaterialViewerRedirectPage />} />
@@ -109,6 +114,7 @@ export function AppRoutes() {
             <Route path={routes.classroomEntranceRequests} element={<Navigate to={routes.entranceRequests} replace />} />
             <Route path={routes.classroomStudentReports} element={<InstructorStudentReportsPage />} />
             <Route path={routes.classroomReportDetail} element={<InstructorReportDetailPage />} />
+          </Route>
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

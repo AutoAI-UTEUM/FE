@@ -68,8 +68,32 @@ describe('rawApiRequest', () => {
 
     await expect(rawApiRequest('/api/materials')).rejects.toMatchObject({
       code: 'RATE_LIMITED',
-      message: '요청이 많아요, 잠시 후 다시 시도해 주세요.',
+      message: '요청이 많아요. 잠시 후 다시 시도해 주세요.',
       status: 429,
+    })
+  })
+
+  it('preserves JSON quota errors for streaming requests', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'AI_QUOTA_EXCEEDED',
+            details: [],
+            message: '일일 AI 사용 한도를 초과했습니다.',
+          },
+          success: false,
+          traceId: 'stream-quota-trace',
+        }),
+        { status: 429 },
+      ),
+    )
+
+    await expect(rawApiRequest('/api/sessions/1/turns/stream')).rejects.toMatchObject({
+      code: 'AI_QUOTA_EXCEEDED',
+      message: '오늘의 AI 사용 한도를 모두 사용했어요. 내일 다시 이용해 주세요.',
+      status: 429,
+      traceId: 'stream-quota-trace',
     })
   })
 })
