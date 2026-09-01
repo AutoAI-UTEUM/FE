@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TestAuthProvider } from '../../test/TestAuthProvider'
 import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { rememberClassroomId } from '../../features/classrooms'
+import { ResponsiveViewportProvider } from '../../shared/responsive'
 import { SessionDetailPage } from './SessionDetailPage'
 
 beforeEach(() => {
@@ -48,7 +49,72 @@ function renderSessionDetail(path = '/sessions/100') {
   )
 }
 
+function renderPhoneSessionDetail(path = '/sessions/100') {
+  Object.defineProperties(window.screen, {
+    height: { configurable: true, value: 844 },
+    width: { configurable: true, value: 390 },
+  })
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      addEventListener: () => undefined,
+      addListener: () => undefined,
+      dispatchEvent: () => true,
+      matches: query === '(pointer: coarse)' || query === '(orientation: portrait)',
+      media: query,
+      onchange: null,
+      removeEventListener: () => undefined,
+      removeListener: () => undefined,
+    } as unknown as MediaQueryList)),
+  })
+
+  return render(
+    <ResponsiveViewportProvider>
+      <TestAuthProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+            <Route path="/classrooms" element={<p>내 강의실 화면</p>} />
+          </Routes>
+        </MemoryRouter>
+      </TestAuthProvider>
+    </ResponsiveViewportProvider>,
+  )
+}
+
 describe('SessionDetailPage', () => {
+  it('switches phone workspace panes without losing the drafted question', async () => {
+    renderPhoneSessionDetail()
+
+    await screen.findByRole(
+      'progressbar',
+      { name: '학습 진행률 1 / 5쪽' },
+      { timeout: 3_000 },
+    )
+    const workspaceTabs = screen.getByRole('tablist', { name: '작업 화면' })
+    expect(within(workspaceTabs).getByRole('tab', { name: '자료' })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(within(workspaceTabs).getByRole('tab', { name: '학습' }))
+    const input = screen.getByLabelText('질문')
+    fireEvent.change(input, { target: { value: '작성 중인 질문' } })
+    fireEvent.click(within(workspaceTabs).getByRole('tab', { name: '자료' }))
+    fireEvent.click(within(workspaceTabs).getByRole('tab', { name: '학습' }))
+
+    expect(screen.getByLabelText('질문')).toHaveValue('작성 중인 질문')
+  })
+
+  it('opens the phone resource list as a focused dismissible drawer', async () => {
+    renderPhoneSessionDetail()
+
+    const openButton = await screen.findByRole('button', { name: '자료 목록' })
+    fireEvent.click(openButton)
+
+    expect(screen.getByRole('complementary', { name: '자료 목록' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: '자료 목록 닫기' })).toHaveFocus())
+    fireEvent.click(screen.getByRole('button', { name: '자료 목록 바깥 영역 닫기' }))
+    expect(screen.queryByRole('complementary', { name: '자료 목록' })).not.toBeInTheDocument()
+  })
+
   it('returns to the remembered classroom week page', async () => {
     rememberClassroomId('12')
     renderSessionDetail()

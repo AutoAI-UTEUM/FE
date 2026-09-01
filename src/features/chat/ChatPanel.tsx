@@ -550,7 +550,7 @@ export function ChatPanel({
         <div className="flex shrink-0 flex-wrap gap-1.5 px-4 pb-2">
           {QUICK_ACTIONS.map((action) => (
             <button
-              className="flex h-7.5 items-center rounded-full border border-stone-200 px-3 type-caption font-medium text-brand-700 hover:bg-brand-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="flex h-7.5 items-center rounded-full border border-stone-200 px-3 type-caption font-medium text-brand-700 hover:bg-brand-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:h-11"
               key={action.kind}
               onClick={() => handleQuickAction(action.kind)}
               type="button"
@@ -561,7 +561,7 @@ export function ChatPanel({
         </div>
       ) : null}
 
-      <form className="shrink-0 p-3" onSubmit={handleSubmit}>
+      <form className="shrink-0 p-3 mobile-web:mobile-safe-bottom" onSubmit={handleSubmit}>
         <div
           className={cx(
             'flex items-center gap-2 rounded-xl border bg-stone-50 p-2',
@@ -590,7 +590,7 @@ export function ChatPanel({
           <button
             aria-label={chat.isTurnPending && !isCancellingTurn ? '답변 중단' : '질문 보내기'}
             className={cx(
-              'flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-white',
+              'flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-white mobile-web:size-11',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
               'disabled:cursor-not-allowed disabled:bg-stone-300',
               chat.isTurnPending && !isCancellingTurn

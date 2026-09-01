@@ -219,7 +219,7 @@ export function DocumentChatPanel({
       </div>
 
       <form
-        className="shrink-0 border-t border-stone-100 p-3"
+        className="shrink-0 border-t border-stone-100 p-3 mobile-web:mobile-safe-bottom"
         onSubmit={handleSubmit}
       >
         <div className={cx(
@@ -246,7 +246,7 @@ export function DocumentChatPanel({
           />
           <button
             aria-label={isPending ? '응답 대기 중' : copy.sendLabel}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-stone-300"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-stone-300 mobile-web:size-11"
             disabled={isPending || question.trim().length === 0}
             type="submit"
           >

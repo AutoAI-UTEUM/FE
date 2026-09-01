@@ -1,7 +1,9 @@
 import { PanelLeftClose } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 import { cx } from '../../shared/lib/cx'
+import { useResponsiveViewport } from '../../shared/responsive'
 
 export interface SessionResourceMaterial {
   id: string
@@ -31,13 +33,32 @@ export function SessionResourcePanel({
   resourcePath,
   weeks,
 }: SessionResourcePanelProps) {
+  const { isMobileWeb } = useResponsiveViewport()
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!isMobileWeb) return
+    closeButtonRef.current?.focus()
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [isMobileWeb, onClose])
+
   return (
-    <aside className="hidden h-full min-h-0 w-[240px] shrink-0 flex-col overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-stone-50/60 p-3 xl:flex">
+    <>
+    {isMobileWeb ? <button aria-label="자료 목록 바깥 영역 닫기" className="fixed inset-0 z-40 bg-stone-950/35" onClick={onClose} type="button" /> : null}
+    <aside aria-label="자료 목록" className={cx(
+      'hidden h-full min-h-0 w-[240px] shrink-0 flex-col overflow-x-hidden overflow-y-auto border-r border-stone-200 bg-stone-50/60 p-3 xl:flex',
+      isMobileWeb && 'fixed inset-y-0 left-0 z-50 !flex w-[min(85vw,320px)] bg-white shadow-2xl mobile-safe-top mobile-safe-bottom',
+    )}>
       <div className="flex justify-end">
         <button
           aria-label="자료 목록 닫기"
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100 mobile-web:size-11"
           onClick={onClose}
+          ref={closeButtonRef}
           title="자료 목록 닫기"
           type="button"
         >
@@ -85,6 +106,7 @@ export function SessionResourcePanel({
       </div>
 
     </aside>
+    </>
   )
 }
 

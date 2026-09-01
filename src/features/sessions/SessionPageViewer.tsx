@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  EllipsisVertical,
   List,
   Minus,
   MoveHorizontal,
@@ -18,6 +19,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 
 import { cx } from '../../shared/lib/cx'
+import { useResponsiveViewport } from '../../shared/responsive'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -57,6 +59,8 @@ export function SessionPageViewer({
   const [pageFitMode, setPageFitMode] = useState<PageFitMode>('page')
   const [isOutlineVisible, setIsOutlineVisible] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
+  const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const { isPhone } = useResponsiveViewport()
   const viewerRef = useRef<HTMLElement | null>(null)
   const pageContainerRef = useRef<HTMLDivElement | null>(null)
   const panRef = useRef<{
@@ -66,6 +70,8 @@ export function SessionPageViewer({
     startX: number
     startY: number
   } | null>(null)
+  const touchPointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null)
   const progress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
   const viewerGridClassName = cx(
     'grid min-h-0 flex-1',
@@ -148,6 +154,26 @@ export function SessionPageViewer({
   }
 
   function startPagePan(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'touch') {
+      touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      if (touchPointersRef.current.size === 2) {
+        pinchRef.current = { distance: getPointerDistance(touchPointersRef.current), zoom }
+        panRef.current = null
+        setIsPanning(false)
+      } else if (zoom > 100) {
+        panRef.current = {
+          pointerId: event.pointerId,
+          scrollLeft: event.currentTarget.scrollLeft,
+          scrollTop: event.currentTarget.scrollTop,
+          startX: event.clientX,
+          startY: event.clientY,
+        }
+        setIsPanning(true)
+      }
+      event.preventDefault()
+      return
+    }
     if (zoom <= 100 || event.button !== 0) return
     panRef.current = {
       pointerId: event.pointerId,
@@ -162,6 +188,14 @@ export function SessionPageViewer({
   }
 
   function movePagePan(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'touch' && touchPointersRef.current.has(event.pointerId)) {
+      touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (pinchRef.current && touchPointersRef.current.size >= 2) {
+        const distance = getPointerDistance(touchPointersRef.current)
+        setZoom(clampZoom(pinchRef.current.zoom * (distance / pinchRef.current.distance)))
+        return
+      }
+    }
     const pan = panRef.current
     if (!pan || pan.pointerId !== event.pointerId) return
     event.currentTarget.scrollLeft = pan.scrollLeft - (event.clientX - pan.startX)
@@ -169,8 +203,17 @@ export function SessionPageViewer({
   }
 
   function endPagePan(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'touch') {
+      touchPointersRef.current.delete(event.pointerId)
+      if (touchPointersRef.current.size < 2) pinchRef.current = null
+    }
     const pan = panRef.current
-    if (!pan || pan.pointerId !== event.pointerId) return
+    if (!pan || pan.pointerId !== event.pointerId) {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      return
+    }
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -180,12 +223,12 @@ export function SessionPageViewer({
 
   return (
     <section aria-label="PDF 뷰어" className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-y-0 border-stone-200 bg-white" ref={viewerRef}>
-      <div className="flex h-13 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
+      <div className="relative flex h-13 shrink-0 items-center gap-3 border-b border-stone-200 px-4 mobile-web:min-h-14 mobile-web:px-2">
         {backTo ? (
           isPending ? (
             <button
               aria-label="주차 페이지로 (AI 답변 생성 중 이동 불가)"
-              className="flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-stone-200 text-stone-300"
+              className="flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-stone-200 text-stone-300 mobile-web:size-11"
               disabled
               title="AI 답변 생성이 끝나면 이동할 수 있습니다."
               type="button"
@@ -195,7 +238,7 @@ export function SessionPageViewer({
           ) : (
             <Link
               aria-label="주차 페이지로"
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
               title="주차 페이지로"
               to={backTo}
             >
@@ -229,7 +272,7 @@ export function SessionPageViewer({
               showLabel={false}
             />
           ) : null}
-          <div className="flex h-8 items-center gap-1 rounded-lg border border-stone-200 px-1.5">
+          <div className="flex h-8 items-center gap-1 rounded-lg border border-stone-200 px-1.5 mobile-phone:hidden">
             <ToolbarIconButton
               icon={Minus}
               label="축소"
@@ -244,6 +287,7 @@ export function SessionPageViewer({
               onClick={() => setZoom((value) => clampZoom(value + 10))}
             />
           </div>
+          <div className="contents mobile-phone:hidden">
           <ToolbarButton
             icon={MoveVertical}
             isActive={pageFitMode === 'height'}
@@ -272,7 +316,27 @@ export function SessionPageViewer({
             onClick={downloadOriginal}
             showLabel={false}
           />
+          </div>
+          <button
+            aria-expanded={isMoreOpen}
+            aria-label="PDF 도구 더보기"
+            className="hidden size-11 items-center justify-center rounded-lg border border-stone-200 text-stone-600 mobile-phone:flex"
+            onClick={() => setIsMoreOpen((open) => !open)}
+            type="button"
+          >
+            <EllipsisVertical aria-hidden="true" size={18} />
+          </button>
         </div>
+        {isPhone && isMoreOpen ? (
+          <div className="absolute top-[calc(100%+0.25rem)] right-2 z-50 grid min-w-48 gap-1 rounded-lg border border-stone-200 bg-white p-2 shadow-xl">
+            <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => setZoom((value) => clampZoom(value - 10))} type="button">축소 · {zoom}%</button>
+            <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => setZoom((value) => clampZoom(value + 10))} type="button">확대 · {zoom}%</button>
+            <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => { applyPageFit('height'); setIsMoreOpen(false) }} type="button">높이 맞춤</button>
+            <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => { applyPageFit('width'); setIsMoreOpen(false) }} type="button">너비 맞춤</button>
+            <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => { setIsOutlineVisible((visible) => !visible); setIsMoreOpen(false) }} type="button">목차</button>
+            <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50 disabled:text-stone-400" disabled={!file} onClick={() => { downloadOriginal(); setIsMoreOpen(false) }} type="button">원본 내려받기</button>
+          </div>
+        ) : null}
       </div>
 
       {file ? (
@@ -302,8 +366,9 @@ export function SessionPageViewer({
             <div
               aria-label="확대된 PDF 이동 영역"
               className={cx(
-                'h-full min-h-0 overflow-auto overscroll-contain p-6',
+                'h-full min-h-0 overflow-auto overscroll-contain p-6 mobile-web:p-3',
                 zoom > 100 && 'touch-none select-none cursor-grab',
+                'mobile-web:touch-none',
                 isPanning && 'cursor-grabbing',
               )}
               onPointerCancel={endPagePan}
@@ -377,7 +442,7 @@ function PageNavigation({
   totalPages: number
 }) {
   return (
-    <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1 rounded-lg border border-stone-200 bg-white/95 p-1 shadow-lg backdrop-blur-sm dark:bg-stone-100/95">
+    <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1 rounded-lg border border-stone-200 bg-white/95 p-1 shadow-lg backdrop-blur-sm dark:bg-stone-100/95 mobile-web:right-3 mobile-web:bottom-3">
       <ToolbarButton
         disabled={isPending || currentPage <= 1}
         icon={ChevronLeft}
@@ -529,7 +594,7 @@ function ToolbarButton({
       aria-label={disabled ? `${label} (사용 불가)` : label}
       aria-pressed={disabled ? undefined : isActive}
       className={cx(
-        'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 type-caption font-medium hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400 disabled:hover:bg-transparent',
+        'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 type-caption font-medium hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400 disabled:hover:bg-transparent mobile-web:h-11 mobile-web:min-w-11 mobile-web:justify-center',
         isActive
           ? 'border-brand-200 bg-brand-50 text-brand-700'
           : 'border-stone-200 text-stone-600',
@@ -552,6 +617,12 @@ function getDownloadFileName(materialTitle: string | undefined): string {
 
 function clampZoom(value: number): number {
   return Math.min(200, Math.max(50, value))
+}
+
+function getPointerDistance(pointers: Map<number, { x: number; y: number }>): number {
+  const [first, second] = Array.from(pointers.values())
+  if (!first || !second) return 1
+  return Math.max(1, Math.hypot(second.x - first.x, second.y - first.y))
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
