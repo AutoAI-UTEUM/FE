@@ -11,4 +11,11 @@ export type {
   AiUsageFeature,
   AiUsageSummary,
   AiUsageUser,
+  AdminRepository,
+  InfraApp,
+  InfraCost,
+  InfraEnv,
+  InfraMetrics,
+  InfraPoint,
+  InfraRange,
 } from './adminRepository'

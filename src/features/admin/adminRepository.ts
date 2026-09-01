@@ -81,7 +81,80 @@ export interface AiUsageUser {
   reasoningTokens: number | null
 }
 
+export type InfraEnv = 'prod' | 'dev'
+export type InfraRange = '1h' | '6h' | '24h' | '7d'
+
+export interface InfraPoint {
+  t: string
+  v: number | null
+}
+
+export interface InfraMetrics {
+  available: boolean
+  stale?: boolean
+  reason?: string
+  env?: InfraEnv
+  range?: InfraRange
+  from?: string
+  to?: string
+  periodSeconds?: number
+  series?: {
+    cpu: InfraPoint[]
+    netIn: InfraPoint[]
+    netOut: InfraPoint[]
+    mem: InfraPoint[]
+    disk: InfraPoint[]
+    status: InfraPoint[]
+  }
+  latest?: {
+    cpu: number | null
+    mem: number | null
+    disk: number | null
+    status: number | null
+  }
+}
+
+export interface InfraCost {
+  available: boolean
+  stale?: boolean
+  reason?: string
+  currency?: string
+  monthToDate?: {
+    total: number
+    byService: Array<{ service: string; amount: number }>
+  }
+  daily?: Array<{ date: string; total: number }>
+  updatedAt?: string
+  note?: string
+}
+
+export interface InfraApp {
+  available: boolean
+  jvm: {
+    heapUsedBytes: number
+    heapMaxBytes: number
+    heapCommittedBytes: number
+    liveThreads: number
+    gcCount: number
+  }
+  http: {
+    requestCount: number
+    serverErrorCount: number
+    averageResponseTimeMs: number | null
+  }
+  db: {
+    activeConnections: number
+    idleConnections: number
+    maxConnections: number
+  }
+  uptimeSeconds: number
+  aiService: { status: 'UP' | 'DOWN' | string; checkedAt: string | null }
+}
+
 export interface AdminRepository {
+  getInfraMetrics: (params: { env: InfraEnv; range: InfraRange }, signal?: AbortSignal) => Promise<InfraMetrics>
+  getInfraCost: (signal?: AbortSignal) => Promise<InfraCost>
+  getInfraApp: (signal?: AbortSignal) => Promise<InfraApp>
   getUser: (userId: number, signal?: AbortSignal) => Promise<AdminUserDetail>
   listUsers: (filters: {
     q?: string
@@ -103,6 +176,21 @@ export interface AdminRepository {
 
 export function createAdminRepository(request: AuthenticatedRequest): AdminRepository {
   return {
+    async getInfraMetrics(params, signal) {
+      const response = await request<InfraMetrics>(
+        `/api/admin/infra/metrics?${toQuery(params)}`,
+        { signal },
+      )
+      return response.data
+    },
+    async getInfraCost(signal) {
+      const response = await request<InfraCost>('/api/admin/infra/cost', { signal })
+      return response.data
+    },
+    async getInfraApp(signal) {
+      const response = await request<InfraApp>('/api/admin/infra/app', { signal })
+      return response.data
+    },
     async getUser(userId, signal) {
       const response = await request<AdminUserDetail>(`/api/admin/users/${userId}`, { signal })
       return response.data

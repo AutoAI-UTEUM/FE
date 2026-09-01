@@ -112,7 +112,9 @@ export async function handleApiFixtureRequest(
         email: body.email,
         id: 1,
         name: 'learner',
-        role: body.email.startsWith('instructor') ? 'INSTRUCTOR' : 'LEARNER',
+        role: body.email.startsWith('admin')
+          ? 'ADMIN'
+          : body.email.startsWith('instructor') ? 'INSTRUCTOR' : 'LEARNER',
       },
     })
   }
@@ -590,6 +592,69 @@ async function handleDevRoute(
       accessToken: 'dev-access-token',
       expiresIn: 3600,
       tokenType: 'Bearer',
+    })
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/infra/metrics') {
+    const env = url.searchParams.get('env') ?? 'prod'
+    const range = url.searchParams.get('range') ?? '24h'
+    const metricPoints = (first: number, second: number) => [
+      { t: '2026-09-01T00:00:00Z', v: first },
+      { t: '2026-09-01T01:00:00Z', v: second },
+    ]
+    return apiSuccess({
+      available: true,
+      env,
+      from: '2026-09-01T00:00:00Z',
+      latest: { cpu: 42.3, disk: 58.2, mem: 61.4, status: 0 },
+      periodSeconds: range === '1h' ? 60 : range === '7d' ? 3600 : 300,
+      range,
+      series: {
+        cpu: metricPoints(35.1, 42.3),
+        disk: metricPoints(57.9, 58.2),
+        mem: metricPoints(60.2, 61.4),
+        netIn: metricPoints(1_024_000, 2_450_000),
+        netOut: metricPoints(640_000, 1_320_000),
+        status: metricPoints(0, 0),
+      },
+      to: '2026-09-01T01:00:00Z',
+    })
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/infra/cost') {
+    return apiSuccess({
+      available: true,
+      currency: 'USD',
+      daily: [
+        { date: '2026-08-30', total: 1.84 },
+        { date: '2026-08-31', total: 2.06 },
+      ],
+      monthToDate: {
+        byService: [
+          { amount: 24.18, service: 'Amazon Elastic Compute Cloud' },
+          { amount: 4.72, service: 'Amazon Relational Database Service' },
+        ],
+        total: 28.9,
+      },
+      note: '비용 데이터는 어제까지 확정됩니다.',
+      updatedAt: '2026-09-01T00:30:00Z',
+    })
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/infra/app') {
+    return apiSuccess({
+      aiService: { checkedAt: '2026-09-01T00:59:00Z', status: 'UP' },
+      available: true,
+      db: { activeConnections: 3, idleConnections: 7, maxConnections: 10 },
+      http: { averageResponseTimeMs: 34.2, requestCount: 1240, serverErrorCount: 2 },
+      jvm: {
+        gcCount: 18,
+        heapCommittedBytes: 402_653_184,
+        heapMaxBytes: 536_870_912,
+        heapUsedBytes: 268_435_456,
+        liveThreads: 46,
+      },
+      uptimeSeconds: 274_320,
     })
   }
 
