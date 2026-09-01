@@ -29,4 +29,39 @@ describe('admin repository', () => {
     expect(request).toHaveBeenNthCalledWith(6, '/api/admin/ai-usage/users?from=2026-08-24&to=2026-08-30&limit=20', { signal: undefined })
     expect(request.mock.calls.every(([path]) => path.startsWith('/api/admin/'))).toBe(true)
   })
+
+  it('unwraps infrastructure responses and sends the documented query', async () => {
+    const metrics = { available: true, env: 'prod', range: '6h' }
+    const cost = { available: true, currency: 'USD' }
+    const app = { available: true, uptimeSeconds: 120 }
+    const request = vi.fn()
+      .mockResolvedValueOnce({ data: metrics })
+      .mockResolvedValueOnce({ data: cost })
+      .mockResolvedValueOnce({ data: app })
+    const repository = createAdminRepository(request as AuthenticatedRequest)
+    const controller = new AbortController()
+
+    await expect(repository.getInfraMetrics(
+      { env: 'prod', range: '6h' },
+      controller.signal,
+    )).resolves.toBe(metrics)
+    await expect(repository.getInfraCost(controller.signal)).resolves.toBe(cost)
+    await expect(repository.getInfraApp(controller.signal)).resolves.toBe(app)
+
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/infra/metrics?env=prod&range=6h',
+      { signal: controller.signal },
+    )
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      '/api/admin/infra/cost',
+      { signal: controller.signal },
+    )
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      '/api/admin/infra/app',
+      { signal: controller.signal },
+    )
+  })
 })
