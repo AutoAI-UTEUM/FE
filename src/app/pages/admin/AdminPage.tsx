@@ -1,6 +1,5 @@
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 import {
   createAdminRepository,
@@ -16,17 +15,26 @@ import {
   type AiUsageUser,
 } from '../../../features/admin'
 import { useAuth } from '../../../features/auth'
-import { ApiClientError } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { Button } from '../../../shared/ui'
-import { routes } from '../../routes'
+import {
+  AdminErrorMessage,
+  formatCount,
+  formatDateTime,
+  Metric,
+  PanelMessage,
+  toAdminError,
+  type AdminErrorInfo,
+} from './adminShared'
+import { InfraPanel } from './InfraPanel'
 
-type AdminTab = 'users' | 'classrooms' | 'ai-usage'
+type AdminTab = 'users' | 'classrooms' | 'ai-usage' | 'infra'
 
 const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: 'users', label: '회원' },
   { id: 'classrooms', label: '강의실' },
   { id: 'ai-usage', label: 'AI 사용량' },
+  { id: 'infra', label: '인프라' },
 ]
 
 export function AdminPage() {
@@ -68,6 +76,7 @@ export function AdminPage() {
         {tab === 'users' ? <UsersPanel repository={repository} /> : null}
         {tab === 'classrooms' ? <ClassroomsPanel repository={repository} /> : null}
         {tab === 'ai-usage' ? <AiUsagePanel repository={repository} /> : null}
+        {tab === 'infra' ? <InfraPanel repository={repository} /> : null}
       </section>
     </div>
   )
@@ -287,23 +296,15 @@ function DailyUsageChart({ daily }: { daily: AiUsageSummary['daily'] }) {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="border-b border-stone-100 px-4 py-4 sm:border-r sm:last:border-r-0"><p className="type-caption text-stone-500">{label}</p><p className="mt-1 type-section-title font-bold text-stone-950">{value}</p></div> }
-
 function FilterSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: Array<[string, string]>; value: string }) { return <label><span className="sr-only">{label}</span><select className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600" onChange={(event) => onChange(event.target.value)} value={value}>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label> }
 
 function Pagination({ onChange, page, totalPages }: { onChange: (page: number) => void; page: number; totalPages: number }) { return <div className="flex h-12 items-center justify-end gap-2 border-t border-stone-200 px-4 type-caption text-stone-500"><span>{totalPages === 0 ? 0 : page + 1} / {totalPages}</span><button aria-label="이전 페이지" className="flex size-8 items-center justify-center rounded-md border border-stone-200 disabled:opacity-40" disabled={page <= 0} onClick={() => onChange(page - 1)} type="button"><ChevronLeft size={15} /></button><button aria-label="다음 페이지" className="flex size-8 items-center justify-center rounded-md border border-stone-200 disabled:opacity-40" disabled={page + 1 >= totalPages} onClick={() => onChange(page + 1)} type="button"><ChevronRight size={15} /></button></div> }
 
-function PanelMessage({ action, message, tone = 'default' }: { action?: React.ReactNode; message: string; tone?: 'default' | 'error' }) { return <div className={tone === 'error' ? 'flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-4 py-3 type-body text-rose-700' : 'px-4 py-10 text-center type-body text-stone-500'} role={tone === 'error' ? 'alert' : 'status'}><span>{message}</span>{action}</div> }
-function AdminErrorMessage({ error }: { error: AdminErrorInfo }) { const { logout } = useAuth(); const navigate = useNavigate(); const action = error.forbidden ? <Button onClick={() => { void logout().finally(() => navigate(routes.login, { replace: true })) }} size="sm" variant="secondary">다시 로그인</Button> : undefined; return <PanelMessage action={action} message={error.message} tone="error" /> }
 function StatusBadge({ status }: { status: string }) { const active = status === 'ACTIVE'; return <span className={active ? 'inline-flex rounded-md bg-emerald-50 px-2 py-1 type-caption font-semibold text-emerald-700' : 'inline-flex rounded-md bg-stone-100 px-2 py-1 type-caption font-semibold text-stone-500'}>{active ? '활성' : status === 'DELETED' ? '탈퇴' : status}</span> }
 function roleLabel(role: string) { return role === 'ADMIN' ? '관리자' : role === 'INSTRUCTOR' || role === 'TEACHER' ? '강의자' : '학습자' }
-function formatCount(value: number | null | undefined) { return value == null ? '-' : value.toLocaleString('ko-KR') }
 function formatDate(value: string) { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(value)) }
-function formatDateTime(value: string) { return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }
 function defaultDateRange() { const to = new Date(); const from = new Date(to); from.setDate(from.getDate() - 6); return { from: localDate(from), to: localDate(to) } }
 function localDate(value: Date) { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(value) }
-type AdminErrorInfo = { forbidden: boolean; message: string }
-function toAdminError(error: unknown): AdminErrorInfo { if (error instanceof ApiClientError && error.status === 403) return { forbidden: true, message: '관리자 권한이 변경되었어요. 다시 로그인하면 현재 권한에 맞는 화면으로 이동합니다.' }; return { forbidden: false, message: error instanceof Error ? error.message : '관리자 정보를 불러오지 못했습니다.' } }
 function featureLabel(feature: string) { return ({ TURN: '학습 대화', DOC_CHAT: '자료 채팅', GRADE: '채점', QUIZ_ASSESSMENT: '퀴즈 평가', DIAGNOSIS: '진단', REPORT: '리포트', EXAM_DRAFT: '시험 초안', OUTLINE: '개요', CAPTIONS: '자막', CRITERIA: '평가 기준', EXTRACT: '문서 추출' } as Record<string, string>)[feature] ?? feature }
 function tokenTotal(value: { inputTokens: number | null; outputTokens: number | null; reasoningTokens: number | null }) { const tokens = [value.inputTokens, value.outputTokens, value.reasoningTokens]; return tokens.every((token) => token === null) ? null : tokens.reduce<number>((total, token) => total + (token ?? 0), 0) }
 function sumNullableTokenTotals(values: Array<{ inputTokens: number | null; outputTokens: number | null; reasoningTokens: number | null }>) { const totals = values.map(tokenTotal).filter((value): value is number => value !== null); return totals.length === 0 ? null : totals.reduce((sum, value) => sum + value, 0) }

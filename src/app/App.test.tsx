@@ -114,7 +114,11 @@ describe('AppRoutes', () => {
     })
 
     expect(await screen.findByRole('heading', { name: '관리자' })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: '관리자 메뉴' })).toBeInTheDocument()
+    const adminNavigation = screen.getByRole('navigation', { name: '관리자 메뉴' })
+    expect(adminNavigation).toBeInTheDocument()
+    expect(within(adminNavigation).getAllByRole('button')).toHaveLength(4)
+    fireEvent.click(within(adminNavigation).getByRole('button', { name: '인프라' }))
+    expect(await screen.findByRole('heading', { name: '서버 상태' })).toBeInTheDocument()
     expect(
       screen.getAllByRole('button', { name: '프로필 메뉴' }).some((button) =>
         within(button).queryByText('관리자'),
