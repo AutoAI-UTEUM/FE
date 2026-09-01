@@ -570,21 +570,13 @@ export function SessionDetailPage() {
 
   async function handleQuizDecline() {
     if (isActionPending || chat.isTurnPending) return
-    chat.clearUiActions()
-    setSession((current) => current ? { ...current, uiActions: [] } : current)
     setIsActionPending(true)
     setError(null)
     try {
       const result = await sessionsRepository.declineQuiz(activeSession.id)
-      applyTurnResult({
-        ...result,
-        uiActions: [],
-      }, true)
+      applyTurnResult(result, true)
     } catch (requestError) {
-      if (!(requestError instanceof ApiClientError
-        && (requestError.status === 404 || requestError.status === 405))) {
-        setError(getRequestErrorMessage(requestError))
-      }
+      setError(getRequestErrorMessage(requestError))
     } finally {
       setIsActionPending(false)
     }
