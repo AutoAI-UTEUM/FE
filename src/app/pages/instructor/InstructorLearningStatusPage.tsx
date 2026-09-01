@@ -23,6 +23,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
 import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
+import { useResponsiveViewport } from '../../../shared/responsive'
 import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
@@ -99,6 +100,7 @@ function StudentLearningTable({
   repository: ReturnType<typeof createClassroomsRepository>
   students: ClassroomStudent[]
 }) {
+  const { isMobileWeb } = useResponsiveViewport()
   const [searchQuery, setSearchQuery] = useState('')
   const [sort, setSort] = useState<StudentSort>({ direction: 'desc', key: 'recentActivity' })
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
@@ -235,9 +237,9 @@ function StudentLearningTable({
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
-                  <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span><span className="mt-2 hidden grid-cols-3 gap-2 mobile-web:grid"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span></span>
+                  <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span>{isMobileWeb ? <span className="mt-2 grid grid-cols-3 gap-2"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span> : null}</span>
                 </span>
-                <span className="contents mobile-web:hidden"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span>
+                {!isMobileWeb ? <span className="contents"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span> : null}
                 <StudentSummaryMetric label="최근 학습" value={formatDetailedRelativeActivityDate(student.lastActiveAt)} />
                 <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
               </button>
