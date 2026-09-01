@@ -415,7 +415,7 @@ describe('SessionDetailPage', () => {
     )
   })
 
-  it('dismisses a declined quiz proposal without showing a page-move widget', async () => {
+  it('replaces a declined quiz proposal with the next server uiActions', async () => {
     renderSessionDetail()
 
     fireEvent.click(await screen.findByRole('button', { name: '네' }))
@@ -425,7 +425,11 @@ describe('SessionDetailPage', () => {
     await waitFor(() =>
       expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument(),
     )
-    expect(screen.queryByText('다음 페이지로 이동할까요?')).not.toBeInTheDocument()
+    const declineRequest = vi.mocked(globalThis.fetch).mock.calls
+      .map(([input, init]) => new Request(input, init))
+      .find((request) => request.url.endsWith('/api/sessions/100/quiz-decline'))
+    expect(declineRequest?.method).toBe('POST')
+    expect(screen.getByText('다음 페이지로 이동할까요?')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })).toBeInTheDocument()
     const explanationCount = screen.getAllByText('이 페이지는 핵심 개념의 정의를 다룹니다.').length
 
