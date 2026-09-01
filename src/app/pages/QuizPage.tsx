@@ -36,6 +36,7 @@ import {
 import { createSessionsRepository, type SessionQuizSummary } from '../../features/sessions'
 import { diagnosisPath, routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+import { MobileWorkspaceTabs, useResponsiveViewport } from '../../shared/responsive'
 
 const DEFAULT_REVIEW_CHAT_WIDTH = 660
 const MIN_REVIEW_CHAT_WIDTH = 360
@@ -92,6 +93,8 @@ export function QuizWorkspace({
   }>()
   const [reviewChatWidth, setReviewChatWidth] = useState<number | null>(null)
   const [reviewChatMaxWidth, setReviewChatMaxWidth] = useState(DEFAULT_REVIEW_CHAT_WIDTH)
+  const [mobileReviewPane, setMobileReviewPane] = useState<'quiz' | 'review'>('quiz')
+  const { isPhone } = useResponsiveViewport()
   const reviewWorkspaceRef = useRef<HTMLDivElement | null>(null)
   const questions = quiz?.questions ?? []
   const question = questions[currentQuestionIndex] ?? questions[0]
@@ -325,10 +328,17 @@ export function QuizWorkspace({
 
   return (
     <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
+      {shouldShowReviewChat && isPhone ? (
+        <MobileWorkspaceTabs
+          active={mobileReviewPane}
+          items={[{ label: '퀴즈', value: 'quiz' }, { label: '복습', value: 'review' }]}
+          onChange={setMobileReviewPane}
+        />
+      ) : null}
       <div
         aria-label={shouldShowReviewChat ? '퀴즈 복습 작업 영역' : undefined}
         className={shouldShowReviewChat
-          ? `study-session-content min-h-[940px] min-w-0 overflow-hidden bg-white lg:min-h-0 ${embedded ? 'lg:h-full' : 'lg:h-[calc(100dvh-7rem)]'}`
+          ? `study-session-content min-h-[940px] min-w-0 overflow-hidden bg-white mobile-web:min-h-0 mobile-web:h-[calc(100dvh-8rem)] lg:min-h-0 ${embedded ? 'lg:h-full' : 'lg:h-[calc(100dvh-7rem)]'}`
           : 'min-w-0'}
         ref={shouldShowReviewChat ? reviewWorkspaceRef : undefined}
         role={shouldShowReviewChat ? 'region' : undefined}
@@ -336,7 +346,7 @@ export function QuizWorkspace({
           ? { '--chat-panel-width': `${reviewChatWidth}px` } as CSSProperties
           : undefined}
       >
-      <section aria-label="퀴즈 문항" className="h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0">
+      <section aria-label="퀴즈 문항" className={`${isPhone && mobileReviewPane !== 'quiz' ? 'hidden' : ''} h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0`}>
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
           <div className="flex justify-end">
             <span className="whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
@@ -426,7 +436,7 @@ export function QuizWorkspace({
               <div className="ml-1 flex gap-1.5">
                 <button
                   aria-label="이전 문항"
-                  className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400"
+                  className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400 mobile-web:size-11"
                   disabled={currentQuestionIndex <= 0}
                   onClick={() => {
                     setCurrentQuestionIndex((index) => Math.max(index - 1, 0))
@@ -439,7 +449,7 @@ export function QuizWorkspace({
                 </button>
                 <button
                   aria-label="다음 문항"
-                  className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400"
+                  className="flex size-9 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400 mobile-web:size-11"
                   disabled={currentQuestionIndex >= questions.length - 1}
                   onClick={() => {
                     setCurrentQuestionIndex((index) =>
@@ -464,7 +474,7 @@ export function QuizWorkspace({
           aria-valuemax={Math.round(reviewChatMaxWidth)}
           aria-valuemin={MIN_REVIEW_CHAT_WIDTH}
           aria-valuenow={reviewChatWidth === null ? undefined : Math.round(reviewChatWidth)}
-          className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex"
+          className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex mobile-web:!hidden"
           onDoubleClick={() => setReviewChatWidth(null)}
           onKeyDown={handleReviewResizerKeyDown}
           onPointerDown={handleReviewResizerPointerDown}
@@ -478,6 +488,7 @@ export function QuizWorkspace({
         </div>
       ) : null}
       {shouldShowReviewChat && resolvedMaterialId ? (
+        <div className={isPhone && mobileReviewPane !== 'review' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
         <DocumentChatPanel
           className="!min-h-0 !rounded-none !border-0"
           key={`${resolvedMaterialId}-quiz`}
@@ -485,6 +496,7 @@ export function QuizWorkspace({
           mode="quiz"
           request={apiRequest}
         />
+        </div>
       ) : null}
       </div>
     </QuizFrame>
@@ -633,7 +645,7 @@ function QuizFrame({
         </Button>
         <h2 className="type-body font-semibold text-stone-950">퀴즈</h2>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 mobile-phone:p-0">
         {children}
       </div>
     </section>

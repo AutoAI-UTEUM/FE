@@ -96,8 +96,8 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
 
   return (
     <div className="h-full min-h-[560px] overflow-auto bg-[#F7F8FA]">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 mobile-phone:flex-col mobile-phone:items-stretch">
+        <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
           <SegmentedControl
             label="환경"
             onChange={(value) => {
@@ -112,7 +112,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
             기간
             <select
               aria-label="조회 기간"
-              className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600"
+              className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600 mobile-web:h-11"
               onChange={(event) => {
                 setMetrics((current) => ({ ...current, error: null, loading: true }))
                 setRange(event.target.value as InfraRange)
@@ -131,7 +131,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
           setCost((current) => ({ ...current, error: null, loading: true }))
           setApp((current) => ({ ...current, error: null, loading: true }))
           setRefreshKey((key) => key + 1)
-        }} size="sm" variant="secondary">
+        }} className="mobile-phone:w-full" size="sm" variant="secondary">
           <RefreshCw aria-hidden="true" size={15} />
           새로고침
         </Button>

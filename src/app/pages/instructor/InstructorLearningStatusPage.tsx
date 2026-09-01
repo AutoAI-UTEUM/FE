@@ -23,6 +23,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
 import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
+import { useResponsiveViewport } from '../../../shared/responsive'
 import { Button, EmptyState } from '../../../shared/ui'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
@@ -99,6 +100,7 @@ function StudentLearningTable({
   repository: ReturnType<typeof createClassroomsRepository>
   students: ClassroomStudent[]
 }) {
+  const { isMobileWeb } = useResponsiveViewport()
   const [searchQuery, setSearchQuery] = useState('')
   const [sort, setSort] = useState<StudentSort>({ direction: 'desc', key: 'recentActivity' })
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
@@ -174,7 +176,7 @@ function StudentLearningTable({
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <button
             aria-label="수강생 목록 새로고침"
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 outline-none transition-colors hover:bg-stone-50 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 outline-none transition-colors hover:bg-stone-50 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60 mobile-web:size-11"
             disabled={isRefreshing}
             onClick={onRefresh}
             title="수강생 목록 새로고침"
@@ -187,7 +189,7 @@ function StudentLearningTable({
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
             <input
               aria-label="수강생 검색"
-              className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 mobile-web:h-11"
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="이름 또는 이메일 검색"
               type="search"
@@ -202,10 +204,10 @@ function StudentLearningTable({
         role="region"
         tabIndex={0}
       >
-        <div className="min-w-[860px]">
+        <div className="min-w-[860px] mobile-web:min-w-0">
           <div
             aria-label="학습 현황 열 제목"
-            className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500"
+            className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500 mobile-web:mobile-horizontal-scroll mobile-web:flex mobile-web:min-h-12 mobile-web:overflow-x-auto mobile-web:px-3"
           >
             <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
             <StudentSortHeader activeSort={sort} className="justify-self-center" label="진도" onSelect={selectSort} sortKey="progress" />
@@ -229,17 +231,15 @@ function StudentLearningTable({
                 aria-controls={detailId}
                 aria-expanded={isExpanded}
                 aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
-                className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 px-5 text-left outline-none transition-colors hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 px-5 text-left outline-none transition-colors hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 mobile-web:grid-cols-[minmax(0,1fr)_auto_auto] mobile-web:gap-3 mobile-web:px-3 mobile-web:py-3"
                 onClick={() => toggleStudent(student.id)}
                 type="button"
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
-                  <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></span>
+                  <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span>{isMobileWeb ? <span className="mt-2 grid grid-cols-3 gap-2"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span> : null}</span>
                 </span>
-                <StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} />
-                <StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} />
-                <StudentQuizSummary analytics={analytics} student={student} />
+                {!isMobileWeb ? <span className="contents"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span> : null}
                 <StudentSummaryMetric label="최근 학습" value={formatDetailedRelativeActivityDate(student.lastActiveAt)} />
                 <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
               </button>
@@ -476,7 +476,7 @@ function StudentSortHeader({
       aria-label={`${label} ${nextDirection} 정렬`}
       aria-pressed={isActive}
       className={cx(
-        'inline-flex min-h-8 w-fit items-center gap-1 text-left type-caption font-semibold text-stone-500 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600',
+        'inline-flex min-h-8 w-fit shrink-0 items-center gap-1 text-left type-caption font-semibold text-stone-500 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 mobile-web:min-h-11 mobile-web:rounded-lg mobile-web:border mobile-web:border-stone-200 mobile-web:bg-white mobile-web:px-3',
         isActive && 'text-brand-700',
         className,
       )}
