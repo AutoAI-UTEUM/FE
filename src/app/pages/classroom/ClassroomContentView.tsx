@@ -2,6 +2,7 @@ import { Bell, BookOpen, ClipboardList, LoaderCircle, MoreHorizontal, RefreshCw,
 import { useState, type DragEvent } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
+import { useResponsiveViewport } from '../../../shared/responsive'
 import { Badge, Button, EmptyState } from '../../../shared/ui'
 import type { ClassroomContentFilter, ClassroomContentItem } from './classroomContentModel'
 
@@ -14,8 +15,30 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
   startDate: string
   weeks: ClassroomWeek[]
 }) {
-  return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white lg:h-full lg:overflow-hidden">
-    <nav aria-label="강의실 주차" className="min-h-0 flex-1 space-y-0.5 px-1.5 py-3 lg:overflow-y-auto">
+  const { isPhone } = useResponsiveViewport()
+  if (isPhone) {
+    return (
+      <section aria-label="강의실 주차 선택" className="rounded-lg border border-stone-200 bg-white p-3">
+        <label className="block type-control font-semibold text-stone-700" htmlFor="mobile-classroom-week">
+          주차
+        </label>
+        <select
+          className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-stone-900"
+          id="mobile-classroom-week"
+          onChange={(event) => onSelect(event.target.value === 'all' ? null : Number(event.target.value))}
+          value={selectedWeekNumber ?? 'all'}
+        >
+          <option value="all">전체 항목</option>
+          {weeks.map((week) => {
+            const period = formatClassroomWeekPeriod(startDate, endDate, week.weekNumber)
+            return <option key={week.id} value={week.weekNumber}>{week.title}{period ? ` · ${period}` : ''}</option>
+          })}
+        </select>
+      </section>
+    )
+  }
+  return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white lg:h-full lg:overflow-hidden tablet-portrait:h-full tablet-portrait:overflow-hidden tablet-landscape:h-full tablet-landscape:overflow-hidden">
+    <nav aria-label="강의실 주차" className="min-h-0 flex-1 space-y-0.5 px-1.5 py-3 lg:overflow-y-auto tablet-portrait:overflow-y-auto tablet-landscape:overflow-y-auto">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
       {weeks.map((week) => {
         const period = formatClassroomWeekPeriod(startDate, endDate, week.weekNumber)
@@ -85,15 +108,15 @@ export function ClassroomContentPanel({
     if (file) onDrop(file)
   }
 
-  return <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-3 lg:h-full lg:min-h-0 lg:overflow-hidden" onDragLeave={() => setDragging(null)} onDragOver={dragOver} onDrop={drop}>
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  return <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-3 lg:h-full lg:min-h-0 lg:overflow-hidden tablet-portrait:h-full tablet-portrait:min-h-0 tablet-portrait:overflow-hidden tablet-landscape:h-full tablet-landscape:min-h-0 tablet-landscape:overflow-hidden" onDragLeave={() => setDragging(null)} onDragOver={dragOver} onDrop={drop}>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mobile-phone:items-stretch">
       <ContentFilterButtons filter={filter} onFilter={onFilter} />
       {canManage ? <AddItemButtons disabled={isUploading} onAdd={onAdd} /> : null}
     </div>
 
     {Object.entries(errors).map(([key, message]) => message ? <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3" key={key}><p className="type-control text-rose-800">{resourceLabel(key as ResourceKey)}을 불러오지 못했습니다. {message}</p><Button onClick={() => onRetry(key as ResourceKey)} size="sm" variant="secondary"><RefreshCw size={13} />재시도</Button></div> : null)}
 
-    <div aria-label="리소스 목록" className="min-h-0 flex-1 space-y-2 lg:overflow-y-auto" role="region">
+    <div aria-label="리소스 목록" className="min-h-0 flex-1 space-y-2 lg:overflow-y-auto tablet-portrait:overflow-y-auto tablet-landscape:overflow-y-auto" role="region">
       {globalItems.length > 0
         ? filter === 'all' || filter === 'notice'
           ? <div className="space-y-2">{globalItems.map((item) => <ContentRow canManage={canManage} isMenuOpen={openMenuItemId === item.id} item={item} key={item.id} onItem={onItem} onMenuToggle={() => setOpenMenuItemId((current) => current === item.id ? null : item.id)} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />)}</div>
@@ -118,7 +141,7 @@ function ContentRow({ canManage, isMenuOpen, item, onItem, onMenuToggle, onRemov
   onRenameMaterial: (material: { id: string; title: string }) => void
   openingMaterialId: string | null
 }) {
-  return <div className="flex h-11 min-h-11 items-center gap-3 rounded-lg border border-stone-200 bg-white px-4 hover:bg-stone-50/70">
+  return <div className="flex h-11 min-h-11 items-center gap-3 rounded-lg border border-stone-200 bg-white px-4 hover:bg-stone-50/70 mobile-web:h-12 mobile-web:min-h-12 mobile-phone:px-3">
     {item.kind === 'material'
       ? <Badge size="compact" tone="info">수업</Badge>
       : item.kind === 'resource'
@@ -134,7 +157,7 @@ function ContentRow({ canManage, isMenuOpen, item, onItem, onMenuToggle, onRemov
       </span>
     </button>
     {item.kind === 'material' && openingMaterialId === item.source.id ? <span className="type-caption text-brand-700">수업 여는 중</span> : null}
-    {canManage && item.kind === 'material' ? <div className="relative shrink-0"><button aria-expanded={isMenuOpen} aria-label={`${item.title} 작업 메뉴`} className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700" onClick={onMenuToggle} type="button"><MoreHorizontal size={16} /></button>{isMenuOpen ? <div className="absolute top-9 right-0 z-20 w-28 rounded-lg border border-stone-200 bg-white p-1 shadow-lg" role="menu"><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => { onMenuToggle(); onRenameMaterial({ id: item.source.id, title: item.title }) }} role="menuitem" type="button">이름 변경</button><button className="block h-8 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => { onMenuToggle(); void onRemoveMaterial(item.weekNumber, item.source.id, item.title) }} role="menuitem" type="button">주차에서 제거</button></div> : null}</div> : <span className="flex size-8 shrink-0 items-center justify-center"><MoreHorizontal className="text-stone-300" size={16} /></span>}
+    {canManage && item.kind === 'material' ? <div className="relative shrink-0"><button aria-expanded={isMenuOpen} aria-label={`${item.title} 작업 메뉴`} className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700 mobile-web:size-11" onClick={onMenuToggle} type="button"><MoreHorizontal size={16} /></button>{isMenuOpen ? <div className="absolute top-11 right-0 z-20 w-32 rounded-lg border border-stone-200 bg-white p-1 shadow-lg" role="menu"><button className="block h-10 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => { onMenuToggle(); onRenameMaterial({ id: item.source.id, title: item.title }) }} role="menuitem" type="button">이름 변경</button><button className="block h-10 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => { onMenuToggle(); void onRemoveMaterial(item.weekNumber, item.source.id, item.title) }} role="menuitem" type="button">주차에서 제거</button></div> : null}</div> : <span className="flex size-8 shrink-0 items-center justify-center mobile-web:size-11"><MoreHorizontal className="text-stone-300" size={16} /></span>}
   </div>
 }
 
@@ -150,8 +173,8 @@ function ContentFilterButtons({ filter, onFilter }: {
     ['exam', '시험'],
   ] as const
 
-  return <div className="flex flex-wrap items-center gap-2" role="group" aria-label="콘텐츠 유형 필터">
-    {filters.map(([value, label]) => <button aria-pressed={filter === value} className={`h-9 min-h-9 rounded-lg border px-3 type-control font-semibold ${filter === value ? 'border-transparent bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`} key={value} onClick={() => onFilter(value)} type="button">{label}</button>)}
+  return <div className="mobile-horizontal-scroll flex flex-wrap items-center gap-2 mobile-phone:flex-nowrap mobile-phone:overflow-x-auto" role="group" aria-label="콘텐츠 유형 필터">
+    {filters.map(([value, label]) => <button aria-pressed={filter === value} className={`h-9 min-h-9 shrink-0 rounded-lg border px-3 type-control font-semibold mobile-web:h-11 mobile-web:min-h-11 ${filter === value ? 'border-transparent bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`} key={value} onClick={() => onFilter(value)} type="button">{label}</button>)}
   </div>
 }
 
@@ -163,8 +186,8 @@ function AddItemButtons({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 
     ['exam', ClipboardList, '시험 추가'],
   ] as const
 
-  return <div aria-label="새 항목 유형" className="flex flex-wrap items-center gap-2 sm:ml-auto" role="group">
-    {items.map(([kind, Icon, label], index) => <Button className="h-9 min-h-9" disabled={disabled} key={kind} onClick={() => onAdd(kind)} size="sm" variant={index === 0 ? 'primary' : 'secondary'}><Icon size={14} />{label}</Button>)}
+  return <div aria-label="새 항목 유형" className="mobile-horizontal-scroll flex flex-wrap items-center gap-2 sm:ml-auto mobile-phone:flex-nowrap mobile-phone:overflow-x-auto" role="group">
+    {items.map(([kind, Icon, label], index) => <Button className="h-9 min-h-9 shrink-0" disabled={disabled} key={kind} onClick={() => onAdd(kind)} size="sm" variant={index === 0 ? 'primary' : 'secondary'}><Icon size={14} />{label}</Button>)}
   </div>
 }
 

@@ -30,6 +30,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { cx } from '../../../shared/lib/cx'
 import { Button, PageContainer, PageHeader, useToast } from '../../../shared/ui'
+import { useResponsiveViewport } from '../../../shared/responsive'
 
 type CalendarView = 'list' | 'month' | 'week'
 
@@ -39,6 +40,7 @@ export function InstructorCalendarPage() {
   usePageTitle('캘린더')
   const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
+  const { mode } = useResponsiveViewport()
   const { classroomId = '' } = useParams()
   const isInstructor = isInstructorRole(user?.role)
   const { addEvent, events, removeEvent, updateEvent } = useCalendarEvents(
@@ -119,7 +121,7 @@ export function InstructorCalendarPage() {
   }
 
   return (
-    <PageContainer className="lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-5 lg:overflow-hidden lg:space-y-0">
+    <PageContainer className={cx('lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-5 lg:overflow-hidden lg:space-y-0', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
       <PageHeader
         actions={
           <>
@@ -139,7 +141,7 @@ export function InstructorCalendarPage() {
         title="캘린더"
       />
 
-      <div className="grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', mode === 'tablet-portrait' && '!grid-cols-1 !overflow-visible')}>
         <section
           aria-label="캘린더 본문"
           className="flex min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
@@ -149,7 +151,7 @@ export function InstructorCalendarPage() {
             <div className="flex items-center gap-2" ref={pickerRef}>
               <button
                 aria-label="이전 기간"
-                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 mobile-web:size-11"
                 onClick={() => move(-1)}
                 type="button"
               >
@@ -179,7 +181,7 @@ export function InstructorCalendarPage() {
               </div>
               <button
                 aria-label="다음 기간"
-                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 mobile-web:size-11"
                 onClick={() => move(1)}
                 type="button"
               >

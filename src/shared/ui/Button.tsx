@@ -54,7 +54,7 @@ function getButtonClassName({
   variant,
 }: Required<ButtonStyleProps> & { className?: string }): string {
   return [
-    'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border font-semibold',
+    'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border font-semibold mobile-web:min-h-11',
     'transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     'disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400',
     sizeClasses[size],

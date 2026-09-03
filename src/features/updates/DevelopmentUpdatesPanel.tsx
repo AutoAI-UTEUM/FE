@@ -8,6 +8,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 
 import { cx } from '../../shared/lib/cx'
+import { useResponsiveViewport } from '../../shared/responsive'
 import {
   createGithubUpdatesRepository,
   type DevelopmentPart,
@@ -53,6 +54,7 @@ export function DevelopmentUpdatesPanel({
   repository?: UpdatesRepository
 }) {
   const activeRepository = repository ?? defaultRepository
+  const { mode } = useResponsiveViewport()
   const today = useMemo(() => initialDate ?? new Date(), [initialDate])
   const todayKey = useMemo(() => formatDateKey(today), [today])
   const [visibleMonth, setVisibleMonth] = useState(
@@ -169,12 +171,12 @@ export function DevelopmentUpdatesPanel({
           <button className="inline-flex items-center gap-1 type-caption font-semibold text-brand-700" onClick={reloadUpdates} type="button"><RefreshCcw aria-hidden="true" size={12} />다시 시도</button>
         </div>
       ) : (
-        <div className="mt-4 grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <div className={cx('mt-4 grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[19rem_minmax(0,1fr)]', mode === 'tablet-portrait' && '!grid-cols-1')}>
           <section aria-label={`${monthLabel} 업데이트 달력`} className="min-w-0 self-start rounded-lg border border-stone-200 bg-white p-3 sm:p-4">
             <div className="mb-2 grid h-9 grid-cols-[2.25rem_1fr_2.25rem] items-center">
-              <button aria-label="이전 달" className="flex size-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50" onClick={() => moveMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button>
+              <button aria-label="이전 달" className="flex size-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button>
               <strong className="text-center type-control text-stone-900">{monthLabel}</strong>
-              <button aria-label="다음 달" className="flex size-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50" onClick={() => moveMonth(1)} type="button"><ChevronRight aria-hidden="true" size={15} /></button>
+              <button aria-label="다음 달" className="flex size-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(1)} type="button"><ChevronRight aria-hidden="true" size={15} /></button>
             </div>
             <div aria-label={`${monthLabel} 업데이트 달력`} role="grid">
               <div className="grid grid-cols-7 gap-1" role="row">
@@ -203,7 +205,7 @@ export function DevelopmentUpdatesPanel({
                       aria-label={`${visibleMonth.getFullYear()}년 ${visibleMonth.getMonth() + 1}월 ${calendarDay.day}일, ${dayUpdates.length > 0 ? `업데이트 ${dayUpdates.length}건` : '업데이트 없음'}`}
                       aria-pressed={isSelected}
                       className={cx(
-                        'relative flex h-10 min-w-0 items-center justify-center rounded-md text-center transition-colors',
+                        'relative flex h-10 min-w-0 items-center justify-center rounded-md text-center transition-colors mobile-web:min-h-11',
                         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600',
                         isSelected
                           ? 'bg-brand-50 text-brand-800'

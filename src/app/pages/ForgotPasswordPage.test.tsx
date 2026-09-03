@@ -23,6 +23,14 @@ function renderForgotPassword() {
 }
 
 describe('ForgotPasswordPage', () => {
+  it('does not show the reset-link introduction', () => {
+    renderForgotPassword()
+
+    expect(
+      screen.queryByText('가입한 이메일로 재설정 링크를 보내드려요'),
+    ).not.toBeInTheDocument()
+  })
+
   it('validates an empty email', () => {
     renderForgotPassword()
 

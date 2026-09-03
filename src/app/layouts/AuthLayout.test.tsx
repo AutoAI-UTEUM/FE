@@ -19,10 +19,10 @@ afterEach(() => {
 describe('AuthLayout', () => {
   it('places the backend service status in secondary auth pages', async () => {
     render(
-      <MemoryRouter initialEntries={['/forgot-password']}>
+      <MemoryRouter initialEntries={['/signup']}>
         <Routes>
           <Route element={<AuthLayout />}>
-            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
+            <Route path="/signup" element={<h1>회원가입 폼</h1>} />
           </Route>
         </Routes>
       </MemoryRouter>,
@@ -53,6 +53,20 @@ describe('AuthLayout', () => {
     })
   })
 
+  it('hides the service status and divider on the forgot-password page', () => {
+    render(
+      <MemoryRouter initialEntries={['/forgot-password']}>
+        <Routes>
+          <Route element={<AuthLayout />}>
+            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
+  })
+
   it('uses the focused login layout without the secondary status footer', () => {
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -81,10 +95,10 @@ describe('AuthLayout', () => {
     )
 
     render(
-      <MemoryRouter initialEntries={['/forgot-password']}>
+      <MemoryRouter initialEntries={['/signup']}>
         <Routes>
           <Route element={<AuthLayout />}>
-            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
+            <Route path="/signup" element={<h1>회원가입 폼</h1>} />
           </Route>
         </Routes>
       </MemoryRouter>,

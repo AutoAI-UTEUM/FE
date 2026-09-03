@@ -142,8 +142,8 @@ export function ClassroomStudentsPage() {
         <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>전체 {students.length}</FilterButton>
         <FilterButton active={filter === 'recent'} onClick={() => setFilter('recent')}>최근 활동 {students.length - inactiveCount}</FilterButton>
         <FilterButton active={filter === 'inactive'} onClick={() => setFilter('inactive')}>7일 이상 미활동 {inactiveCount}</FilterButton>
-        <div className="ml-auto flex min-w-0 items-center gap-2">
-          <label className="relative min-w-48 sm:w-72"><span className="sr-only">수강생 검색</span><Search aria-hidden="true" className="absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} /><input className="h-10 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" onChange={(event) => setQuery(event.target.value)} placeholder="이름 검색" value={query} /></label>
+        <div className="ml-auto flex min-w-0 items-center gap-2 mobile-phone:ml-0 mobile-phone:min-w-full">
+          <label className="relative min-w-48 sm:w-72 mobile-phone:min-w-0 mobile-phone:flex-1"><span className="sr-only">수강생 검색</span><Search aria-hidden="true" className="absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} /><input className="h-10 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 mobile-web:h-11" onChange={(event) => setQuery(event.target.value)} placeholder="이름 검색" value={query} /></label>
           <label className="relative shrink-0"><span className="sr-only">수강생 정렬</span><ArrowUpDown aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} /><select aria-label="수강생 정렬" className="h-10 appearance-none rounded-lg border border-stone-200 bg-white pr-8 pl-9 type-control text-stone-700 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" onChange={(event) => setSort(event.target.value as ClassroomStudentSort)} value={sort}><option value="RECENT_ACTIVITY">최근 활동순</option><option value="NAME">이름순</option><option value="LOW_PROGRESS">낮은 진도순</option></select><ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-stone-400" size={13} /></label>
         </div>
       </div>
@@ -163,7 +163,7 @@ export function ClassroomStudentsPage() {
 }
 
 function FilterButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
-  return <button className={active ? 'h-9 rounded-lg bg-stone-950 px-3 type-caption font-bold text-white dark:bg-stone-200 dark:text-stone-950' : 'h-9 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600 hover:bg-stone-50'} onClick={onClick} type="button">{children}</button>
+  return <button className={active ? 'h-9 shrink-0 rounded-lg bg-stone-950 px-3 type-caption font-bold text-white dark:bg-stone-200 dark:text-stone-950 mobile-web:h-11' : 'h-9 shrink-0 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600 hover:bg-stone-50 mobile-web:h-11'} onClick={onClick} type="button">{children}</button>
 }
 
 function isInactiveStudent(student: ClassroomStudent): boolean {

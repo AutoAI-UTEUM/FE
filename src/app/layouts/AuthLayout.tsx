@@ -11,9 +11,11 @@ import { routes } from '../routes'
 export function AuthLayout() {
   const location = useLocation()
   const isLoginPage = location.pathname === routes.login
+  const showsServiceStatus =
+    !isLoginPage && location.pathname !== routes.forgotPassword
 
   return (
-    <main className="auth-light grid min-h-screen bg-white text-stone-900 lg:grid-cols-[minmax(520px,46.5vw)_minmax(0,1fr)]">
+    <main className="auth-light grid min-h-screen bg-white text-stone-900 lg:grid-cols-[minmax(520px,46.5vw)_minmax(0,1fr)] mobile-web:min-h-[100dvh]">
       <aside className={`hidden bg-[#131C2B] px-12 py-10 text-white xl:px-14 ${isLoginPage ? 'lg:flex lg:flex-col' : 'lg:flex lg:flex-col lg:justify-between'}`}>
         {!isLoginPage ? (
           <Link
@@ -56,7 +58,7 @@ export function AuthLayout() {
         </p>
       </aside>
 
-      <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8">
+      <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8 mobile-web:min-h-[100dvh] mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:mobile-safe-bottom">
         <div className={isLoginPage ? 'w-full max-w-[400px]' : 'w-full max-w-[440px]'}>
           <Link
             to={routes.classrooms}
@@ -75,7 +77,7 @@ export function AuthLayout() {
 
           <Outlet />
 
-          {!isLoginPage ? (
+          {showsServiceStatus ? (
             <footer
               aria-label="서비스 연결 상태"
               className="mt-8 flex justify-center border-t border-stone-100 pt-4"

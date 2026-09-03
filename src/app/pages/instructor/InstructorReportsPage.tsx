@@ -102,7 +102,7 @@ export function InstructorReportsPage() {
 
   return (
     <ClassroomWorkspaceContainer>
-      {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="reports" classroom={classroom} /> : null}
+      {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="learning" classroom={classroom} /> : null}
 
       {!reportsEnabled ? <ReportsUnavailableState /> : null}
       {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
@@ -115,22 +115,22 @@ export function InstructorReportsPage() {
             <label className="relative block w-full sm:w-64">
               <span className="sr-only">리포트 학습자 검색</span>
               <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={14} />
-              <input aria-label="리포트 학습자 검색" className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" onChange={(event) => setSearchQuery(event.target.value)} placeholder="이름, 이메일 또는 소속 검색" type="search" value={searchQuery} />
+              <input aria-label="리포트 학습자 검색" className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control text-stone-900 outline-none placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 mobile-web:h-11" onChange={(event) => setSearchQuery(event.target.value)} placeholder="이름, 이메일 또는 소속 검색" type="search" value={searchQuery} />
             </label>
           </div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable]">
-            <div className="min-w-[760px]">
-              <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+            <div className="min-w-[760px] mobile-web:min-w-0">
+              <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500 mobile-web:hidden">
                 <span className="pl-11">학습자</span><span>이메일</span><span>소속</span><span className="text-center">리포트</span>
               </div>
               {visibleStudents.length === 0 ? (
                 <div className="flex min-h-40 items-center justify-center type-body text-stone-400">검색 결과가 없습니다.</div>
               ) : visibleStudents.map((student) => (
-                <article className="grid min-h-16 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 px-5 last:border-0 hover:bg-stone-50" key={student.id}>
+                <article className="grid min-h-16 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 px-5 last:border-0 hover:bg-stone-50 mobile-web:grid-cols-[minmax(0,1fr)_auto] mobile-web:gap-x-3 mobile-web:gap-y-1 mobile-web:px-4 mobile-web:py-3" key={student.id}>
                   <div className="flex min-w-0 items-center gap-3"><span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{student.name.trim().slice(0, 1) || '?'}</span><strong className="truncate type-body text-stone-900">{student.name}</strong></div>
-                  <span className="truncate type-control text-stone-500">{student.email}</span>
-                  <span className="truncate type-control text-stone-500">{student.affiliation ?? '-'}</span>
-                  <ButtonLink aria-label={`${student.name} 리포트 열기`} className="w-full" size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary">리포트 보기</ButtonLink>
+                  <span className="truncate type-control text-stone-500 mobile-web:col-start-1 mobile-web:pl-11">{student.email}</span>
+                  <span className="truncate type-control text-stone-500 mobile-web:col-start-1 mobile-web:pl-11">{student.affiliation ?? '-'}</span>
+                  <ButtonLink aria-label={`${student.name} 리포트 열기`} className="w-full mobile-web:col-start-2 mobile-web:row-span-3 mobile-web:row-start-1 mobile-web:w-auto mobile-web:self-center" size="sm" to={classroomStudentReportsPath(classroomId, student.id)} variant="secondary">리포트 보기</ButtonLink>
                 </article>
               ))}
             </div>

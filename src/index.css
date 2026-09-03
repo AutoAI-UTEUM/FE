@@ -28,7 +28,44 @@
   }
 }
 
+html[data-responsive-mode='phone'] .study-session-content {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+html[data-responsive-mode='tablet-portrait'] .study-session-content {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 11fr) minmax(0, 9fr);
+}
+
+html[data-responsive-mode='tablet-landscape'] .study-session-content {
+  grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] {
+  align-items: stretch;
+  padding: 0 !important;
+}
+
+html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > form,
+html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > section,
+html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  overflow-y: auto;
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant mobile-web (&:where(.mobile-web, .mobile-web *));
+@custom-variant mobile-phone (&:where([data-responsive-mode='phone'], [data-responsive-mode='phone'] *));
+@custom-variant tablet-portrait (&:where([data-responsive-mode='tablet-portrait'], [data-responsive-mode='tablet-portrait'] *));
+@custom-variant tablet-landscape (&:where([data-responsive-mode='tablet-landscape'], [data-responsive-mode='tablet-landscape'] *));
 
 @theme {
   --font-sans:
@@ -290,6 +327,47 @@ html {
   min-width: 320px;
   background: #f6f7f9;
   scrollbar-gutter: stable;
+}
+
+html.mobile-web {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  scrollbar-gutter: auto;
+}
+
+html.mobile-web body,
+html.mobile-web #root {
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+.mobile-horizontal-scroll {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-horizontal-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+html.mobile-web input,
+html.mobile-web textarea,
+html.mobile-web select {
+  font-size: 16px;
+}
+
+@utility mobile-safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+@utility mobile-safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility mobile-safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 html.study-workspace-active,
