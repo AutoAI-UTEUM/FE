@@ -102,7 +102,7 @@ export function InstructorReportsPage() {
 
   return (
     <ClassroomWorkspaceContainer>
-      {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="reports" classroom={classroom} /> : null}
+      {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="learning" classroom={classroom} /> : null}
 
       {!reportsEnabled ? <ReportsUnavailableState /> : null}
       {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}

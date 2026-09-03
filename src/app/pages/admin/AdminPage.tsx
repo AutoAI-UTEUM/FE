@@ -1,4 +1,4 @@
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, ShieldCheck } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import {
@@ -247,6 +247,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
   const [users, setUsers] = useState<AiUsageUser[]>([])
   const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -257,7 +258,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
       .catch((reason: unknown) => { if (!controller.signal.aborted) setError(toAdminError(reason)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [range, repository])
+  }, [range, refreshKey, repository])
 
   const daily = summary?.daily ?? []
   const totals = {
@@ -266,7 +267,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
     tokens: sumNullableTokenTotals(daily),
   }
 
-  return <div className="flex h-full min-h-[560px] flex-col"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">AI 사용량</h2><p className="type-caption text-stone-500">호출 및 토큰 사용 현황</p></div><form className="flex items-center gap-2 mobile-phone:grid mobile-phone:w-full mobile-phone:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setRange({ from, to }) }}><label className="type-caption text-stone-500">시작일 <input className="mt-1 h-9 w-full rounded-lg border border-stone-200 px-2 text-stone-800 mobile-web:h-11" max={to} onChange={(event) => setFrom(event.target.value)} type="date" value={from} /></label><label className="type-caption text-stone-500">종료일 <input className="mt-1 h-9 w-full rounded-lg border border-stone-200 px-2 text-stone-800 mobile-web:h-11" min={from} onChange={(event) => setTo(event.target.value)} type="date" value={to} /></label><Button className="mobile-phone:col-span-2" size="sm" type="submit">조회</Button></form></div>
+  return <div className="flex h-full min-h-[560px] flex-col"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">AI 사용량</h2><p className="type-caption text-stone-500">호출 및 토큰 사용 현황</p></div><form className="flex items-end gap-2 mobile-phone:grid mobile-phone:w-full mobile-phone:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setLoading(true); setError(null); setRange({ from, to }) }}><label className="type-caption text-stone-500">시작일 <input className="mt-1 h-9 w-full rounded-lg border border-stone-200 px-2 text-stone-800 mobile-web:h-11" max={to} onChange={(event) => setFrom(event.target.value)} type="date" value={from} /></label><label className="type-caption text-stone-500">종료일 <input className="mt-1 h-9 w-full rounded-lg border border-stone-200 px-2 text-stone-800 mobile-web:h-11" min={from} onChange={(event) => setTo(event.target.value)} type="date" value={to} /></label><div className="flex items-center gap-2 mobile-phone:col-span-2"><Button className="mobile-phone:flex-1" size="sm" type="submit">조회</Button><Button aria-label="AI 사용량 새로고침" className="size-9 shrink-0 p-0 mobile-web:size-11" disabled={loading} onClick={() => { setLoading(true); setError(null); setRefreshKey((key) => key + 1) }} size="sm" title="새로고침" type="button" variant="secondary"><RefreshCw aria-hidden="true" className={loading ? 'animate-spin' : undefined} size={15} /></Button></div></form></div>
     {error ? <AdminErrorMessage error={error} /> : null}
     <div className="min-h-0 flex-1 overflow-auto"><div className="grid border-b border-stone-200 sm:grid-cols-3"><Metric label="총 호출" value={`${formatCount(totals.calls)}건`} /><Metric label="실패" value={`${formatCount(totals.failures)}건`} /><Metric label="총 토큰" value={formatCount(totals.tokens)} /></div>
       {loading ? <PanelMessage message="AI 사용량을 불러오는 중입니다." /> : <><DailyUsageChart daily={daily} /><div className="grid xl:grid-cols-2"><UsageTable summary={summary} /><UsersUsageTable users={users} /></div></>}

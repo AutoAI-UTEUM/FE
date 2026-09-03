@@ -150,7 +150,10 @@ describe('InfraPanel', () => {
     expect(repository.getInfraApp).toHaveBeenCalledTimes(1)
 
     const metricsCalls = vi.mocked(repository.getInfraMetrics).mock.calls.length
-    fireEvent.click(screen.getByRole('button', { name: '새로고침' }))
+    const refreshButton = screen.getByRole('button', { name: '인프라 새로고침' })
+    expect(refreshButton).toHaveAttribute('title', '새로고침')
+    expect(refreshButton).toHaveTextContent('')
+    fireEvent.click(refreshButton)
     await waitFor(() => expect(repository.getInfraCost).toHaveBeenCalledTimes(2))
     expect(repository.getInfraApp).toHaveBeenCalledTimes(2)
     expect(repository.getInfraMetrics).toHaveBeenCalledTimes(metricsCalls + 1)

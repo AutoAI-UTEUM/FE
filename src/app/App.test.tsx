@@ -633,8 +633,8 @@ describe('AppRoutes', () => {
     })
 
     expect(await screen.findByRole('heading', { name: '수강생 리포트' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: '학습현황' })).not.toHaveAttribute('aria-current')
+    expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '학습현황' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: '평가 지표' })).toHaveAttribute('href', '/classrooms/12/report-criteria')
     expect(screen.queryByText('분석 대상 학습자')).not.toBeInTheDocument()
     expect(screen.queryByText('학습자를 선택해 새 리포트를 생성하거나 저장된 버전을 확인하세요.')).not.toBeInTheDocument()

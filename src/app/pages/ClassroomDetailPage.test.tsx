@@ -137,7 +137,7 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('heading', { level: 1, name: '자료구조' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '강의' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: '학습현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
-    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
+    expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '관리' })).toBeInTheDocument()
     const classroomMenu = screen.getByRole('navigation', { name: '강의실 메뉴' })
     expect(classroomMenu.previousElementSibling).toHaveClass('lg:h-10')

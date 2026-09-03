@@ -11,6 +11,8 @@ import { routes } from '../routes'
 export function AuthLayout() {
   const location = useLocation()
   const isLoginPage = location.pathname === routes.login
+  const showsServiceStatus =
+    !isLoginPage && location.pathname !== routes.forgotPassword
 
   return (
     <main className="auth-light grid min-h-screen bg-white text-stone-900 lg:grid-cols-[minmax(520px,46.5vw)_minmax(0,1fr)] mobile-web:min-h-[100dvh]">
@@ -75,7 +77,7 @@ export function AuthLayout() {
 
           <Outlet />
 
-          {!isLoginPage ? (
+          {showsServiceStatus ? (
             <footer
               aria-label="서비스 연결 상태"
               className="mt-8 flex justify-center border-t border-stone-100 pt-4"

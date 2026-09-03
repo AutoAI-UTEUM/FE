@@ -10,11 +10,10 @@ import {
   classroomAnalyticsPath,
   classroomDetailPath,
   classroomEditPath,
-  classroomReportsPath,
 } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
-export type ClassroomWorkspaceTab = 'course' | 'learning' | 'reports' | 'settings'
+export type ClassroomWorkspaceTab = 'course' | 'learning' | 'settings'
 
 export function ClassroomHeaderInfoBar({
   classroom,
@@ -82,7 +81,6 @@ export function ClassroomWorkspaceHeader({
     ? [
         { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
         { id: 'learning' as const, label: '학습현황', to: classroomAnalyticsPath(classroom.id) },
-        { id: 'reports' as const, label: '리포트', to: classroomReportsPath(classroom.id) },
         { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
       ]
     : []
