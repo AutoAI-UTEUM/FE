@@ -1,7 +1,6 @@
-# Required GitHub Secrets:
-# - PROD_SSH_HOST
-# - DEV_SSH_USER / DEV_SSH_KEY (shared deployment account and key)
-# - VITE_GOOGLE_CLIENT_ID
+# Required prod environment Secrets:
+# - PROD_SSH_HOST / PROD_SSH_USER / PROD_SSH_KEY / PROD_SSH_PASSPHRASE
+# Required repository Secret: VITE_GOOGLE_CLIENT_ID
 name: Deploy FE production
 
 on:
@@ -21,6 +20,7 @@ jobs:
   deploy:
     name: deploy-fe-production
     runs-on: ubuntu-latest
+    environment: prod
     timeout-minutes: 15
     env:
       VITE_API_BASE_URL: /api
@@ -76,8 +76,9 @@ jobs:
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          key: ${{ secrets.DEV_SSH_KEY }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
           source: dist/*
           target: /tmp/fe-dist-production
           strip_components: 1
@@ -88,8 +89,9 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          key: ${{ secrets.DEV_SSH_KEY }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
           script: |
             set -eu
             test -f /tmp/fe-dist-production/index.html
