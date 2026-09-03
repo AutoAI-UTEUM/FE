@@ -714,7 +714,7 @@ describe('instructor pages', () => {
     )
 
     expect(await screen.findByRole('link', { name: '학습현황' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: '리포트' })).toHaveAttribute('href', '/classrooms/12/reports')
+    expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
     expect(screen.queryByText('관찰 데이터 축적 중')).not.toBeInTheDocument()
     expect((await screen.findAllByText('최근 학습')).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '수강생별 학습 현황 안내' })).toBeInTheDocument()
@@ -735,7 +735,7 @@ describe('instructor pages', () => {
     expect(screen.getByLabelText('수강생별 학습 현황')).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col')
     expect(screen.getByRole('region', { name: '수강생별 학습 현황 목록' })).toHaveClass('min-h-0', 'flex-1', 'overflow-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
     expect(screen.getByLabelText('학습 현황 열 제목')).toHaveClass('sticky', 'top-0')
-    expect(screen.getByLabelText('학습 현황 열 제목')).toHaveTextContent('이름진도질문퀴즈최근 학습')
+    expect(screen.getByLabelText('학습 현황 열 제목')).toHaveTextContent('이름진도질문퀴즈최근 학습리포트')
     expect(screen.getByRole('button', { name: '최근 학습 오름차순 정렬' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '이름 오름차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: '진도 내림차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
@@ -783,7 +783,9 @@ describe('instructor pages', () => {
       .getAllByRole('article', { name: /학습 현황$/ })
       .map((row) => row.getAttribute('aria-label'))
     expect(getStudentOrder()).toEqual(['김학습 학습 현황', '이우수 학습 현황', '박느림 학습 현황'])
-    expect(within(studentList).queryByRole('link', { name: /리포트/ })).not.toBeInTheDocument()
+    expect(within(studentList).getByRole('link', { name: '김학습 리포트 보기' })).toHaveAttribute('href', '/classrooms/12/students/9/reports')
+    expect(within(studentList).getByRole('link', { name: '이우수 리포트 보기' })).toHaveAttribute('href', '/classrooms/12/students/10/reports')
+    expect(within(studentList).getByRole('link', { name: '박느림 리포트 보기' })).toHaveAttribute('href', '/classrooms/12/students/11/reports')
 
     expect(screen.getByRole('button', { name: '최근 학습 오름차순 정렬' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '이름 오름차순 정렬' }))

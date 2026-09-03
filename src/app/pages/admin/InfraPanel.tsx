@@ -51,6 +51,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   const [metrics, setMetrics] = useState<LoadState<InfraMetrics>>(emptyState)
   const [cost, setCost] = useState<LoadState<InfraCost>>(emptyState)
   const [app, setApp] = useState<LoadState<InfraApp>>(emptyState)
+  const isRefreshing = metrics.loading || cost.loading || app.loading
 
   useEffect(() => {
     const controller = new AbortController()
@@ -126,14 +127,13 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
             </select>
           </label>
         </div>
-        <Button onClick={() => {
+        <Button aria-label="인프라 새로고침" onClick={() => {
           setMetrics((current) => ({ ...current, error: null, loading: true }))
           setCost((current) => ({ ...current, error: null, loading: true }))
           setApp((current) => ({ ...current, error: null, loading: true }))
           setRefreshKey((key) => key + 1)
-        }} className="mobile-phone:w-full" size="sm" variant="secondary">
-          <RefreshCw aria-hidden="true" size={15} />
-          새로고침
+        }} className="size-9 shrink-0 p-0 mobile-web:size-11 mobile-phone:self-end" disabled={isRefreshing} size="sm" title="새로고침" variant="secondary">
+          <RefreshCw aria-hidden="true" className={isRefreshing ? 'animate-spin' : undefined} size={15} />
         </Button>
       </div>
 

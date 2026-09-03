@@ -26,9 +26,6 @@ export function ForgotPasswordPage() {
     <div>
       <div className="flex flex-col gap-1.5">
         <h1 className="type-page-title font-bold text-stone-900">비밀번호 찾기</h1>
-        <p className="type-body text-stone-400">
-          가입한 이메일로 재설정 링크를 보내드려요
-        </p>
       </div>
 
       <form className="mt-4" noValidate onSubmit={handleSubmit}>

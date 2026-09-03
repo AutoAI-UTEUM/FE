@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
+  FileText,
   Info,
   LoaderCircle,
   RefreshCw,
@@ -24,7 +25,8 @@ import { cx } from '../../../shared/lib/cx'
 import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { useResponsiveViewport } from '../../../shared/responsive'
-import { Button, EmptyState } from '../../../shared/ui'
+import { Button, ButtonLink, EmptyState } from '../../../shared/ui'
+import { classroomStudentReportsPath } from '../../routes'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
@@ -204,16 +206,17 @@ function StudentLearningTable({
         role="region"
         tabIndex={0}
       >
-        <div className="min-w-[860px] mobile-web:min-w-0">
+        <div className="min-w-[920px] mobile-web:min-w-0">
           <div
             aria-label="학습 현황 열 제목"
-            className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500 mobile-web:mobile-horizontal-scroll mobile-web:flex mobile-web:min-h-12 mobile-web:overflow-x-auto mobile-web:px-3"
+            className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_84px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500 mobile-web:mobile-horizontal-scroll mobile-web:flex mobile-web:min-h-12 mobile-web:overflow-x-auto mobile-web:px-3"
           >
             <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
             <StudentSortHeader activeSort={sort} className="justify-self-center" label="진도" onSelect={selectSort} sortKey="progress" />
             <StudentSortHeader activeSort={sort} className="justify-self-center" label="질문" onSelect={selectSort} sortKey="question" />
             <StudentSortHeader activeSort={sort} className="justify-self-center" label="퀴즈" onSelect={selectSort} sortKey="quiz" />
             <StudentSortHeader activeSort={sort} label="최근 학습" onSelect={selectSort} sortKey="recentActivity" />
+            <span className="text-center mobile-web:hidden">리포트</span>
             <span aria-hidden="true" />
           </div>
           <div>
@@ -227,22 +230,43 @@ function StudentLearningTable({
             const detailKey = `${classroomId}:${student.id}`
             const analytics = analyticsByStudentId[detailKey]
             return <article aria-label={`${student.name} 학습 현황`} className="overflow-hidden border-b border-stone-100 bg-white last:border-b-0" key={student.id}>
-              <button
-                aria-controls={detailId}
-                aria-expanded={isExpanded}
-                aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
-                className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 px-5 text-left outline-none transition-colors hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 mobile-web:grid-cols-[minmax(0,1fr)_auto_auto] mobile-web:gap-3 mobile-web:px-3 mobile-web:py-3"
-                onClick={() => toggleStudent(student.id)}
-                type="button"
-              >
+              <div className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_84px_20px] items-center gap-4 px-5 transition-colors hover:bg-stone-50 mobile-web:grid-cols-[minmax(0,1fr)_auto_auto_auto] mobile-web:gap-3 mobile-web:px-3 mobile-web:py-3">
+                <button
+                  aria-controls={detailId}
+                  aria-expanded={isExpanded}
+                  aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
+                  className="col-span-5 grid min-h-16 grid-cols-subgrid items-center text-left outline-none focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-brand-500 mobile-web:col-span-2 mobile-web:min-h-11"
+                  onClick={() => toggleStudent(student.id)}
+                  type="button"
+                >
                 <span className="flex min-w-0 items-center gap-3">
                   <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
                   <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span>{isMobileWeb ? <span className="mt-2 grid grid-cols-3 gap-2"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span> : null}</span>
                 </span>
                 {!isMobileWeb ? <span className="contents"><StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} /><StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} /><StudentQuizSummary analytics={analytics} student={student} /></span> : null}
                 <StudentSummaryMetric label="최근 학습" value={formatDetailedRelativeActivityDate(student.lastActiveAt)} />
+                </button>
+                <ButtonLink
+                  aria-label={`${student.name} 리포트 보기`}
+                  className="relative z-[1] w-full px-2 mobile-web:w-auto"
+                  size="sm"
+                  to={classroomStudentReportsPath(classroomId, student.id)}
+                  variant="secondary"
+                >
+                  <FileText aria-hidden="true" size={13} />
+                  <span className="mobile-web:sr-only">리포트</span>
+                </ButtonLink>
+                <button
+                  aria-controls={detailId}
+                  aria-expanded={isExpanded}
+                  aria-label={`${student.name} 상세 ${isExpanded ? '접기' : '펼치기'}`}
+                  className="flex size-8 items-center justify-center rounded-md outline-none hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-brand-500 mobile-web:size-11"
+                  onClick={() => toggleStudent(student.id)}
+                  type="button"
+                >
                 <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
-              </button>
+                </button>
+              </div>
               {isExpanded ? <StudentLearningDetails
                 analytics={analytics}
                 detailId={detailId}
