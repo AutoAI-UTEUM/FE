@@ -1,4 +1,6 @@
-# Required GitHub Secrets: DEV_SSH_HOST / DEV_SSH_USER / DEV_SSH_KEY
+# Required dev environment Secrets: DEV_SSH_HOST / DEV_SSH_USER / DEV_SSH_KEY
+# Encrypted SSH keys also require DEV_SSH_PASSPHRASE in the dev environment.
+# Keep repository SSH secrets unchanged: production currently shares them.
 name: Deploy FE dev
 
 on:
@@ -18,6 +20,7 @@ jobs:
   deploy:
     name: deploy-fe-dev
     runs-on: ubuntu-latest
+    environment: dev
     timeout-minutes: 15
     env:
       VITE_API_BASE_URL: /api
@@ -69,6 +72,7 @@ jobs:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
+          passphrase: ${{ secrets.DEV_SSH_PASSPHRASE }}
           source: dist/*
           target: /tmp/fe-dist
           strip_components: 1
@@ -81,6 +85,7 @@ jobs:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
+          passphrase: ${{ secrets.DEV_SSH_PASSPHRASE }}
           script: |
             set -eu
             test -f /tmp/fe-dist/index.html

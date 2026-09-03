@@ -10,11 +10,10 @@ import {
   classroomAnalyticsPath,
   classroomDetailPath,
   classroomEditPath,
-  classroomReportsPath,
 } from '../../routes'
 import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext'
 
-export type ClassroomWorkspaceTab = 'course' | 'learning' | 'reports' | 'settings'
+export type ClassroomWorkspaceTab = 'course' | 'learning' | 'settings'
 
 export function ClassroomHeaderInfoBar({
   classroom,
@@ -28,7 +27,7 @@ export function ClassroomHeaderInfoBar({
   showInviteCode?: boolean
 }) {
   return (
-    <div aria-label="강의실 정보" className="flex min-h-10 max-w-full items-stretch overflow-hidden rounded-lg border border-stone-200 bg-white text-stone-600" role="group">
+    <div aria-label="강의실 정보" className="mobile-horizontal-scroll flex min-h-10 max-w-full items-stretch overflow-x-auto rounded-lg border border-stone-200 bg-white text-stone-600 mobile-web:min-h-11" role="group">
       <span className="flex min-w-0 items-center gap-1.5 px-3 type-control">
         <CalendarRange aria-hidden="true" className="shrink-0 text-stone-400" size={14} />
         <span className="truncate">{formatClassroomPeriod(classroom.startDate, classroom.endDate)}</span>
@@ -82,7 +81,6 @@ export function ClassroomWorkspaceHeader({
     ? [
         { id: 'course' as const, label: '강의', to: classroomDetailPath(classroom.id) },
         { id: 'learning' as const, label: '학습현황', to: classroomAnalyticsPath(classroom.id) },
-        { id: 'reports' as const, label: '리포트', to: classroomReportsPath(classroom.id) },
         { id: 'settings' as const, label: '관리', to: classroomEditPath(classroom.id) },
       ]
     : []
@@ -118,7 +116,7 @@ export function ClassroomWorkspaceHeader({
           </>}
         />
       </div>
-      {showTabs && tabs.length > 0 ? <nav aria-label="강의실 메뉴" className="mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200">
+      {showTabs && tabs.length > 0 ? <nav aria-label="강의실 메뉴" className="mobile-horizontal-scroll mt-4 flex h-11 items-stretch gap-7 overflow-x-auto border-b border-stone-200 mobile-web:h-12">
         {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? 'page' : undefined} className={activeTab === tab.id ? 'relative flex shrink-0 items-center type-body font-semibold text-stone-950 after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-brand-600' : 'relative flex shrink-0 items-center type-body font-semibold text-stone-500 hover:text-stone-900'} key={tab.id} preventScrollReset to={tab.to}>{tab.label}</Link>)}
       </nav> : null}
     </header>

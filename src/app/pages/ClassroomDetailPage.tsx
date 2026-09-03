@@ -399,7 +399,7 @@ export function ClassroomDetailPage() {
 
     {isInstructor && isReadOnly ? <p className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 type-caption text-stone-600"><Archive size={15} />종료된 강의실입니다. 콘텐츠를 확인할 수 있지만 새 항목을 추가하거나 수정할 수 없습니다.</p> : null}
 
-    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
+    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch mobile-phone:min-h-0 tablet-portrait:min-h-0 tablet-portrait:flex-1 tablet-portrait:grid-cols-[220px_minmax(0,1fr)] tablet-portrait:grid-rows-[minmax(0,1fr)] tablet-portrait:items-stretch tablet-landscape:min-h-0 tablet-landscape:flex-1 tablet-landscape:grid-cols-[240px_minmax(0,1fr)] tablet-landscape:grid-rows-[minmax(0,1fr)] tablet-landscape:items-stretch">
       <ClassroomContentRail
         endDate={classroom.endDate}
         onSelect={(weekNumber) => {
@@ -410,7 +410,7 @@ export function ClassroomDetailPage() {
         startDate={classroom.startDate}
         weeks={weeks}
       />
-      <div className="min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
+      <div className="min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden tablet-portrait:flex tablet-portrait:h-full tablet-portrait:min-h-0 tablet-portrait:flex-col tablet-portrait:overflow-hidden tablet-landscape:flex tablet-landscape:h-full tablet-landscape:min-h-0 tablet-landscape:flex-col tablet-landscape:overflow-hidden">
         {viewingNotice && selectedNotice ? <NoticeDetailPanel canEdit={canManage} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onEdit={() => updateQuery({ panel: `notice-edit-${selectedNotice.id}` })} /> : null}
         {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: selectedNotice ? `notice-${selectedNotice.id}` : null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
         {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}

@@ -231,14 +231,14 @@ export function EntranceRequestsPage() {
 
   return <PageContainer>
     <PageHeader title="입장 요청" />
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div aria-label="입장 요청 상태" className="inline-flex w-fit rounded-lg border border-stone-200 bg-white p-1" role="tablist">
+    <div className="flex flex-wrap items-center justify-between gap-3 mobile-phone:flex-col mobile-phone:items-stretch">
+      <div aria-label="입장 요청 상태" className="inline-flex w-fit rounded-lg border border-stone-200 bg-white p-1 mobile-horizontal-scroll mobile-phone:w-full" role="tablist">
         <TabButton active={tab === 'pending'} label={`대기 중${tab === 'pending' ? ` ${requests.length}` : ''}`} onClick={() => selectTab('pending')} />
         <TabButton active={tab === 'students'} label="수강생 관리" onClick={() => selectTab('students')} />
         <TabButton active={tab === 'processed'} label="처리 내역" onClick={() => selectTab('processed')} />
       </div>
       {tab === 'pending' && requests.length > 0 ? (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 mobile-phone:grid mobile-phone:grid-cols-2">
           <button className="h-7 rounded-md border border-stone-300 bg-white px-2 type-micro font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400" disabled={selectedRequestKeys.size === 0 || isBatchProcessing} onClick={() => void processSelected('reject')} type="button">선택 거절</button>
           <button className="h-7 rounded-md border border-brand-700 bg-brand-700 px-2 type-micro font-semibold text-white transition-colors hover:bg-brand-800 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400" disabled={selectedRequestKeys.size === 0 || isBatchProcessing} onClick={() => void processSelected('approve')} type="button">선택 승인</button>
         </div>
@@ -294,5 +294,5 @@ export function EntranceRequestsPage() {
 }
 
 function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-selected={active} className={cx('h-8 rounded-md px-3 type-caption font-semibold', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
+  return <button aria-selected={active} className={cx('h-8 shrink-0 rounded-md px-3 type-caption font-semibold mobile-web:h-11', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
 }

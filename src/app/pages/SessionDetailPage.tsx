@@ -42,6 +42,7 @@ import {
   sessionDetailPath,
 } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+import { MobileWorkspaceTabs, useResponsiveViewport } from '../../shared/responsive'
 import { QuizWorkspace } from './QuizPage'
 
 const SessionPageViewer = lazy(async () => {
@@ -109,6 +110,8 @@ export function SessionDetailPage() {
   const [chatPanelWidth, setChatPanelWidth] = useState<number | null>(null)
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
   const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
+  const [mobilePane, setMobilePane] = useState<'content' | 'learning'>('content')
+  const { isPhone } = useResponsiveViewport()
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
   const currentPageRef = useRef(1)
@@ -570,21 +573,13 @@ export function SessionDetailPage() {
 
   async function handleQuizDecline() {
     if (isActionPending || chat.isTurnPending) return
-    chat.clearUiActions()
-    setSession((current) => current ? { ...current, uiActions: [] } : current)
     setIsActionPending(true)
     setError(null)
     try {
       const result = await sessionsRepository.declineQuiz(activeSession.id)
-      applyTurnResult({
-        ...result,
-        uiActions: [],
-      }, true)
+      applyTurnResult(result, true)
     } catch (requestError) {
-      if (!(requestError instanceof ApiClientError
-        && (requestError.status === 404 || requestError.status === 405))) {
-        setError(getRequestErrorMessage(requestError))
-      }
+      setError(getRequestErrorMessage(requestError))
     } finally {
       setIsActionPending(false)
     }
@@ -763,7 +758,7 @@ export function SessionDetailPage() {
         {activeSession.materialTitle} 학습 화면입니다.
       </p>
 
-      <section className="flex h-full min-h-0">
+      <section className="flex h-full min-h-0 mobile-phone:flex-col">
         {isResourcePanelOpen ? (
           <SessionResourcePanel
             activeMaterialId={activeSession.materialId}
@@ -778,6 +773,14 @@ export function SessionDetailPage() {
           />
         ) : null}
 
+        {isPhone ? (
+          <MobileWorkspaceTabs
+            active={mobilePane}
+            items={[{ label: embeddedQuizId ? '퀴즈' : '자료', value: 'content' }, { label: '학습', value: 'learning' }]}
+            onChange={setMobilePane}
+          />
+        ) : null}
+
         <div
           className="study-session-content h-full min-h-0 min-w-0 flex-1"
           ref={workspaceRef}
@@ -785,6 +788,7 @@ export function SessionDetailPage() {
             ? undefined
             : { '--chat-panel-width': `${chatPanelWidth}px` } as CSSProperties}
         >
+          <div className={isPhone && mobilePane !== 'content' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
           <Suspense
             fallback={
               <div
@@ -837,6 +841,7 @@ export function SessionDetailPage() {
               />
             )}
           </Suspense>
+          </div>
 
           <div
             aria-label="PDF와 학습 패널 너비 조절"
@@ -844,7 +849,7 @@ export function SessionDetailPage() {
             aria-valuemax={Math.round(chatPanelMaxWidth)}
             aria-valuemin={MIN_CHAT_PANEL_WIDTH}
             aria-valuenow={chatPanelWidth === null ? undefined : Math.round(chatPanelWidth)}
-            className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex"
+            className="group hidden h-full cursor-col-resize touch-none items-center justify-center bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600 lg:flex mobile-web:!hidden"
             onDoubleClick={() => setChatPanelWidth(null)}
             onKeyDown={handleResizerKeyDown}
             onPointerDown={handleResizerPointerDown}
@@ -857,6 +862,7 @@ export function SessionDetailPage() {
             <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
           </div>
 
+          <div className={isPhone && mobilePane !== 'learning' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
           {lockedQuizId ? (
             <QuizChatLockPanel
               isQuizVisible={embeddedQuizId === lockedQuizId}
@@ -949,6 +955,7 @@ export function SessionDetailPage() {
             isLoadingQuizzes={isLoadingSessionQuizzes}
             sessionId={activeSession.id}
           />}
+          </div>
         </div>
       </section>
     </div>

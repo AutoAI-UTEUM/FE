@@ -39,6 +39,7 @@ import {
   type AppNotificationType,
 } from '../../features/notifications'
 import { cx } from '../../shared/lib/cx'
+import { useResponsiveViewport } from '../../shared/responsive'
 import { SERVICE_NAME } from '../../shared/config/brand'
 import { formatDateTime } from '../../shared/lib/format'
 import {
@@ -65,6 +66,7 @@ export function AppLayout() {
   const { apiRequest, logout, rawApiRequest, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { isMobileWeb } = useResponsiveViewport()
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
   const [sidebarPreference, setSidebarPreference] = useState<{
     isCollapsed: boolean
@@ -77,6 +79,7 @@ export function AppLayout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuContainerRef = useRef<HTMLDivElement | null>(null)
   const mobileMenuContainerRef = useRef<HTMLDivElement | null>(null)
+  const primaryNavigationRef = useRef<HTMLElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -120,6 +123,12 @@ export function AppLayout() {
       : loadedProfileAvatar?.source === avatarSource
         ? loadedProfileAvatar.url
         : null
+
+  useEffect(() => {
+    if (!isMobileWeb) return
+    const activeItem = primaryNavigationRef.current?.querySelector<HTMLElement>('[aria-current="page"]')
+    activeItem?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [isMobileWeb, location.pathname])
 
   useEffect(() => {
     document.documentElement.classList.toggle(
@@ -344,21 +353,21 @@ export function AppLayout() {
   return (
     <div
       className={cx(
-        'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex',
+        'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:!flex-col mobile-web:max-w-full mobile-web:overflow-x-hidden',
         isStudyWorkspace ? 'h-dvh overflow-hidden' : 'min-h-screen',
       )}
     >
       <aside
         className={cx(
-          'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4',
-          isCollapsed ? 'lg:w-14 lg:px-2' : 'lg:w-52 lg:px-2.5',
+          'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-web:sticky mobile-web:top-0 mobile-web:!h-auto mobile-web:!w-full mobile-web:!flex-row mobile-web:!border-r-0 mobile-web:!border-b mobile-web:!py-3 mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:shadow-sm',
+          isCollapsed ? 'lg:w-14 lg:px-2 mobile-web:!px-4' : 'lg:w-52 lg:px-2.5 mobile-web:!px-4',
         )}
       >
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 lg:block lg:flex-none">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 lg:block lg:flex-none mobile-web:!flex mobile-web:!flex-1 mobile-web:!items-center">
           <div
             className={cx(
               'flex items-center justify-between gap-2',
-              isCollapsed && 'lg:flex-col lg:gap-3',
+              isCollapsed && 'lg:flex-col lg:gap-3 mobile-web:!flex-row mobile-web:!gap-2',
             )}
           >
             <Link
@@ -371,14 +380,14 @@ export function AppLayout() {
               <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
                 <BookOpenCheck aria-hidden="true" size={16} />
               </span>
-              <span className={cx('type-section-title font-bold', isCollapsed && 'lg:hidden')}>
+              <span className={cx('type-section-title font-bold', isCollapsed && !isMobileWeb && 'lg:hidden')}>
                 {SERVICE_NAME}
               </span>
             </Link>
             <div
               className={cx(
                 'flex items-center gap-1',
-                isCollapsed && 'lg:flex-col',
+                isCollapsed && 'lg:flex-col mobile-web:!flex-row',
               )}
             >
               {!isAdmin ? <div className="relative" ref={notificationsRef}>
@@ -386,7 +395,7 @@ export function AppLayout() {
                   aria-expanded={isNotificationsOpen}
                   aria-haspopup="dialog"
                   aria-label={`알림 ${unreadNotificationCount}개`}
-                  className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
                   onClick={() => {
                     if (!isNotificationsOpen) {
                       setIsLoadingNotifications(true)
@@ -423,7 +432,7 @@ export function AppLayout() {
               </div> : null}
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
-                className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex"
+                className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex mobile-web:!hidden"
                 onClick={() =>
                   setSidebarPreference({
                     isCollapsed: !isCollapsed,
@@ -444,7 +453,8 @@ export function AppLayout() {
 
           <nav
             aria-label="주요 메뉴"
-            className="order-2 mt-3 flex w-full gap-1 overflow-x-auto lg:mt-6 lg:ml-0 lg:w-auto lg:flex-col lg:gap-0.5"
+            className="mobile-horizontal-scroll order-2 mt-3 flex w-full gap-1 overflow-x-auto lg:mt-6 lg:ml-0 lg:w-auto lg:flex-col lg:gap-0.5 mobile-web:!mt-3 mobile-web:!w-full mobile-web:!flex-row mobile-web:!gap-1 mobile-web:scroll-px-3"
+            ref={primaryNavigationRef}
           >
             {primaryNavigation.map((item) => (
               <div className="contents" key={item.label}>
@@ -457,12 +467,12 @@ export function AppLayout() {
                       : item.to === routes.classrooms
                         ? isActive && !isEntranceRequestsPath
                         : isActive
-                    return navLinkClassName(isItemActive, isCollapsed)
+                    return navLinkClassName(isItemActive, isCollapsed && !isMobileWeb)
                   }}
                   title={item.label}
                 >
                   <item.icon aria-hidden="true" className="shrink-0" size={16} />
-                  <span className={cx(isCollapsed && 'lg:sr-only')}>{item.label}</span>
+                  <span className={cx(isCollapsed && !isMobileWeb && 'lg:sr-only')}>{item.label}</span>
                   {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
                     <span
                       aria-label={`${pendingJoinRequestCount}개의 대기 요청`}
@@ -498,12 +508,12 @@ export function AppLayout() {
           </nav>
         </div>
 
-        <div className="relative ml-2 shrink-0 lg:hidden" ref={mobileMenuContainerRef}>
+        <div className="relative ml-2 shrink-0 lg:hidden mobile-web:!block" ref={mobileMenuContainerRef}>
           <button
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
             aria-label="프로필 메뉴"
-            className="flex size-9 items-center justify-center rounded-full bg-stone-200 type-caption font-semibold text-stone-600 hover:bg-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            className="flex size-9 items-center justify-center rounded-full bg-stone-200 type-caption font-semibold text-stone-600 hover:bg-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
             onClick={() => setIsMenuOpen((open) => !open)}
             type="button"
           >
@@ -517,7 +527,7 @@ export function AppLayout() {
         </div>
 
         <div
-          className="relative hidden lg:mt-auto lg:flex lg:items-center lg:gap-1"
+          className="relative hidden lg:mt-auto lg:flex lg:items-center lg:gap-1 mobile-web:!hidden"
           ref={menuContainerRef}
         >
           <button
@@ -560,8 +570,8 @@ export function AppLayout() {
         className={cx(
           'min-w-0 flex-1',
           isStudyWorkspace
-            ? 'h-[calc(100dvh-61px)] overflow-hidden p-0 lg:h-dvh'
-            : 'px-4 py-4 sm:px-6 lg:px-12 lg:py-5',
+            ? 'h-[calc(100dvh-61px)] overflow-hidden p-0 lg:h-dvh mobile-web:!h-[calc(100dvh-113px)]'
+            : 'px-4 py-4 sm:px-6 lg:px-12 lg:py-5 mobile-phone:px-3 mobile-web:mobile-safe-bottom',
         )}
       >
         <div
@@ -609,13 +619,13 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
     <div
       aria-labelledby="settings-dialog-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 mobile-phone:p-0"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
       role="dialog"
     >
-      <section className="flex h-[min(520px,calc(100dvh-3rem))] min-h-0 w-full max-w-[560px] flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-2xl sm:p-6">
+      <section className="flex h-[min(520px,calc(100dvh-3rem))] min-h-0 w-full max-w-[560px] flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-2xl sm:p-6 mobile-phone:h-[100dvh] mobile-phone:max-w-none mobile-phone:rounded-none mobile-phone:border-0 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:mobile-safe-bottom">
         <div className="mb-5 flex items-center justify-between gap-4">
           <h2 className="type-dialog-title font-bold text-stone-950" id="settings-dialog-title">
             설정
@@ -799,7 +809,7 @@ function getNotificationPath(notification: AppNotification): string {
 
 function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
   return cx(
-    'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control',
+    'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control mobile-web:h-11',
     isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     isActive

@@ -1,4 +1,4 @@
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search, ShieldCheck } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Search, ShieldCheck } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import {
@@ -16,6 +16,7 @@ import {
 } from '../../../features/admin'
 import { useAuth } from '../../../features/auth'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
+import { useResponsiveViewport } from '../../../shared/responsive'
 import { Button } from '../../../shared/ui'
 import {
   AdminErrorMessage,
@@ -55,7 +56,7 @@ export function AdminPage() {
             <p className="mt-0.5 type-caption text-stone-500">서비스 운영 현황 조회</p>
           </div>
         </div>
-        <nav aria-label="관리자 메뉴" className="flex h-9 items-center rounded-lg bg-stone-100 p-1">
+        <nav aria-label="관리자 메뉴" className="mobile-horizontal-scroll flex h-9 items-center overflow-x-auto rounded-lg bg-stone-100 p-1 mobile-web:h-11 mobile-phone:w-full">
           {tabs.map((item) => (
             <button
               aria-current={tab === item.id ? 'page' : undefined}
@@ -85,6 +86,7 @@ export function AdminPage() {
 type Repository = ReturnType<typeof createAdminRepository>
 
 function UsersPanel({ repository }: { repository: Repository }) {
+  const { isMobileWeb } = useResponsiveViewport()
   const [query, setQuery] = useState('')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [role, setRole] = useState<AdminUserRole | ''>('')
@@ -138,11 +140,11 @@ function UsersPanel({ repository }: { repository: Repository }) {
           <h2 className="type-section-title font-bold text-stone-950">회원 목록</h2>
           <p className="type-caption text-stone-500">{formatCount(result?.totalElements)}명</p>
         </div>
-        <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); setPage(0); setSubmittedQuery(query.trim()) }}>
-          <label className="relative">
+        <form className="flex flex-wrap items-center gap-2 mobile-phone:w-full" onSubmit={(event) => { event.preventDefault(); setPage(0); setSubmittedQuery(query.trim()) }}>
+          <label className="relative mobile-phone:w-full">
             <span className="sr-only">회원 검색</span>
             <Search aria-hidden="true" className="absolute top-1/2 left-3 -translate-y-1/2 text-stone-400" size={15} />
-            <input className="h-9 w-60 rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control outline-none focus:border-brand-600" onChange={(event) => setQuery(event.target.value)} placeholder="이름 또는 이메일 검색" value={query} />
+            <input className="h-9 w-60 rounded-lg border border-stone-200 bg-white pr-3 pl-9 type-control outline-none focus:border-brand-600 mobile-web:h-11 mobile-phone:w-full" onChange={(event) => setQuery(event.target.value)} placeholder="이름 또는 이메일 검색" value={query} />
           </label>
           <FilterSelect label="역할" onChange={(value) => { setPage(0); setRole(value as AdminUserRole | '') }} value={role} options={[['', '전체 역할'], ['LEARNER', '학습자'], ['INSTRUCTOR', '강의자'], ['ADMIN', '관리자']]} />
           <FilterSelect label="상태" onChange={(value) => { setPage(0); setStatus(value as AdminUserStatus | '') }} value={status} options={[['', '전체 상태'], ['ACTIVE', '활성'], ['DELETED', '탈퇴']]} />
@@ -151,7 +153,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
       </div>
       {error ? <AdminErrorMessage error={error} /> : null}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[780px] border-collapse text-left">
+        {isMobileWeb ? <div aria-label="회원 목록" className="divide-y divide-stone-100">{result?.items.map((user) => <MobileUserRow detail={expandedId === user.id ? detail : null} expanded={expandedId === user.id} key={user.id} onToggle={() => toggleDetail(user.id)} user={user} />)}</div> : <table className="w-full min-w-[780px] border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500">
             <tr><th className="px-4 py-3">회원</th><th className="px-4 py-3">역할</th><th className="px-4 py-3">상태</th><th className="px-4 py-3">가입일</th><th className="px-4 py-3">인증</th><th className="w-12 px-4 py-3"><span className="sr-only">상세</span></th></tr>
           </thead>
@@ -160,13 +162,17 @@ function UsersPanel({ repository }: { repository: Repository }) {
               <UserRows detail={expandedId === user.id ? detail : null} expanded={expandedId === user.id} key={user.id} onToggle={() => toggleDetail(user.id)} user={user} />
             ))}
           </tbody>
-        </table>
+        </table>}
         {!loading && result?.items.length === 0 ? <PanelMessage message="조건에 맞는 회원이 없습니다." /> : null}
         {loading ? <PanelMessage message="회원 정보를 불러오는 중입니다." /> : null}
       </div>
       <Pagination page={page} totalPages={result?.totalPages ?? 0} onChange={setPage} />
     </div>
   )
+}
+
+function MobileUserRow({ detail, expanded, onToggle, user }: { detail: AdminUserDetail | null; expanded: boolean; onToggle: () => void; user: AdminUserSummary }) {
+  return <article><button aria-expanded={expanded} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left" onClick={onToggle} type="button"><span className="min-w-0 flex-1"><strong className="block truncate type-body text-stone-950">{user.name}</strong><span className="block truncate type-caption text-stone-500">{user.email}</span><span className="mt-2 flex flex-wrap items-center gap-2 type-caption text-stone-600"><span>{roleLabel(user.role)}</span><StatusBadge status={user.status} /><span>{formatDate(user.createdAt)}</span></span></span>{expanded ? <ChevronUp aria-hidden="true" size={17} /> : <ChevronDown aria-hidden="true" size={17} />}</button>{expanded ? <div className="bg-stone-50 px-4 py-3 type-caption text-stone-600">{detail ? <dl className="grid gap-2 sm:grid-cols-2"><div><dt className="text-stone-400">회원 ID</dt><dd className="font-semibold text-stone-900">{detail.id}</dd></div><div><dt className="text-stone-400">인증</dt><dd className="font-semibold text-stone-900">{user.authProvider}</dd></div><div><dt className="text-stone-400">소속</dt><dd className="font-semibold text-stone-900">{detail.affiliation || '-'}</dd></div><div><dt className="text-stone-400">동의 일시</dt><dd className="font-semibold text-stone-900">{detail.consentedAt ? formatDateTime(detail.consentedAt) : '-'}</dd></div></dl> : '상세 정보를 불러오는 중입니다.'}</div> : null}</article>
 }
 
 function UserRows({ detail, expanded, onToggle, user }: { detail: AdminUserDetail | null; expanded: boolean; onToggle: () => void; user: AdminUserSummary }) {
@@ -183,6 +189,7 @@ function UserRows({ detail, expanded, onToggle, user }: { detail: AdminUserDetai
 }
 
 function ClassroomsPanel({ repository }: { repository: Repository }) {
+  const { isMobileWeb } = useResponsiveViewport()
   const [sort, setSort] = useState<AdminSort>('RECENT')
   const [page, setPage] = useState(0)
   const [result, setResult] = useState<AdminPageResult<AdminClassroomSummary> | null>(null)
@@ -212,15 +219,19 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
       <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">전체 강의실</h2><p className="type-caption text-stone-500">{formatCount(result?.totalElements)}개</p></div><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
       {error ? <AdminErrorMessage error={error} /> : null}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[720px] border-collapse text-left"><thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500"><tr><th className="px-4 py-3">강의실</th><th className="px-4 py-3">개설자</th><th className="px-4 py-3">인원</th><th className="px-4 py-3">상태</th><th className="px-4 py-3">생성일</th><th className="w-12 px-4 py-3"><span className="sr-only">상세</span></th></tr></thead><tbody>
+        {isMobileWeb ? <div aria-label="강의실 목록" className="divide-y divide-stone-100">{result?.items.map((classroom) => <MobileClassroomRow classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} onToggle={() => toggleDetail(classroom.id)} />)}</div> : <table className="w-full min-w-[720px] border-collapse text-left"><thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500"><tr><th className="px-4 py-3">강의실</th><th className="px-4 py-3">개설자</th><th className="px-4 py-3">인원</th><th className="px-4 py-3">상태</th><th className="px-4 py-3">생성일</th><th className="w-12 px-4 py-3"><span className="sr-only">상세</span></th></tr></thead><tbody>
           {result?.items.map((classroom) => <ClassroomRows classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} onToggle={() => toggleDetail(classroom.id)} />)}
-        </tbody></table>
+        </tbody></table>}
         {!loading && result?.items.length === 0 ? <PanelMessage message="강의실이 없습니다." /> : null}
         {loading ? <PanelMessage message="강의실 정보를 불러오는 중입니다." /> : null}
       </div>
       <Pagination page={page} totalPages={result?.totalPages ?? 0} onChange={setPage} />
     </div>
   )
+}
+
+function MobileClassroomRow({ classroom, detail, expanded, onToggle }: { classroom: AdminClassroomSummary; detail: AdminClassroomDetail | null; expanded: boolean; onToggle: () => void }) {
+  return <article><button aria-expanded={expanded} className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left" onClick={onToggle} type="button"><span className="min-w-0 flex-1"><strong className="block truncate type-body text-stone-950">{classroom.name}</strong><span className="block truncate type-caption text-stone-500">{classroom.instructor.name}</span><span className="mt-2 flex flex-wrap items-center gap-2 type-caption text-stone-600"><span>{classroom.memberCount}명</span><StatusBadge status={classroom.status} /><span>{formatDate(classroom.createdAt)}</span></span></span>{expanded ? <ChevronUp aria-hidden="true" size={17} /> : <ChevronDown aria-hidden="true" size={17} />}</button>{expanded ? <div className="bg-stone-50 px-4 py-3">{detail ? <><p className="type-caption font-semibold text-stone-700">참여 회원 {detail.members.length}명</p><div className="mt-2 flex flex-wrap gap-2">{detail.members.map((member) => <span className="rounded-md border border-stone-200 bg-white px-2 py-1.5 type-caption text-stone-600" key={member.userId}>{member.name} · {roleLabel(member.role)}</span>)}</div></> : <p className="type-caption text-stone-500">상세 정보를 불러오는 중입니다.</p>}</div> : null}</article>
 }
 
 function ClassroomRows({ classroom, detail, expanded, onToggle }: { classroom: AdminClassroomSummary; detail: AdminClassroomDetail | null; expanded: boolean; onToggle: () => void }) {
@@ -236,6 +247,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
   const [users, setUsers] = useState<AiUsageUser[]>([])
   const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -246,7 +258,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
       .catch((reason: unknown) => { if (!controller.signal.aborted) setError(toAdminError(reason)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [range, repository])
+  }, [range, refreshKey, repository])
 
   const daily = summary?.daily ?? []
   const totals = {
@@ -255,7 +267,7 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
     tokens: sumNullableTokenTotals(daily),
   }
 
-  return <div className="flex h-full min-h-[560px] flex-col"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">AI 사용량</h2><p className="type-caption text-stone-500">호출 및 토큰 사용 현황</p></div><form className="flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); setRange({ from, to }) }}><label className="type-caption text-stone-500">시작일 <input className="ml-1 h-9 rounded-lg border border-stone-200 px-2 text-stone-800" max={to} onChange={(event) => setFrom(event.target.value)} type="date" value={from} /></label><label className="type-caption text-stone-500">종료일 <input className="ml-1 h-9 rounded-lg border border-stone-200 px-2 text-stone-800" min={from} onChange={(event) => setTo(event.target.value)} type="date" value={to} /></label><Button size="sm" type="submit">조회</Button></form></div>
+  return <div className="flex h-full min-h-[560px] flex-col"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div><h2 className="type-section-title font-bold text-stone-950">AI 사용량</h2><p className="type-caption text-stone-500">호출 및 토큰 사용 현황</p></div><form className="flex items-end gap-2 mobile-phone:grid mobile-phone:w-full mobile-phone:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setLoading(true); setError(null); setRange({ from, to }) }}><label className="type-caption text-stone-500">시작일 <input className="mt-1 h-9 w-full rounded-lg border border-stone-200 px-2 text-stone-800 mobile-web:h-11" max={to} onChange={(event) => setFrom(event.target.value)} type="date" value={from} /></label><label className="type-caption text-stone-500">종료일 <input className="mt-1 h-9 w-full rounded-lg border border-stone-200 px-2 text-stone-800 mobile-web:h-11" min={from} onChange={(event) => setTo(event.target.value)} type="date" value={to} /></label><div className="flex items-center gap-2 mobile-phone:col-span-2"><Button className="mobile-phone:flex-1" size="sm" type="submit">조회</Button><Button aria-label="AI 사용량 새로고침" className="size-9 shrink-0 p-0 mobile-web:size-11" disabled={loading} onClick={() => { setLoading(true); setError(null); setRefreshKey((key) => key + 1) }} size="sm" title="새로고침" type="button" variant="secondary"><RefreshCw aria-hidden="true" className={loading ? 'animate-spin' : undefined} size={15} /></Button></div></form></div>
     {error ? <AdminErrorMessage error={error} /> : null}
     <div className="min-h-0 flex-1 overflow-auto"><div className="grid border-b border-stone-200 sm:grid-cols-3"><Metric label="총 호출" value={`${formatCount(totals.calls)}건`} /><Metric label="실패" value={`${formatCount(totals.failures)}건`} /><Metric label="총 토큰" value={formatCount(totals.tokens)} /></div>
       {loading ? <PanelMessage message="AI 사용량을 불러오는 중입니다." /> : <><DailyUsageChart daily={daily} /><div className="grid xl:grid-cols-2"><UsageTable summary={summary} /><UsersUsageTable users={users} /></div></>}
