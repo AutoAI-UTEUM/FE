@@ -54,15 +54,23 @@ import {
 } from '../routes'
 import { SettingsContent } from '../pages/SettingsPage'
 
-const learnerNavigation: Array<{
+/*
+ * `inBottomNav`는 폰 하단 바에 올릴 메뉴를 고른다.
+ * 하단 바는 최우측 프로필까지 네 칸이므로 내비는 3개까지만 올리고,
+ * 나머지는 프로필 메뉴 위쪽에 모은다.
+ */
+interface NavigationItem {
   icon: LucideIcon
+  inBottomNav?: boolean
   label: string
   to: string
-}> = [
-  { icon: LayoutGrid, label: '강의실', to: routes.classrooms },
+}
+
+const learnerNavigation: NavigationItem[] = [
+  { icon: LayoutGrid, inBottomNav: true, label: '강의실', to: routes.classrooms },
   { icon: CalendarDays, label: '캘린더', to: routes.calendar },
-  { icon: NotebookPen, label: '내 노트', to: routes.notes },
-  { icon: ClipboardCheck, label: '복습 퀴즈', to: routes.reviewQuizzes },
+  { icon: NotebookPen, inBottomNav: true, label: '내 노트', to: routes.notes },
+  { icon: ClipboardCheck, inBottomNav: true, label: '복습 퀴즈', to: routes.reviewQuizzes },
   { icon: FileCheck2, label: '시험', to: routes.exams },
 ]
 
@@ -70,7 +78,7 @@ export function AppLayout() {
   const { apiRequest, logout, rawApiRequest, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isMobileWeb } = useResponsiveViewport()
+  const { isMobileWeb, isPhone, isTablet } = useResponsiveViewport()
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
   const [sidebarPreference, setSidebarPreference] = useState<{
     isCollapsed: boolean
@@ -83,6 +91,7 @@ export function AppLayout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuContainerRef = useRef<HTMLDivElement | null>(null)
   const mobileMenuContainerRef = useRef<HTMLDivElement | null>(null)
+  const bottomMenuContainerRef = useRef<HTMLElement | null>(null)
   const primaryNavigationRef = useRef<HTMLElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
@@ -121,6 +130,10 @@ export function AppLayout() {
       ? instructorNavigation
       : learnerNavigation, [isAdmin, isInstructor])
   const homeRoute = isAdmin ? routes.admin : routes.classrooms
+  const bottomNavigation = primaryNavigation.filter((item) => item.inBottomNav)
+  const overflowNavigation = primaryNavigation.filter((item) => !item.inBottomNav)
+  /* 폰은 하단 탭 바, 태블릿은 72px 세로 레일, 데스크톱은 기존 사이드바. */
+  const hasBottomNav = isPhone && !isStudyWorkspace
   const avatarSource = user?.avatarUrl
   const isDirectAvatarSource = avatarSource?.startsWith('blob:')
     || avatarSource?.startsWith('data:')
@@ -207,7 +220,8 @@ export function AppLayout() {
       const target = event.target as Node
       if (
         !menuContainerRef.current?.contains(target) &&
-        !mobileMenuContainerRef.current?.contains(target)
+        !mobileMenuContainerRef.current?.contains(target) &&
+        !bottomMenuContainerRef.current?.contains(target)
       ) {
         setIsMenuOpen(false)
       }
@@ -322,6 +336,24 @@ export function AppLayout() {
       className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
       role="menu"
     >
+      {/* 하단 바 네 칸에 자리가 없어 빠진 메뉴. 레일·사이드바가 보이는 곳에서는 중복이다. */}
+      {hasBottomNav && overflowNavigation.length > 0 ? (
+        <>
+          {overflowNavigation.map((item) => (
+            <Link
+              className="flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              key={item.label}
+              onClick={() => setIsMenuOpen(false)}
+              role="menuitem"
+              to={item.to}
+            >
+              <item.icon aria-hidden="true" size={15} />
+              {item.label}
+            </Link>
+          ))}
+          <div className="mx-2 my-1 h-px bg-stone-100" />
+        </>
+      ) : null}
       <button
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={openSettings}
@@ -347,46 +379,68 @@ export function AppLayout() {
   return (
     <div
       className={cx(
-        'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:!flex-col mobile-web:max-w-full mobile-web:overflow-x-hidden',
+        'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:max-w-full mobile-web:overflow-x-hidden',
+        /*
+         * 폰은 상단 바·본문·하단 바가 세로로 쌓이고, 태블릿은 레일이 옆에 선다.
+         * 루트가 실제로 flex여야 main이 남은 높이를 받아 매직 넘버 없이 화면을 채운다.
+         */
         isStudyWorkspace
-          ? 'h-dvh overflow-hidden'
+          ? cx('h-dvh overflow-hidden', isPhone && 'flex flex-col', isTablet && 'flex flex-row')
           : isAdminFixedHeightWorkspace
-            ? 'flex h-dvh flex-col overflow-hidden lg:flex-row'
-            : 'min-h-screen',
+            ? cx('flex h-dvh overflow-hidden', isTablet ? 'flex-row' : 'flex-col lg:flex-row')
+            : cx('min-h-dvh', isPhone && 'flex flex-col', isTablet && 'flex flex-row'),
       )}
     >
       <aside
         className={cx(
-          'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-web:sticky mobile-web:top-0 mobile-web:!h-auto mobile-web:!w-full mobile-web:!flex-row mobile-web:!border-r-0 mobile-web:!border-b mobile-web:!py-3 mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:shadow-sm',
-          isCollapsed ? 'lg:w-14 lg:px-2 mobile-web:!px-4' : 'lg:w-52 lg:px-2.5 mobile-web:!px-4',
+          isTablet
+            // 태블릿은 가로 스크롤 띠 대신 72px 세로 레일을 쓴다.
+            ? 'sticky top-0 z-40 flex h-dvh w-[72px] shrink-0 flex-col border-r border-stone-200 bg-white px-2 py-4 dark:bg-[#222327] mobile-safe-top'
+            : 'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
+          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-52 lg:px-2.5 mobile-phone:!px-4'),
           isAdminFixedHeightWorkspace && 'shrink-0',
         )}
       >
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 lg:block lg:flex-none mobile-web:!flex mobile-web:!flex-1 mobile-web:!items-center">
+        <div
+          className={cx(
+            isTablet
+              ? 'flex min-w-0 flex-none flex-col'
+              : 'flex min-w-0 flex-1 flex-wrap items-center gap-x-4 lg:block lg:flex-none mobile-phone:!flex mobile-phone:!flex-1 mobile-phone:!items-center',
+          )}
+        >
           <div
             className={cx(
               'flex items-center justify-between gap-2',
-              isCollapsed && 'lg:flex-col lg:gap-3 mobile-web:!flex-row mobile-web:!gap-2',
+              isTablet && 'flex-col gap-3',
+              !isTablet && isCollapsed && 'lg:flex-col lg:gap-3 mobile-phone:!flex-row mobile-phone:!gap-2',
             )}
           >
             <Link
               className={cx(
                 'flex shrink-0 items-center gap-2.5 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
-                isCollapsed && 'lg:justify-center lg:px-0',
+                isTablet && 'justify-center px-0',
+                !isTablet && isCollapsed && 'lg:justify-center lg:px-0',
               )}
               to={homeRoute}
             >
               <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
                 <BookOpenCheck aria-hidden="true" size={16} />
               </span>
-              <span className={cx('type-section-title font-bold', isCollapsed && !isMobileWeb && 'lg:hidden')}>
+              <span
+                className={cx(
+                  'type-section-title font-bold',
+                  isTablet && 'hidden',
+                  !isTablet && isCollapsed && !isMobileWeb && 'lg:hidden',
+                )}
+              >
                 {SERVICE_NAME}
               </span>
             </Link>
             <div
               className={cx(
                 'flex items-center gap-1',
-                isCollapsed && 'lg:flex-col mobile-web:!flex-row',
+                isTablet && 'flex-col',
+                !isTablet && isCollapsed && 'lg:flex-col mobile-phone:!flex-row',
               )}
             >
               {!isAdmin ? <div className="relative" ref={notificationsRef}>
@@ -452,7 +506,13 @@ export function AppLayout() {
 
           <nav
             aria-label="주요 메뉴"
-            className="mobile-horizontal-scroll order-2 mt-3 flex w-full gap-1 overflow-x-auto lg:mt-6 lg:ml-0 lg:w-auto lg:flex-col lg:gap-0.5 mobile-web:!mt-3 mobile-web:!w-full mobile-web:!flex-row mobile-web:!gap-1 mobile-web:scroll-px-3"
+            className={cx(
+              isTablet
+                ? 'mt-6 flex w-auto flex-col items-center gap-0.5'
+                : 'mobile-horizontal-scroll order-2 mt-3 flex w-full gap-1 overflow-x-auto lg:mt-6 lg:ml-0 lg:w-auto lg:flex-col lg:gap-0.5 mobile-phone:!mt-3 mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!gap-1 mobile-phone:scroll-px-3',
+              // 폰은 하단 탭 바가 대신하므로 상단 내비를 띄우지 않는다.
+              isPhone && 'hidden',
+            )}
             ref={primaryNavigationRef}
           >
             {primaryNavigation.map((item) => {
@@ -471,12 +531,19 @@ export function AppLayout() {
               <div className="contents" key={item.label}>
                 <Link
                   aria-current={isItemActive ? 'page' : undefined}
-                  className={navLinkClassName(isItemActive, isCollapsed && !isMobileWeb)}
+                  className={navLinkClassName(isItemActive, isCollapsed && !isMobileWeb, isTablet)}
                   to={item.to}
                   title={item.label}
                 >
                   <item.icon aria-hidden="true" className="shrink-0" size={16} />
-                  <span className={cx(isCollapsed && !isMobileWeb && 'lg:sr-only')}>{item.label}</span>
+                  <span
+                    className={cx(
+                      isTablet && 'type-compact-action leading-none',
+                      isCollapsed && !isMobileWeb && 'lg:sr-only',
+                    )}
+                  >
+                    {item.label}
+                  </span>
                   {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
                     <span
                       aria-label={`${pendingJoinRequestCount}개의 대기 요청`}
@@ -513,7 +580,15 @@ export function AppLayout() {
           </nav>
         </div>
 
-        <div className="relative ml-2 shrink-0 lg:hidden mobile-web:!block" ref={mobileMenuContainerRef}>
+        {/* 폰에서는 프로필이 하단 바 최우측으로 내려가므로 상단에서는 감춘다. */}
+        <div
+          className={cx(
+            'relative ml-2 shrink-0 lg:hidden mobile-web:!block',
+            isTablet && 'mt-auto ml-0 flex justify-center',
+            hasBottomNav && '!hidden',
+          )}
+          ref={mobileMenuContainerRef}
+        >
           <button
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
@@ -525,7 +600,14 @@ export function AppLayout() {
             <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-9 type-caption" name={user?.name} />
           </button>
           {isMenuOpen ? (
-            <div className="absolute top-[calc(100%+8px)] right-0 z-30 w-60 lg:hidden">
+            <div
+              className={cx(
+                'absolute z-30 w-60 lg:hidden',
+                isTablet
+                  ? 'bottom-0 left-[calc(100%+8px)]'
+                  : 'top-[calc(100%+8px)] right-0',
+              )}
+            >
               {profileMenu}
             </div>
           ) : null}
@@ -571,11 +653,15 @@ export function AppLayout() {
         </div>
       </aside>
 
+      {/*
+       * 상단 바 높이를 빼는 계산식 대신 flex로 남은 높이를 받는다.
+       * 상단 바가 한 줄이든 두 줄이든, 세이프에어리어가 얼마든 아래가 잘리지 않는다.
+       */}
       <main
         className={cx(
-          'min-w-0 flex-1',
+          'flex min-w-0 flex-1 flex-col',
           isStudyWorkspace
-            ? 'h-[calc(100dvh-61px)] overflow-hidden p-0 lg:h-dvh mobile-web:!h-[calc(100dvh-113px)]'
+            ? 'min-h-0 overflow-hidden p-0'
             : cx(
                 'px-4 py-4 sm:px-6 lg:py-5 mobile-phone:px-3 mobile-web:mobile-safe-bottom',
                 isAdmin ? 'lg:px-8' : 'lg:px-12',
@@ -586,7 +672,7 @@ export function AppLayout() {
         <div
           className={
             isStudyWorkspace
-              ? 'h-full min-h-0'
+              ? 'min-h-0 flex-1'
               : isAdminFixedHeightWorkspace
                 ? 'h-full min-h-0 w-full min-w-0'
               : isAdmin
@@ -597,6 +683,71 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* 폰 하단 탭. 내비 3개 + 최우측 프로필로 네 칸. 학습 화면에서는 세로 공간을 통째로 내준다. */}
+      {hasBottomNav ? (
+        <nav
+          aria-label="하단 주요 메뉴"
+          className="sticky bottom-0 z-40 flex shrink-0 border-t border-stone-200 bg-white mobile-safe-bottom dark:bg-[#222327]"
+          ref={bottomMenuContainerRef}
+        >
+          {bottomNavigation.map((item) => {
+            const itemPath = item.to.split('?')[0]
+            const isEntranceRequestsPath = location.pathname.endsWith('/entrance-requests')
+            const isPathActive = location.pathname === itemPath
+              || location.pathname.startsWith(`${itemPath}/`)
+            const isItemActive = isAdmin && item.to.startsWith(routes.admin)
+              ? adminTabFromLocation(item.to) === adminTabFromLocation(`${location.pathname}${location.search}`)
+              : item.to === routes.entranceRequests
+                ? isEntranceRequestsPath
+                : item.to === routes.classrooms
+                  ? isPathActive && !isEntranceRequestsPath
+                  : isPathActive
+
+            return (
+              <Link
+                aria-current={isItemActive ? 'page' : undefined}
+                className={bottomNavLinkClassName(isItemActive)}
+                key={item.label}
+                onClick={() => setIsMenuOpen(false)}
+                to={item.to}
+              >
+                <item.icon aria-hidden="true" size={20} />
+                <span>{item.label}</span>
+                {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
+                  <span
+                    aria-label={`${pendingJoinRequestCount}개의 대기 요청`}
+                    className="absolute top-1.5 right-[calc(50%-1.25rem)] min-w-4 rounded-full bg-brand-600 px-1 text-center type-micro font-bold leading-4 text-white"
+                  >
+                    {pendingJoinRequestCount > 99 ? '99+' : pendingJoinRequestCount}
+                  </span>
+                ) : null}
+              </Link>
+            )
+          })}
+          <button
+            aria-expanded={isMenuOpen}
+            aria-haspopup="menu"
+            aria-label="프로필 메뉴"
+            className={bottomNavLinkClassName(isMenuOpen)}
+            onClick={() => setIsMenuOpen((open) => !open)}
+            type="button"
+          >
+            <ProfileAvatar
+              avatarUrl={profileAvatarUrl}
+              className="size-5 type-compact-action"
+              name={user?.name}
+            />
+            <span>프로필</span>
+          </button>
+          {/* 메뉴는 sticky한 nav를 기준으로 위쪽으로 펼쳐진다. */}
+          {isMenuOpen ? (
+            <div className="absolute right-2 bottom-[calc(100%+8px)] z-30 w-60">
+              {profileMenu}
+            </div>
+          ) : null}
+        </nav>
+      ) : null}
       {isSettingsOpen ? <SettingsDialog onClose={() => setIsSettingsOpen(false)} /> : null}
     </div>
   )
@@ -828,10 +979,13 @@ function getNotificationPath(notification: AppNotification): string {
   }
 }
 
-function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
+function navLinkClassName(isActive: boolean, isCollapsed: boolean, isRail = false): string {
   return cx(
-    'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control mobile-web:h-11',
-    isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
+    isRail
+      // 태블릿 레일은 아이콘 위·라벨 아래 52px 정사각.
+      ? 'relative inline-flex size-13 shrink-0 flex-col items-center justify-center gap-1 rounded-lg'
+      : 'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control mobile-web:h-11',
+    !isRail && isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     isActive
       ? 'bg-brand-50 font-semibold text-brand-700 shadow-sm'
@@ -839,16 +993,26 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean): string {
   )
 }
 
-const instructorNavigation: Array<{ icon: LucideIcon; label: string; to: string }> = [
-  { icon: LayoutGrid, label: '강의실', to: routes.classrooms },
-  { icon: CalendarDays, label: '캘린더', to: routes.calendar },
-  { icon: UserPlus, label: '입장 요청', to: routes.entranceRequests },
+const instructorNavigation: NavigationItem[] = [
+  { icon: LayoutGrid, inBottomNav: true, label: '강의실', to: routes.classrooms },
+  { icon: CalendarDays, inBottomNav: true, label: '캘린더', to: routes.calendar },
+  { icon: UserPlus, inBottomNav: true, label: '입장 요청', to: routes.entranceRequests },
 ]
 
-const adminNavigation: Array<{ icon: LucideIcon; label: string; to: string }> = [
-  { icon: CircleUserRound, label: '회원', to: routes.admin },
-  { icon: List, label: '강의실', to: `${routes.admin}?tab=classrooms` },
-  { icon: Sparkles, label: 'AI 사용량', to: `${routes.admin}?tab=ai-usage` },
+/* 폰 하단 탭. 52px 높이로 44px 최소 터치 영역을 넘기고, 네 칸이 정확히 같은 폭으로 나뉜다. */
+function bottomNavLinkClassName(isActive: boolean): string {
+  return cx(
+    // h-13: index.css의 전역 min-height:44px 규칙이 layer 밖이라 min-h-*를 이긴다. 높이를 명시로 고정한다.
+    'relative flex h-13 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 type-compact-action font-semibold',
+    'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600',
+    isActive ? 'text-brand-700' : 'text-stone-500',
+  )
+}
+
+const adminNavigation: NavigationItem[] = [
+  { icon: CircleUserRound, inBottomNav: true, label: '회원', to: routes.admin },
+  { icon: List, inBottomNav: true, label: '강의실', to: `${routes.admin}?tab=classrooms` },
+  { icon: Sparkles, inBottomNav: true, label: 'AI 사용량', to: `${routes.admin}?tab=ai-usage` },
   { icon: ServerCog, label: '인프라', to: `${routes.admin}?tab=infra` },
   { icon: CalendarDays, label: '업데이트', to: `${routes.admin}?tab=updates` },
 ]

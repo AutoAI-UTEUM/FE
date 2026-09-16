@@ -268,7 +268,9 @@ describe('AppRoutes', () => {
     expect(screen.getByText('시험 대비 요약.pdf 학습 화면입니다.')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '학습' })).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-14')
-    expect(screen.getByRole('main')).toHaveClass('lg:h-dvh', 'overflow-hidden', 'p-0')
+    // 상단 바 높이를 빼는 계산식 대신 flex로 남은 높이를 받는다.
+    expect(screen.getByRole('main')).toHaveClass('flex-1', 'min-h-0', 'overflow-hidden', 'p-0')
+    expect(screen.getByRole('main').className).not.toMatch(/h-\[calc\(100dvh/)
     expect(await screen.findByRole('region', { name: 'PDF 뷰어' })).toHaveClass(
       'h-full',
       'min-h-0',
