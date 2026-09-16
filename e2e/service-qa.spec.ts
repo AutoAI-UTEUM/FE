@@ -105,6 +105,17 @@ test.describe('mock feature workspaces', () => {
       await expect(page).not.toHaveURL(/\/login/)
       if (path === '/sessions/100') {
         await expect(page.locator('.react-pdf__Page__canvas')).toBeVisible({ timeout: 15_000 })
+        if (testInfo.project.name.startsWith('tablet-')) {
+          const pdfBounds = await page.getByRole('region', { name: 'PDF 뷰어' }).boundingBox()
+          const aiBounds = await page.getByRole('region', { name: 'AI 학습 패널' }).boundingBox()
+          expect(pdfBounds, 'tablet PDF panel must be visible').not.toBeNull()
+          expect(aiBounds, 'tablet AI panel must be visible').not.toBeNull()
+          expect(
+            aiBounds!.x,
+            'tablet AI panel must stay to the right of the PDF panel',
+          ).toBeGreaterThanOrEqual(pdfBounds!.x + pdfBounds!.width - 1)
+          expect(Math.abs(aiBounds!.y - pdfBounds!.y), 'tablet panels must share a top edge').toBeLessThanOrEqual(1)
+        }
       }
       await assertPageHealthy(page, testInfo, { axe: false })
     }
