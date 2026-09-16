@@ -59,6 +59,8 @@ export default defineConfig(({ mode }) => {
       css: true,
       exclude: [...configDefaults.exclude, 'e2e/**'],
       restoreMocks: true,
+      // lazy 라우트를 여러 번 기다리는 테스트가 기본 5초를 넘기지 않도록 여유를 준다.
+      testTimeout: 20_000,
     },
   }
 })
