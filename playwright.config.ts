@@ -93,6 +93,7 @@ function touchProject(name: string, width: number, height: number): Project {
     use: {
       ...devices['Desktop Chrome'],
       hasTouch: true,
+      screen: { height, width },
       viewport: { height, width },
     },
   }
