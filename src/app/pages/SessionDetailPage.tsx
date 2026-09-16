@@ -41,8 +41,16 @@ import {
   routes,
   sessionDetailPath,
 } from '../routes'
+import { cx } from '../../shared/lib/cx'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { QuizWorkspace } from './QuizPage'
+
+type MobilePane = 'chat' | 'material'
+
+const MOBILE_PANES: Array<{ id: MobilePane; label: string }> = [
+  { id: 'material', label: '자료' },
+  { id: 'chat', label: 'AI 대화' },
+]
 
 const SessionPageViewer = lazy(async () => {
   const module = await import('../../features/sessions/SessionPageViewer')
@@ -57,8 +65,9 @@ const QUIZ_TYPE_OPTIONS: Array<{ kind: QuizKind; label: string }> = [
 ]
 
 const DEFAULT_CHAT_PANEL_WIDTH = 660
-const MIN_CHAT_PANEL_WIDTH = 360
-const MIN_PDF_PANEL_WIDTH = 360
+/* 최소 폭 합이 1024px를 넘으면 태블릿 가로에서 분할이 곧바로 재조정된다. */
+const MIN_CHAT_PANEL_WIDTH = 320
+const MIN_PDF_PANEL_WIDTH = 320
 const PANEL_RESIZER_WIDTH = 6
 const OVERVIEW_POLL_INTERVAL_MS = 15_000
 const PAGE_MOVE_DEBOUNCE_MS = 500
@@ -109,6 +118,7 @@ export function SessionDetailPage() {
   const [chatPanelWidth, setChatPanelWidth] = useState<number | null>(null)
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
   const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
+  const [mobilePane, setMobilePane] = useState<MobilePane>('material')
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
   const currentPageRef = useRef(1)
@@ -763,7 +773,37 @@ export function SessionDetailPage() {
         {activeSession.materialTitle} 학습 화면입니다.
       </p>
 
-      <section className="flex h-full min-h-0">
+      <section className="flex h-full min-h-0 flex-col md:flex-row">
+        {/* 폰은 자료와 대화를 한 화면에 나란히 둘 세로 공간이 없어 세그먼트로 전환한다. */}
+        <div
+          aria-label="학습 화면 전환"
+          className="flex shrink-0 gap-1 border-b border-stone-200 bg-white p-1.5 md:hidden"
+          role="group"
+        >
+          {MOBILE_PANES.map((pane) => (
+            <button
+              aria-pressed={mobilePane === pane.id}
+              className={cx(
+                'relative min-h-11 flex-1 rounded-lg type-control font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-600',
+                mobilePane === pane.id
+                  ? 'bg-brand-50 text-brand-700 shadow-sm'
+                  : 'text-stone-500',
+              )}
+              key={pane.id}
+              onClick={() => setMobilePane(pane.id)}
+              type="button"
+            >
+              {pane.label}
+              {pane.id === 'chat' && mobilePane !== 'chat' && chat.isTurnPending ? (
+                <span
+                  aria-label="새 답변이 도착하는 중"
+                  className="ml-1.5 inline-block size-1.5 rounded-full bg-brand-600 align-middle"
+                />
+              ) : null}
+            </button>
+          ))}
+        </div>
+
         {isResourcePanelOpen ? (
           <SessionResourcePanel
             activeMaterialId={activeSession.materialId}
@@ -779,7 +819,8 @@ export function SessionDetailPage() {
         ) : null}
 
         <div
-          className="study-session-content h-full min-h-0 min-w-0 flex-1"
+          className="study-session-content min-h-0 min-w-0 flex-1"
+          data-mobile-pane={mobilePane}
           ref={workspaceRef}
           style={chatPanelWidth === null
             ? undefined

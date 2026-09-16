@@ -55,8 +55,8 @@ describe('AppRoutes', () => {
     expect(await screen.findAllByText('Uteum')).not.toHaveLength(0)
     const intro = screen.getByText(/같은 강의,/)
     expect(intro).toHaveClass('type-auth-intro')
-    expect(intro).toHaveTextContent(/같은 강의,\s*나에게 맞춘 학습\.\s*그래서, 으뜸\./)
-    expect(screen.getByText('그래서, 으뜸.')).toHaveClass('text-[#5B8DEF]')
+    expect(intro).toHaveTextContent(/같은 강의,\s*나에게 맞춘 학습\s*그래서, 으뜸/)
+    expect(screen.getByText('그래서, 으뜸')).toHaveClass('text-[#5B8DEF]')
     expect(screen.getByText(/이해 속도에 맞춰 설명하고 점검하는/)).toHaveClass('type-auth-description')
     expect(
       screen.queryByText(
@@ -141,12 +141,37 @@ describe('AppRoutes', () => {
     expect(screen.getByText('시험 대비 요약.pdf 학습 화면입니다.')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '학습' })).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-14')
-    expect(screen.getByRole('main')).toHaveClass('lg:h-dvh', 'overflow-hidden', 'p-0')
+    // 상단 바 높이를 빼는 계산식 대신 flex로 남은 높이를 받는다.
+    expect(screen.getByRole('main')).toHaveClass('flex-1', 'min-h-0', 'overflow-hidden', 'p-0')
+    expect(screen.getByRole('main')).not.toHaveClass('h-[calc(100dvh-61px)]')
     expect(await screen.findByRole('region', { name: 'PDF 뷰어' })).toHaveClass(
       'h-full',
       'min-h-0',
       'min-w-0',
     )
+  })
+
+  it('폰 학습 화면은 자료와 대화를 세그먼트로 전환하고 하단 탭을 감춘다', async () => {
+    renderRoute('/sessions/100')
+
+    const paneSwitch = await screen.findByRole('group', { name: '학습 화면 전환' })
+    expect(within(paneSwitch).getByRole('button', { name: '자료' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    const chatPaneButton = within(paneSwitch).getByRole('button', { name: 'AI 대화' })
+    expect(chatPaneButton).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(chatPaneButton)
+
+    expect(chatPaneButton).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('.study-session-content')).toHaveAttribute(
+      'data-mobile-pane',
+      'chat',
+    )
+    expect(
+      screen.queryByRole('navigation', { name: '하단 주요 메뉴' }),
+    ).not.toBeInTheDocument()
   })
 
   it('redirects the removed session list route to classrooms', async () => {
@@ -174,9 +199,13 @@ describe('AppRoutes', () => {
 
     const settingsDialog = await screen.findByRole('dialog', { name: '설정' })
     expect(settingsDialog).toBeInTheDocument()
+    // 폰은 전체 화면 시트, sm부터 560px 카드. 높이는 고정이 아니라 상한이다.
     expect(settingsDialog.firstElementChild).toHaveClass(
-      'h-[min(520px,calc(100dvh-3rem))]',
-      'max-w-[560px]',
+      'h-dvh',
+      'max-h-dvh',
+      'sm:h-[520px]',
+      'sm:max-h-[calc(100dvh-3rem)]',
+      'sm:max-w-[560px]',
     )
     expect(settingsDialog.firstElementChild).not.toHaveClass('h-[66dvh]', 'max-h-[66dvh]', 'overflow-y-auto')
     expect(within(settingsDialog).getByRole('button', { name: '피드백' })).toBeInTheDocument()
@@ -236,13 +265,53 @@ describe('AppRoutes', () => {
   it('shows learner study menus and keeps instructor management menus out', () => {
     renderRoute('/')
 
-    expect(screen.getByRole('link', { name: '강의실' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '내 강의실' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '내 노트' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '복습 퀴즈' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '입장 요청' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
+    const sidebarMenu = within(screen.getByRole('navigation', { name: '주요 메뉴' }))
+    expect(sidebarMenu.getByRole('link', { name: '강의실' })).toBeInTheDocument()
+    expect(sidebarMenu.queryByRole('link', { name: '내 강의실' })).not.toBeInTheDocument()
+    expect(sidebarMenu.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
+    expect(sidebarMenu.getByRole('link', { name: '내 노트' })).toBeInTheDocument()
+    expect(sidebarMenu.getByRole('link', { name: '복습 퀴즈' })).toBeInTheDocument()
+    expect(sidebarMenu.queryByRole('link', { name: '입장 요청' })).not.toBeInTheDocument()
+    expect(sidebarMenu.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
+  })
+
+  it('폰 하단 탭은 내비 3개와 최우측 프로필까지 4칸이다', () => {
+    renderRoute('/')
+
+    // 사이드바는 md 미만에서 display:none이라 두 메뉴가 동시에 읽히지는 않는다.
+    const bottomMenu = within(screen.getByRole('navigation', { name: '하단 주요 메뉴' }))
+    expect(
+      bottomMenu.getAllByRole('link').map((link) => link.textContent),
+    ).toEqual(['강의실', '내 노트', '복습 퀴즈'])
+    expect(bottomMenu.getByRole('button', { name: '프로필 메뉴' })).toBeInTheDocument()
+    expect(bottomMenu.getByRole('link', { name: '강의실' })).toHaveClass('min-h-13')
+  })
+
+  it('하단 바에서 빠진 학습자 메뉴를 프로필 메뉴에 담는다', () => {
+    renderRoute('/')
+
+    const bottomMenu = within(screen.getByRole('navigation', { name: '하단 주요 메뉴' }))
+    fireEvent.click(bottomMenu.getByRole('button', { name: '프로필 메뉴' }))
+
+    const menu = within(bottomMenu.getByRole('menu'))
+    expect(menu.getByRole('menuitem', { name: '캘린더' })).toHaveAttribute('href', '/calendar')
+    expect(menu.getByRole('menuitem', { name: '시험' })).toHaveAttribute('href', '/exams')
+    expect(menu.getByRole('menuitem', { name: '설정' })).toBeInTheDocument()
+    expect(menu.getByRole('menuitem', { name: '로그아웃' })).toBeInTheDocument()
+  })
+
+  it('강의자는 내비 3개가 모두 하단 바에 들어가 프로필 메뉴가 늘지 않는다', () => {
+    renderRoute('/', { email: 'instructor@example.com', name: '강의자', role: 'INSTRUCTOR' })
+
+    const bottomMenu = within(screen.getByRole('navigation', { name: '하단 주요 메뉴' }))
+    expect(
+      bottomMenu.getAllByRole('link').map((link) => link.textContent),
+    ).toEqual(['강의실', '캘린더', '입장 요청'])
+
+    fireEvent.click(bottomMenu.getByRole('button', { name: '프로필 메뉴' }))
+    const menu = within(bottomMenu.getByRole('menu'))
+    expect(menu.queryByRole('menuitem', { name: '캘린더' })).not.toBeInTheDocument()
+    expect(menu.getByRole('menuitem', { name: '설정' })).toBeInTheDocument()
   })
 
   it('shows enrolled classrooms in the learner sidebar', async () => {
@@ -381,14 +450,15 @@ describe('AppRoutes', () => {
       await screen.findByRole('heading', { name: '입장 요청' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
-    expect(screen.getByRole('link', { name: '강의실' })).toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: '자연어처리 개론' })).toHaveAttribute('href', '/classrooms/12')
-    expect(screen.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '공지 관리' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '통합 관리' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '입장 요청' })).toHaveAttribute('href', '/entrance-requests')
-    expect(screen.queryByRole('link', { name: '자료' })).not.toBeInTheDocument()
+    const sidebarMenu = within(screen.getByRole('navigation', { name: '주요 메뉴' }))
+    expect(sidebarMenu.getByRole('link', { name: '강의실' })).toBeInTheDocument()
+    expect(await sidebarMenu.findByRole('link', { name: '자연어처리 개론' })).toHaveAttribute('href', '/classrooms/12')
+    expect(sidebarMenu.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
+    expect(sidebarMenu.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
+    expect(sidebarMenu.queryByRole('link', { name: '공지 관리' })).not.toBeInTheDocument()
+    expect(sidebarMenu.queryByRole('link', { name: '통합 관리' })).not.toBeInTheDocument()
+    expect(sidebarMenu.getByRole('link', { name: '입장 요청' })).toHaveAttribute('href', '/entrance-requests')
+    expect(sidebarMenu.queryByRole('link', { name: '자료' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('강의실 선택')).not.toBeInTheDocument()
   })
 

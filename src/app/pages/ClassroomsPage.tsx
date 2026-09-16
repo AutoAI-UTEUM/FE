@@ -221,7 +221,8 @@ function LearnerClassroomsPage() {
       />
 
       {latestSession ? (
-        <section className="flex flex-col gap-4 rounded-lg bg-stone-100 px-5 py-4 sm:flex-row sm:items-center">
+        // 폰·태블릿에서는 강의실 카드를 먼저 보여주고, 이어서 학습하기 배너는 데스크톱에서만 띄운다.
+        <section className="hidden flex-col gap-4 rounded-lg bg-stone-100 px-5 py-4 lg:flex lg:flex-row lg:items-center">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-rose-50 type-micro font-bold text-rose-600">
             PDF
           </span>
@@ -300,7 +301,7 @@ function LearnerClassroomsPage() {
         <div
           aria-label="강의실 검색"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-6 sm:pt-[15vh]"
           role="dialog"
         >
           <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
@@ -316,7 +317,7 @@ function LearnerClassroomsPage() {
               />
               <button
                 aria-label="검색 닫기"
-                className="flex size-7 items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                className="touch-target flex size-7 items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
                 onClick={() => setIsSearchOpen(false)}
                 type="button"
               >
@@ -356,7 +357,7 @@ function LearnerClassroomsPage() {
               </div>
               <button
                 aria-label="참여 창 닫기"
-                className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                className="touch-target flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
                 onClick={() => setIsJoinOpen(false)}
                 type="button"
               >

@@ -109,7 +109,7 @@ export function ClassroomResourceUploadDialog({
           <h2 className="type-dialog-title font-bold text-stone-950">자료 업로드</h2>
           <button
             aria-label="자료 업로드 닫기"
-            className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="touch-target flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
             onClick={onClose}
             type="button"
           >
@@ -226,7 +226,7 @@ export function ClassroomResourcePreviewPanel({
       <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-stone-200 px-4 sm:px-5">
         <button
           aria-label="콘텐츠 목록으로 돌아가기"
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100"
+          className="touch-target flex size-8 shrink-0 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100"
           onClick={onClose}
           type="button"
         >
@@ -244,7 +244,7 @@ export function ClassroomResourcePreviewPanel({
         <div className="flex shrink-0 items-center gap-1.5">
           {resource.source.kind === 'file' && resource.source.objectUrl ? (
             <a
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 type-caption font-semibold text-stone-700 hover:bg-stone-50"
+              className="touch-target inline-flex h-8 items-center gap-1.5 rounded-md border border-stone-200 px-2.5 type-caption font-semibold text-stone-700 hover:bg-stone-50"
               download={resource.source.fileName}
               href={resource.source.objectUrl}
             >
@@ -284,7 +284,7 @@ export function ClassroomResourcePreviewPanel({
               />
               <button
                 aria-label="자료 질문 보내기"
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-300 text-white"
+                className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-300 text-white"
                 disabled
                 type="button"
               >
@@ -347,7 +347,7 @@ export function ClassroomResourceEditDialog({
       <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="type-dialog-title font-bold text-stone-950">일반 자료 수정</h2>
-          <button aria-label="일반 자료 수정 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isSaving} onClick={onClose} type="button"><X size={17} /></button>
+          <button aria-label="일반 자료 수정 닫기" className="touch-target flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isSaving} onClick={onClose} type="button"><X size={17} /></button>
         </div>
         <label className="mt-5 block type-control font-semibold text-stone-800">
           주차 선택

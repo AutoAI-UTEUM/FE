@@ -119,11 +119,11 @@ export function InstructorNoticesPage() {
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader activeTab="course" classroom={classroom} />
 
-      <section aria-label="공지 관리" className="grid min-h-[540px] overflow-hidden rounded-lg border border-stone-200 bg-white lg:grid-cols-[300px_minmax(0,1fr)]">
+      <section aria-label="공지 관리" className="grid overflow-hidden md:min-h-[540px] rounded-lg border border-stone-200 bg-white lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="flex min-h-0 flex-col border-b border-stone-200 bg-stone-50/60 lg:border-r lg:border-b-0">
           <div className="flex min-h-12 items-center justify-between border-b border-stone-200 px-4">
             <h2 className="type-body font-bold text-stone-900">공지 목록</h2>
-            <button aria-label="새 공지" className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-brand-700 disabled:cursor-not-allowed disabled:text-stone-300 dark:hover:bg-stone-100" disabled={isReadOnly} onClick={startNewNotice} title="새 공지" type="button"><Plus aria-hidden="true" size={16} /></button>
+            <button aria-label="새 공지" className="touch-target flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-white hover:text-brand-700 disabled:cursor-not-allowed disabled:text-stone-300 dark:hover:bg-stone-100" disabled={isReadOnly} onClick={startNewNotice} title="새 공지" type="button"><Plus aria-hidden="true" size={16} /></button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto py-2">
@@ -193,7 +193,7 @@ function NoticeEditor({
   }
 
   return (
-    <form className="flex min-h-[440px] min-w-0 flex-col" onSubmit={submit}>
+    <form className="flex min-w-0 flex-col md:min-h-[440px]" onSubmit={submit}>
       <div className="flex min-h-12 items-center justify-between border-b border-stone-200 px-5">
         <h2 className="type-body font-bold text-stone-900">{notice ? '공지 편집' : '공지 작성'}</h2>
         {notice ? <time className="type-caption text-stone-400">{formatNoticeDate(notice.publishedAt)} 게시</time> : null}

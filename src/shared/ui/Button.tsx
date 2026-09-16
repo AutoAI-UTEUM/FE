@@ -54,7 +54,8 @@ function getButtonClassName({
   variant,
 }: Required<ButtonStyleProps> & { className?: string }): string {
   return [
-    'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border font-semibold',
+    // touch-target: 보이는 크기(36~40px)는 그대로 두고 터치 기기에서만 타격 영역을 44px로 넓힌다.
+    'touch-target inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border font-semibold',
     'transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     'disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400',
     sizeClasses[size],

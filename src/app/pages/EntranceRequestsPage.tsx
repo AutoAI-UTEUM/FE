@@ -239,8 +239,8 @@ export function EntranceRequestsPage() {
       </div>
       {tab === 'pending' && requests.length > 0 ? (
         <div className="flex items-center gap-1.5">
-          <button className="h-7 rounded-md border border-stone-300 bg-white px-2 type-micro font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400" disabled={selectedRequestKeys.size === 0 || isBatchProcessing} onClick={() => void processSelected('reject')} type="button">선택 거절</button>
-          <button className="h-7 rounded-md border border-brand-700 bg-brand-700 px-2 type-micro font-semibold text-white transition-colors hover:bg-brand-800 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400" disabled={selectedRequestKeys.size === 0 || isBatchProcessing} onClick={() => void processSelected('approve')} type="button">선택 승인</button>
+          <button className="touch-target h-7 rounded-md border border-stone-300 bg-white px-2 type-micro font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400" disabled={selectedRequestKeys.size === 0 || isBatchProcessing} onClick={() => void processSelected('reject')} type="button">선택 거절</button>
+          <button className="touch-target h-7 rounded-md border border-brand-700 bg-brand-700 px-2 type-micro font-semibold text-white transition-colors hover:bg-brand-800 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400" disabled={selectedRequestKeys.size === 0 || isBatchProcessing} onClick={() => void processSelected('approve')} type="button">선택 승인</button>
         </div>
       ) : null}
     </div>
@@ -294,5 +294,5 @@ export function EntranceRequestsPage() {
 }
 
 function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-selected={active} className={cx('h-8 rounded-md px-3 type-caption font-semibold', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
+  return <button aria-selected={active} className={cx('touch-target h-8 rounded-md px-3 type-caption font-semibold', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
 }

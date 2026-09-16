@@ -119,14 +119,15 @@ export function InstructorReportsPage() {
             </label>
           </div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable]">
-            <div className="min-w-[760px]">
-              <div className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500">
+            {/* 760px 최소 폭 대신 반응형 격자. 폰에서는 한 명이 카드 한 장이 된다. */}
+            <div className="lg:min-w-[760px]">
+              <div className="sticky top-0 z-10 hidden min-h-10 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500 lg:grid">
                 <span className="pl-11">학습자</span><span>이메일</span><span>소속</span><span className="text-center">리포트</span>
               </div>
               {visibleStudents.length === 0 ? (
                 <div className="flex min-h-40 items-center justify-center type-body text-stone-400">검색 결과가 없습니다.</div>
               ) : visibleStudents.map((student) => (
-                <article className="grid min-h-16 grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] items-center gap-4 border-b border-stone-100 px-5 last:border-0 hover:bg-stone-50" key={student.id}>
+                <article className="grid min-h-16 items-center gap-2 border-b border-stone-100 px-5 py-3 last:border-0 hover:bg-stone-50 lg:grid-cols-[minmax(200px,1.2fr)_minmax(220px,1.4fr)_minmax(140px,0.8fr)_120px] lg:gap-4 lg:py-0" key={student.id}>
                   <div className="flex min-w-0 items-center gap-3"><span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{student.name.trim().slice(0, 1) || '?'}</span><strong className="truncate type-body text-stone-900">{student.name}</strong></div>
                   <span className="truncate type-control text-stone-500">{student.email}</span>
                   <span className="truncate type-control text-stone-500">{student.affiliation ?? '-'}</span>

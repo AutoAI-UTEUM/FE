@@ -133,7 +133,7 @@ export function DevelopmentUpdatesPanel({
         <div className="flex items-center gap-2">
           <h2 className="type-section-title font-bold text-stone-950" id="development-updates-title">업데이트</h2>
           <a
-            className="inline-flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            className="touch-target inline-flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
             href="https://github.com/AutoAI-UTEUM"
             rel="noreferrer"
             target="_blank"

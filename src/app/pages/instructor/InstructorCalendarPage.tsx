@@ -149,7 +149,7 @@ export function InstructorCalendarPage() {
             <div className="flex items-center gap-2" ref={pickerRef}>
               <button
                 aria-label="이전 기간"
-                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                className="touch-target flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
                 onClick={() => move(-1)}
                 type="button"
               >
@@ -160,7 +160,7 @@ export function InstructorCalendarPage() {
                   aria-expanded={isPickerOpen}
                   aria-haspopup="dialog"
                   aria-label="연도와 월 선택"
-                  className="flex h-8 min-w-28 items-center justify-center gap-1.5 rounded-lg px-2 type-body font-bold text-stone-900 hover:bg-stone-100 sm:min-w-36"
+                  className="touch-target flex h-8 min-w-28 items-center justify-center gap-1.5 rounded-lg px-2 type-body font-bold text-stone-900 hover:bg-stone-100 sm:min-w-36"
                   onClick={togglePicker}
                   type="button"
                 >
@@ -179,7 +179,7 @@ export function InstructorCalendarPage() {
               </div>
               <button
                 aria-label="다음 기간"
-                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                className="touch-target flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
                 onClick={() => move(1)}
                 type="button"
               >
@@ -352,7 +352,7 @@ function SegmentedControl({
         <button
           aria-pressed={value === option}
           className={cx(
-            'h-8 min-w-10 rounded-md px-2.5 type-caption font-semibold',
+            'touch-target h-8 min-w-10 rounded-md px-2.5 type-caption font-semibold',
             value === option
               ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950'
               : 'text-stone-500 hover:bg-stone-100 hover:text-stone-900',
@@ -385,7 +385,18 @@ function MonthView({
 
   return (
     <section aria-label="월간 캘린더" className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 lg:min-h-0" onWheel={onWheel}>
-      <div className="grid grid-cols-7">
+      {/*
+        7열 격자는 360px에서 칸당 48px이라 일정 칩이 잘린다.
+        폰은 같은 달의 일정을 날짜순 목록으로 대신 보여준다. 새 상태 없이 같은 데이터에서 파생한다.
+      */}
+      <MonthAgenda
+        cells={cells}
+        cursor={cursor}
+        events={events}
+        onSelectEvent={onSelectEvent}
+        today={today}
+      />
+      <div className="hidden grid-cols-7 md:grid">
         {WEEKDAY_LABELS.map((label, index) => (
           <div
             className={cx(
@@ -403,7 +414,7 @@ function MonthView({
         ))}
       </div>
       <div
-        className="grid flex-1 grid-cols-7 gap-1"
+        className="hidden flex-1 grid-cols-7 gap-1 md:grid"
         style={{
           gridTemplateRows: `repeat(${cells.length / 7}, minmax(5.5rem, 1fr))`,
         }}
@@ -450,6 +461,62 @@ function MonthView({
         })}
       </div>
     </section>
+  )
+}
+
+/* 폰 전용 월간 아젠다. 이번 달에서 일정이 있는 날만 날짜순으로 편다. */
+function MonthAgenda({
+  cells,
+  cursor,
+  events,
+  onSelectEvent,
+  today,
+}: {
+  cells: Date[]
+  cursor: Date
+  events: CalendarEvent[]
+  onSelectEvent: (event: CalendarEvent) => void
+  today: Date
+}) {
+  const days = cells
+    .filter((date) => date.getMonth() === cursor.getMonth())
+    .map((date) => ({ date, dayEvents: getEventsForDay(events, date) }))
+    .filter((day) => day.dayEvents.length > 0)
+
+  if (days.length === 0) {
+    return (
+      <p className="flex min-h-40 items-center justify-center type-body text-stone-400 md:hidden">
+        이번 달 일정이 없습니다.
+      </p>
+    )
+  }
+
+  return (
+    <ul className="grid gap-3 md:hidden">
+      {days.map(({ date, dayEvents }) => (
+        <li
+          className={cx(
+            'rounded-lg border border-stone-200 p-3',
+            isSameDay(date, today) ? 'bg-brand-50' : 'bg-white',
+          )}
+          key={date.toISOString()}
+        >
+          <p className="type-caption font-semibold text-stone-500">
+            {formatCalendarDate(date)}
+            {isSameDay(date, today) ? <span className="ml-1.5 text-brand-700">오늘</span> : null}
+          </p>
+          <div className="mt-2 grid gap-1.5">
+            {dayEvents.map((event) => (
+              <CalendarEventButton
+                event={event}
+                key={event.id}
+                onClick={() => onSelectEvent(event)}
+              />
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -626,7 +693,7 @@ function CalendarEventButton({
     <button
       aria-label={`${event.title}, ${formatScheduleDateTime(event.startsAt)}`}
       className={cx(
-        'h-6 min-w-0 truncate rounded px-1.5 text-left type-micro font-semibold',
+        'touch-target h-6 min-w-0 truncate rounded px-1.5 text-left type-micro font-semibold',
         getEventChipClassName(event.kind),
       )}
       onClick={onClick}
@@ -692,7 +759,7 @@ function ScheduleComposer({
           </h2>
           <button
             aria-label="일정 추가 닫기"
-            className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="touch-target flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
             onClick={onClose}
             type="button"
           >
@@ -803,7 +870,7 @@ function ScheduleDetailDialog({
           </div>
           <button
             aria-label="일정 상세 닫기"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+            className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
             onClick={onClose}
             type="button"
           >

@@ -293,7 +293,7 @@ export function InstructorClassroomEditPage() {
                 <h2 className="type-dialog-title font-bold text-stone-950" id="delete-classroom-title">강의실 영구 삭제</h2>
                 <p className="mt-2 type-caption leading-5 text-stone-500">강의실과 시험 등 소속 데이터가 영구 삭제됩니다. 학생 개인 학습 기록 (자료·세션·진도)은 유지됩니다.</p>
               </div>
-              <button aria-label="강의실 삭제 닫기" className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700" disabled={isDeleting} onClick={closeDeleteDialog} type="button"><X aria-hidden="true" size={16} /></button>
+              <button aria-label="강의실 삭제 닫기" className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700" disabled={isDeleting} onClick={closeDeleteDialog} type="button"><X aria-hidden="true" size={16} /></button>
             </div>
             <label className="mt-5 block type-control font-semibold text-stone-800" htmlFor="classroom-delete-confirmation">
               확인을 위해 <strong>{classroom.name}</strong> 입력
@@ -378,8 +378,8 @@ function BasicInformationSection({
           <p className="type-caption font-semibold text-stone-700">강의실 코드</p>
           <div className="mt-1 flex min-h-11 items-center gap-2 rounded-lg bg-stone-50 px-3">
             <strong className="min-w-0 flex-1 truncate font-mono type-body tracking-wider text-stone-900">{inviteCode}</strong>
-            <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-brand-700" onClick={onCopyInviteCode} type="button">복사</button>
-            <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-stone-600" onClick={onRegenerateInviteCode} type="button">재발급</button>
+            <button className="touch-target h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-brand-700" onClick={onCopyInviteCode} type="button">복사</button>
+            <button className="touch-target h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-stone-600" onClick={onRegenerateInviteCode} type="button">재발급</button>
           </div>
         </div>
       </div>

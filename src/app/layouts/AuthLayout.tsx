@@ -12,8 +12,10 @@ export function AuthLayout() {
   const location = useLocation()
   const isLoginPage = location.pathname === routes.login
 
+  // 브랜드 패널 하한이 520px이면 1024px에서 폼 열에 504px만 남아 가로 넘침이 난다.
+  // 하한을 420px로 낮추고 폼 열에 min-w-0을 명시한다.
   return (
-    <main className="auth-light grid min-h-screen bg-white text-stone-900 lg:grid-cols-[minmax(520px,46.5vw)_minmax(0,1fr)]">
+    <main className="auth-light grid min-h-dvh bg-white text-stone-900 lg:grid-cols-[minmax(420px,46.5vw)_minmax(0,1fr)]">
       <aside className={`hidden bg-[#131C2B] px-12 py-10 text-white xl:px-14 ${isLoginPage ? 'lg:flex lg:flex-col' : 'lg:flex lg:flex-col lg:justify-between'}`}>
         {!isLoginPage ? (
           <Link
@@ -36,9 +38,9 @@ export function AuthLayout() {
           <p className="max-w-sm type-auth-intro font-bold text-white">
             같은 강의,
             <br />
-            나에게 맞춘 학습.
+            나에게 맞춘 학습
             <br />
-            <span className="text-[#5B8DEF]">그래서, {SERVICE_NAME}.</span>
+            <span className="text-[#5B8DEF]">그래서, {SERVICE_NAME}</span>
           </p>
           <p className="max-w-sm type-auth-description text-[#A6ACBB]">
             이해 속도에 맞춰 설명하고 점검하는
@@ -56,7 +58,7 @@ export function AuthLayout() {
         </p>
       </aside>
 
-      <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8">
+      <section className="flex min-h-dvh min-w-0 items-center justify-center px-4 py-8 sm:px-8">
         <div className={isLoginPage ? 'w-full max-w-[400px]' : 'w-full max-w-[440px]'}>
           <Link
             to={routes.classrooms}

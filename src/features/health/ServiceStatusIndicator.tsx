@@ -72,7 +72,7 @@ export function ServiceStatusIndicator() {
     <button
       aria-label={label}
       className={cx(
-        'flex h-8 items-center justify-center gap-2 rounded-lg px-2 type-caption text-stone-500 hover:bg-stone-50',
+        'touch-target flex h-8 items-center justify-center gap-2 rounded-lg px-2 type-caption text-stone-500 hover:bg-stone-50',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         isChecking && 'cursor-wait',
       )}

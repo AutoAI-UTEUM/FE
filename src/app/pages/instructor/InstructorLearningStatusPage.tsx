@@ -202,10 +202,11 @@ function StudentLearningTable({
         role="region"
         tabIndex={0}
       >
-        <div className="min-w-[860px]">
+        {/* 860px 최소 폭은 폰·태블릿 세로에서 가로 스크롤을 만든다. 열 제목은 격자가 살아나는 lg부터만 쓴다. */}
+        <div className="lg:min-w-[860px]">
           <div
             aria-label="학습 현황 열 제목"
-            className="sticky top-0 z-10 grid min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500"
+            className="sticky top-0 z-10 hidden min-h-10 grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 border-b border-stone-100 bg-stone-50 px-5 type-caption font-semibold text-stone-500 lg:grid"
           >
             <StudentSortHeader activeSort={sort} className="pl-11" label="이름" onSelect={selectSort} sortKey="name" />
             <StudentSortHeader activeSort={sort} className="justify-self-center" label="진도" onSelect={selectSort} sortKey="progress" />
@@ -229,7 +230,7 @@ function StudentLearningTable({
                 aria-controls={detailId}
                 aria-expanded={isExpanded}
                 aria-label={`${student.name} 프로필 상세 ${isExpanded ? '접기' : '펼치기'}`}
-                className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] items-center gap-4 px-5 text-left outline-none transition-colors hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                className="group relative grid min-h-16 w-full grid-cols-1 items-center gap-2 py-3 pr-12 pl-5 text-left outline-none transition-colors hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 lg:grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_20px] lg:gap-4 lg:py-0 lg:pr-5"
                 onClick={() => toggleStudent(student.id)}
                 type="button"
               >
@@ -237,11 +238,14 @@ function StudentLearningTable({
                   <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 type-caption font-bold text-brand-700">{getInitial(student.name)}</span>
                   <span className="min-w-0"><strong className="block truncate type-control text-stone-900 group-hover:text-brand-700">{student.name}</strong><span className="block truncate type-caption text-stone-400">{student.email}</span></span>
                 </span>
-                <StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} />
-                <StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} />
-                <StudentQuizSummary analytics={analytics} student={student} />
-                <StudentSummaryMetric label="최근 학습" value={formatDetailedRelativeActivityDate(student.lastActiveAt)} />
-                <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
+                {/* 폰에서는 지표를 한 줄로 감싸고, lg부터 contents로 풀어 원래 격자 칸에 그대로 앉힌다. */}
+                <span className="flex flex-wrap items-center gap-x-4 gap-y-1 lg:contents">
+                  <StudentSummaryMetric label="진도" value={`${Math.round(student.averageProgressRate ?? 0)}%`} />
+                  <StudentSummaryMetric label="질문" value={`${getStudentQuestionCount(student, analytics)}건`} />
+                  <StudentQuizSummary analytics={analytics} student={student} />
+                  <StudentSummaryMetric label="최근 학습" value={formatDetailedRelativeActivityDate(student.lastActiveAt)} />
+                </span>
+                <ChevronDown aria-hidden="true" className={cx('absolute top-1/2 right-5 shrink-0 -translate-y-1/2 text-stone-400 transition-transform lg:static lg:translate-y-0', isExpanded && 'rotate-180 text-brand-700')} size={15} />
               </button>
               {isExpanded ? <StudentLearningDetails
                 analytics={analytics}
@@ -367,7 +371,8 @@ function StudentLearningDetails({
 }
 
 function StudentSummaryMetric({ label, value }: { label: string; value: string }) {
-  return <strong aria-label={`${label} ${value}`} className="whitespace-nowrap text-center type-caption text-stone-900">{value}</strong>
+  // 폰에는 열 제목 줄이 없으므로 항목 이름을 값 앞에 함께 보여준다.
+  return <strong aria-label={`${label} ${value}`} className="whitespace-nowrap text-center type-caption text-stone-900"><span aria-hidden="true" className="font-medium text-stone-400 lg:hidden">{label} </span>{value}</strong>
 }
 
 function StudentQuizSummary({

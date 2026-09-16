@@ -67,10 +67,11 @@ export function SessionPageViewer({
     startY: number
   } | null>(null)
   const progress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0
+  // 144px 목차를 폰에서 열로 두면 본문에 216px만 남는다. md 미만에서는 겹쳐 띄운다.
   const viewerGridClassName = cx(
-    'grid min-h-0 flex-1',
+    'relative grid min-h-0 flex-1',
     isOutlineVisible
-      ? 'grid-cols-[144px_minmax(0,1fr)] sm:grid-cols-[152px_minmax(0,1fr)]'
+      ? 'grid-cols-[minmax(0,1fr)] md:grid-cols-[144px_minmax(0,1fr)] lg:grid-cols-[152px_minmax(0,1fr)]'
       : 'grid-cols-[minmax(0,1fr)]',
   )
 
@@ -185,7 +186,7 @@ export function SessionPageViewer({
           isPending ? (
             <button
               aria-label="주차 페이지로 (AI 답변 생성 중 이동 불가)"
-              className="flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-stone-200 text-stone-300"
+              className="touch-target flex size-8 shrink-0 cursor-not-allowed items-center justify-center rounded-lg border border-stone-200 text-stone-300"
               disabled
               title="AI 답변 생성이 끝나면 이동할 수 있습니다."
               type="button"
@@ -195,7 +196,7 @@ export function SessionPageViewer({
           ) : (
             <Link
               aria-label="주차 페이지로"
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               title="주차 페이지로"
               to={backTo}
             >
@@ -412,7 +413,7 @@ function PageOutline({
   return (
     <nav
       aria-label="자료 페이지"
-      className="grid content-start gap-2 overflow-y-auto border-r border-stone-200 bg-stone-50 p-2 [scrollbar-gutter:stable]"
+      className="absolute inset-y-0 left-0 z-20 grid w-36 content-start gap-2 overflow-y-auto border-r border-stone-200 bg-stone-50 p-2 shadow-lg [scrollbar-gutter:stable] md:static md:w-auto md:shadow-none"
     >
       {Array.from({ length: totalPages }, (_, index) => index + 1).map(
         (pageNumber) => (
@@ -500,7 +501,7 @@ function ToolbarIconButton({
   return (
     <button
       aria-label={label}
-      className="flex size-5.5 items-center justify-center rounded text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+      className="touch-target flex size-5.5 items-center justify-center rounded text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
       onClick={onClick}
       type="button"
     >
@@ -529,7 +530,7 @@ function ToolbarButton({
       aria-label={disabled ? `${label} (사용 불가)` : label}
       aria-pressed={disabled ? undefined : isActive}
       className={cx(
-        'flex h-8 items-center gap-1.5 rounded-lg border px-2.5 type-caption font-medium hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400 disabled:hover:bg-transparent',
+        'touch-target flex h-8 items-center gap-1.5 rounded-lg border px-2.5 type-caption font-medium hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400 disabled:hover:bg-transparent',
         isActive
           ? 'border-brand-200 bg-brand-50 text-brand-700'
           : 'border-stone-200 text-stone-600',

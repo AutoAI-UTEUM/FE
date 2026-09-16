@@ -36,7 +36,7 @@ export function SessionResourcePanel({
       <div className="flex justify-end">
         <button
           aria-label="자료 목록 닫기"
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
+          className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-white hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:hover:bg-stone-100"
           onClick={onClose}
           title="자료 목록 닫기"
           type="button"

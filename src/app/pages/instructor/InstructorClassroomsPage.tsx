@@ -389,7 +389,7 @@ function InviteCodeRegenerationDialog({
           </div>
           <button
             aria-label="초대 코드 재발급 닫기"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isSubmitting}
             onClick={onClose}
             type="button"
@@ -555,7 +555,7 @@ function SearchDialog({
     <div
       aria-label="강의실 검색"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-6 sm:pt-[15vh]"
       role="dialog"
     >
       <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
@@ -579,7 +579,7 @@ function SearchDialog({
           />
           <button
             aria-label="검색 닫기"
-            className="flex h-7 items-center justify-center rounded-md border border-stone-200 px-2 type-micro font-semibold text-stone-400"
+            className="touch-target flex h-7 items-center justify-center rounded-md border border-stone-200 px-2 type-micro font-semibold text-stone-400"
             onClick={onClose}
             type="button"
           >
@@ -794,7 +794,7 @@ function CreateClassroomDialog({
           </h2>
           <button
             aria-label="닫기"
-            className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100"
+            className="touch-target flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100"
             disabled={isSubmitting}
             onClick={onClose}
             type="button"
@@ -829,7 +829,7 @@ function CreateClassroomDialog({
               <div className="mt-1 flex h-11 items-center rounded-lg border border-stone-300 bg-white p-1">
                 <button
                   aria-label="주차 수 줄이기"
-                  className="flex size-8 items-center justify-center rounded-md hover:bg-stone-100"
+                  className="touch-target flex size-8 items-center justify-center rounded-md hover:bg-stone-100"
                   disabled={weekCount <= 1}
                   onClick={() =>
                     setWeekCount((value) => Math.max(1, value - 1))
@@ -843,7 +843,7 @@ function CreateClassroomDialog({
                 </output>
                 <button
                   aria-label="주차 수 늘리기"
-                  className="flex size-8 items-center justify-center rounded-md hover:bg-stone-100"
+                  className="touch-target flex size-8 items-center justify-center rounded-md hover:bg-stone-100"
                   disabled={weekCount >= 52}
                   onClick={() =>
                     setWeekCount((value) => Math.min(52, value + 1))

@@ -21,6 +21,21 @@
   grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
 }
 
+/*
+ * 폰에서 위아래 60/40으로 쪼개면 대화 로그에 150px 남짓만 남는다.
+ * `data-mobile-pane`을 주는 화면은 한 번에 한 패널만 전면에 두고 세그먼트로 전환한다.
+ */
+@media (max-width: 767px) {
+  .study-session-content[data-mobile-pane] {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .study-session-content[data-mobile-pane='chat'] > :first-child,
+  .study-session-content[data-mobile-pane='material'] > :last-child {
+    display: none;
+  }
+}
+
 @media (min-width: 1024px) {
   .study-session-content {
     grid-template-columns: minmax(0, 1fr) 6px var(--chat-panel-width, minmax(0, 1fr));
@@ -305,7 +320,7 @@ html.study-workspace-active {
 
 body {
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: #f6f7f9;
   font-size: 0.875rem;
@@ -377,6 +392,30 @@ select {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * 시각 크기는 그대로 두고 터치 영역만 44px로 넓힌다.
+ * 화면 폭이 아니라 포인터 종류로 판단해 마우스 환경의 촘촘한 배치를 건드리지 않는다.
+ */
+@media (pointer: coarse) {
+  /*
+   * 이 규칙은 layer 밖이라 Tailwind utility보다 우선한다.
+   * 이미 배치 유틸리티를 쓰는 버튼의 position을 덮어쓰지 않도록 제외한다.
+   */
+  .touch-target:not(.absolute, .fixed, .sticky) {
+    position: relative;
+  }
+
+  .touch-target::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
 }
 
 /*

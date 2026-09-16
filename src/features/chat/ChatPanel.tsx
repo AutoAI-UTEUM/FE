@@ -407,7 +407,7 @@ export function ChatPanel({
         >
           <button
             aria-label="학습 텍스트 작게"
-            className="flex size-8 items-center justify-center rounded-l-lg text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 disabled:text-stone-300"
+            className="touch-target flex size-8 items-center justify-center rounded-l-lg text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 disabled:text-stone-300"
             disabled={learningTextSize === 'small'}
             onClick={() => changeLearningTextSize(-1)}
             title="글자 작게"
@@ -423,7 +423,7 @@ export function ChatPanel({
           </span>
           <button
             aria-label="학습 텍스트 크게"
-            className="flex size-8 items-center justify-center rounded-r-lg text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 disabled:text-stone-300"
+            className="touch-target flex size-8 items-center justify-center rounded-r-lg text-stone-500 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600 disabled:text-stone-300"
             disabled={learningTextSize === 'large'}
             onClick={() => changeLearningTextSize(1)}
             title="글자 크게"
@@ -590,7 +590,7 @@ export function ChatPanel({
           <button
             aria-label={chat.isTurnPending && !isCancellingTurn ? '답변 중단' : '질문 보내기'}
             className={cx(
-              'flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-white',
+              'touch-target flex size-8 shrink-0 items-center justify-center self-center rounded-lg text-white',
               'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
               'disabled:cursor-not-allowed disabled:bg-stone-300',
               chat.isTurnPending && !isCancellingTurn
@@ -987,7 +987,7 @@ function MessageActions({
   onSaveNote: () => void
   onShare: () => void
 }) {
-  const className = 'flex size-6 items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 text-stone-400 hover:bg-stone-100 hover:text-brand-700 focus-visible:outline-brand-600'
+  const className = 'touch-target flex size-6 items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 text-stone-400 hover:bg-stone-100 hover:text-brand-700 focus-visible:outline-brand-600'
 
   return (
     <div className="flex items-center gap-0.5">

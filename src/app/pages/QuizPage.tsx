@@ -328,7 +328,9 @@ export function QuizWorkspace({
       <div
         aria-label={shouldShowReviewChat ? '퀴즈 복습 작업 영역' : undefined}
         className={shouldShowReviewChat
-          ? `study-session-content min-h-[940px] min-w-0 overflow-hidden bg-white lg:min-h-0 ${embedded ? 'lg:h-full' : 'lg:h-[calc(100dvh-7rem)]'}`
+          // ponytail: 폰은 화면 높이에 맞추기만 한다. 940px 고정은 overflow-hidden 안에서 아래를 잘라냈다.
+          // 복습 대화가 여전히 40%뿐이라 좁으면, 학습 화면처럼 data-mobile-pane 세그먼트를 붙이면 된다.
+          ? `study-session-content min-h-[calc(100dvh-7rem)] min-w-0 overflow-hidden bg-white md:min-h-[940px] lg:min-h-0 ${embedded ? 'lg:h-full' : 'lg:h-[calc(100dvh-7rem)]'}`
           : 'min-w-0'}
         ref={shouldShowReviewChat ? reviewWorkspaceRef : undefined}
         role={shouldShowReviewChat ? 'region' : undefined}

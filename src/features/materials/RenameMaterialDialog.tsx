@@ -48,7 +48,7 @@ export function RenameMaterialDialog({
           <h2 className="type-dialog-title font-bold text-stone-950">자료 이름 변경</h2>
           <button
             aria-label="자료 이름 변경 닫기"
-            className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100"
+            className="touch-target flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100"
             disabled={isSaving}
             onClick={onClose}
             type="button"

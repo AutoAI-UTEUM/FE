@@ -556,7 +556,7 @@ export function SignupPage() {
                 isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'
               }
               aria-pressed={isPasswordVisible}
-              className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              className="touch-target absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
               onClick={() => setIsPasswordVisible((visible) => !visible)}
               title={isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 표시'}
               type="button"
@@ -635,7 +635,7 @@ export function SignupPage() {
                   : '비밀번호 확인 표시'
               }
               aria-pressed={isConfirmPasswordVisible}
-              className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
+              className="touch-target absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-600"
               onClick={() =>
                 setIsConfirmPasswordVisible((visible) => !visible)
               }

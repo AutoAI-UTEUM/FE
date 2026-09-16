@@ -246,7 +246,7 @@ export function LearnerNotesPage() {
               {query ? (
                 <button
                   aria-label="검색어 지우기"
-                  className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100"
+                  className="touch-target absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100"
                   onClick={() => setQuery('')}
                   type="button"
                 >
@@ -355,7 +355,7 @@ export function LearnerNotesPage() {
                         </button>
                         <button
                           aria-label="노트 수정"
-                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                          className="touch-target flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
                           onClick={() => navigate(noteEditPath(item.kind, item.note.id))}
                           type="button"
                         >
@@ -363,7 +363,7 @@ export function LearnerNotesPage() {
                         </button>
                         <button
                           aria-label="노트 삭제"
-                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
+                          className="touch-target flex size-8 shrink-0 items-center justify-center rounded-md text-stone-400 hover:bg-rose-50 hover:text-rose-700"
                           onClick={() => void deleteNote(item)}
                           type="button"
                         >

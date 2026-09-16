@@ -246,7 +246,7 @@ export function DocumentChatPanel({
           />
           <button
             aria-label={isPending ? '응답 대기 중' : copy.sendLabel}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-stone-300"
+            className="touch-target flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-stone-300"
             disabled={isPending || question.trim().length === 0}
             type="submit"
           >

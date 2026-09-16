@@ -35,7 +35,12 @@ describe('SessionPageViewer', () => {
     const pageOutline = screen.getByRole('navigation', { name: '자료 페이지' })
     expect(pageOutline).toBeInTheDocument()
     expect(pageOutline).toHaveClass('[scrollbar-gutter:stable]')
-    expect(pageOutline.parentElement).toHaveClass('grid-cols-[144px_minmax(0,1fr)]')
+    // 폰에서는 목차가 본문 위에 겹쳐 뜨고, md부터 왼쪽 열을 차지한다.
+    expect(pageOutline).toHaveClass('absolute', 'w-36', 'md:static')
+    expect(pageOutline.parentElement).toHaveClass(
+      'grid-cols-[minmax(0,1fr)]',
+      'md:grid-cols-[144px_minmax(0,1fr)]',
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '너비 맞춤' }))
     expect(screen.getByRole('button', { name: '너비 맞춤' })).toHaveAttribute('aria-pressed', 'true')
