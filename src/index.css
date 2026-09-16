@@ -34,8 +34,8 @@ html[data-responsive-mode='phone'] .study-session-content {
 }
 
 html[data-responsive-mode='tablet-portrait'] .study-session-content {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 11fr) minmax(0, 9fr);
+  grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 html[data-responsive-mode='tablet-landscape'] .study-session-content {

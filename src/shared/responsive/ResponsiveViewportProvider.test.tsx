@@ -27,6 +27,21 @@ describe('responsive viewport mode', () => {
     expect(getResponsiveViewportMode({ coarsePointer: true, screenHeight: 1024, screenWidth: 1366 })).toBe('tablet-landscape')
   })
 
+  it('uses the orientation query when tablet screen dimensions lag behind rotation', () => {
+    expect(getResponsiveViewportMode({
+      coarsePointer: true,
+      portraitOrientation: false,
+      screenHeight: 1180,
+      screenWidth: 820,
+    })).toBe('tablet-landscape')
+    expect(getResponsiveViewportMode({
+      coarsePointer: true,
+      portraitOrientation: true,
+      screenHeight: 820,
+      screenWidth: 1180,
+    })).toBe('tablet-portrait')
+  })
+
   it('does not apply mobile layout to large touch displays', () => {
     expect(getResponsiveViewportMode({ coarsePointer: true, screenHeight: 900, screenWidth: 1440 })).toBe('desktop')
   })

@@ -413,6 +413,7 @@ export function ChatPanel({
 
   return (
     <section
+      aria-label="AI 학습 패널"
       className={cx(
         'learning-text-scope flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white',
         className,

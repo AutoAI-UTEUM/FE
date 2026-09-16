@@ -23,6 +23,7 @@ export interface ResponsiveViewportValue {
 
 interface ViewportSnapshot {
   coarsePointer: boolean
+  portraitOrientation?: boolean
   screenHeight: number
   screenWidth: number
 }
@@ -41,6 +42,7 @@ const ResponsiveViewportContext = createContext<ResponsiveViewportValue>(desktop
 
 export function getResponsiveViewportMode({
   coarsePointer,
+  portraitOrientation,
   screenHeight,
   screenWidth,
 }: ViewportSnapshot): ResponsiveViewportMode {
@@ -49,7 +51,8 @@ export function getResponsiveViewportMode({
 
   if (!coarsePointer || longEdge > MAX_MOBILE_LONG_EDGE) return 'desktop'
   if (shortEdge <= MAX_PHONE_SHORT_EDGE) return 'phone'
-  return screenHeight >= screenWidth ? 'tablet-portrait' : 'tablet-landscape'
+  const isPortrait = portraitOrientation ?? screenHeight >= screenWidth
+  return isPortrait ? 'tablet-portrait' : 'tablet-landscape'
 }
 
 function readViewportMode(): ResponsiveViewportMode {
@@ -58,6 +61,8 @@ function readViewportMode(): ResponsiveViewportMode {
   const screenHeight = window.screen.height || window.innerHeight
   return getResponsiveViewportMode({
     coarsePointer: window.matchMedia?.('(pointer: coarse)').matches ?? false,
+    portraitOrientation: window.matchMedia?.('(orientation: portrait)').matches
+      ?? window.innerHeight >= window.innerWidth,
     screenHeight,
     screenWidth,
   })
