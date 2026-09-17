@@ -147,7 +147,7 @@ export function DocumentChatPanel({
     <section
       aria-label={copy.ariaLabel}
       className={cx(
-        'flex h-full min-h-[420px] min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white',
+        'flex h-full mobile-web:min-h-0 min-h-[420px] min-w-0 flex-col overflow-hidden rounded-xl border border-stone-200 bg-white',
         className,
       )}
     >
