@@ -357,7 +357,13 @@ html.mobile-web select {
   font-size: 16px;
 }
 
-/* Touch layouts use one minimum target contract across feature-owned controls. */
+/*
+ * Touch layouts use one minimum target contract across feature-owned controls.
+ *
+ * 본문 문장 안에 끼워 넣은 컨트롤은 제외한다. 앵커는 display:inline이라 규칙이
+ * 적용되지 않지만, 폼 컨트롤은 대체 요소라 인라인이어도 44x44로 부풀어
+ * 문장 흐름을 깨뜨린다(AI 답변의 쪽 참조 버튼). 그런 곳에는 .touch-exempt를 단다.
+ */
 html.mobile-web :is(
   a[href],
   button,
@@ -365,7 +371,7 @@ html.mobile-web :is(
   select,
   textarea,
   [role='button']
-) {
+):not(.touch-exempt) {
   min-width: 44px;
   min-height: 44px;
 }
@@ -396,7 +402,7 @@ html.study-workspace-active {
 
 body {
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: #f6f7f9;
   font-size: 0.875rem;

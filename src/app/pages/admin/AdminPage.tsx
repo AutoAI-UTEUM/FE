@@ -173,7 +173,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
   }
 
   return (
-    <div className="flex h-full min-h-[620px] flex-col">
+    <div className="flex h-full mobile-web:min-h-0 min-h-[620px] flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h2 className="type-section-title font-bold text-stone-950">회원 목록 <span className="ml-1">{formatCount(result?.totalElements)}</span></h2>
@@ -279,7 +279,7 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
   }
 
   return (
-    <div className="flex h-full min-h-[620px] flex-col">
+    <div className="flex h-full mobile-web:min-h-0 min-h-[620px] flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><h2 className="type-section-title font-bold text-stone-950">강의실 목록 <span className="ml-1">{formatCount(result?.totalElements)}</span></h2><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
       {error ? <AdminErrorMessage error={error} /> : null}
       <div className="min-h-0 flex-1 overflow-auto">

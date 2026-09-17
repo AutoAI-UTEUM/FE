@@ -290,7 +290,7 @@ export function SignupPage() {
             })}
           </div>
 
-          <label className="mt-5 flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
+          <label className="mt-5 flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
             <input
               checked={hasAcceptedGoogleTerms}
               className="mt-0.5 size-4 shrink-0 rounded border-stone-300 accent-brand-600"
@@ -652,7 +652,7 @@ export function SignupPage() {
         </div>
 
         <div className="grid gap-2 pt-1">
-          <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600">
+          <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
             <input
               checked={hasAcceptedTerms}
               className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"

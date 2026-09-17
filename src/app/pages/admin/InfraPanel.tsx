@@ -95,7 +95,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   }, [refreshKey, repository])
 
   return (
-    <div className="h-full min-h-[620px] overflow-auto bg-[#F7F8FA]">
+    <div className="h-full mobile-web:min-h-0 min-h-[620px] overflow-auto bg-[#F7F8FA]">
       <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 mobile-phone:flex-col mobile-phone:items-stretch">
         <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
           <SegmentedControl

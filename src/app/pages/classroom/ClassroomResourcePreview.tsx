@@ -222,7 +222,7 @@ export function ClassroomResourcePreviewPanel({
   weekTitle?: string
 }) {
   return (
-    <article className="flex h-full min-h-[600px] flex-col overflow-hidden rounded-lg border border-stone-200 bg-white">
+    <article className="flex h-full mobile-web:min-h-0 min-h-[600px] flex-col overflow-hidden rounded-lg border border-stone-200 bg-white">
       <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-stone-200 px-4 sm:px-5">
         <button
           aria-label="콘텐츠 목록으로 돌아가기"
@@ -259,7 +259,7 @@ export function ClassroomResourcePreviewPanel({
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
         <ResourceViewer resource={resource} />
-        <aside aria-label="자료 질문" className="flex min-h-[360px] min-w-0 flex-col border-t border-stone-200 bg-white lg:min-h-0 lg:border-t-0 lg:border-l">
+        <aside aria-label="자료 질문" className="flex mobile-web:min-h-0 min-h-[360px] min-w-0 flex-col border-t border-stone-200 bg-white lg:min-h-0 lg:border-t-0 lg:border-l">
           <div className="flex h-12 shrink-0 items-center gap-2 border-b border-stone-200 px-4">
             <Bot aria-hidden="true" className="text-brand-700" size={17} />
             <h3 className="type-body font-bold text-stone-950">자료 질문</h3>
@@ -372,7 +372,7 @@ export function ClassroomResourceEditDialog({
 function ResourceViewer({ resource }: { resource: ClassroomResourcePreviewValue }) {
   if (resource.source.kind === 'link') {
     return (
-      <section aria-label="웹 링크 뷰어" className="flex min-h-[360px] items-center justify-center bg-stone-50 p-6 text-center">
+      <section aria-label="웹 링크 뷰어" className="flex mobile-web:min-h-[50dvh] min-h-[360px] items-center justify-center bg-stone-50 p-6 text-center">
         <div className="max-w-md">
           <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-white text-brand-700 shadow-sm ring-1 ring-stone-200">
             <LinkIcon aria-hidden="true" size={22} />
@@ -394,7 +394,7 @@ function ResourceViewer({ resource }: { resource: ClassroomResourcePreviewValue 
 
   if (resource.source.previewKind === 'image' && resource.source.objectUrl) {
     return (
-      <section aria-label="이미지 뷰어" className="flex min-h-[360px] items-center justify-center overflow-auto bg-stone-100 p-4">
+      <section aria-label="이미지 뷰어" className="flex mobile-web:min-h-[50dvh] mobile-web:min-h-[50dvh] min-h-[360px] items-center justify-center overflow-auto bg-stone-100 p-4">
         <img alt={resource.title} className="max-h-full max-w-full object-contain" src={resource.source.objectUrl} />
       </section>
     )
@@ -402,15 +402,15 @@ function ResourceViewer({ resource }: { resource: ClassroomResourcePreviewValue 
 
   if (resource.source.previewKind === 'pdf' && resource.source.objectUrl) {
     return (
-      <section aria-label="PDF 자료 뷰어" className="min-h-[520px] bg-stone-100 p-2">
-        <iframe className="h-full min-h-[500px] w-full border-0 bg-white" src={resource.source.objectUrl} title={`${resource.title} PDF 미리보기`} />
+      <section aria-label="PDF 자료 뷰어" className="mobile-web:min-h-[50dvh] min-h-[520px] bg-stone-100 p-2">
+        <iframe className="h-full mobile-web:min-h-[50dvh] min-h-[500px] w-full border-0 bg-white" src={resource.source.objectUrl} title={`${resource.title} PDF 미리보기`} />
       </section>
     )
   }
 
   const Icon = resource.source.previewKind === 'image' ? Image : FileText
   return (
-    <section aria-label="문서 자료 뷰어" className="flex min-h-[360px] items-center justify-center bg-stone-50 p-6 text-center">
+    <section aria-label="문서 자료 뷰어" className="flex mobile-web:min-h-[50dvh] min-h-[360px] items-center justify-center bg-stone-50 p-6 text-center">
       <div className="max-w-md">
         <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-white text-stone-600 shadow-sm ring-1 ring-stone-200">
           <Icon aria-hidden="true" size={22} />

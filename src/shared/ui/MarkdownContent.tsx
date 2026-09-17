@@ -182,7 +182,8 @@ export function MarkdownContent({
                 <a href={href}>{children}</a>
               ) : (
                 <button
-                  className="inline cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-brand-600 underline dark:text-brand-400"
+                  // touch-exempt: 문장 안에 끼는 참조라 44px로 부풀면 줄 높이가 깨진다.
+                  className="touch-exempt inline cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-brand-600 underline dark:text-brand-400"
                   onClick={() => onPageReferenceClick(pageNumber)}
                   title={`${pageNumber}쪽으로 이동`}
                   type="button"
