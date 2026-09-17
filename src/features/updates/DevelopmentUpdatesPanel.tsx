@@ -235,7 +235,7 @@ export function DevelopmentUpdatesPanel({
             </div>
           </section>
 
-          <aside aria-label="월별 업데이트 목록" className="flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0">
+          <aside aria-label="월별 업데이트 목록" className="flex mobile-web:min-h-0 min-h-[420px] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0">
             <div className="flex min-h-12 items-center gap-2 border-b border-stone-200 bg-stone-50/70 px-4">
               <h3 className="type-body font-bold text-stone-950">{activeDate.label}</h3>
               <span className="type-caption text-stone-400">{activeDate.weekday}</span>

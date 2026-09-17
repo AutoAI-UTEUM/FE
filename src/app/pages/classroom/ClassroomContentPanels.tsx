@@ -25,7 +25,7 @@ export function NoticeDetailPanel({
     : notice.publishAt
 
   return (
-    <article className="flex min-h-[520px] flex-col rounded-lg border border-stone-200 bg-white">
+    <article className="flex mobile-web:min-h-0 min-h-[520px] flex-col rounded-lg border border-stone-200 bg-white">
       <div className="flex min-h-14 items-center gap-3 border-b border-stone-200 px-5">
         <button
           aria-label="목록으로 돌아가기"
@@ -122,7 +122,7 @@ export function NoticeContentPanel({
     }
   }
 
-  return <form className="flex min-h-[520px] flex-col rounded-lg border border-stone-200 bg-white" onSubmit={submit}>
+  return <form className="flex mobile-web:min-h-0 min-h-[520px] flex-col rounded-lg border border-stone-200 bg-white" onSubmit={submit}>
     <div className="flex min-h-14 items-center gap-3 border-b border-stone-200 px-5">
       <button aria-label="목록으로 돌아가기" className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-100" onClick={onClose} type="button"><ArrowLeft size={16} /></button>
       <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="type-section-title font-bold text-stone-950">{notice ? '공지 편집' : '공지 작성'}</h2>{notice ? <Badge tone={notice.published ? 'success' : 'warning'}>{notice.published ? '게시됨' : '예약'}</Badge> : null}</div><p className="type-caption text-stone-500">{selectedWeek === null ? '전체 공지' : `${selectedWeek}주차 공지`}</p></div>

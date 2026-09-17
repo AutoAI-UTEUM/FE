@@ -119,7 +119,7 @@ export function InstructorNoticesPage() {
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader activeTab="course" classroom={classroom} />
 
-      <section aria-label="공지 관리" className="grid min-h-[540px] overflow-hidden rounded-lg border border-stone-200 bg-white lg:grid-cols-[300px_minmax(0,1fr)]">
+      <section aria-label="공지 관리" className="grid mobile-web:min-h-0 min-h-[540px] overflow-hidden rounded-lg border border-stone-200 bg-white lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="flex min-h-0 flex-col border-b border-stone-200 bg-stone-50/60 lg:border-r lg:border-b-0">
           <div className="flex min-h-12 items-center justify-between border-b border-stone-200 px-4">
             <h2 className="type-body font-bold text-stone-900">공지 목록</h2>
@@ -193,7 +193,7 @@ function NoticeEditor({
   }
 
   return (
-    <form className="flex min-h-[440px] min-w-0 flex-col" onSubmit={submit}>
+    <form className="flex mobile-web:min-h-0 min-h-[440px] min-w-0 flex-col" onSubmit={submit}>
       <div className="flex min-h-12 items-center justify-between border-b border-stone-200 px-5">
         <h2 className="type-body font-bold text-stone-900">{notice ? '공지 편집' : '공지 작성'}</h2>
         {notice ? <time className="type-caption text-stone-400">{formatNoticeDate(notice.publishedAt)} 게시</time> : null}

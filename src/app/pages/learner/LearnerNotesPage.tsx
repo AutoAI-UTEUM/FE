@@ -621,7 +621,7 @@ export function LearnerNoteEditPage() {
 function EditorLoadingState() {
   return (
     <div
-      className="flex min-h-[420px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50 type-body text-stone-500"
+      className="flex mobile-web:min-h-0 min-h-[420px] items-center justify-center rounded-lg border border-stone-200 bg-stone-50 type-body text-stone-500"
       role="status"
     >
       편집기를 불러오는 중입니다.

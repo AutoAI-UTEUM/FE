@@ -144,7 +144,7 @@ export function InstructorCalendarPage() {
       <div className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', mode === 'tablet-portrait' && '!grid-cols-1 !overflow-visible')}>
         <section
           aria-label="캘린더 본문"
-          className="flex min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
+          className="flex mobile-web:min-h-0 min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
         >
           <div className="grid min-h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-stone-200 px-3 sm:px-4">
             <span aria-hidden="true" />
