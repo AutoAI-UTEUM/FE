@@ -11,16 +11,23 @@ import { handleApiFixtureRequest } from '../src/test/apiFixtures'
  * 테스트와 같은 픽스처를 그대로 서빙해 전 화면 QA를 가능하게 한다.
  */
 export function mockApiPlugin(): Plugin {
+  const installMiddleware = (middlewares: { use(handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): void }) => {
+    middlewares.use((req, res, next) => {
+      if (!req.url?.startsWith('/api')) {
+        next()
+        return
+      }
+      void respond(req, res)
+    })
+  }
+
   return {
     name: 'edupilot-mock-api',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url?.startsWith('/api')) {
-          next()
-          return
-        }
-        void respond(req, res)
-      })
+      installMiddleware(server.middlewares)
+    },
+    configurePreviewServer(server) {
+      installMiddleware(server.middlewares)
     },
   }
 }

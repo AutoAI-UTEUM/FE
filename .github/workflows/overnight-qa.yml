@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       deadline:
-        description: ISO-8601 deadline including timezone
+        description: Hard stop including timezone; the run finishes early after QA and commercialization review
         required: true
-        default: '2026-09-12T10:00:00+09:00'
+        default: '2026-09-20T10:00:00+09:00'
       create_issues:
         description: Create or update deduplicated FE/BE/AI issues
         required: true
@@ -20,7 +20,7 @@ permissions:
 jobs:
   qa:
     runs-on: ubuntu-latest
-    timeout-minutes: 660
+    timeout-minutes: 360
     env:
       QA_CREATE_ISSUES: ${{ inputs.create_issues && secrets.QA_ISSUE_TOKEN != '' }}
       QA_DEADLINE: ${{ inputs.deadline }}
@@ -46,7 +46,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
-      - name: Run until the deadline
+      - name: Run one full QA pass and prepare commercialization review
         run: npm run test:overnight
       - name: Upload evidence
         if: always()

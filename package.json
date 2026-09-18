@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:qa": "cross-env VITE_API_BASE_URL=/api VITE_API_CAPABILITIES=reports,password-reset,oauth,schedule,analytics VITE_DEV_PROXY_TARGET=mock npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
@@ -18,6 +19,9 @@
     "test:e2e:dev": "cross-env QA_ENV=dev playwright test",
     "test:e2e:prod": "cross-env QA_ENV=prod playwright test",
     "test:e2e:visual": "cross-env QA_ENV=mock QA_FULL_MATRIX=1 playwright test --grep @visual",
+    "test:performance:bundle": "node scripts/analyze-fe-performance.mjs",
+    "test:qa:health": "node scripts/qa-health-probe.mjs",
+    "test:qa:commercialization": "node scripts/prepare-commercialization-review.mjs",
     "test:qa:issues": "node scripts/report-qa-issues.mjs",
     "test:overnight": "node scripts/run-overnight-qa.mjs"
   },
