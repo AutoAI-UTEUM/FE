@@ -22,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     env:
-      QA_CREATE_ISSUES: ${{ inputs.create_issues && secrets.QA_ISSUE_TOKEN != '' }}
+      QA_CREATE_ISSUES: ${{ inputs.create_issues }}
       QA_DEADLINE: ${{ inputs.deadline }}
-      GH_TOKEN: ${{ secrets.QA_ISSUE_TOKEN }}
+      GH_TOKEN: ${{ secrets.QA_ISSUE_TOKEN != '' && secrets.QA_ISSUE_TOKEN || github.token }}
       DEV_QA_LEARNER_EMAIL: ${{ secrets.DEV_QA_LEARNER_EMAIL }}
       DEV_QA_LEARNER_PASSWORD: ${{ secrets.DEV_QA_LEARNER_PASSWORD }}
       DEV_QA_INSTRUCTOR_EMAIL: ${{ secrets.DEV_QA_INSTRUCTOR_EMAIL }}
