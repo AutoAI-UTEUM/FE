@@ -278,7 +278,7 @@ export function InstructorClassroomsPage() {
       {!error && classrooms.length > 0 ? (
         <section
           aria-label="운영 강의실"
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+          className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 tablet-landscape:grid-cols-3"
         >
           {classrooms.map((classroom) => (
             <ClassroomCard
