@@ -59,6 +59,7 @@ function getButtonClassName({
     'disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400',
     sizeClasses[size],
     variantClasses[variant],
+    variant === 'primary' && 'tablet-primary-action',
     className,
   ]
     .filter(Boolean)

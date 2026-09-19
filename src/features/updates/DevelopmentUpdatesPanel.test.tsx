@@ -56,7 +56,7 @@ describe('DevelopmentUpdatesPanel', () => {
     expect(await screen.findByText('feat: 리포트 API 추가')).toBeInTheDocument()
     expect(screen.getByText('feat: 업데이트 화면 추가')).toBeInTheDocument()
     expect(screen.queryByText('fix: 로그인 화면 정리')).not.toBeInTheDocument()
-    expect(screen.getByRole('grid', { name: '2026년 8월 업데이트 달력' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '2026년 8월 업데이트 달력' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '8월 26일' })).toBeInTheDocument()
     expect(screen.getByText('수요일')).toBeInTheDocument()
     expect(screen.getAllByText('2건')).not.toHaveLength(0)
@@ -66,7 +66,7 @@ describe('DevelopmentUpdatesPanel', () => {
     expect(screen.getByRole('complementary', { name: '월별 업데이트 목록' })).toHaveClass('overflow-hidden')
     expect(screen.getByRole('region', { name: '업데이트 기록' })).toHaveClass('overflow-y-auto', 'overscroll-contain')
 
-    fireEvent.click(screen.getByRole('gridcell', { name: '2026년 8월 25일, 업데이트 1건' }))
+    fireEvent.click(screen.getByRole('button', { name: '2026년 8월 25일, 업데이트 1건' }))
     expect(screen.getByRole('heading', { name: '8월 25일' })).toBeInTheDocument()
     expect(screen.getByText('fix: 로그인 화면 정리')).toBeInTheDocument()
     expect(screen.queryByText('feat: 리포트 API 추가')).not.toBeInTheDocument()

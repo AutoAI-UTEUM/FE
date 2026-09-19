@@ -42,7 +42,7 @@ import {
   sessionDetailPath,
 } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { MobileWorkspaceTabs, useResponsiveViewport } from '../../shared/responsive'
+import { MobileWorkspaceTabs, useResponsiveViewport, useElementWidth, TabletWorkspaceControls, type TabletPane } from '../../shared/responsive'
 import { QuizWorkspace } from './QuizPage'
 
 const SessionPageViewer = lazy(async () => {
@@ -111,7 +111,13 @@ export function SessionDetailPage() {
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
   const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
   const [mobilePane, setMobilePane] = useState<'content' | 'learning'>('content')
-  const { isPhone } = useResponsiveViewport()
+  const { isPhone, isTablet } = useResponsiveViewport()
+  const [measureArea, areaWidth] = useElementWidth<HTMLElement>()
+  const [tabletPane, setTabletPane] = useState<TabletPane>('both')
+  const canSplit = areaWidth >= 720
+  const activeTabletPane = tabletPane === 'both' && !canSplit ? 'content' : tabletPane
+  const contentHidden = (isPhone && mobilePane !== 'content') || (isTablet && activeTabletPane === 'learning')
+  const learningHidden = (isPhone && mobilePane !== 'learning') || (isTablet && activeTabletPane === 'content')
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
   const currentPageRef = useRef(1)
@@ -758,7 +764,7 @@ export function SessionDetailPage() {
         {activeSession.materialTitle} 학습 화면입니다.
       </p>
 
-      <section className="flex h-full min-h-0 mobile-phone:flex-col">
+      <section className={`flex h-full min-h-0 ${isTablet || isPhone ? 'flex-col' : ''}`} ref={measureArea}>
         {isResourcePanelOpen ? (
           <SessionResourcePanel
             activeMaterialId={activeSession.materialId}
@@ -780,15 +786,17 @@ export function SessionDetailPage() {
             onChange={setMobilePane}
           />
         ) : null}
+        {isTablet ? <TabletWorkspaceControls canSplit={canSplit} contentLabel={embeddedQuizId ? '퀴즈' : '자료'} onChange={setTabletPane} value={activeTabletPane} /> : null}
 
         <div
           className="study-session-content h-full min-h-0 min-w-0 flex-1"
+          data-tablet-pane={isTablet ? activeTabletPane : undefined}
           ref={workspaceRef}
           style={chatPanelWidth === null
             ? undefined
             : { '--chat-panel-width': `${chatPanelWidth}px` } as CSSProperties}
         >
-          <div className={isPhone && mobilePane !== 'content' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
+          <div className={contentHidden ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
           <Suspense
             fallback={
               <div
@@ -834,7 +842,7 @@ export function SessionDetailPage() {
                 isPending={isActionPending || chat.isTurnPending}
                 materialTitle={activeSession.materialTitle}
                 onMovePage={handlePageNavigation}
-                onOpenResources={isResourcePanelOpen
+                onOpenResources={isResourcePanelOpen && !isTablet && !isPhone
                   ? undefined
                   : () => setIsResourcePanelOpen(true)}
                 totalPages={totalPages}
@@ -862,7 +870,7 @@ export function SessionDetailPage() {
             <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
           </div>
 
-          <div className={isPhone && mobilePane !== 'learning' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
+          <div className={learningHidden ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
           {lockedQuizId ? (
             <QuizChatLockPanel
               isQuizVisible={embeddedQuizId === lockedQuizId}

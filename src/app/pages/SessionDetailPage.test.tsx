@@ -109,10 +109,10 @@ describe('SessionDetailPage', () => {
     const openButton = await screen.findByRole('button', { name: '자료 목록' })
     fireEvent.click(openButton)
 
-    expect(screen.getByRole('complementary', { name: '자료 목록' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '자료 목록' })).toHaveAttribute('aria-modal', 'true')
     await waitFor(() => expect(screen.getByRole('button', { name: '자료 목록 닫기' })).toHaveFocus())
     fireEvent.click(screen.getByRole('button', { name: '자료 목록 바깥 영역 닫기' }))
-    expect(screen.queryByRole('complementary', { name: '자료 목록' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '자료 목록' })).not.toBeInTheDocument()
   })
 
   it('returns to the remembered classroom week page', async () => {

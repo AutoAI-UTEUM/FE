@@ -76,7 +76,7 @@ export function NotionBlockEditor({
     root.className = 'bn-container bn-mantine notion-block-editor-floating-ui'
     return root
   })
-  const editor = useCreateBlockNote({ dictionary: ko, schema: noteEditorSchema })
+  const editor = useCreateBlockNote({ dictionary: ko, schema: noteEditorSchema, domAttributes: { editor: { 'aria-label': ariaLabel || '노트 본문' } } })
 
   useEffect(() => {
     const savedBlocks = parseSavedBlocks(initialDocumentRef.current)

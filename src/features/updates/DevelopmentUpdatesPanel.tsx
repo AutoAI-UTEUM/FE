@@ -8,7 +8,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 
 import { cx } from '../../shared/lib/cx'
-import { useResponsiveViewport } from '../../shared/responsive'
+import { useElementWidth, useResponsiveViewport } from '../../shared/responsive'
 import {
   createGithubUpdatesRepository,
   type DevelopmentPart,
@@ -56,7 +56,9 @@ export function DevelopmentUpdatesPanel({
   showTitle?: boolean
 }) {
   const activeRepository = repository ?? defaultRepository
-  const { mode } = useResponsiveViewport()
+  const { isTablet } = useResponsiveViewport()
+  const [measureArea, areaWidth] = useElementWidth()
+  const compactCalendar = isTablet && areaWidth < 400
   const today = useMemo(() => initialDate ?? new Date(), [initialDate])
   const todayKey = useMemo(() => formatDateKey(today), [today])
   const [visibleMonth, setVisibleMonth] = useState(
@@ -136,6 +138,7 @@ export function DevelopmentUpdatesPanel({
       aria-label={showTitle ? undefined : '업데이트'}
       aria-labelledby={showTitle ? 'development-updates-title' : undefined}
       className="flex min-h-0 min-w-0 flex-col lg:flex-1"
+      ref={measureArea}
     >
       <div className="flex items-center justify-between gap-3">
         {showTitle ? <div className="flex items-center gap-2">
@@ -177,15 +180,15 @@ export function DevelopmentUpdatesPanel({
           <button className="inline-flex items-center gap-1 type-caption font-semibold text-brand-700" onClick={reloadUpdates} type="button"><RefreshCcw aria-hidden="true" size={12} />다시 시도</button>
         </div>
       ) : (
-        <div className={cx('mt-4 grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[19rem_minmax(0,1fr)]', mode === 'tablet-portrait' && '!grid-cols-1')}>
+        <div className={cx('mt-4 grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[19rem_minmax(0,1fr)]', isTablet && 'tablet-updates-grid')} style={isTablet ? { gridTemplateColumns: areaWidth >= 960 ? '360px minmax(0,1fr)' : 'minmax(0,1fr)' } : undefined}>
           <section aria-label={`${monthLabel} 업데이트 달력`} className="min-w-0 self-start rounded-lg border border-stone-200 bg-white p-3 sm:p-4">
             <div className="mb-2 grid h-9 grid-cols-[2.25rem_1fr_2.25rem] items-center">
               <button aria-label="이전 달" className="flex size-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button>
               <strong className="text-center type-control text-stone-900">{monthLabel}</strong>
               <button aria-label="다음 달" className="flex size-9 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(1)} type="button"><ChevronRight aria-hidden="true" size={15} /></button>
             </div>
-            <div aria-label={`${monthLabel} 업데이트 달력`} role="grid">
-              <div className="grid grid-cols-7 gap-1" role="row">
+            {compactCalendar ? <label className="block type-control font-semibold">날짜 선택<input className="mt-2 block w-full min-w-0 rounded-lg border border-stone-200 p-2" type="date" value={activeDateKey} onChange={(event) => { if (!event.target.value) return; const next = new Date(`${event.target.value}T12:00:00`); setSelectedDateKey(event.target.value); if (next.getMonth() !== visibleMonth.getMonth() || next.getFullYear() !== visibleMonth.getFullYear()) { setIsLoading(true); setVisibleMonth(new Date(next.getFullYear(), next.getMonth(), 1)) } }} /></label> : <div aria-label={`${monthLabel} 업데이트 달력`} role="group">
+              <div className="grid grid-cols-7 gap-1">
                 {WEEKDAY_LABELS.map((weekday, index) => (
                   <span
                     className={cx(
@@ -193,7 +196,6 @@ export function DevelopmentUpdatesPanel({
                       index === 0 ? 'text-rose-600' : index === 6 ? 'text-blue-600' : 'text-stone-500',
                     )}
                     key={weekday}
-                    role="columnheader"
                   >
                     {weekday}
                   </span>
@@ -219,7 +221,6 @@ export function DevelopmentUpdatesPanel({
                       )}
                       key={calendarDay.dateKey}
                       onClick={() => selectDate(calendarDay.dateKey)}
-                      role="gridcell"
                       type="button"
                     >
                       <span className={cx('flex size-6 items-center justify-center rounded-full type-caption font-semibold', isToday && !isSelected ? 'bg-stone-900 text-white' : isSelected ? 'text-brand-800' : 'text-stone-600')}>{calendarDay.day}</span>
@@ -232,7 +233,7 @@ export function DevelopmentUpdatesPanel({
                   )
                 })}
               </div>
-            </div>
+            </div>}
           </section>
 
           <aside aria-label="월별 업데이트 목록" className="flex mobile-web:min-h-0 min-h-[420px] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0">

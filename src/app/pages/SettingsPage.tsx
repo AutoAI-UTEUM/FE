@@ -461,7 +461,7 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
           ) : null}
         </div>
       </div>
-      <input accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); event.target.value = '' }} ref={avatarInputRef} type="file" />
+      <input aria-label="프로필 이미지 선택" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); event.target.value = '' }} ref={avatarInputRef} type="file" />
     </>
   )
 }
