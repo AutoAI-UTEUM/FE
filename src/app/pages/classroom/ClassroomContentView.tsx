@@ -8,7 +8,8 @@ import type { ClassroomContentFilter, ClassroomContentItem } from './classroomCo
 
 type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
 
-export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, startDate, weeks }: {
+export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, startDate, weeks, compact = false }: {
+  compact?: boolean
   endDate: string
   onSelect: (weekNumber: number | null) => void
   selectedWeekNumber: number | null
@@ -16,7 +17,7 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
   weeks: ClassroomWeek[]
 }) {
   const { isPhone } = useResponsiveViewport()
-  if (isPhone) {
+  if (isPhone || compact) {
     return (
       <section aria-label="강의실 주차 선택" className="rounded-lg border border-stone-200 bg-white p-3">
         <label className="block type-control font-semibold text-stone-700" htmlFor="mobile-classroom-week">

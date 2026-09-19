@@ -420,7 +420,7 @@ export function ChatPanel({
       )}
       data-learning-text-size={learningTextSize}
     >
-      <div className="flex h-13 shrink-0 items-center border-b border-stone-200 px-3">
+      <div className="tablet-chat-toolbar flex h-13 shrink-0 items-center border-b border-stone-200 px-3">
         <div className="flex h-full min-w-0 flex-1 overflow-x-auto" role="tablist">
           <PanelTab
             isActive={tab === 'overview'}

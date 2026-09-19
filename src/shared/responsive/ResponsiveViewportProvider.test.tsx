@@ -46,6 +46,36 @@ describe('responsive viewport mode', () => {
     expect(getResponsiveViewportMode({ coarsePointer: true, screenHeight: 900, screenWidth: 1440 })).toBe('desktop')
   })
 
+  it('keeps a tablet with a trackpad in tablet mode when touch remains available', () => {
+    expect(getResponsiveViewportMode({ coarsePointer: false, anyCoarsePointer: true, screenWidth: 820, screenHeight: 1180 })).toBe('tablet-portrait')
+  })
+
+  it('keeps device mode when only split-window and keyboard bounds change', () => {
+    Object.defineProperties(window.screen, {
+      width: { configurable: true, value: 820 },
+      height: { configurable: true, value: 1180 },
+      orientation: { configurable: true, value: { type: 'portrait-primary' } },
+    })
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(any-pointer: coarse)', addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const visual = new EventTarget()
+    Object.assign(visual, { height: 900, offsetTop: 0 })
+    vi.stubGlobal('visualViewport', visual)
+    const wrapper = ({ children }: { children: ReactNode }) => <ResponsiveViewportProvider>{children}</ResponsiveViewportProvider>
+    const { result, unmount } = renderHook(() => useResponsiveViewport(), { wrapper })
+    act(() => {
+      vi.stubGlobal('innerWidth', 375)
+      Object.assign(visual, { height: 400, offsetTop: 20 })
+      visual.dispatchEvent(new Event('resize'))
+    })
+    expect(result.current.mode).toBe('tablet-portrait')
+    expect(result.current.viewportWidth).toBe(375)
+    expect(result.current.visibleHeight).toBe(400)
+    expect(result.current.visibleTop).toBe(20)
+    unmount()
+    vi.unstubAllGlobals()
+    Object.defineProperty(window.screen, 'orientation', { configurable: true, value: undefined })
+  })
+
   it('updates the shared mode when orientation changes', () => {
     const listeners = new Map<string, () => void>()
     let portrait = true

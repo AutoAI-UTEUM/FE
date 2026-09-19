@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./shared/responsive/tablet.css";
 
 .google-signin-button > div,
 .google-signin-button > div > div {

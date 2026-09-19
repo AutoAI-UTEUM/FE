@@ -30,7 +30,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { cx } from '../../../shared/lib/cx'
 import { Button, PageContainer, PageHeader, useToast } from '../../../shared/ui'
-import { useResponsiveViewport } from '../../../shared/responsive'
+import { useElementWidth, useResponsiveViewport } from '../../../shared/responsive'
 
 type CalendarView = 'list' | 'month' | 'week'
 
@@ -40,7 +40,8 @@ export function InstructorCalendarPage() {
   usePageTitle('캘린더')
   const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
-  const { mode } = useResponsiveViewport()
+  const { mode, isTablet } = useResponsiveViewport()
+  const [measureArea, areaWidth] = useElementWidth()
   const { classroomId = '' } = useParams()
   const isInstructor = isInstructorRole(user?.role)
   const { addEvent, events, removeEvent, updateEvent } = useCalendarEvents(
@@ -54,6 +55,7 @@ export function InstructorCalendarPage() {
   const [isComposerOpen, setIsComposerOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [selectedDay, setSelectedDay] = useState<Date>(today)
   const [pickerYear, setPickerYear] = useState(cursor.getFullYear())
   const pickerRef = useRef<HTMLDivElement | null>(null)
   const lastWheelNavigationAt = useRef(0)
@@ -90,15 +92,17 @@ export function InstructorCalendarPage() {
   }, [isPickerOpen])
 
   function move(direction: -1 | 1) {
-    setCursor((current) =>
+    const next =
       view === 'week'
-        ? addDays(current, direction * 7)
-        : new Date(current.getFullYear(), current.getMonth() + direction, 1),
-    )
+        ? addDays(cursor, direction * 7)
+        : new Date(cursor.getFullYear(), cursor.getMonth() + direction, 1)
+    setCursor(next)
+    if (isTablet) setSelectedDay(next)
   }
 
   function moveToCurrentMonth() {
     setCursor(startOfMonth(today))
+    if (isTablet) setSelectedDay(today)
   }
 
   function handleMonthWheel(event: ReactWheelEvent<HTMLElement>) {
@@ -117,6 +121,7 @@ export function InstructorCalendarPage() {
 
   function selectMonth(month: number) {
     setCursor(new Date(pickerYear, month, 1))
+    if (isTablet) setSelectedDay(new Date(pickerYear, month, 1))
     setIsPickerOpen(false)
   }
 
@@ -141,7 +146,7 @@ export function InstructorCalendarPage() {
         title="캘린더"
       />
 
-      <div className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', mode === 'tablet-portrait' && '!grid-cols-1 !overflow-visible')}>
+      <div ref={measureArea} style={isTablet ? { gridTemplateColumns: areaWidth >= 960 ? 'minmax(0,1fr) 18rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', isTablet && 'tablet-calendar')}>
         <section
           aria-label="캘린더 본문"
           className="flex mobile-web:min-h-0 min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
@@ -200,17 +205,21 @@ export function InstructorCalendarPage() {
             ) : null}
           </div>
 
-          {view === 'month' ? (
+          {isTablet && areaWidth < 400 && view !== 'list' ? <div className="p-3"><label className="block type-control font-semibold">날짜 선택<input type="date" className="mt-2 w-full min-w-0 rounded-lg border border-stone-200 p-2" value={toDateTimeLocal(selectedDay).slice(0, 10)} onChange={(event) => { if (event.target.value) { const day = new Date(`${event.target.value}T12:00:00`); setSelectedDay(day); setCursor(day) } }} /></label></div> : view === 'month' ? (
             <MonthView
               cursor={cursor}
               events={events}
-              onWheel={handleMonthWheel}
+              onWheel={isTablet ? () => undefined : handleMonthWheel}
+              onSelectDay={isTablet ? setSelectedDay : undefined}
+              selectedDay={isTablet ? selectedDay : undefined}
               onSelectEvent={setSelectedEvent}
               today={today}
             />
           ) : null}
-          {view === 'week' ? (
+          {view === 'week' && !(isTablet && areaWidth < 400) ? (
             <WeekView
+              onSelectDay={isTablet ? setSelectedDay : undefined}
+              selectedDay={selectedDay}
               cursor={cursor}
               events={events}
               onSelectEvent={setSelectedEvent}
@@ -223,7 +232,8 @@ export function InstructorCalendarPage() {
         </section>
 
         <MonthlySchedulePanel
-          events={visibleMonthEvents}
+          title={isTablet ? `${formatCalendarDate(selectedDay)} 일정` : undefined}
+          events={isTablet ? getEventsForDay(events, selectedDay) : visibleMonthEvents}
           onSelectEvent={setSelectedEvent}
         />
       </div>
@@ -376,12 +386,16 @@ function MonthView({
   onWheel,
   onSelectEvent,
   today,
+  onSelectDay,
+  selectedDay,
 }: {
   cursor: Date
   events: CalendarEvent[]
   onWheel: (event: ReactWheelEvent<HTMLElement>) => void
   onSelectEvent: (event: CalendarEvent) => void
   today: Date
+  onSelectDay?: (date: Date) => void
+  selectedDay?: Date
 }) {
   const cells = getMonthCells(cursor)
 
@@ -423,7 +437,7 @@ function MonthView({
               )}
               key={date.toISOString()}
             >
-              <span
+              {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className={cx('flex size-11 items-center justify-center rounded-lg type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : 'text-stone-800')}>{date.getDate()}</button> : <span
                 className={cx(
                   'flex size-7 items-center justify-center rounded-full type-body font-semibold',
                   isToday
@@ -432,7 +446,7 @@ function MonthView({
                 )}
               >
                 {date.getDate()}
-              </span>
+              </span>}
               <div className="mt-1 grid gap-1">
                 {dayEvents.slice(0, 2).map((event) => (
                   <CalendarEventButton
@@ -456,11 +470,15 @@ function MonthView({
 }
 
 function WeekView({
+  onSelectDay,
+  selectedDay,
   cursor,
   events,
   onSelectEvent,
   today,
 }: {
+  onSelectDay?: (date: Date) => void
+  selectedDay?: Date
   cursor: Date
   events: CalendarEvent[]
   onSelectEvent: (event: CalendarEvent) => void
@@ -477,7 +495,7 @@ function WeekView({
             className="min-h-48 min-w-0 rounded-lg border border-stone-200 bg-stone-50/60 p-3"
             key={date.toISOString()}
           >
-            <div className="flex items-center gap-2">
+            {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className={cx('flex min-h-11 w-full items-center justify-center rounded-lg type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : 'text-stone-800')}>{WEEKDAY_LABELS[index]} {date.getDate()}</button> : <div className="flex items-center gap-2">
               <span
                 className={cx(
                   'type-caption font-semibold',
@@ -500,7 +518,7 @@ function WeekView({
               >
                 {date.getDate()}
               </span>
-            </div>
+            </div>}
             <div className="mt-3 grid gap-1.5">
               {dayEvents.map((event) => (
                 <CalendarEventButton
@@ -571,16 +589,18 @@ function ListView({
 function MonthlySchedulePanel({
   events,
   onSelectEvent,
+  title = '이번 달 일정',
 }: {
   events: CalendarEvent[]
   onSelectEvent: (event: CalendarEvent) => void
+  title?: string
 }) {
   return (
     <aside
-      aria-label="이번 달 일정"
+      aria-label={title}
       className="min-h-0 rounded-lg border border-stone-200 bg-white p-4 lg:overflow-auto"
     >
-      <h2 className="type-body font-bold text-stone-900">이번 달 일정</h2>
+      <h2 className="type-body font-bold text-stone-900">{title}</h2>
       {events.length > 0 ? (
         <div className="mt-4 grid gap-1">
           {events.map((event) => (

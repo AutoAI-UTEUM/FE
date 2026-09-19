@@ -42,7 +42,7 @@ import {
   type AppNotificationType,
 } from '../../features/notifications'
 import { cx } from '../../shared/lib/cx'
-import { useResponsiveViewport } from '../../shared/responsive'
+import { useResponsiveViewport, useFocusScope } from '../../shared/responsive'
 import { SERVICE_NAME } from '../../shared/config/brand'
 import { formatDateTime } from '../../shared/lib/format'
 import {
@@ -78,12 +78,17 @@ export function AppLayout() {
   const { apiRequest, logout, rawApiRequest, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isMobileWeb, isPhone, isTablet, mode } = useResponsiveViewport()
+  const { isMobileWeb, isPhone, isTablet, mode, viewportWidth } = useResponsiveViewport()
   /*
    * 태블릿은 방향에 따라 사이드바를 나눈다.
-   * 세로는 가로 여유가 없어 68px 아이콘 전용, 가로는 176px 라벨까지 보여준다.
+   * 세로와 좁은 분할 창은 68px 레일, 넓은 가로 창은 204px 사이드바.
    */
-  const isTabletRail = mode === 'tablet-portrait'
+  const [tabletMenuPath, setTabletMenuPath] = useState<string | null>(null)
+  const tabletMenuOpen = tabletMenuPath === `${location.pathname}${location.search}`
+  const tabletUsesRail = isTablet && (mode === 'tablet-portrait' || viewportWidth < 1024)
+  const isTabletRail = tabletUsesRail && !tabletMenuOpen
+  const tabletNavigationRef = useRef<HTMLElement>(null)
+  useFocusScope(tabletNavigationRef, tabletUsesRail && tabletMenuOpen, () => setTabletMenuPath(null))
   const isSettingsRoute = location.pathname === routes.settings
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
   const [sidebarPreference, setSidebarPreference] = useState<{
@@ -441,6 +446,8 @@ export function AppLayout() {
 
   return (
     <div
+      data-tablet-app={isTablet ? 'true' : undefined}
+      data-study-workspace={isStudyWorkspace ? 'true' : undefined}
       className={cx(
         'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:max-w-full mobile-web:overflow-x-hidden',
         /*
@@ -454,13 +461,19 @@ export function AppLayout() {
             : cx('min-h-dvh', isPhone && 'flex flex-col', isTablet && 'flex flex-row'),
       )}
     >
+      {tabletUsesRail && tabletMenuOpen ? <><button aria-label="주요 메뉴 닫기" className="fixed inset-0 z-40 bg-stone-950/35" onClick={() => setTabletMenuPath(null)} type="button" /><div aria-hidden="true" className="w-[68px] shrink-0" /></> : null}
       <aside
+        ref={tabletNavigationRef}
+        role={tabletUsesRail && tabletMenuOpen ? 'dialog' : undefined}
+        aria-modal={tabletUsesRail && tabletMenuOpen ? true : undefined}
+        aria-label={tabletUsesRail && tabletMenuOpen ? '주요 메뉴' : undefined}
         className={cx(
           isTablet
             // 태블릿은 가로 스크롤 띠 대신 72px 세로 레일을 쓴다.
             ? cx(
                 'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-stone-200 bg-white py-4 dark:bg-[#222327] mobile-safe-top',
                 isTabletRail ? 'w-[68px] px-2' : 'w-[204px] px-2.5',
+                tabletUsesRail && tabletMenuOpen && '!fixed inset-y-0 left-0 !z-50 shadow-xl',
               )
             : 'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
           !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-52 lg:px-2.5 mobile-phone:!px-4'),
@@ -482,6 +495,7 @@ export function AppLayout() {
             )}
           >
             <Link
+              aria-label={`${SERVICE_NAME} 홈`}
               className={cx(
                 'flex shrink-0 items-center gap-2.5 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
                 isTabletRail && 'justify-center px-0',
@@ -510,6 +524,7 @@ export function AppLayout() {
               )}
             >
               {!isAdmin && !isTablet ? notificationsTrigger : null}
+              {tabletUsesRail ? <button aria-expanded={tabletMenuOpen} aria-label={tabletMenuOpen ? '메뉴 접기' : '메뉴 펼치기'} className="flex size-11 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100" onClick={(event) => { event.currentTarget.focus(); setTabletMenuPath(tabletMenuOpen ? null : `${location.pathname}${location.search}`) }} type="button">{tabletMenuOpen ? <ChevronsLeft aria-hidden="true" size={18} /> : <ChevronsRight aria-hidden="true" size={18} />}</button> : null}
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex mobile-web:!hidden"
@@ -583,7 +598,7 @@ export function AppLayout() {
                     </span>
                   ) : null}
                 </Link>
-                {item.label === '강의실' && sidebarClassrooms.length > 0 ? (
+                {item.label === '강의실' && sidebarClassrooms.length > 0 && !isTabletRail ? (
                   <div className={cx('ml-5 hidden border-l border-stone-200 py-1 pl-2 lg:flex lg:flex-col lg:gap-0.5 tablet-landscape:flex tablet-landscape:flex-col tablet-landscape:gap-0.5', isCollapsed && 'lg:hidden')}>
                     {sidebarClassrooms.map((classroom) => (
                       <NavLink

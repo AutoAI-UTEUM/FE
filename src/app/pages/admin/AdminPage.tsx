@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KeyRound, RefreshCw, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import {
@@ -20,7 +20,7 @@ import { useAuth } from '../../../features/auth'
 import { DevelopmentUpdatesPanel } from '../../../features/updates'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
-import { useResponsiveViewport } from '../../../shared/responsive'
+import { useResponsiveViewport, TabletMasterDetail, TabletChartValues, useElementWidth } from '../../../shared/responsive'
 import { Button } from '../../../shared/ui'
 import {
   AdminErrorMessage,
@@ -101,7 +101,7 @@ const ADMIN_USERS_PAGE_SIZE = 17
 
 function UsersPanel({ repository }: { repository: Repository }) {
   const { user: currentUser } = useAuth()
-  const { isMobileWeb } = useResponsiveViewport()
+  const { isMobileWeb, isTablet } = useResponsiveViewport()
   const [query, setQuery] = useState('')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [role, setRole] = useState<AdminUserRole | ''>('')
@@ -158,8 +158,18 @@ function UsersPanel({ repository }: { repository: Repository }) {
     }
     setExpandedId(userId)
     setDetail(null)
-    void repository.getUser(userId).then(setDetail).catch((reason: unknown) => setError(toAdminError(reason)))
   }
+
+  useEffect(() => {
+    if (expandedId === null) return
+    const controller = new AbortController()
+    repository.getUser(expandedId, controller.signal)
+      .then(value => { if (!controller.signal.aborted) setDetail(value) })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) { setError(toAdminError(reason)); setExpandedId(null) }
+      })
+    return () => controller.abort()
+  }, [expandedId, repository])
 
   async function resetPassword(target: AdminUserSummary) {
     if (!window.confirm(`${target.name} 회원의 비밀번호를 임시 비밀번호로 초기화할까요?`)) return
@@ -191,11 +201,12 @@ function UsersPanel({ repository }: { repository: Repository }) {
           </label>
           <FilterSelect label="역할" onChange={(value) => { setPage(0); setRole(value as AdminUserRole | '') }} value={role} options={[['', '전체 역할'], ['LEARNER', '학습자'], ['INSTRUCTOR', '강의자'], ['ADMIN', '관리자']]} />
           <FilterSelect label="상태" onChange={(value) => { setPage(0); setStatus(value as AdminUserStatus | '') }} value={status} options={[['', '전체 상태'], ['ACTIVE', '활성'], ['DELETED', '탈퇴']]} />
+          {isTablet ? <FilterSelect label="회원 정렬" onChange={(value) => { setPage(0); setSort(value as AdminUserSort) }} value={sort} options={[[ 'RECENT', '가입일 최신순' ], ['NAME', '이름순'], ['RECENT_ACTIVITY_DESC', '최근 활동 최신순'], ['RECENT_ACTIVITY_ASC', '최근 활동 오래된순']]} /> : null}
         </form>
       </div>
       {error ? <AdminErrorMessage error={error} /> : null}
-      <div className="min-h-0 flex-1 overflow-auto">
-        {isMobileWeb ? <div aria-label="회원 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((user) => <MobileUserRow currentUserId={currentUser?.id} detail={expandedId === user.id ? detail : null} expanded={expandedId === user.id} key={user.id} onResetPassword={() => void resetPassword(user)} onToggle={() => toggleDetail(user.id)} user={user} />)}</div> : <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
+      <TabletMasterDetail enabled={isTablet} onClose={() => setExpandedId(null)} title="회원 상세" detail={expandedId !== null ? <div className="p-4">{detail ? <><h4 className="type-section-title font-bold">{detail.name}</h4><p className="mt-2 break-all text-stone-500">{detail.email}</p><dl className="mt-5 grid gap-4 type-body"><div><dt>역할</dt><dd>{roleLabel(detail.role)}</dd></div><div><dt>상태</dt><dd><StatusBadge status={detail.status} /></dd></div><div><dt>소속</dt><dd>{detail.affiliation || '-'}</dd></div><div><dt>가입일</dt><dd>{formatDate(detail.createdAt)}</dd></div><div><dt>인증</dt><dd>{detail.authProvider}</dd></div><div><dt>최근 활동</dt><dd>{formatDetailedRelativeActivityDate(detail.lastActiveAt ?? undefined)}</dd></div><div><dt>동의 일시</dt><dd>{detail.consentedAt ? formatDateTime(detail.consentedAt) : '-'}</dd></div></dl>{detail.authProvider === 'LOCAL' && detail.status === 'ACTIVE' && detail.id !== currentUser?.id ? <Button className="mt-5" onClick={() => void resetPassword(detail)} variant="secondary">임시 비밀번호 발급</Button> : null}</> : <p role="status">상세 정보를 불러오는 중입니다.</p>}</div> : null}>
+        {isTablet ? <div aria-label="회원 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((user) => <button aria-label={`${user.name} 상세 정보`} aria-expanded={expandedId === user.id} className="tablet-summary-row w-full px-4 py-4 text-left hover:bg-stone-50" key={user.id} onClick={() => toggleDetail(user.id)} type="button"><span className="min-w-0"><strong className="block break-words">{user.name}</strong><span className="block break-all type-caption text-stone-500">{user.email}</span></span><span>{roleLabel(user.role)}</span><StatusBadge status={user.status} /></button>)}</div> : isMobileWeb ? <div aria-label="회원 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((user) => <MobileUserRow currentUserId={currentUser?.id} detail={expandedId === user.id ? detail : null} expanded={expandedId === user.id} key={user.id} onResetPassword={() => void resetPassword(user)} onToggle={() => toggleDetail(user.id)} user={user} />)}</div> : <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
           <thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500">
             <tr>
               <th className="w-[16%] px-4 py-2.5"><SortButton active={sort === 'NAME'} direction="asc" label="회원 · ID" onClick={() => { setPage(0); setSort('NAME') }} /></th>
@@ -216,7 +227,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
         </table>}
         {!loading && result?.items.length === 0 ? <PanelMessage message="조건에 맞는 회원이 없습니다." /> : null}
         {loading ? <PanelMessage message="회원 정보를 불러오는 중입니다." /> : null}
-      </div>
+      </TabletMasterDetail>
       <Pagination page={page} pageSize={result?.size ?? ADMIN_USERS_PAGE_SIZE} totalElements={result?.totalElements ?? 0} totalPages={result?.totalPages ?? 0} onChange={setPage} />
       {resetResult ? <PasswordResetDialog onClose={() => setResetResult(null)} result={resetResult} /> : null}
     </div>
@@ -252,7 +263,7 @@ function PasswordResetDialog({ onClose, result }: { onClose: () => void; result:
 }
 
 function ClassroomsPanel({ repository }: { repository: Repository }) {
-  const { isMobileWeb } = useResponsiveViewport()
+  const { isMobileWeb, isTablet } = useResponsiveViewport()
   const [sort, setSort] = useState<AdminSort>('RECENT')
   const [page, setPage] = useState(0)
   const [result, setResult] = useState<AdminPageResult<AdminClassroomSummary> | null>(null)
@@ -275,20 +286,30 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
     if (expandedId === classroomId) { setExpandedId(null); setDetail(null); return }
     setExpandedId(classroomId)
     setDetail(null)
-    void repository.getClassroom(classroomId).then(setDetail).catch((reason: unknown) => setError(toAdminError(reason)))
   }
+
+  useEffect(() => {
+    if (expandedId === null) return
+    const controller = new AbortController()
+    repository.getClassroom(expandedId, controller.signal)
+      .then(value => { if (!controller.signal.aborted) setDetail(value) })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) { setError(toAdminError(reason)); setExpandedId(null) }
+      })
+    return () => controller.abort()
+  }, [expandedId, repository])
 
   return (
     <div className="flex h-full mobile-web:min-h-0 min-h-[620px] flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><h2 className="type-section-title font-bold text-stone-950">강의실 목록 <span className="ml-1">{formatCount(result?.totalElements)}</span></h2><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
       {error ? <AdminErrorMessage error={error} /> : null}
-      <div className="min-h-0 flex-1 overflow-auto">
-        {isMobileWeb ? <div aria-label="강의실 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((classroom) => <MobileClassroomRow classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} onToggle={() => toggleDetail(classroom.id)} />)}</div> : <table className="w-full min-w-[820px] table-fixed border-collapse text-left"><thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500"><tr><th className="w-[31%] px-4 py-2.5"><SortButton active={sort === 'NAME'} direction="asc" label="강의실 · ID" onClick={() => { setPage(0); setSort('NAME') }} /></th><th className="w-[16%] px-4 py-2.5">개설자</th><th className="w-[24%] px-4 py-2.5">수강 인원</th><th className="w-[14%] px-4 py-2.5"><SortButton active={sort === 'RECENT'} direction="desc" label="생성일" onClick={() => { setPage(0); setSort('RECENT') }} /></th><th className="w-[10%] px-4 py-2.5">상태</th><th className="w-10 px-2 py-2.5"><span className="sr-only">상세</span></th></tr></thead><tbody>
+      <TabletMasterDetail enabled={isTablet} onClose={() => setExpandedId(null)} title="강의실 상세" detail={expandedId !== null ? <div className="p-4">{detail ? <><h4 className="type-section-title font-bold">{detail.name}</h4><p className="mt-2 type-body">개설자 {detail.instructor.name}</p><p className="mt-4 type-control font-semibold">참여 회원 {detail.members.length}명</p><ul className="mt-2 divide-y divide-stone-100">{detail.members.map((member) => <li className="flex flex-wrap justify-between gap-2 py-3" key={member.userId}><span>{member.name}</span><span className="text-stone-500">{roleLabel(member.role)}</span></li>)}</ul></> : <p role="status">상세 정보를 불러오는 중입니다.</p>}</div> : null}>
+        {isTablet ? <div aria-label="강의실 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((classroom) => <button aria-label={`${classroom.name} 상세 정보`} aria-expanded={expandedId === classroom.id} className="tablet-summary-row w-full px-4 py-4 text-left hover:bg-stone-50" key={classroom.id} onClick={() => toggleDetail(classroom.id)} type="button"><span className="min-w-0"><strong className="block break-words">{classroom.name}</strong><span className="block type-caption text-stone-500">{classroom.instructor.name}</span></span><span>{classroom.memberCount}명</span><StatusBadge status={classroom.status} /></button>)}</div> : isMobileWeb ? <div aria-label="강의실 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((classroom) => <MobileClassroomRow classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} onToggle={() => toggleDetail(classroom.id)} />)}</div> : <table className="w-full min-w-[820px] table-fixed border-collapse text-left"><thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500"><tr><th className="w-[31%] px-4 py-2.5"><SortButton active={sort === 'NAME'} direction="asc" label="강의실 · ID" onClick={() => { setPage(0); setSort('NAME') }} /></th><th className="w-[16%] px-4 py-2.5">개설자</th><th className="w-[24%] px-4 py-2.5">수강 인원</th><th className="w-[14%] px-4 py-2.5"><SortButton active={sort === 'RECENT'} direction="desc" label="생성일" onClick={() => { setPage(0); setSort('RECENT') }} /></th><th className="w-[10%] px-4 py-2.5">상태</th><th className="w-10 px-2 py-2.5"><span className="sr-only">상세</span></th></tr></thead><tbody>
           {result?.items.map((classroom) => <ClassroomRows classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} maxMembers={maxMembers} onToggle={() => toggleDetail(classroom.id)} />)}
         </tbody></table>}
         {!loading && result?.items.length === 0 ? <PanelMessage message="강의실이 없습니다." /> : null}
         {loading ? <PanelMessage message="강의실 정보를 불러오는 중입니다." /> : null}
-      </div>
+      </TabletMasterDetail>
       <Pagination page={page} pageSize={result?.size ?? 20} totalElements={result?.totalElements ?? 0} totalPages={result?.totalPages ?? 0} onChange={setPage} />
     </div>
   )
@@ -340,12 +361,39 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
   return <div className="flex h-full min-h-0 flex-col"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3"><div className="flex flex-wrap items-baseline gap-x-4 gap-y-1"><h2 className="type-section-title font-bold text-stone-950">AI 사용량</h2><p className="flex flex-wrap gap-3 type-caption text-stone-500"><span>총 호출 <strong className="text-stone-700">{formatCount(totals.calls)}건</strong></span><span>실패 <strong className={totals.failures > 0 ? 'text-amber-700' : 'text-stone-700'}>{formatCount(totals.failures)}건 ({failureRate.toFixed(1)}%)</strong></span><span>총 토큰 <strong className="text-stone-700">{formatCount(totals.tokens)}</strong></span><span>호출당 <strong className="text-stone-700">{formatCount(tokensPerCall)}</strong></span></p></div><div className="flex items-center gap-2 mobile-phone:w-full mobile-phone:justify-end"><div aria-label="AI 사용량 조회 기간" className="flex h-9 items-center overflow-hidden rounded-lg border border-stone-200 bg-white mobile-web:h-11"><button aria-label="이전 주" className="flex h-full w-9 items-center justify-center text-stone-500 hover:bg-stone-50 hover:text-stone-900 disabled:opacity-40 mobile-web:w-11" disabled={loading} onClick={() => moveWeek(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button><span className="min-w-28 px-2 text-center type-control font-semibold text-stone-700">{formatWeekRange(range)}</span><button aria-label="다음 주" className="flex h-full w-9 items-center justify-center text-stone-500 hover:bg-stone-50 hover:text-stone-900 disabled:opacity-40 mobile-web:w-11" disabled={loading || range.to >= initialRange.to} onClick={() => moveWeek(1)} type="button"><ChevronRight aria-hidden="true" size={15} /></button></div><Button aria-label="AI 사용량 새로고침" className="size-9 shrink-0 p-0 mobile-web:size-11" disabled={loading} onClick={() => { setLoading(true); setError(null); setRefreshKey((key) => key + 1) }} size="sm" title="새로고침" type="button" variant="secondary"><RefreshCw aria-hidden="true" className={loading ? 'animate-spin' : undefined} size={15} /></Button></div></div>
     {error ? <AdminErrorMessage error={error} /> : null}
     <div aria-label="AI 사용량 상세" className="min-h-0 flex-1 overflow-hidden" role="region">
-      {loading ? <PanelMessage message="AI 사용량을 불러오는 중입니다." /> : <div className="grid h-full min-h-0 grid-rows-[minmax(150px,1fr)_minmax(240px,1.35fr)] xl:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.55fr)] xl:grid-rows-1"><UsersUsageRanking totalCalls={totals.calls} users={users} /><div className="grid min-h-0 grid-rows-2 overflow-hidden"><DailyUsageChart daily={daily} /><FeatureUsageChart summary={summary} /></div></div>}
+      {loading ? <PanelMessage message="AI 사용량을 불러오는 중입니다." /> : <UsageLayout ranking={<UsersUsageRanking totalCalls={totals.calls} users={users} />} charts={<><DailyUsageChart daily={daily} /><FeatureUsageChart summary={summary} /></>} />}
+    </div>
+  </div>
+}
+
+function UsageLayout({ ranking, charts }: { ranking: ReactNode; charts: ReactNode }) {
+  const { isTablet } = useResponsiveViewport()
+  const [measureArea, areaWidth] = useElementWidth()
+  const [view, setView] = useState('charts')
+  if (!isTablet) return <div className="grid h-full min-h-0 grid-rows-[minmax(150px,1fr)_minmax(240px,1.35fr)] xl:grid-cols-[minmax(340px,0.95fr)_minmax(0,1.55fr)] xl:grid-rows-1">{ranking}<div className="grid min-h-0 grid-rows-2 overflow-hidden">{charts}</div></div>
+  const narrow = areaWidth < 960
+  return <div ref={measureArea} className="flex h-full min-h-0 flex-col">
+    {narrow ? <div aria-label="사용량 보기" role="group" className="flex shrink-0 border-b border-stone-200 p-2">{[['charts', '추이 · 기능'], ['users', '사용자별 호출']].map(([value, label]) => <button type="button" aria-pressed={view === value} key={value} onClick={() => setView(value)} className={`min-h-11 flex-1 rounded-lg px-3 type-control ${view === value ? 'bg-brand-50 font-bold text-brand-700' : 'text-stone-500'}`}>{label}</button>)}</div> : null}
+    <div className="flex min-h-0 flex-1">
+      <div className={`${narrow && view !== 'users' ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col ${narrow ? 'w-full' : 'w-2/5'}`}>{ranking}</div>
+      <div className={`${narrow && view !== 'charts' ? 'hidden' : 'block'} min-h-0 min-w-0 flex-1 overflow-auto`}>{charts}</div>
     </div>
   </div>
 }
 
 function UsersUsageRanking({ totalCalls, users }: { totalCalls: number; users: AiUsageUser[] }) {
+  const { isTablet } = useResponsiveViewport()
+  if (isTablet) return <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="usage-ranking-title">
+    <h3 className="shrink-0 border-b border-stone-200 p-3 type-control font-bold" id="usage-ranking-title">사용자별 호출 <span className="font-normal text-stone-500">상위 {users.length}명</span></h3>
+    <div aria-label="사용자별 호출 목록" role="region" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <ol className="divide-y divide-stone-100">{users.map((user, index) => <li key={user.userId} className="grid grid-cols-[28px_minmax(0,1fr)] gap-2 p-3">
+        <span className="font-bold text-stone-500">{index + 1}</span>
+        <div className="min-w-0"><p className="break-words type-body font-semibold">{user.name}</p><p className="break-all type-caption text-stone-500">{user.email}</p>
+          <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 type-caption"><div><dt className="text-stone-500">호출</dt><dd>{formatCount(user.callCount)}건</dd></div><div><dt className="text-stone-500">비중</dt><dd>{totalCalls > 0 ? `${Math.round(user.callCount / totalCalls * 100)}%` : '-'}</dd></div><div><dt className="text-stone-500">토큰</dt><dd>{formatCount(tokenTotal(user))}</dd></div></dl>
+        </div>
+      </li>)}</ol>{users.length === 0 ? <PanelMessage message="선택한 기간의 사용자 기록이 없습니다." /> : null}
+    </div>
+  </section>
   return <section className="flex min-h-0 flex-col overflow-hidden border-b border-stone-200 xl:border-r xl:border-b-0" aria-labelledby="usage-ranking-title"><h3 className="shrink-0 border-b border-stone-100 px-4 py-3 type-control font-bold text-stone-900" id="usage-ranking-title">사용자별 호출 <span className="ml-1 font-normal text-stone-400">상위 {users.length}명</span></h3><div aria-label="사용자별 호출 목록" className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]" role="region"><table className="w-full table-fixed text-left type-caption"><thead className="sticky top-0 z-10 bg-[#F7F8FA] text-stone-500"><tr><th className="w-10 px-4 py-2">#</th><th className="px-2 py-2">사용자</th><th className="w-16 px-2 py-2 text-right">호출</th><th className="w-16 px-2 py-2 text-right">비중</th><th className="w-24 px-4 py-2 text-right">토큰</th></tr></thead><tbody>{users.map((user, index) => <tr className="border-b border-stone-100" key={user.userId}><td className="px-4 py-3"><span className={index < 3 ? 'inline-flex size-5 items-center justify-center rounded-md bg-emerald-50 font-bold text-emerald-700' : 'inline-flex size-5 items-center justify-center text-stone-400'}>{index + 1}</span></td><td className="min-w-0 px-2 py-3"><p className="truncate font-semibold text-stone-800">{user.name}</p><p className="truncate text-stone-400">{user.email}</p></td><td className="px-2 py-3 text-right font-semibold text-stone-800">{formatCount(user.callCount)}</td><td className="px-2 py-3 text-right text-stone-500">{totalCalls > 0 ? `${Math.round((user.callCount / totalCalls) * 100)}%` : '-'}</td><td className="px-4 py-3 text-right text-stone-500">{formatCount(tokenTotal(user))}</td></tr>)}</tbody></table>{users.length === 0 ? <PanelMessage message="선택한 기간의 사용자 기록이 없습니다." /> : null}</div></section>
 }
 
@@ -359,7 +407,7 @@ function DailyUsageChart({ daily }: { daily: AiUsageSummary['daily'] }) {
         <div className="flex items-center gap-4 type-caption text-stone-500"><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-brand-700" />성공</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-amber-500" />실패</span></div>
       </div>
       {daily.length === 0 ? <p className="py-10 text-center type-body text-stone-500">선택한 기간의 사용 기록이 없습니다.</p> : (
-        <div className="overflow-x-auto pb-1">
+        <div className="overflow-x-auto pb-1" role="region" aria-label="일별 호출 그래프" tabIndex={0}>
           <div className="flex min-w-max items-end justify-around gap-5" role="img" aria-label="날짜별 AI 성공 및 실패 호출 막대 차트">
             {daily.map((day) => {
               const tokens = tokenTotal(day)
@@ -370,6 +418,7 @@ function DailyUsageChart({ daily }: { daily: AiUsageSummary['daily'] }) {
           </div>
         </div>
       )}
+      <TabletChartValues label="일별 호출" columns={['날짜', '성공', '실패', '토큰']} rows={daily.map(day => [day.date, formatCount(day.successCount), formatCount(day.failCount), formatCount(tokenTotal(day))])} />
     </section>
   )
 }
@@ -377,7 +426,13 @@ function DailyUsageChart({ daily }: { daily: AiUsageSummary['daily'] }) {
 function FeatureUsageChart({ summary }: { summary: AiUsageSummary | null }) {
   const features = summary?.features ?? []
   const maxCalls = Math.max(1, ...features.map((item) => item.callCount))
-  return <section className="min-h-0 overflow-hidden px-4 py-3" aria-labelledby="feature-usage-title"><h3 className="mb-2 type-control font-bold text-stone-900" id="feature-usage-title">기능별 호출</h3>{features.length === 0 ? <p className="py-8 text-center type-body text-stone-500">선택한 기간의 기능별 기록이 없습니다.</p> : <div className="overflow-x-auto pb-1"><div className="flex min-w-max items-end justify-around gap-5" role="img" aria-label="기능별 AI 호출 막대 차트">{features.map((item) => <div className="flex w-20 shrink-0 flex-col items-center" key={item.feature} title={`${featureLabel(item.feature)}: ${formatCount(item.callCount)}건, 토큰 ${formatCount(tokenTotal(item))}`}><strong className="mb-1 type-caption text-stone-700">{formatCount(item.callCount)}</strong><span className="flex h-16 items-end sm:h-20 xl:h-28"><span className="block w-7 rounded-t-sm bg-brand-700" style={{ height: `${Math.max(3, (item.callCount / maxCalls) * 100)}%` }} /></span><span className="mt-1 max-w-full truncate type-caption text-stone-600">{featureLabel(item.feature)}</span><span className="type-micro text-stone-400">{formatCompactNumber(tokenTotal(item))}</span></div>)}</div></div>}</section>
+  return <section className="min-h-0 overflow-hidden px-4 py-3" aria-labelledby="feature-usage-title">
+    <h3 className="mb-2 type-control font-bold text-stone-900" id="feature-usage-title">기능별 호출</h3>
+    {features.length === 0 ? <p className="py-8 text-center type-body text-stone-500">선택한 기간의 기능별 기록이 없습니다.</p> : <div className="overflow-x-auto pb-1" role="region" aria-label="기능별 호출 그래프" tabIndex={0}>
+      <div className="flex min-w-max items-end justify-around gap-5" role="img" aria-label="기능별 AI 호출 막대 차트">{features.map((item) => <div className="flex w-20 shrink-0 flex-col items-center" key={item.feature} title={`${featureLabel(item.feature)}: ${formatCount(item.callCount)}건, 토큰 ${formatCount(tokenTotal(item))}`}><strong className="mb-1 type-caption text-stone-700">{formatCount(item.callCount)}</strong><span className="flex h-16 items-end sm:h-20 xl:h-28"><span className="block w-7 rounded-t-sm bg-brand-700" style={{ height: `${Math.max(3, (item.callCount / maxCalls) * 100)}%` }} /></span><span className="mt-1 max-w-full truncate type-caption text-stone-600">{featureLabel(item.feature)}</span><span className="type-micro text-stone-400">{formatCompactNumber(tokenTotal(item))}</span></div>)}</div>
+    </div>}
+    <TabletChartValues label="기능별 호출" columns={['기능', '호출', '토큰']} rows={features.map(item => [featureLabel(item.feature), formatCount(item.callCount), formatCount(tokenTotal(item))])} />
+  </section>
 }
 
 function FilterSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: Array<[string, string]>; value: string }) { return <label><span className="sr-only">{label}</span><select className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600" onChange={(event) => onChange(event.target.value)} value={value}>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label> }

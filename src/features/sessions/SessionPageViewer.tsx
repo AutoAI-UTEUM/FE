@@ -20,7 +20,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 
 import { cx } from '../../shared/lib/cx'
-import { useResponsiveViewport } from '../../shared/responsive'
+import { useFocusScope, useResponsiveViewport } from '../../shared/responsive'
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -58,7 +58,18 @@ export function SessionPageViewer({
   const [isOutlineVisible, setIsOutlineVisible] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [isMoreOpen, setIsMoreOpen] = useState(false)
-  const { isPhone } = useResponsiveViewport()
+  const { isMobileWeb } = useResponsiveViewport()
+  const moreRef = useRef<HTMLDivElement>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  useFocusScope(moreRef, isMobileWeb && isMoreOpen, () => setIsMoreOpen(false), false)
+  useEffect(() => {
+    if (!isMoreOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!moreRef.current?.contains(event.target as Node) && !moreButtonRef.current?.contains(event.target as Node)) setIsMoreOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [isMoreOpen])
   const viewerRef = useRef<HTMLElement | null>(null)
   const pageContainerRef = useRef<HTMLDivElement | null>(null)
   const panRef = useRef<{
@@ -244,7 +255,7 @@ export function SessionPageViewer({
             </Link>
           )
         ) : null}
-        <h2 className="hidden min-w-0 truncate type-section-title font-semibold text-stone-950 sm:block">
+        <h2 className="hidden min-w-0 truncate type-section-title font-semibold text-stone-950 sm:block mobile-web:hidden">
           {materialTitle ?? '학습 자료'}
         </h2>
         <span className="shrink-0 type-section-title text-stone-400">
@@ -252,7 +263,7 @@ export function SessionPageViewer({
         </span>
         <div
           aria-label={`학습 진행률 ${currentPage} / ${totalPages}쪽`}
-          className="hidden h-1 w-24 shrink-0 overflow-hidden rounded-full bg-stone-200 md:block"
+          className="hidden h-1 w-24 shrink-0 overflow-hidden rounded-full bg-stone-200 md:block mobile-web:hidden"
           role="progressbar"
         >
           <div
@@ -270,7 +281,7 @@ export function SessionPageViewer({
               showLabel={false}
             />
           ) : null}
-          <div className="flex h-8 items-center gap-1 rounded-lg border border-stone-200 px-1.5 mobile-phone:hidden">
+          <div className="flex h-8 items-center gap-1 rounded-lg border border-stone-200 px-1.5 mobile-web:hidden">
             <ToolbarIconButton
               icon={Minus}
               label="축소"
@@ -285,7 +296,7 @@ export function SessionPageViewer({
               onClick={() => setZoom((value) => clampZoom(value + 10))}
             />
           </div>
-          <div className="contents mobile-phone:hidden">
+          <div className="contents mobile-web:hidden">
           <ToolbarButton
             icon={MoveVertical}
             isActive={pageFitMode === 'height'}
@@ -318,15 +329,16 @@ export function SessionPageViewer({
           <button
             aria-expanded={isMoreOpen}
             aria-label="PDF 도구 더보기"
-            className="hidden size-11 items-center justify-center rounded-lg border border-stone-200 text-stone-600 mobile-phone:flex"
-            onClick={() => setIsMoreOpen((open) => !open)}
+            ref={moreButtonRef}
+            className="hidden size-11 items-center justify-center rounded-lg border border-stone-200 text-stone-600 mobile-web:flex"
+            onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setIsMoreOpen((open) => !open) }}
             type="button"
           >
             <EllipsisVertical aria-hidden="true" size={18} />
           </button>
         </div>
-        {isPhone && isMoreOpen ? (
-          <div className="absolute top-[calc(100%+0.25rem)] right-2 z-50 grid min-w-48 gap-1 rounded-lg border border-stone-200 bg-white p-2 shadow-xl">
+        {isMobileWeb && isMoreOpen ? (
+          <div ref={moreRef} role="dialog" aria-label="PDF 도구" className="absolute top-[calc(100%+0.25rem)] right-2 z-50 grid max-h-[60dvh] min-w-48 gap-1 overflow-y-auto rounded-lg border border-stone-200 bg-white p-2 shadow-xl">
             <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => setZoom((value) => clampZoom(value - 10))} type="button">축소 · {zoom}%</button>
             <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => setZoom((value) => clampZoom(value + 10))} type="button">확대 · {zoom}%</button>
             <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => { applyPageFit('height'); setIsMoreOpen(false) }} type="button">높이 맞춤</button>
@@ -598,7 +610,7 @@ function ToolbarButton({
           : 'border-stone-200 text-stone-600',
       )}
       disabled={disabled}
-      onClick={onClick}
+      onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onClick?.() }}
       title={label}
       type="button"
     >

@@ -67,6 +67,7 @@ export function AppRoutes() {
           <Route element={<RequireAdmin />}>
             <Route path={routes.admin} element={<AdminPage />} />
           </Route>
+          <Route path={routes.settings} element={<SettingsPage />} />
           <Route element={<RequireNonAdmin />}>
           <Route path={routes.classrooms} element={<ClassroomsPage />} />
           <Route path={routes.materials} element={<MaterialsPage />} />
@@ -75,7 +76,6 @@ export function AppRoutes() {
           <Route path={routes.sessionDetail} element={<SessionDetailPage />} />
           <Route path={routes.quizDetail} element={<QuizPage />} />
           <Route path={routes.diagnosis} element={<DiagnosisPage />} />
-          <Route path={routes.settings} element={<SettingsPage />} />
           <Route path={routes.updates} element={<UpdatesPage />} />
           <Route path={routes.calendar} element={<InstructorCalendarPage />} />
           <Route path={routes.classroomCalendar} element={<InstructorCalendarPage />} />

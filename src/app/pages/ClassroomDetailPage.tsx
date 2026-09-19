@@ -15,6 +15,7 @@ import { createSessionsRepository } from '../../features/sessions'
 import { getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { usePolling } from '../../shared/state'
+import { useElementWidth, useResponsiveViewport } from '../../shared/responsive'
 import { Button, EmptyState, useToast } from '../../shared/ui'
 import { examDetailPath, sessionDetailPath } from '../routes'
 import { ClassroomContentPanel, ClassroomContentRail } from './classroom/ClassroomContentView'
@@ -32,6 +33,9 @@ import { ClassroomHeaderInfoBar, ClassroomWorkspaceHeader } from './classroom/Cl
 type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
 
 export function ClassroomDetailPage() {
+  const [measureArea, areaWidth] = useElementWidth<HTMLElement>()
+  const { isTablet } = useResponsiveViewport()
+  const compactWeeks = isTablet && areaWidth < 960
   usePageTitle('강의실 콘텐츠')
   const { classroomId = '' } = useParams()
   const navigate = useNavigate()
@@ -388,6 +392,7 @@ export function ClassroomDetailPage() {
   if (classroomError || !classroom) return <ClassroomWorkspaceContainer><EmptyState action={<Button onClick={() => void load()} variant="secondary">다시 시도</Button>} description={classroomError ?? '강의실 정보를 확인할 수 없습니다.'} title="강의실을 불러오지 못했습니다" /></ClassroomWorkspaceContainer>
 
   const selectedWeek = weeks.find((week) => week.weekNumber === selectedWeekNumber)
+  const tabletEditing = isTablet && (editingNotice || editingExam)
 
   return <ClassroomWorkspaceContainer className="lg:overflow-hidden">
     <ClassroomWorkspaceHeader
@@ -399,8 +404,9 @@ export function ClassroomDetailPage() {
 
     {isInstructor && isReadOnly ? <p className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 type-caption text-stone-600"><Archive size={15} />종료된 강의실입니다. 콘텐츠를 확인할 수 있지만 새 항목을 추가하거나 수정할 수 없습니다.</p> : null}
 
-    <section aria-label="강의실 통합 콘텐츠" className="grid min-h-[600px] items-start gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch mobile-phone:min-h-0 tablet-portrait:min-h-0 tablet-portrait:flex-1 tablet-portrait:grid-cols-[220px_minmax(0,1fr)] tablet-portrait:grid-rows-[minmax(0,1fr)] tablet-portrait:items-stretch tablet-landscape:min-h-0 tablet-landscape:flex-1 tablet-landscape:grid-cols-[240px_minmax(0,1fr)] tablet-landscape:grid-rows-[minmax(0,1fr)] tablet-landscape:items-stretch">
-      <ClassroomContentRail
+    <section aria-label="강의실 통합 콘텐츠" ref={measureArea} style={isTablet ? { gridTemplateColumns: compactWeeks || tabletEditing ? 'minmax(0,1fr)' : '240px minmax(0,1fr)', gridTemplateRows: compactWeeks && !tabletEditing ? 'auto minmax(0,1fr)' : 'minmax(0,1fr)' } : undefined} className="grid min-h-[600px] items-start gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch mobile-phone:min-h-0 tablet-portrait:min-h-0 tablet-portrait:flex-1 tablet-portrait:items-stretch tablet-landscape:min-h-0 tablet-landscape:flex-1 tablet-landscape:items-stretch">
+      {!tabletEditing ? <ClassroomContentRail
+        compact={compactWeeks}
         endDate={classroom.endDate}
         onSelect={(weekNumber) => {
           setResourcePreview(null)
@@ -409,7 +415,7 @@ export function ClassroomDetailPage() {
         selectedWeekNumber={selectedWeekNumber}
         startDate={classroom.startDate}
         weeks={weeks}
-      />
+      /> : null}
       <div className="min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden tablet-portrait:flex tablet-portrait:h-full tablet-portrait:min-h-0 tablet-portrait:flex-col tablet-portrait:overflow-hidden tablet-landscape:flex tablet-landscape:h-full tablet-landscape:min-h-0 tablet-landscape:flex-col tablet-landscape:overflow-hidden">
         {viewingNotice && selectedNotice ? <NoticeDetailPanel canEdit={canManage} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onEdit={() => updateQuery({ panel: `notice-edit-${selectedNotice.id}` })} /> : null}
         {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: selectedNotice ? `notice-${selectedNotice.id}` : null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
