@@ -78,7 +78,13 @@ export function AppLayout() {
   const { apiRequest, logout, rawApiRequest, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isMobileWeb, isPhone, isTablet } = useResponsiveViewport()
+  const { isMobileWeb, isPhone, isTablet, mode } = useResponsiveViewport()
+  /*
+   * 태블릿은 방향에 따라 사이드바를 나눈다.
+   * 세로는 가로 여유가 없어 68px 아이콘 전용, 가로는 176px 라벨까지 보여준다.
+   */
+  const isTabletRail = mode === 'tablet-portrait'
+  const isSettingsRoute = location.pathname === routes.settings
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
   const [sidebarPreference, setSidebarPreference] = useState<{
     isCollapsed: boolean
@@ -331,6 +337,63 @@ export function AppLayout() {
     setIsSettingsOpen(true)
   }
 
+  /* 시안대로 알림은 태블릿에서 내비 항목 자리에 선다. 세로는 아이콘만, 가로는 라벨까지. */
+  const notificationsTrigger = (
+    <div className={cx('relative', isTablet && !isTabletRail && 'w-full')} ref={notificationsRef}>
+      <button
+        aria-expanded={isNotificationsOpen}
+        aria-haspopup="dialog"
+        aria-label={`알림 ${unreadNotificationCount}개`}
+        className={cx(
+          'relative flex shrink-0 items-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+          isTablet
+            ? isTabletRail
+              ? 'size-12 justify-center'
+              : 'h-11 w-full gap-2.5 px-3 type-control font-medium'
+            : 'size-7 justify-center mobile-web:size-11',
+        )}
+        onClick={() => {
+          if (!isNotificationsOpen) {
+            setIsLoadingNotifications(true)
+            setNotificationReloadKey((key) => key + 1)
+          }
+          setIsNotificationsOpen((open) => !open)
+          setIsMenuOpen(false)
+        }}
+        title="알림"
+        type="button"
+      >
+        <Bell aria-hidden="true" className="shrink-0" size={isTablet && !isTabletRail ? 16 : 15} />
+        {isTablet && !isTabletRail ? <span>알림</span> : null}
+        {unreadNotificationCount > 0 ? (
+          <span
+            className={cx(
+              'flex min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 type-micro font-bold leading-4 text-white',
+              isTablet && !isTabletRail ? 'ml-auto' : 'absolute -top-1 -right-1',
+            )}
+          >
+            {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+          </span>
+        ) : null}
+      </button>
+      {isNotificationsOpen ? (
+        <NotificationPanel
+          error={notificationsError}
+          isCollapsed={isCollapsed}
+          isLoading={isLoadingNotifications}
+          notifications={notifications}
+          onDelete={(notificationId) => void deleteNotification(notificationId)}
+          onMarkRead={() => void markAllNotificationsRead()}
+          onOpen={openNotification}
+          onRetry={() => {
+            setIsLoadingNotifications(true)
+            setNotificationReloadKey((key) => key + 1)
+          }}
+        />
+      ) : null}
+    </div>
+  )
+
   const profileMenu = (
     <div
       className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
@@ -395,7 +458,10 @@ export function AppLayout() {
         className={cx(
           isTablet
             // 태블릿은 가로 스크롤 띠 대신 72px 세로 레일을 쓴다.
-            ? 'sticky top-0 z-40 flex h-dvh w-[72px] shrink-0 flex-col border-r border-stone-200 bg-white px-2 py-4 dark:bg-[#222327] mobile-safe-top'
+            ? cx(
+                'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-stone-200 bg-white py-4 dark:bg-[#222327] mobile-safe-top',
+                isTabletRail ? 'w-[68px] px-2' : 'w-[204px] px-2.5',
+              )
             : 'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
           !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-52 lg:px-2.5 mobile-phone:!px-4'),
           isAdminFixedHeightWorkspace && 'shrink-0',
@@ -411,14 +477,14 @@ export function AppLayout() {
           <div
             className={cx(
               'flex items-center justify-between gap-2',
-              isTablet && 'flex-col gap-3',
+              isTabletRail && 'flex-col gap-3',
               !isTablet && isCollapsed && 'lg:flex-col lg:gap-3 mobile-phone:!flex-row mobile-phone:!gap-2',
             )}
           >
             <Link
               className={cx(
                 'flex shrink-0 items-center gap-2.5 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
-                isTablet && 'justify-center px-0',
+                isTabletRail && 'justify-center px-0',
                 !isTablet && isCollapsed && 'lg:justify-center lg:px-0',
               )}
               to={homeRoute}
@@ -429,7 +495,7 @@ export function AppLayout() {
               <span
                 className={cx(
                   'type-section-title font-bold',
-                  isTablet && 'hidden',
+                  isTabletRail && 'hidden',
                   !isTablet && isCollapsed && !isMobileWeb && 'lg:hidden',
                 )}
               >
@@ -439,50 +505,11 @@ export function AppLayout() {
             <div
               className={cx(
                 'flex items-center gap-1',
-                isTablet && 'flex-col',
+                isTabletRail && 'flex-col',
                 !isTablet && isCollapsed && 'lg:flex-col mobile-phone:!flex-row',
               )}
             >
-              {!isAdmin ? <div className="relative" ref={notificationsRef}>
-                <button
-                  aria-expanded={isNotificationsOpen}
-                  aria-haspopup="dialog"
-                  aria-label={`알림 ${unreadNotificationCount}개`}
-                className="relative flex size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
-                  onClick={() => {
-                    if (!isNotificationsOpen) {
-                      setIsLoadingNotifications(true)
-                      setNotificationReloadKey((key) => key + 1)
-                    }
-                    setIsNotificationsOpen((open) => !open)
-                    setIsMenuOpen(false)
-                  }}
-                  title="알림"
-                  type="button"
-                >
-                  <Bell aria-hidden="true" size={15} />
-                  {unreadNotificationCount > 0 ? (
-                    <span className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 type-micro font-bold leading-4 text-white">
-                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
-                    </span>
-                  ) : null}
-                </button>
-                {isNotificationsOpen ? (
-                  <NotificationPanel
-                    error={notificationsError}
-                    isCollapsed={isCollapsed}
-                    isLoading={isLoadingNotifications}
-                    notifications={notifications}
-                    onDelete={(notificationId) => void deleteNotification(notificationId)}
-                    onMarkRead={() => void markAllNotificationsRead()}
-                    onOpen={openNotification}
-                    onRetry={() => {
-                      setIsLoadingNotifications(true)
-                      setNotificationReloadKey((key) => key + 1)
-                    }}
-                  />
-                ) : null}
-              </div> : null}
+              {!isAdmin && !isTablet ? notificationsTrigger : null}
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex mobile-web:!hidden"
@@ -508,7 +535,7 @@ export function AppLayout() {
             aria-label="주요 메뉴"
             className={cx(
               isTablet
-                ? 'mt-6 flex w-auto flex-col items-center gap-0.5'
+                ? cx('mt-6 flex flex-col gap-0.5', isTabletRail ? 'w-auto items-center' : 'w-full items-stretch')
                 : 'mobile-horizontal-scroll order-2 mt-3 flex w-full gap-1 overflow-x-auto lg:mt-6 lg:ml-0 lg:w-auto lg:flex-col lg:gap-0.5 mobile-phone:!mt-3 mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!gap-1 mobile-phone:scroll-px-3',
               // 폰은 하단 탭 바가 대신하므로 상단 내비를 띄우지 않는다.
               isPhone && 'hidden',
@@ -531,14 +558,14 @@ export function AppLayout() {
               <div className="contents" key={item.label}>
                 <Link
                   aria-current={isItemActive ? 'page' : undefined}
-                  className={navLinkClassName(isItemActive, isCollapsed && !isMobileWeb, isTablet)}
+                  className={navLinkClassName(isItemActive, isCollapsed && !isMobileWeb, isTabletRail)}
                   to={item.to}
                   title={item.label}
                 >
                   <item.icon aria-hidden="true" className="shrink-0" size={16} />
                   <span
                     className={cx(
-                      isTablet && 'type-compact-action leading-none',
+                      isTabletRail && 'sr-only',
                       isCollapsed && !isMobileWeb && 'lg:sr-only',
                     )}
                   >
@@ -557,7 +584,7 @@ export function AppLayout() {
                   ) : null}
                 </Link>
                 {item.label === '강의실' && sidebarClassrooms.length > 0 ? (
-                  <div className={cx('ml-5 hidden border-l border-stone-200 py-1 pl-2 lg:flex lg:flex-col lg:gap-0.5', isCollapsed && 'lg:hidden')}>
+                  <div className={cx('ml-5 hidden border-l border-stone-200 py-1 pl-2 lg:flex lg:flex-col lg:gap-0.5 tablet-landscape:flex tablet-landscape:flex-col tablet-landscape:gap-0.5', isCollapsed && 'lg:hidden')}>
                     {sidebarClassrooms.map((classroom) => (
                       <NavLink
                         className={({ isActive }) => cx(
@@ -577,6 +604,7 @@ export function AppLayout() {
               </div>
               )
             })}
+            {isTablet && !isAdmin ? notificationsTrigger : null}
           </nav>
         </div>
 
@@ -584,33 +612,56 @@ export function AppLayout() {
         <div
           className={cx(
             'relative ml-2 shrink-0 lg:hidden mobile-web:!block',
-            isTablet && 'mt-auto ml-0 flex justify-center',
+            isTablet && cx('mt-auto ml-0 flex', isTabletRail ? 'justify-center' : 'w-full'),
             hasBottomNav && '!hidden',
           )}
           ref={mobileMenuContainerRef}
         >
-          <button
-            aria-expanded={isMenuOpen}
-            aria-haspopup="menu"
-            aria-label="프로필 메뉴"
-            className="flex size-9 items-center justify-center rounded-full bg-stone-200 type-caption font-semibold text-stone-600 hover:bg-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
-            onClick={() => setIsMenuOpen((open) => !open)}
-            type="button"
-          >
-            <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-9 type-caption" name={user?.name} />
-          </button>
-          {isMenuOpen ? (
-            <div
+          {isTablet ? (
+            /* 태블릿에서는 프로필이 드롭다운이 아니라 설정 페이지 진입점이다. */
+            <Link
+              aria-current={isSettingsRoute ? 'page' : undefined}
               className={cx(
-                'absolute z-30 w-60 lg:hidden',
-                isTablet
-                  ? 'bottom-0 left-[calc(100%+8px)]'
-                  : 'top-[calc(100%+8px)] right-0',
+                'flex items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+                isTabletRail
+                  ? 'size-12 justify-center'
+                  : 'w-full gap-2.5 p-1.5 text-left',
+                isSettingsRoute
+                  ? 'bg-brand-50 text-brand-700'
+                  : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800',
               )}
+              title="설정"
+              to={routes.settings}
             >
-              {profileMenu}
-            </div>
-          ) : null}
+              <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-9 type-caption" name={user?.name} />
+              <span className={cx('min-w-0 flex-1', isTabletRail && 'sr-only')}>
+                <span className="block truncate type-control font-semibold text-stone-800">
+                  {user?.name}
+                </span>
+                <span className="block truncate type-micro text-stone-400">
+                  {roleLabel}
+                </span>
+              </span>
+            </Link>
+          ) : (
+            <>
+              <button
+                aria-expanded={isMenuOpen}
+                aria-haspopup="menu"
+                aria-label="프로필 메뉴"
+                className="flex size-9 items-center justify-center rounded-full bg-stone-200 type-caption font-semibold text-stone-600 hover:bg-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
+                onClick={() => setIsMenuOpen((open) => !open)}
+                type="button"
+              >
+                <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-9 type-caption" name={user?.name} />
+              </button>
+              {isMenuOpen ? (
+                <div className="absolute top-[calc(100%+8px)] right-0 z-30 w-60 lg:hidden">
+                  {profileMenu}
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
 
         <div
@@ -983,7 +1034,8 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean, isRail = fals
   return cx(
     isRail
       // 태블릿 레일은 아이콘 위·라벨 아래 52px 정사각.
-      ? 'relative inline-flex size-13 shrink-0 flex-col items-center justify-center gap-1 rounded-lg'
+      // 세로 레일은 라벨 없이 아이콘만. 48px 정사각이면 68px 레일 안에 여백이 남는다.
+      ? 'relative inline-flex size-12 shrink-0 items-center justify-center rounded-lg'
       : 'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control mobile-web:h-11',
     !isRail && isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',

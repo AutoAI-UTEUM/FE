@@ -249,7 +249,7 @@ function LearnerClassroomsPage() {
         <h2 className="sr-only" id="classroom-list-heading">
           참여 중인 강의실
         </h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 tablet-landscape:grid-cols-3">
           {sortedClassrooms.map((classroom) => (
             <Link className="flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" key={classroom.id} to={classroomDetailPath(classroom.id)}>
               <div className="flex items-start gap-4">

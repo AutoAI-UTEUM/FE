@@ -1,5 +1,5 @@
-import { Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { ChevronLeft, Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { createUserSettingsRepository, getRoleLabel, useAuth, type AiAnswerStyle, type UserPreferences } from '../../features/auth'
@@ -17,6 +17,7 @@ import {
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { useTheme, type ThemeMode } from '../../shared/theme'
+import { useResponsiveViewport } from '../../shared/responsive'
 
 type SettingsSection = 'account' | 'appearance' | 'assistant' | 'feedback' | 'notification' | 'password' | 'profile'
 
@@ -48,20 +49,26 @@ const THEME_OPTIONS: Array<{
 
 export function SettingsPage() {
   usePageTitle('설정')
+  const navigate = useNavigate()
+  const { isMobileWeb } = useResponsiveViewport()
 
   return (
     <PageContainer>
-      <PageHeader
-        title="설정"
-      />
-      <SettingsContent />
+      {/* 모바일은 뒤로·제목·저장이 한 행이라 SettingsContent가 헤더까지 그린다. */}
+      {isMobileWeb ? null : <PageHeader title="설정" />}
+      <SettingsContent onBack={() => navigate(-1)} variant="page" />
     </PageContainer>
   )
 }
 
-export function SettingsContent({ className }: { className?: string } = {}) {
+export function SettingsContent({ className, onBack, variant = 'dialog' }: {
+  className?: string
+  onBack?: () => void
+  variant?: 'dialog' | 'page'
+} = {}) {
   const { apiRequest, logout, rawApiRequest, updateUser, user, withdraw } = useAuth()
   const { mode, setMode } = useTheme()
+  const { isMobileWeb } = useResponsiveViewport()
   const { show: showToast } = useToast()
   const navigate = useNavigate()
   const [section, setSection] = useState<SettingsSection>('profile')
@@ -98,6 +105,11 @@ export function SettingsContent({ className }: { className?: string } = {}) {
     repository.getAvatar().then((blob) => { objectUrl = URL.createObjectURL(blob); setAvatarUrl(objectUrl) }).catch(() => undefined)
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [repository, user?.avatarUrl])
+
+  async function handleLogout() {
+    await logout()
+    navigate(routes.login, { replace: true })
+  }
 
   function applyPreferences(preferences: UserPreferences) {
     setNewMaterialNotification(preferences.newMaterialNotification)
@@ -218,15 +230,53 @@ export function SettingsContent({ className }: { className?: string } = {}) {
 
   return (
     <>
-      <div className={cx('flex flex-col gap-5 lg:flex-row lg:gap-0', className)}>
-        <nav aria-label="설정 메뉴" className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0 lg:pr-4">
+      {/* 태블릿 가로는 데스크톱과 같은 좌측 카테고리 + 본문 2열, 세로는 스택. */}
+      {isMobileWeb && variant === 'page' ? (
+        <div className="mb-4 flex items-center gap-3">
+          {onBack ? (
+            <button
+              aria-label="뒤로"
+              className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              onClick={onBack}
+              type="button"
+            >
+              <ChevronLeft aria-hidden="true" size={18} />
+            </button>
+          ) : null}
+          <h1 className="min-w-0 flex-1 truncate type-page-title font-bold text-stone-950">설정</h1>
+          {section === 'profile' ? (
+            <>
+              <Button
+                onClick={() => {
+                  setName(user?.name ?? '')
+                  setAffiliation(user?.affiliation ?? '')
+                }}
+                type="button"
+                variant="secondary"
+              >
+                취소
+              </Button>
+              <Button
+                disabled={isSavingProfile || !name.trim()}
+                onClick={() => void saveProfile()}
+                type="button"
+              >
+                {isSavingProfile ? '저장 중' : '저장'}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={cx('flex flex-col gap-5 lg:flex-row lg:gap-0 tablet-landscape:flex-row tablet-landscape:gap-0', className)}>
+        <nav aria-label="설정 메뉴" className="mobile-horizontal-scroll flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0 lg:pr-4 tablet-landscape:w-40 tablet-landscape:shrink-0 tablet-landscape:flex-col tablet-landscape:gap-0.5 tablet-landscape:overflow-visible tablet-landscape:pb-0 tablet-landscape:pr-4">
           {SECTIONS.map((item) => (
             <button
               aria-current={section === item.id ? 'page' : undefined}
               className={cx(
                 'flex h-9 shrink-0 items-center rounded-lg px-3 type-control',
                 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
-                item.id === 'account' && 'text-rose-700 lg:mt-4',
+                item.id === 'account' && 'text-rose-700 lg:mt-4 tablet-landscape:mt-4',
                 section === item.id
                   ? item.id === 'account'
                     ? 'bg-rose-50 font-semibold text-rose-700'
@@ -242,11 +292,25 @@ export function SettingsContent({ className }: { className?: string } = {}) {
               {item.label}
             </button>
           ))}
+          {/*
+            태블릿·폰은 프로필이 설정 진입점으로 바뀌어 드롭다운이 없다. 로그아웃을 여기 둔다.
+            데스크톱은 사이드바 드롭다운에 그대로 있으므로 DOM에 넣지 않는다.
+          */}
+          {isMobileWeb ? (
+            <button
+              className="inline-flex h-9 shrink-0 items-center rounded-lg px-3 type-control font-medium text-rose-700 hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 tablet-landscape:mt-1"
+              onClick={() => void handleLogout()}
+              type="button"
+            >
+              로그아웃
+            </button>
+          ) : null}
         </nav>
 
-        <div className="min-h-0 min-w-0 flex-1 space-y-4 lg:overflow-y-auto lg:pl-5 lg:pr-1">
+        <div className="min-h-0 min-w-0 flex-1 space-y-4 lg:overflow-y-auto lg:pl-5 lg:pr-1 tablet-landscape:grid tablet-landscape:grid-cols-2 tablet-landscape:content-start tablet-landscape:gap-4 tablet-landscape:space-y-0 tablet-landscape:pl-5 tablet-landscape:pr-1">
           {section === 'profile' ? (
             <ProfileSection
+              asRows={isMobileWeb}
               affiliation={affiliation}
               avatarUrl={avatarUrl}
               email={user?.email ?? ''}
@@ -374,7 +438,7 @@ export function SettingsContent({ className }: { className?: string } = {}) {
             </Card>
           ) : null}
 
-          {section === 'profile' ? (
+          {section === 'profile' && !(isMobileWeb && variant === 'page') ? (
             <div className="flex items-center justify-end gap-3">
               <Button
                 onClick={() => {
@@ -499,8 +563,19 @@ function FeedbackSection({
   )
 }
 
+/* 시안의 계정 카드: 라벨 왼쪽 · 값 오른쪽 · 행 사이 헤어라인. 값 자체가 입력란이라 행을 눌러 바로 고친다. */
+function ProfileRow({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="flex min-h-14 items-center gap-4 border-b border-stone-100 px-4 last:border-b-0">
+      <span className="w-20 shrink-0 type-control text-stone-500">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
 function ProfileSection({
   affiliation,
+  asRows = false,
   avatarUrl,
   email,
   name,
@@ -511,6 +586,7 @@ function ProfileSection({
   role,
 }: {
   affiliation: string
+  asRows?: boolean
   avatarUrl: string | null
   email: string
   name: string
@@ -520,6 +596,53 @@ function ProfileSection({
   onSelectAvatar: () => void
   role: string
 }) {
+  if (asRows) {
+    return (
+      <>
+        <section className="flex items-center gap-4 rounded-xl border border-stone-200 bg-white p-4">
+          <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-200 type-card-title font-bold text-stone-500">{avatarUrl ? <img alt="프로필" className="h-full w-full object-cover" src={avatarUrl} /> : name.slice(0, 1) || '?'}</span>
+          <div className="min-w-0 flex-1">
+            <strong className="block truncate type-section-title font-bold text-stone-950">{name || '이름 없음'}</strong>
+            <span className="block truncate type-caption text-stone-500">{email} · {role}</span>
+          </div>
+          <Button onClick={onSelectAvatar} size="sm" type="button" variant="secondary">
+            사진 변경
+          </Button>
+          <Button className="hidden sm:inline-flex" disabled={!avatarUrl} onClick={onDeleteAvatar} size="sm" type="button" variant="ghost">
+            삭제
+          </Button>
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+          <h2 className="border-b border-stone-100 px-4 py-3 type-caption font-semibold text-stone-500">계정</h2>
+          <ProfileRow label="이름">
+            <input
+              aria-label="이름"
+              className="w-full rounded-md bg-transparent py-1 type-body text-stone-900 outline-none focus:bg-stone-50 focus:px-2"
+              onChange={(event) => onNameChange(event.target.value)}
+              value={name}
+            />
+          </ProfileRow>
+          <ProfileRow label="이메일">
+            <span className="block truncate type-body text-stone-500">{email}</span>
+          </ProfileRow>
+          <ProfileRow label="소속">
+            <input
+              aria-label="소속"
+              className="w-full rounded-md bg-transparent py-1 type-body text-stone-900 outline-none placeholder:text-stone-400 focus:bg-stone-50 focus:px-2"
+              onChange={(event) => onAffiliationChange(event.target.value)}
+              placeholder="학교 · 기관 (선택)"
+              value={affiliation}
+            />
+          </ProfileRow>
+          <ProfileRow label="역할">
+            <span className="block truncate type-body text-stone-500">{role}</span>
+          </ProfileRow>
+        </section>
+      </>
+    )
+  }
+
   return (
     <Card as="section" className="border-0 p-0">
       <h2 className="type-section-title font-bold text-stone-950">프로필</h2>
@@ -589,14 +712,18 @@ function ToggleRow({
         <p className="type-body font-semibold text-stone-900">{label}</p>
         <p className="mt-0.5 type-caption text-stone-400">{description}</p>
       </div>
+      {/*
+        버튼 자체는 44px 터치 영역만 잡고 배경을 두지 않는다.
+        트랙을 버튼에 직접 그리면 mobile-web의 전역 min-height:44px가 h-5.5를 덮어
+        40x44 정사각이 되면서 알약이 원으로 뭉개진다.
+      */}
       <button
         aria-checked={checked}
         aria-label={label}
         className={cx(
-          'ml-auto flex h-5.5 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors',
+          'ml-auto flex h-11 min-w-11 shrink-0 items-center justify-end rounded-lg bg-transparent',
           'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
           disabled && 'cursor-not-allowed opacity-60',
-          checked ? 'bg-brand-600' : 'bg-stone-300',
         )}
         disabled={disabled}
         onClick={() => onChange(!checked)}
@@ -605,10 +732,17 @@ function ToggleRow({
       >
         <span
           className={cx(
-            'size-4.5 rounded-full bg-white transition-transform',
-            checked && 'translate-x-4.5',
+            'flex h-5.5 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors',
+            checked ? 'bg-brand-600' : 'bg-stone-300',
           )}
-        />
+        >
+          <span
+            className={cx(
+              'size-4.5 rounded-full bg-white transition-transform',
+              checked && 'translate-x-4.5',
+            )}
+          />
+        </span>
       </button>
     </div>
   )
