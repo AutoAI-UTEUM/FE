@@ -1,8 +1,3 @@
-export { SessionResourcePanel } from './SessionResourcePanel'
-export type {
-  SessionResourceMaterial,
-  SessionResourceWeek,
-} from './SessionResourcePanel'
 export { movePage } from './pageActions'
 export { UiActionsRenderer } from './UiActionsRenderer'
 export type {

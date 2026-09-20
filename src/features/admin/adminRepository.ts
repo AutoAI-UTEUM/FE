@@ -83,6 +83,42 @@ export interface AiUsageUser {
   reasoningTokens: number | null
 }
 
+export type XaiRiskLevel = 'NORMAL' | 'WARNING' | 'CRITICAL'
+export type XaiManagementFailureType = 'CONFIGURATION_ERROR' | 'TEMPORARY_FAILURE'
+
+export interface AdminXaiOverview {
+  prepaidBalanceUsd: string | null
+  currentMonthCostUsd: string | null
+  postpaidLimitUsd: string | null
+  postpaidRemainingUsd: string | null
+  totalAvailableUsd: string | null
+  averageDailyCost7d: string | null
+  projectedDepletionAt: string | null
+  riskLevel: XaiRiskLevel | null
+  fetchedAt: string | null
+  lastSuccessfulSyncAt: string | null
+  stale: boolean | null
+  available: boolean
+}
+
+export interface AdminXaiCredits {
+  prepaidBalanceUsd: string | null
+  postpaidLimitUsd: string | null
+  postpaidUsedUsd: string | null
+  postpaidRemainingUsd: string | null
+  fetchedAt: string | null
+  lastSuccessfulSyncAt: string | null
+  stale: boolean | null
+  available: boolean
+}
+
+export interface AdminXaiStatus {
+  available: boolean
+  lastSuccessfulSyncAt: string | null
+  lastFailureAt: string | null
+  recentErrorClassification: XaiManagementFailureType | null
+}
+
 export type InfraEnv = 'prod' | 'dev'
 export type InfraRange = '1h' | '6h' | '24h' | '7d'
 
@@ -175,6 +211,10 @@ export interface AdminRepository {
   }, signal?: AbortSignal) => Promise<AdminPageResult<AdminClassroomSummary>>
   getAiUsageSummary: (range: { from: string; to: string }, signal?: AbortSignal) => Promise<AiUsageSummary>
   getAiUsageUsers: (range: { from: string; to: string; limit?: number }, signal?: AbortSignal) => Promise<AiUsageUser[]>
+  getXaiOverview: (signal?: AbortSignal) => Promise<AdminXaiOverview>
+  getXaiCredits: (signal?: AbortSignal) => Promise<AdminXaiCredits>
+  getXaiStatus: (signal?: AbortSignal) => Promise<AdminXaiStatus>
+  syncXai: (signal?: AbortSignal) => Promise<AdminXaiOverview>
 }
 
 export function createAdminRepository(request: AuthenticatedRequest): AdminRepository {
@@ -236,6 +276,34 @@ export function createAdminRepository(request: AuthenticatedRequest): AdminRepos
         { signal },
       )
       return Array.isArray(response.data) ? response.data : response.data.items
+    },
+    async getXaiOverview(signal) {
+      const response = await request<AdminXaiOverview>('/api/admin/xai/overview', {
+        cache: 'no-store',
+        signal,
+      })
+      return response.data
+    },
+    async getXaiCredits(signal) {
+      const response = await request<AdminXaiCredits>('/api/admin/xai/credits', {
+        cache: 'no-store',
+        signal,
+      })
+      return response.data
+    },
+    async getXaiStatus(signal) {
+      const response = await request<AdminXaiStatus>('/api/admin/xai/status', {
+        cache: 'no-store',
+        signal,
+      })
+      return response.data
+    },
+    async syncXai(signal) {
+      const response = await request<AdminXaiOverview>('/api/admin/xai/sync', {
+        method: 'POST',
+        signal,
+      })
+      return response.data
     },
   }
 }

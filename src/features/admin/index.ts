@@ -2,6 +2,9 @@ export { createAdminRepository } from './adminRepository'
 export type {
   AdminClassroomDetail,
   AdminClassroomSummary,
+  AdminXaiCredits,
+  AdminXaiOverview,
+  AdminXaiStatus,
   AdminPageResult,
   AdminSort,
   AdminUserDetail,
@@ -19,4 +22,6 @@ export type {
   InfraMetrics,
   InfraPoint,
   InfraRange,
+  XaiManagementFailureType,
+  XaiRiskLevel,
 } from './adminRepository'

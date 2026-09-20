@@ -471,13 +471,28 @@ describe('instructor pages', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '강의실 검색' }))
 
-    expect(
-      screen.getByRole('dialog', { name: '강의실 검색' }),
-    ).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: '강의실 검색' })
+    expect(dialog).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '검색 닫기' })).toHaveTextContent(
       'esc',
     )
     expect(screen.queryByText('⌘K로 어디서든 열기')).not.toBeInTheDocument()
+
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: '검색어' }))
+    expect(dialog).toBeInTheDocument()
+    fireEvent.mouseDown(dialog)
+    expect(screen.queryByRole('dialog', { name: '강의실 검색' })).not.toBeInTheDocument()
+  })
+
+  it('closes the classroom composer from its backdrop', () => {
+    renderInstructorPage(<InstructorClassroomsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '강의실 만들기' }))
+    const dialog = screen.getByRole('dialog', { name: '강의실 만들기' })
+    fireEvent.mouseDown(within(dialog).getByLabelText('강의실 이름'))
+    expect(dialog).toBeInTheDocument()
+    fireEvent.mouseDown(dialog)
+    expect(screen.queryByRole('dialog', { name: '강의실 만들기' })).not.toBeInTheDocument()
   })
 
   it('uses the simplified classroom card actions', async () => {
@@ -745,6 +760,17 @@ describe('instructor pages', () => {
     expect(screen.getByLabelText('종료일')).toHaveAttribute('type', 'date')
     expect(screen.getByRole('switch', { name: '기간' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('switch', { name: '시간' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('closes the calendar composer from its backdrop', () => {
+    renderCalendar()
+
+    fireEvent.click(screen.getByRole('button', { name: '일정 추가' }))
+    const dialog = screen.getByRole('dialog', { name: '일정 추가' })
+    fireEvent.mouseDown(within(dialog).getByLabelText('일정 이름'))
+    expect(dialog).toBeInTheDocument()
+    fireEvent.mouseDown(dialog)
+    expect(screen.queryByRole('dialog', { name: '일정 추가' })).not.toBeInTheDocument()
   })
 
   it('opens the learning status for the classroom selected in the URL', async () => {

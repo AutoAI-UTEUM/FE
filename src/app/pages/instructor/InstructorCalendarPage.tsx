@@ -17,7 +17,7 @@ import {
 } from 'react'
 import { useParams } from 'react-router-dom'
 
-import { isInstructorRole, useAuth } from '../../../features/auth'
+import { isAdminRole, useAuth } from '../../../features/auth'
 import { rememberClassroomId } from '../../../features/classrooms'
 import {
   getCalendarEventKindLabel,
@@ -43,7 +43,7 @@ export function InstructorCalendarPage() {
   const { mode, isTablet } = useResponsiveViewport()
   const [measureArea, areaWidth] = useElementWidth()
   const { classroomId = '' } = useParams()
-  const isInstructor = isInstructorRole(user?.role)
+  const canManagePersonalEvents = !isAdminRole(user?.role)
   const { addEvent, events, removeEvent, updateEvent } = useCalendarEvents(
     user?.id ?? user?.email,
     apiRequest,
@@ -128,7 +128,7 @@ export function InstructorCalendarPage() {
   const calendarActions = (
     <>
       <SegmentedControl onChange={setView} value={view} />
-      {isInstructor ? (
+      {canManagePersonalEvents ? (
         <Button
           aria-label="일정 추가"
           onClick={() => { setEditingEvent(null); setIsComposerOpen(true) }}
@@ -275,7 +275,7 @@ export function InstructorCalendarPage() {
         />
       </div>
 
-      {isInstructor && isComposerOpen ? (
+      {canManagePersonalEvents && isComposerOpen ? (
         <ScheduleComposer
           initialEvent={editingEvent ?? undefined}
           initialDate={getInitialScheduleDate(cursor, today)}
@@ -300,12 +300,12 @@ export function InstructorCalendarPage() {
         <ScheduleDetailDialog
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
-          onEdit={isInstructor && selectedEvent.kind === 'PERSONAL' ? () => {
+          onEdit={canManagePersonalEvents && selectedEvent.kind === 'PERSONAL' ? () => {
             setEditingEvent(selectedEvent)
             setSelectedEvent(null)
             setIsComposerOpen(true)
           } : undefined}
-          onRemove={isInstructor && selectedEvent.kind === 'PERSONAL' ? async () => {
+          onRemove={canManagePersonalEvents && selectedEvent.kind === 'PERSONAL' ? async () => {
             try {
               await removeEvent(selectedEvent)
               setSelectedEvent(null)
@@ -739,6 +739,9 @@ function ScheduleComposer({
       aria-labelledby="schedule-composer-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose()
+      }}
       role="dialog"
     >
       <form
@@ -845,6 +848,9 @@ function ScheduleDetailDialog({
       aria-labelledby="schedule-detail-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
+      onMouseDown={(mouseEvent) => {
+        if (mouseEvent.target === mouseEvent.currentTarget) onClose()
+      }}
       role="dialog"
     >
       <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-2xl">

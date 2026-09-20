@@ -1,9 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
-import { apiFailure, installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { ClassroomsPage } from './ClassroomsPage'
 
 afterEach(() => {
@@ -23,11 +23,53 @@ function renderPage() {
 }
 
 describe('ClassroomsPage', () => {
+  it('uses four-column compact summary cards for learners', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
+        return apiSuccess({
+          items: [{
+            averageProgressRate: 38,
+            classroomId: 12,
+            color: 'BLUE',
+            currentWeek: 6,
+            endDate: '2026-11-15',
+            instructorName: '진동섭',
+            learnerCount: 42,
+            name: 'SK-Mini-CDS과정',
+            pendingRequestCount: 0,
+            startDate: '2026-08-03',
+            status: 'ACTIVE',
+            weekCount: 15,
+          }],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return undefined
+    })
+    renderPage()
+
+    const classroomList = await screen.findByRole('region', { name: '참여 중인 강의실' })
+    const classroomLink = within(classroomList).getByRole('link', { name: 'SK-Mini-CDS과정 강의실 열기' })
+
+    expect(classroomLink.parentElement).toHaveClass('xl:grid-cols-4')
+    expect(classroomLink).toHaveClass('min-h-[180px]')
+    expect(classroomLink).toHaveTextContent('2026 1학기 · 6주차 · 진동섭')
+    expect(classroomLink).toHaveTextContent('진도38%')
+    expect(within(classroomLink).queryByText('수강 중')).not.toBeInTheDocument()
+    expect(within(classroomLink).queryByText(/학습 이어가기/)).not.toBeInTheDocument()
+  })
+
   it('keeps the learner header free of role-specific count and term labels', () => {
     renderPage()
 
     expect(screen.queryByText(/참여 중 \d+개/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\d{4}년 \d학기/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/이어서 학습하기/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/쪽부터 계속/)).not.toBeInTheDocument()
   })
 
   it('opens search with the keyboard shortcut', () => {
@@ -39,6 +81,24 @@ describe('ClassroomsPage', () => {
       screen.getByRole('dialog', { name: '강의실 검색' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '검색어' })).toHaveFocus()
+  })
+
+  it('closes learner dialogs only when their backdrop is pressed', () => {
+    renderPage()
+
+    fireEvent.keyDown(window, { ctrlKey: true, key: 'k' })
+    const searchDialog = screen.getByRole('dialog', { name: '강의실 검색' })
+    fireEvent.mouseDown(within(searchDialog).getByRole('textbox', { name: '검색어' }))
+    expect(searchDialog).toBeInTheDocument()
+    fireEvent.mouseDown(searchDialog)
+    expect(screen.queryByRole('dialog', { name: '강의실 검색' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '강의실 참여' }))
+    const joinDialog = screen.getByRole('dialog', { name: '강의실 참여' })
+    fireEvent.mouseDown(within(joinDialog).getByRole('textbox', { name: '초대 코드' }))
+    expect(joinDialog).toBeInTheDocument()
+    fireEvent.mouseDown(joinDialog)
+    expect(screen.queryByRole('dialog', { name: '강의실 참여' })).not.toBeInTheDocument()
   })
 
   it('changes the classroom sort order', () => {

@@ -77,7 +77,7 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 /* 역할과 페이지 종류에 관계없이 사용하는 기본 콘텐츠 프레임. */
 @utility app-page-frame {
   width: 100%;
-  max-width: 1600px;
+  max-width: 1760px;
   min-width: 0;
   margin-inline: auto;
 }
@@ -103,6 +103,16 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 @utility type-page-title {
   font-size: 1.375rem;
   line-height: 1.875rem;
+}
+
+@utility type-brand-title {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+@utility type-navigation {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 @utility type-card-title {
@@ -251,7 +261,7 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
   --color-stone-300: #c9ceda;
   --color-stone-400: #666c7a;
   --color-stone-500: #5f6675;
-  --color-stone-600: #555c6b;
+  --color-stone-600: #5f6675;
   --color-stone-700: #4a4f5e;
   --color-stone-800: #3c4152;
   --color-stone-900: #171a22;
@@ -265,6 +275,39 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
   color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+html:not(.dark) {
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #ecfdf5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #a7f3d0;
+  --color-emerald-700: #065f46;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #065f46;
+  --color-emerald-950: #065f46;
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fffbeb;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fde68a;
+  --color-amber-700: #92400e;
+  --color-amber-800: #92400e;
+  --color-amber-900: #92400e;
+  --color-amber-950: #92400e;
+  --color-rose-50: #fff1f2;
+  --color-rose-100: #fff1f2;
+  --color-rose-200: #fecdd3;
+  --color-rose-300: #fecdd3;
+  --color-rose-700: #9f1239;
+  --color-rose-800: #9f1239;
+  --color-rose-900: #9f1239;
+  --color-cyan-50: #ecfeff;
+  --color-cyan-100: #ecfeff;
+  --color-cyan-200: #a5f3fc;
+  --color-cyan-300: #a5f3fc;
+  --color-cyan-700: #155e75;
+  --color-cyan-800: #155e75;
+  --color-cyan-900: #155e75;
 }
 
 html.dark {

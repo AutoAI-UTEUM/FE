@@ -171,4 +171,3 @@ html[data-responsive-mode^='tablet'] .tablet-work-actions {
   html[data-responsive-mode^='tablet'] .app-page-frame > header { flex-direction: column; }
   html[data-responsive-mode^='tablet'] .app-page-frame > header > div { flex-wrap: wrap; min-width: 0; }
 }
-html[data-responsive-mode^='tablet'] .bg-\[\#E7F6EC\] { color: #106b34; }

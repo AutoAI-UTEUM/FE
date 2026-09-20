@@ -51,6 +51,7 @@ describe('remote auth repository', () => {
       )
     const repository = getAuthRepository()
     const values = {
+      affiliation: ' 울산대학교 ',
       email: ' Learner@example.com ',
       name: ' 학습자 ',
       password: 'password123',
@@ -75,6 +76,7 @@ describe('remote auth repository', () => {
     })
 
     expectJsonRequest(fetchMock, 0, '/api/auth/signup', {
+      affiliation: '울산대학교',
       email: 'learner@example.com',
       learningEmailOptIn: false,
       name: '학습자',
@@ -113,6 +115,7 @@ describe('remote auth repository', () => {
 
     const failure = await getAuthRepository()
       .signup({
+        affiliation: '울산대학교',
         email: 'learner@example.com',
         name: '학습자',
         password: 'password',

@@ -37,6 +37,7 @@ export const routes = {
   sessions: '/sessions',
   sessionDetail: '/sessions/:sessionId',
   settings: '/settings',
+  feedback: '/feedback',
   updates: '/updates',
   quizDetail: '/quizzes/:quizId',
   diagnosis: '/sessions/:sessionId/diagnosis/:diagnosisId',
