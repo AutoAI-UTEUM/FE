@@ -8,6 +8,7 @@ import {
   type AuthUser,
 } from '../features/auth'
 import { CLASSROOMS_CHANGED_EVENT } from '../features/classrooms'
+import * as responsive from '../shared/responsive'
 import { ToastProvider } from '../shared/ui'
 import {
   apiFailure,
@@ -59,6 +60,73 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
+  it('uses four bottom navigation slots with profile last in tablet portrait', async () => {
+    vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
+      isMobileWeb: true,
+      isPhone: false,
+      isTablet: true,
+      mode: 'tablet-portrait',
+      viewportWidth: 820,
+      visibleHeight: 1120,
+      visibleTop: 0,
+    })
+
+    renderRoute('/classrooms')
+
+    const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
+    expect(within(bottomNavigation).getAllByRole('link')).toHaveLength(3)
+    expect(bottomNavigation).toHaveClass(
+      'min-h-[calc(4.25rem+env(safe-area-inset-bottom))]',
+      'items-center',
+    )
+    expect(within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' })).toBe(
+      bottomNavigation.lastElementChild,
+    )
+    expect(screen.getByRole('complementary')).toHaveClass('hidden')
+  })
+
+  it('reduces narrow tablet split view to three slots and moves the remaining menu into profile', async () => {
+    vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
+      isMobileWeb: true,
+      isPhone: false,
+      isTablet: true,
+      mode: 'tablet-portrait',
+      viewportWidth: 375,
+      visibleHeight: 980,
+      visibleTop: 0,
+    })
+
+    renderRoute('/classrooms')
+
+    const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
+    expect(within(bottomNavigation).getAllByRole('link')).toHaveLength(2)
+    fireEvent.click(within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' }))
+    expect(within(bottomNavigation).getByRole('menuitem', { name: '복습 퀴즈' })).toBeInTheDocument()
+    expect(within(bottomNavigation).getByRole('menuitem', { name: '시험' })).toBeInTheDocument()
+  })
+
+  it('opens the settings page instead of a dialog from tablet portrait profile', async () => {
+    vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
+      isMobileWeb: true,
+      isPhone: false,
+      isTablet: true,
+      mode: 'tablet-portrait',
+      viewportWidth: 820,
+      visibleHeight: 1120,
+      visibleTop: 0,
+    })
+
+    renderRoute('/classrooms')
+
+    const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
+    fireEvent.click(within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' }))
+    fireEvent.click(within(bottomNavigation).getByRole('menuitem', { name: '설정' }))
+
+    expect(await screen.findByRole('heading', { name: '설정' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '뒤로' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
+  })
+
   it('shows the Uteum brand and personalized learning message on the login screen', async () => {
     renderRoute('/login', null)
 
@@ -938,7 +1006,7 @@ describe('AppRoutes', () => {
       if (request.method === 'GET' && url.pathname === '/api/materials') {
         materialsCalls += 1
         if (materialsCalls === 1) {
-          return apiFailure('TOKEN_INVALID', '토큰이 만료되었습니다.', 401)
+          return apiFailure('TOKEN_EXPIRED', '토큰이 만료되었습니다.', 401)
         }
         return undefined
       }

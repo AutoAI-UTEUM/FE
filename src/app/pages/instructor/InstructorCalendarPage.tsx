@@ -125,42 +125,72 @@ export function InstructorCalendarPage() {
     setIsPickerOpen(false)
   }
 
+  const calendarActions = (
+    <>
+      <SegmentedControl onChange={setView} value={view} />
+      {isInstructor ? (
+        <Button
+          aria-label="일정 추가"
+          onClick={() => { setEditingEvent(null); setIsComposerOpen(true) }}
+          size="sm"
+        >
+          <Plus aria-hidden="true" size={14} />
+          개인 일정
+        </Button>
+      ) : null}
+    </>
+  )
+
   return (
-    <PageContainer className={cx('lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-5 lg:overflow-hidden lg:space-y-0', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
+    <PageContainer className={cx('lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden lg:space-y-0', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
       <PageHeader
-        actions={
-          <>
-            <SegmentedControl onChange={setView} value={view} />
-            {isInstructor ? (
-              <Button
-                aria-label="일정 추가"
-                onClick={() => { setEditingEvent(null); setIsComposerOpen(true) }}
-                size="sm"
-              >
-                <Plus aria-hidden="true" size={14} />
-                개인 일정
-              </Button>
-            ) : null}
-          </>
-        }
+        actions={isTablet ? undefined : calendarActions}
         title="캘린더"
       />
 
-      <div ref={measureArea} style={isTablet ? { gridTemplateColumns: areaWidth >= 960 ? 'minmax(0,1fr) 18rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', isTablet && 'tablet-calendar')}>
+      <div ref={measureArea} style={isTablet ? { gridTemplateColumns: mode === 'tablet-landscape' && areaWidth >= 960 ? 'minmax(0,1fr) 18rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', isTablet && 'tablet-calendar')}>
         <section
           aria-label="캘린더 본문"
           className="flex mobile-web:min-h-0 min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
         >
-          <div className="grid min-h-14 grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-stone-200 px-3 sm:px-4">
-            <span aria-hidden="true" />
-            <div className="flex items-center gap-2" ref={pickerRef}>
+          <div
+            aria-label="캘린더 도구"
+            className={cx(
+              'min-h-14 items-center gap-2 border-b border-stone-200 px-4 py-2',
+              isTablet && areaWidth >= 700
+                ? 'relative flex'
+                : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]',
+            )}
+            role="toolbar"
+          >
+            <span className="justify-self-start">
+              {isTablet && !isViewingCurrentMonth && view !== 'list' ? (
+                <Button onClick={moveToCurrentMonth} size="sm" variant="secondary">
+                  이번 달
+                </Button>
+              ) : null}
+            </span>
+            <div
+              className={cx(
+                'flex items-center gap-2',
+                isTablet && areaWidth >= 700 && 'absolute left-1/2 -translate-x-1/2',
+              )}
+              ref={pickerRef}
+            >
               <button
                 aria-label="이전 기간"
-                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 mobile-web:size-11"
+                className={cx(
+                  'flex shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50',
+                  isTablet ? 'size-11' : 'size-8 border border-stone-200 bg-white',
+                )}
                 onClick={() => move(-1)}
                 type="button"
               >
-                <ChevronLeft aria-hidden="true" size={15} />
+                {isTablet ? (
+                  <span className="flex size-7 items-center justify-center rounded-full border border-stone-200 bg-white">
+                    <ChevronLeft aria-hidden="true" size={14} />
+                  </span>
+                ) : <ChevronLeft aria-hidden="true" size={15} />}
               </button>
               <div className="relative">
                 <button
@@ -186,23 +216,30 @@ export function InstructorCalendarPage() {
               </div>
               <button
                 aria-label="다음 기간"
-                className="flex size-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 mobile-web:size-11"
+                className={cx(
+                  'flex shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-50',
+                  isTablet ? 'size-11' : 'size-8 border border-stone-200 bg-white',
+                )}
                 onClick={() => move(1)}
                 type="button"
               >
-                <ChevronRight aria-hidden="true" size={15} />
+                {isTablet ? (
+                  <span className="flex size-7 items-center justify-center rounded-full border border-stone-200 bg-white">
+                    <ChevronRight aria-hidden="true" size={14} />
+                  </span>
+                ) : <ChevronRight aria-hidden="true" size={15} />}
               </button>
             </div>
-            {!isViewingCurrentMonth && view !== 'list' ? (
-              <Button
-                className="justify-self-end"
-                onClick={moveToCurrentMonth}
-                size="sm"
-                variant="secondary"
-              >
-                이번 달
-              </Button>
-            ) : null}
+            <span className={cx(
+              'flex min-w-0 items-center justify-end gap-2',
+              isTablet && areaWidth >= 700 && 'ml-auto',
+            )}>
+              {isTablet ? calendarActions : !isViewingCurrentMonth && view !== 'list' ? (
+                <Button onClick={moveToCurrentMonth} size="sm" variant="secondary">
+                  이번 달
+                </Button>
+              ) : null}
+            </span>
           </div>
 
           {isTablet && areaWidth < 400 && view !== 'list' ? <div className="p-3"><label className="block type-control font-semibold">날짜 선택<input type="date" className="mt-2 w-full min-w-0 rounded-lg border border-stone-200 p-2" value={toDateTimeLocal(selectedDay).slice(0, 10)} onChange={(event) => { if (event.target.value) { const day = new Date(`${event.target.value}T12:00:00`); setSelectedDay(day); setCursor(day) } }} /></label></div> : view === 'month' ? (
@@ -400,12 +437,12 @@ function MonthView({
   const cells = getMonthCells(cursor)
 
   return (
-    <section aria-label="월간 캘린더" className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 lg:min-h-0" onWheel={onWheel}>
+    <section aria-label="월간 캘린더" className="flex min-h-0 flex-1 flex-col overflow-auto p-4 lg:min-h-0" onWheel={onWheel}>
       <div className="grid grid-cols-7">
         {WEEKDAY_LABELS.map((label, index) => (
           <div
             className={cx(
-              'px-2 py-2.5 text-center type-micro font-semibold',
+              'px-2 py-2.5 text-center type-caption font-semibold',
               index === 5
                 ? 'text-sky-700'
                 : index === 6
@@ -437,7 +474,7 @@ function MonthView({
               )}
               key={date.toISOString()}
             >
-              {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className={cx('flex size-11 items-center justify-center rounded-lg type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : 'text-stone-800')}>{date.getDate()}</button> : <span
+              {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className="flex size-11 items-start justify-start"><span className={cx('flex size-7 items-center justify-center rounded-full type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : getWeekendDateClassName(date, isCurrentMonth))}>{date.getDate()}</span></button> : <span
                 className={cx(
                   'flex size-7 items-center justify-center rounded-full type-body font-semibold',
                   isToday
@@ -495,7 +532,7 @@ function WeekView({
             className="min-h-48 min-w-0 rounded-lg border border-stone-200 bg-stone-50/60 p-3"
             key={date.toISOString()}
           >
-            {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className={cx('flex min-h-11 w-full items-center justify-center rounded-lg type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : 'text-stone-800')}>{WEEKDAY_LABELS[index]} {date.getDate()}</button> : <div className="flex items-center gap-2">
+            {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className="flex min-h-11 w-full items-center justify-center gap-2"><span className={cx('type-caption font-semibold', index === 5 ? 'text-sky-700' : index === 6 ? 'text-rose-600' : 'text-stone-500')}>{WEEKDAY_LABELS[index]}</span><span className={cx('flex size-7 items-center justify-center rounded-full type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : getWeekendDateClassName(date, true))}>{date.getDate()}</span></button> : <div className="flex items-center gap-2">
               <span
                 className={cx(
                   'type-caption font-semibold',

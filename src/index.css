@@ -341,6 +341,26 @@ html.mobile-web body,
 html.mobile-web #root {
   min-height: 100dvh;
   overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
+/*
+ * iPad Safari의 viewport rubber-band가 앱 바깥 배경을 드러내지 않도록
+ * 문서 스크롤을 잠그고 앱 루트를 실제 스크롤 컨테이너로 사용한다.
+ */
+html[data-responsive-mode^='tablet'],
+html[data-responsive-mode^='tablet'] body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html[data-responsive-mode^='tablet'] #root {
+  height: var(--visible-height, 100dvh);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobile-horizontal-scroll {

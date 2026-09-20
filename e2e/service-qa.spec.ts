@@ -74,7 +74,11 @@ for (const role of ['LEARNER', 'INSTRUCTOR', 'ADMIN'] as const) {
             ))
             expect.soft(pageOverflow, 'AI usage must not create page-level vertical scrolling').toBeLessThanOrEqual(2)
             await expect(page.getByRole('region', { name: 'AI 사용량 상세' })).toBeVisible()
-            await expect(page.getByRole('region', { name: '사용자별 호출 목록' })).toBeVisible()
+            const userCallsRegion = page.getByRole('region', { name: '사용자별 호출 목록' })
+            if (!await userCallsRegion.isVisible()) {
+              await page.getByRole('button', { name: '사용자별 호출' }).click()
+            }
+            await expect(userCallsRegion).toBeVisible()
           }
           if (role === 'ADMIN' && path === '/admin?tab=updates') {
             const pageOverflow = await page.evaluate(() => (
@@ -83,7 +87,10 @@ for (const role of ['LEARNER', 'INSTRUCTOR', 'ADMIN'] as const) {
             ))
             expect.soft(pageOverflow, 'Admin updates must not create page-level vertical scrolling').toBeLessThanOrEqual(2)
             await expect(page.getByRole('group', { name: '개발 파트' })).toBeVisible()
-            await expect(page.getByRole('link', { name: '업데이트' })).toHaveAttribute('aria-current', 'page')
+            await expect(
+              page.getByRole('navigation', { name: '관리자 메뉴' })
+                .getByRole('button', { name: '업데이트' }),
+            ).toHaveAttribute('aria-current', 'page')
           }
         })
       }

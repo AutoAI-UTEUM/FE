@@ -10,7 +10,21 @@ import type {
 
 export interface AuthSessionResult {
   accessToken: string
+  expiresIn: number
+  session: AuthSessionPolicy
   user: AuthUser
+}
+
+export interface AuthSessionPolicy {
+  absoluteExpiresAt: string
+  idleExpiresAt: string
+  idleTimeoutSeconds: number
+}
+
+export interface AccessGrant {
+  accessToken: string
+  expiresIn: number
+  session: AuthSessionPolicy
 }
 
 export interface AuthRepository {
@@ -22,13 +36,18 @@ export interface AuthRepository {
   loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthSessionResult>
   login: (values: LoginFormValues) => Promise<AuthSessionResult>
   logout: () => Promise<void>
-  refresh: (signal?: AbortSignal) => Promise<string>
+  recordSessionActivity: (
+    accessToken: string,
+    signal?: AbortSignal,
+  ) => Promise<AuthSessionPolicy>
+  refresh: (signal?: AbortSignal) => Promise<AccessGrant>
   signup: (values: SignupFormValues) => Promise<void>
 }
 
 interface LoginResponseDto {
   accessToken: string
   expiresIn: number
+  session?: AuthSessionPolicy
   tokenType: string
   user: {
     affiliation?: string
@@ -40,6 +59,16 @@ interface LoginResponseDto {
     role: string
   }
 }
+
+interface AccessGrantDto {
+  accessToken: string
+  expiresIn?: number
+  session?: AuthSessionPolicy
+}
+
+const LEGACY_ACCESS_TTL_SECONDS = 60 * 60
+const LEGACY_IDLE_TIMEOUT_SECONDS = 30 * 60
+const LEGACY_ABSOLUTE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
 interface UserResponseDto {
   affiliation?: string
@@ -83,7 +112,7 @@ const repository: AuthRepository = {
       })
 
       return {
-        accessToken: data.accessToken,
+        ...mapAccessGrant(data),
         user: mapUser(data.user),
       }
     } catch (error) {
@@ -105,7 +134,7 @@ const repository: AuthRepository = {
     })
 
     return {
-      accessToken: data.accessToken,
+      ...mapAccessGrant(data),
       user: mapUser(data.user),
     }
   },
@@ -114,13 +143,25 @@ const repository: AuthRepository = {
     await apiRequest<unknown>('/api/auth/logout', { method: 'POST' })
   },
 
+  async recordSessionActivity(accessToken, signal) {
+    const { data } = await apiRequest<AuthSessionPolicy>(
+      '/api/auth/session/activity',
+      {
+        accessToken,
+        method: 'POST',
+        signal,
+      },
+    )
+    return data
+  },
+
   // refresh 쿠키(edupilot_refresh)로 access 토큰을 재발급받는다 (DEC-004).
   async refresh(signal) {
-    const { data } = await apiRequest<{ accessToken: string }>(
+    const { data } = await apiRequest<AccessGrantDto>(
       '/api/auth/refresh',
       { method: 'POST', signal },
     )
-    return data.accessToken
+    return mapAccessGrant(data)
   },
 
   async signup(values) {
@@ -142,6 +183,33 @@ const repository: AuthRepository = {
       throw mapRemoteAuthError(error, 'signup')
     }
   },
+}
+
+function mapAccessGrant(data: AccessGrantDto): AccessGrant {
+  const receivedAt = Date.now()
+  const expiresIn =
+    typeof data.expiresIn === 'number' && data.expiresIn > 0
+      ? data.expiresIn
+      : LEGACY_ACCESS_TTL_SECONDS
+  const idleTimeoutSeconds =
+    typeof data.session?.idleTimeoutSeconds === 'number' &&
+    data.session.idleTimeoutSeconds > 0
+      ? data.session.idleTimeoutSeconds
+      : LEGACY_IDLE_TIMEOUT_SECONDS
+
+  return {
+    accessToken: data.accessToken,
+    expiresIn,
+    session: data.session ?? {
+      absoluteExpiresAt: new Date(
+        receivedAt + LEGACY_ABSOLUTE_TTL_MS,
+      ).toISOString(),
+      idleExpiresAt: new Date(
+        receivedAt + idleTimeoutSeconds * 1000,
+      ).toISOString(),
+      idleTimeoutSeconds,
+    },
+  }
 }
 
 export function getAuthRepository(): AuthRepository {
