@@ -21,7 +21,12 @@ export interface AuthUser {
   role?: string
 }
 
-export type LogoutReason = 'idle' | 'manual' | 'session-expired'
+export type LogoutReason =
+  | 'absolute-expired'
+  | 'idle'
+  | 'inactive'
+  | 'manual'
+  | 'session-expired'
 
 export type AuthenticatedRequest = <T>(
   path: string,

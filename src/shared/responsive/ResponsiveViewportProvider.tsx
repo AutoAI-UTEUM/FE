@@ -67,13 +67,19 @@ function readViewportMode(): ResponsiveViewportMode {
   if (typeof window === 'undefined') return 'desktop'
   const screenWidth = window.screen.width || window.innerWidth
   const screenHeight = window.screen.height || window.innerHeight
+  const dimensionsArePortrait = screenHeight >= screenWidth
+  const reportedOrientation = window.screen.orientation?.type
+  const reportedPortrait = reportedOrientation
+    ? reportedOrientation.startsWith('portrait')
+    : dimensionsArePortrait
   return getResponsiveViewportMode({
     coarsePointer: window.matchMedia?.('(pointer: coarse)').matches ?? false,
     anyCoarsePointer: window.matchMedia?.('(any-pointer: coarse)').matches ?? false,
-    // Screen orientation is independent of the keyboard and split-window aspect ratio.
-    portraitOrientation: window.screen.orientation?.type
-      ? window.screen.orientation.type.startsWith('portrait')
-      : screenHeight >= screenWidth,
+    // Some desktop tablet emulators report a stale orientation type. Physical
+    // screen dimensions remain independent of the keyboard and split-window width.
+    portraitOrientation: screenWidth === screenHeight
+      ? reportedPortrait
+      : dimensionsArePortrait,
     screenHeight,
     screenWidth,
   })

@@ -161,7 +161,7 @@ function LearnerClassroomsPage() {
         actions={<>
           <button
             aria-label="강의실 검색"
-            className="flex h-10 min-w-56 flex-1 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:min-w-72 xl:flex-none"
+            className="flex h-10 w-full min-w-0 flex-[1_1_100%] items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 min-[520px]:w-auto min-[520px]:min-w-56 min-[520px]:flex-1 sm:min-w-72 xl:flex-none"
             onClick={() => setIsSearchOpen(true)}
             type="button"
           >
@@ -172,11 +172,11 @@ function LearnerClassroomsPage() {
             </kbd>
           </button>
 
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 min-[520px]:flex-none">
             <button
               aria-expanded={isSortOpen}
               aria-haspopup="menu"
-              className="flex h-10 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 type-body font-medium text-stone-700 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-stone-200 bg-white px-3 type-body font-medium text-stone-700 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               onClick={() => setIsSortOpen((open) => !open)}
               type="button"
             >
@@ -213,7 +213,7 @@ function LearnerClassroomsPage() {
             ) : null}
           </div>
 
-          <Button className="h-10" onClick={() => setIsJoinOpen(true)}>
+          <Button className="h-10 min-w-0 flex-1 whitespace-nowrap min-[520px]:flex-none" onClick={() => setIsJoinOpen(true)}>
             <Plus aria-hidden="true" size={15} />
             강의실 참여
           </Button>

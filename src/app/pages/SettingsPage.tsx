@@ -1,4 +1,4 @@
-import { ChevronLeft, Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
+import { Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -49,21 +49,19 @@ const THEME_OPTIONS: Array<{
 
 export function SettingsPage() {
   usePageTitle('설정')
-  const navigate = useNavigate()
   const { isMobileWeb } = useResponsiveViewport()
 
   return (
     <PageContainer>
-      {/* 모바일은 뒤로·제목·저장이 한 행이라 SettingsContent가 헤더까지 그린다. */}
+      {/* 모바일은 제목과 저장 작업이 한 행이라 SettingsContent가 헤더까지 그린다. */}
       {isMobileWeb ? null : <PageHeader title="설정" />}
-      <SettingsContent onBack={() => navigate(-1)} variant="page" />
+      <SettingsContent variant="page" />
     </PageContainer>
   )
 }
 
-export function SettingsContent({ className, onBack, variant = 'dialog' }: {
+export function SettingsContent({ className, variant = 'dialog' }: {
   className?: string
-  onBack?: () => void
   variant?: 'dialog' | 'page'
 } = {}) {
   const { apiRequest, logout, rawApiRequest, updateUser, user, withdraw } = useAuth()
@@ -233,16 +231,6 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
       {/* 태블릿 가로는 데스크톱과 같은 좌측 카테고리 + 본문 2열, 세로는 스택. */}
       {isMobileWeb && variant === 'page' ? (
         <div className="mb-4 flex items-center gap-3">
-          {onBack ? (
-            <button
-              aria-label="뒤로"
-              className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              onClick={onBack}
-              type="button"
-            >
-              <ChevronLeft aria-hidden="true" size={18} />
-            </button>
-          ) : null}
           <h1 className="min-w-0 flex-1 truncate type-page-title font-bold text-stone-950">설정</h1>
           {section === 'profile' ? (
             <>
