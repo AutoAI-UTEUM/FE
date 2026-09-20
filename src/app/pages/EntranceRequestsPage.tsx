@@ -13,6 +13,7 @@ import {
 import { getRequestErrorMessage } from '../../shared/api'
 import { cx } from '../../shared/lib/cx'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+import { TabletMasterDetail, useResponsiveViewport } from '../../shared/responsive'
 import { Button, EmptyState, PageContainer, PageHeader, useToast } from '../../shared/ui'
 
 type RequestTab = 'pending' | 'processed' | 'students'
@@ -21,6 +22,8 @@ type ClassroomStudentRow = ClassroomStudent & { classroomId: string; classroomNa
 export function EntranceRequestsPage() {
   usePageTitle('입장 요청')
   const { apiRequest } = useAuth()
+  const { isTablet } = useResponsiveViewport()
+  const [detailKey, setDetailKey] = useState<string | null>(null)
   const { show: showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
@@ -103,6 +106,7 @@ export function EntranceRequestsPage() {
   }, [classrooms, hasLoadedClassrooms, reloadKey, repository, tab])
 
   function selectTab(nextTab: RequestTab) {
+    setDetailKey(null)
     setIsLoading(true)
     setSelectedRequestKeys(new Set())
     setTab(nextTab)
@@ -228,6 +232,8 @@ export function EntranceRequestsPage() {
       : '처리한 입장 요청이 없습니다'
   const itemCount = tab === 'students' ? students.length : requests.length
   const allRequestsSelected = requests.length > 0 && selectedRequestKeys.size === requests.length
+  const detailRequest = requests.find(request => requestKey(request) === detailKey)
+  const detailStudent = students.find(student => `${student.classroomId}:${student.id}` === detailKey)
 
   return <PageContainer>
     <PageHeader title="입장 요청" />
@@ -247,7 +253,12 @@ export function EntranceRequestsPage() {
     {isLoading ? <p className="py-16 text-center type-body text-stone-500" role="status">입장 정보를 불러오는 중입니다.</p> : null}
     {error ? <EmptyState action={<Button onClick={retry} variant="secondary">다시 시도</Button>} description={error} title="입장 정보를 불러오지 못했습니다" /> : null}
     {!isLoading && !error ? (
-      <section className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+      isTablet ? <section className="flex min-h-80 flex-col overflow-hidden border-y border-stone-200 bg-white">
+        {tab === 'pending' ? <div className="flex items-center gap-2 border-b border-stone-200 p-3"><SelectionCheckbox ariaLabel="전체 요청 선택" checked={allRequestsSelected} onChange={toggleAllRequests} />전체 선택</div> : null}
+        <TabletMasterDetail onClose={() => setDetailKey(null)} title={tab === 'students' ? '수강생 상세' : '입장 요청 상세'} detail={detailStudent && tab === 'students' ? <div className="space-y-4 p-4"><h3 className="font-bold">{detailStudent.name}</h3><p className="break-all">{detailStudent.email}</p><p>{detailStudent.classroomName}</p><p>{detailStudent.affiliation ?? '-'}</p><Button variant="secondary" onClick={() => void removeStudent(detailStudent)}>강의실에서 제외</Button></div> : detailRequest ? <div className="space-y-4 p-4"><h3 className="font-bold">{detailRequest.learner?.name}</h3><p className="break-all">{detailRequest.learner?.email}</p><p>{detailRequest.classroomName}</p><p>{detailRequest.learner?.affiliation ?? '-'}</p><p>{new Date(detailRequest.requestedAt).toLocaleString('ko-KR')}</p>{detailRequest.status === 'PENDING' ? <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={processingRequestKeys.has(requestKey(detailRequest)) || isBatchProcessing} onClick={() => void process(detailRequest, 'reject')}>거절</Button><Button disabled={processingRequestKeys.has(requestKey(detailRequest)) || isBatchProcessing || classrooms.find(c => c.id === detailRequest.classroomId)?.status === 'COMPLETED'} onClick={() => void process(detailRequest, 'approve')}>승인</Button></div> : <p>{detailRequest.status === 'APPROVED' ? '승인됨' : '거절됨'}</p>}</div> : null}>
+          {itemCount === 0 ? <p className="p-6 text-stone-500">{emptyTitle}</p> : tab === 'students' ? students.map(student => <button type="button" className="tablet-summary-row w-full border-b border-stone-100 p-4 text-left" key={`${student.classroomId}:${student.id}`} onClick={() => setDetailKey(`${student.classroomId}:${student.id}`)}><span className="min-w-0"><strong className="block">{student.name}</strong><span className="break-all text-stone-500">{student.email}</span></span><span>{student.classroomName}</span><span>수강 중</span></button>) : requests.map(request => <div className="flex items-center border-b border-stone-100 px-3" key={requestKey(request)}>{tab === 'pending' ? <SelectionCheckbox ariaLabel={`${request.learner?.name ?? '학습자'} 요청 선택`} checked={selectedRequestKeys.has(requestKey(request))} onChange={() => toggleRequest(request)} disabled={isBatchProcessing} /> : null}<button type="button" className="tablet-summary-row min-w-0 flex-1 p-3 text-left" onClick={() => setDetailKey(requestKey(request))}><span className="min-w-0"><strong className="block">{request.learner?.name}</strong><span className="break-all type-caption text-stone-500">{request.learner?.email}</span></span><span>{request.classroomName}</span><span>{request.status === 'PENDING' ? '대기 중' : request.status === 'APPROVED' ? '승인됨' : '거절됨'}</span></button></div>)}
+        </TabletMasterDetail>
+      </section> : <section className="overflow-hidden rounded-lg border border-stone-200 bg-white">
         <div className="hidden grid-cols-[36px_1fr_1.35fr_1fr_1fr_1fr_150px] items-center border-b border-stone-200 bg-stone-50 px-4 py-3 type-micro font-semibold text-stone-400 lg:grid">
           <span className="flex h-full items-center">
             {tab === 'pending' ? <SelectionCheckbox ariaLabel="전체 요청 선택" checked={allRequestsSelected} onChange={toggleAllRequests} /> : null}

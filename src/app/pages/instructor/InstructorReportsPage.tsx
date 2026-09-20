@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
+import { useResponsiveViewport } from '../../../shared/responsive'
 import {
   createClassroomsRepository,
   rememberClassroomId,
@@ -273,6 +274,7 @@ export function InstructorStudentReportsPage() {
 
 export function InstructorReportDetailPage() {
   usePageTitle('리포트 상세')
+  const { isTablet } = useResponsiveViewport()
   const { classroomId = '', studentId = '', reportId = '' } = useParams()
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
@@ -306,10 +308,11 @@ export function InstructorReportDetailPage() {
 
   return <PageContainer>
     <PageHeader actions={<ButtonLink to={classroomStudentReportsPath(classroomId, studentId)} variant="secondary">버전 목록</ButtonLink>} title={report.studentName ? `${report.studentName} 리포트` : '학생 리포트'} titleAccessory={<span className="type-caption text-stone-500">버전 {report.version ?? '-'}</span>} />
-    <section className="grid gap-3 sm:grid-cols-3"><Metric label="종합 단계" value={overallStage} /><Metric label="종합 점수" value={report.overallScore === null ? '데이터 부족' : `${report.overallScore}점`} /><Metric label="동일 범위의 이전 리포트 대비" value={report.overallScore === null ? '데이터 부족' : getTrendLabel(report.trend)} trend={report.overallScore === null ? undefined : report.trend} /></section>
+    {isTablet ? <nav aria-label="리포트 섹션" className="sticky top-0 z-10 flex gap-2 overflow-x-auto border-y border-stone-200 bg-white py-2">{[['report-summary', '요약'], ['criteria-results-title', '평가 항목'], ['report-guidance', '지도 방향']].map(([id, label]) => <a className="flex shrink-0 items-center rounded-lg px-3 font-semibold text-brand-700" key={id} href={`#${id}`}>{label}</a>)}</nav> : null}
+    <section id="report-summary" className="scroll-mt-20 grid gap-3 sm:grid-cols-3"><Metric label="종합 단계" value={overallStage} /><Metric label="종합 점수" value={report.overallScore === null ? '데이터 부족' : `${report.overallScore}점`} /><Metric label="동일 범위의 이전 리포트 대비" value={report.overallScore === null ? '데이터 부족' : getTrendLabel(report.trend)} trend={report.overallScore === null ? undefined : report.trend} /></section>
     {report.overview ? <section className="border-y border-stone-200 py-5"><h2 className="type-section-title font-bold">종합 해석</h2><p className="mt-2 type-body leading-6 text-stone-600">{report.overview}</p></section> : null}
     <section aria-labelledby="criteria-results-title"><h2 className="type-section-title font-bold" id="criteria-results-title">평가 항목</h2><div className="mt-3 grid gap-3 lg:grid-cols-3">{report.criterionResults.map((result) => <CriterionResultCard evidence={report.evidence} key={result.criterionKey} result={result} />)}</div></section>
-    <section className="grid gap-3 lg:grid-cols-2"><StatementSection evidence={report.evidence} items={report.strengths} title="강점" /><StatementSection evidence={report.evidence} items={report.improvements} title="보완점" /><StatementSection evidence={report.evidence} items={report.misconceptionCandidates} title="오개념 후보" /><StatementSection evidence={report.evidence} items={report.recommendedActions} title="추천 지도 행동" /></section>
+    <section id="report-guidance" className="scroll-mt-20 grid gap-3 lg:grid-cols-2"><StatementSection evidence={report.evidence} items={report.strengths} title="강점" /><StatementSection evidence={report.evidence} items={report.improvements} title="보완점" /><StatementSection evidence={report.evidence} items={report.misconceptionCandidates} title="오개념 후보" /><StatementSection evidence={report.evidence} items={report.recommendedActions} title="추천 지도 행동" /></section>
     {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}
   </PageContainer>
 }

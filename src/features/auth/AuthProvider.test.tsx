@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RequireAuth } from './RequireAuth'
 import {
+  AUTH_ACTIVITY_RECORD_INTERVAL_MS,
   AUTH_IDLE_TIMEOUT_MS,
   AUTH_IDLE_WARNING_MS,
+  AUTH_REFRESH_EARLY_MS,
   AUTH_REFRESH_TIMEOUT_MS,
   AUTH_RESTORE_TIMEOUT_MS,
   AuthProvider,
@@ -15,12 +17,14 @@ import { useAuth } from './useAuth'
 
 beforeEach(() => {
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')
+  vi.stubGlobal('BroadcastChannel', undefined)
 })
 
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
 
@@ -162,6 +166,146 @@ describe('AuthProvider', () => {
     expect(await screen.findByText('로그인 화면')).toBeInTheDocument()
   })
 
+  it('ends the session when the retried request is also unauthorized', async () => {
+    let refreshCallCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCallCount += 1
+        return Promise.resolve(
+          jsonResponse({
+            accessToken:
+              refreshCallCount === 1 ? 'restored-token' : 'renewed-token',
+          }),
+        )
+      }
+      if (url.endsWith('/api/users/me')) {
+        return Promise.resolve(
+          jsonResponse({
+            email: 'learner@test.com',
+            name: '학습자',
+            role: 'LEARNER',
+            userId: 1,
+          }),
+        )
+      }
+      return Promise.resolve(
+        jsonResponse(
+          {
+            error: {
+              code: 'TOKEN_EXPIRED',
+              details: [],
+              message: '토큰이 만료되었습니다.',
+            },
+            success: false,
+          },
+          401,
+        ),
+      )
+    })
+
+    renderAuthenticatedRoute(<AuthenticatedRequestHarness />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '자료 요청' }),
+    )
+
+    expect(await screen.findByText('로그인 화면')).toBeInTheDocument()
+    expect(refreshCallCount).toBe(2)
+  })
+
+  it('records repeated input at most once per five minutes', async () => {
+    vi.useFakeTimers()
+    let activityCallCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        return Promise.resolve(jsonResponse(createAccessGrantResponse()))
+      }
+      if (url.endsWith('/api/users/me')) {
+        return Promise.resolve(
+          jsonResponse({
+            email: 'learner@test.com',
+            name: '학습자',
+            role: 'LEARNER',
+            userId: 1,
+          }),
+        )
+      }
+      if (url.endsWith('/api/auth/session/activity')) {
+        activityCallCount += 1
+        return Promise.resolve(jsonResponse(createSessionPolicy()))
+      }
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+
+    renderAuthenticatedRoute(<p>비공개 화면</p>)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTH_ACTIVITY_RECORD_INTERVAL_MS)
+    })
+    fireEvent.pointerDown(window)
+    fireEvent.keyDown(window, { key: 'A' })
+    fireEvent.scroll(window)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(activityCallCount).toBe(1)
+  })
+
+  it('refreshes five minutes before expiry only after recent user activity', async () => {
+    vi.useFakeTimers()
+    let refreshCallCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCallCount += 1
+        return Promise.resolve(
+          jsonResponse(
+            createAccessGrantResponse(`access-token-${refreshCallCount}`),
+          ),
+        )
+      }
+      if (url.endsWith('/api/users/me')) {
+        return Promise.resolve(
+          jsonResponse({
+            email: 'learner@test.com',
+            name: '학습자',
+            role: 'LEARNER',
+            userId: 1,
+          }),
+        )
+      }
+      if (url.endsWith('/api/auth/session/activity')) {
+        return Promise.resolve(jsonResponse(createSessionPolicy()))
+      }
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+
+    renderAuthenticatedRoute(<p>비공개 화면</p>)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        15 * 60 * 1000 - AUTH_REFRESH_EARLY_MS - 60_000,
+      )
+    })
+    fireEvent.pointerDown(window)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+
+    expect(refreshCallCount).toBe(2)
+  })
+
   it('warns before idle logout during an exam and lets the learner continue', async () => {
     vi.useFakeTimers()
     mockRestoredSession()
@@ -200,7 +344,7 @@ describe('AuthProvider', () => {
     expect(screen.getByText('로그인 화면')).toBeInTheDocument()
   })
 
-  it('gives an active exam a warning grace period when returning from another tab', async () => {
+  it('does not let a hidden exam tab bypass the server idle policy', async () => {
     vi.useFakeTimers()
     let visibilityState: DocumentVisibilityState = 'hidden'
     vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState)
@@ -216,8 +360,8 @@ describe('AuthProvider', () => {
     visibilityState = 'visible'
     fireEvent(document, new Event('visibilitychange'))
 
-    expect(screen.getByRole('dialog', { name: '계속 응시 중이신가요?' })).toBeInTheDocument()
-    expect(screen.queryByText('로그인 화면')).not.toBeInTheDocument()
+    expect(screen.getByText('로그인 화면')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
 
@@ -277,6 +421,23 @@ function mockRestoredSession() {
     if (url.endsWith('/api/auth/logout')) return Promise.resolve(jsonResponse(null))
     return Promise.resolve(new Response(null, { status: 404 }))
   })
+}
+
+function createAccessGrantResponse(accessToken = 'restored-token') {
+  return {
+    accessToken,
+    expiresIn: 15 * 60,
+    session: createSessionPolicy(),
+  }
+}
+
+function createSessionPolicy() {
+  const now = Date.now()
+  return {
+    absoluteExpiresAt: new Date(now + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    idleExpiresAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
+    idleTimeoutSeconds: 2 * 60 * 60,
+  }
 }
 
 function jsonResponse(data: unknown, status = 200) {

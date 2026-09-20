@@ -15,6 +15,10 @@ export function RequireAuth() {
     const reason =
       logoutReason === 'idle'
         ? '?reason=idle'
+        : logoutReason === 'absolute-expired'
+          ? '?reason=absolute-expired'
+          : logoutReason === 'inactive'
+            ? '?reason=inactive'
         : logoutReason === 'session-expired'
           ? '?reason=session-expired'
           : ''

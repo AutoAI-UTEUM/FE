@@ -674,6 +674,45 @@ async function handleDevRoute(
     ] })
   }
 
+  if ((method === 'GET' && pathname === '/api/admin/xai/overview') || (method === 'POST' && pathname === '/api/admin/xai/sync')) {
+    return apiSuccess({
+      available: true,
+      averageDailyCost7d: '4.85',
+      currentMonthCostUsd: '72.75',
+      fetchedAt: '2026-09-20T08:00:00Z',
+      lastSuccessfulSyncAt: '2026-09-20T08:00:00Z',
+      postpaidLimitUsd: '300.00',
+      postpaidRemainingUsd: '227.25',
+      prepaidBalanceUsd: '125.00',
+      projectedDepletionAt: '2026-12-01T08:00:00Z',
+      riskLevel: 'NORMAL',
+      stale: false,
+      totalAvailableUsd: '352.25',
+    })
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/xai/credits') {
+    return apiSuccess({
+      available: true,
+      fetchedAt: '2026-09-20T08:00:00Z',
+      lastSuccessfulSyncAt: '2026-09-20T08:00:00Z',
+      postpaidLimitUsd: '300.00',
+      postpaidRemainingUsd: '227.25',
+      postpaidUsedUsd: '72.75',
+      prepaidBalanceUsd: '125.00',
+      stale: false,
+    })
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/xai/status') {
+    return apiSuccess({
+      available: true,
+      lastFailureAt: null,
+      lastSuccessfulSyncAt: '2026-09-20T08:00:00Z',
+      recentErrorClassification: null,
+    })
+  }
+
   if (method === 'GET' && pathname === '/api/admin/infra/metrics') {
     const env = url.searchParams.get('env') ?? 'prod'
     const range = url.searchParams.get('range') ?? '24h'

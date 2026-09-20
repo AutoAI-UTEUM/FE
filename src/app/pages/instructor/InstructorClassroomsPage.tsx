@@ -235,7 +235,7 @@ export function InstructorClassroomsPage() {
           <>
             <button
               aria-label="강의실 검색"
-              className="flex h-10 min-w-56 flex-1 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:min-w-72 xl:flex-none"
+              className="flex h-10 w-full min-w-0 flex-[1_1_100%] items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 min-[520px]:w-auto min-[520px]:min-w-56 min-[520px]:flex-1 sm:min-w-72 xl:flex-none"
               onClick={() => setIsSearchOpen(true)}
               type="button"
             >
@@ -245,7 +245,7 @@ export function InstructorClassroomsPage() {
                 ⌘K
               </kbd>
             </button>
-            <Button className="h-10" onClick={() => setIsCreateOpen(true)}>
+            <Button className="h-10 min-w-0 flex-1 whitespace-nowrap min-[520px]:flex-none" onClick={() => setIsCreateOpen(true)}>
               <Plus aria-hidden="true" size={15} />
               강의실 만들기
             </Button>
@@ -278,7 +278,7 @@ export function InstructorClassroomsPage() {
       {!error && classrooms.length > 0 ? (
         <section
           aria-label="운영 강의실"
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 tablet-landscape:grid-cols-3"
+          className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 tablet-landscape:grid-cols-3"
         >
           {classrooms.map((classroom) => (
             <ClassroomCard
@@ -354,6 +354,7 @@ export function InstructorClassroomsPage() {
           onConfirm={() => void regenerateInviteCode(inviteCodeRegenerationTarget)}
         />
       ) : null}
+
     </PageContainer>
   )
 }
@@ -451,7 +452,7 @@ function ClassroomCard({
         <span
           className={
             isActive
-              ? 'rounded-full bg-[#E7F6EC] px-2 py-1 type-micro font-semibold text-[#12833E]'
+              ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 type-micro font-semibold text-emerald-800'
               : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'
           }
         >
@@ -556,6 +557,9 @@ function SearchDialog({
       aria-label="강의실 검색"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       role="dialog"
     >
       <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
@@ -782,6 +786,9 @@ function CreateClassroomDialog({
       aria-labelledby="create-classroom-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose()
+      }}
       role="dialog"
     >
       <form

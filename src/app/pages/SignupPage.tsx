@@ -31,6 +31,7 @@ import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
 const initialValues: SignupFormValues = {
+  affiliation: '',
   email: '',
   name: '',
   password: '',
@@ -471,6 +472,37 @@ export function SignupPage() {
             onChange={(event) => updateValue('name', event.target.value)}
             placeholder="홍길동"
             value={values.name}
+          />
+        </div>
+
+        <div>
+          <div className="flex items-baseline justify-between gap-3">
+            <label
+              className="type-control font-semibold text-stone-800"
+              htmlFor="signup-affiliation"
+            >
+              소속
+            </label>
+            {errors.affiliation ? (
+              <p
+                className="type-caption font-medium text-rose-700"
+                id="signup-affiliation-error"
+                role="alert"
+              >
+                {errors.affiliation}
+              </p>
+            ) : null}
+          </div>
+          <input
+            aria-describedby={errors.affiliation ? 'signup-affiliation-error' : undefined}
+            aria-invalid={errors.affiliation ? true : undefined}
+            autoComplete="organization"
+            className={`${fieldClassName(Boolean(errors.affiliation), '')} mt-1`}
+            id="signup-affiliation"
+            onChange={(event) => updateValue('affiliation', event.target.value)}
+            placeholder="학교, 학원 또는 소속 기관"
+            required
+            value={values.affiliation ?? ''}
           />
         </div>
 

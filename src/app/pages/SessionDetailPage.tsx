@@ -3,13 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { LockKeyhole } from 'lucide-react'
 
 import { useAuth } from '../../features/auth'
-import {
-  createClassroomsRepository,
-  getRememberedClassroomId,
-  rememberClassroomId,
-  type Classroom,
-  type ClassroomWeek,
-} from '../../features/classrooms'
+import { getRememberedClassroomId } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { ChatPanel, useSessionChat } from '../../features/chat'
 import { DocumentChatPanel } from '../../features/documentChat'
@@ -18,11 +12,9 @@ import type { QuizKind } from '../../features/quiz'
 import {
   createSessionsRepository,
   movePage,
-  SessionResourcePanel,
   UiActionsRenderer,
   type LearningSession,
   type SessionQuizSummary,
-  type SessionResourceWeek,
   type SessionTurnResult,
   type UiAction,
   type UiActionEvent,
@@ -37,12 +29,10 @@ import {
 import {
   classroomDetailPath,
   diagnosisPath,
-  materialViewerPath,
   routes,
-  sessionDetailPath,
 } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { MobileWorkspaceTabs, useResponsiveViewport } from '../../shared/responsive'
+import { MobileWorkspaceTabs, useResponsiveViewport, useElementWidth, TabletWorkspaceControls, type TabletPane } from '../../shared/responsive'
 import { QuizWorkspace } from './QuizPage'
 
 const SessionPageViewer = lazy(async () => {
@@ -83,10 +73,6 @@ export function SessionDetailPage() {
     () => createMaterialsRepository(apiRequest, rawApiRequest),
     [apiRequest, rawApiRequest],
   )
-  const classroomsRepository = useMemo(
-    () => createClassroomsRepository(apiRequest),
-    [apiRequest],
-  )
   const [session, setSession] = useState<
     LearningSession | null | undefined
   >(undefined)
@@ -102,16 +88,20 @@ export function SessionDetailPage() {
   const [sessionQuizzes, setSessionQuizzes] = useState<SessionQuizSummary[]>([])
   const [sessionQuizzesError, setSessionQuizzesError] = useState<string | null>(null)
   const [isLoadingSessionQuizzes, setIsLoadingSessionQuizzes] = useState(false)
-  const [resourceWeeks, setResourceWeeks] = useState<SessionResourceWeek[]>([])
-  const [resourceReloadKey, setResourceReloadKey] = useState(0)
+  const [quizReloadKey, setQuizReloadKey] = useState(0)
   const [materialFile, setMaterialFile] = useState<Blob | null | undefined>()
   const [materialFileError, setMaterialFileError] = useState<string | null>(null)
   const [materialOverview, setMaterialOverview] = useState<MaterialOverview | null>(null)
   const [chatPanelWidth, setChatPanelWidth] = useState<number | null>(null)
   const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH)
-  const [isResourcePanelOpen, setIsResourcePanelOpen] = useState(false)
   const [mobilePane, setMobilePane] = useState<'content' | 'learning'>('content')
-  const { isPhone } = useResponsiveViewport()
+  const { isPhone, isTablet } = useResponsiveViewport()
+  const [measureArea, areaWidth] = useElementWidth<HTMLElement>()
+  const [tabletPane, setTabletPane] = useState<TabletPane>('both')
+  const canSplit = areaWidth >= 720
+  const activeTabletPane = tabletPane === 'both' && !canSplit ? 'content' : tabletPane
+  const contentHidden = (isPhone && mobilePane !== 'content') || (isTablet && activeTabletPane === 'learning')
+  const learningHidden = (isPhone && mobilePane !== 'learning') || (isTablet && activeTabletPane === 'content')
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const autoOpenedQuizIdRef = useRef<string | null>(null)
   const currentPageRef = useRef(1)
@@ -119,11 +109,9 @@ export function SessionDetailPage() {
   const queuedPageMoveRef = useRef<QueuedPageMove | null>(null)
   const chat = useSessionChat(sessionsRepository, sessionId ?? '')
   const chatTurnPendingRef = useRef(chat.isTurnPending)
-  const [resolvedClassroomId, setResolvedClassroomId] = useState<string | null>(
-    () => getRememberedClassroomId(),
-  )
-  const weekPagePath = resolvedClassroomId
-    ? classroomDetailPath(resolvedClassroomId)
+  const rememberedClassroomId = getRememberedClassroomId()
+  const weekPagePath = rememberedClassroomId
+    ? classroomDetailPath(rememberedClassroomId)
     : routes.classrooms
 
   useEffect(() => {
@@ -312,68 +300,7 @@ export function SessionDetailPage() {
     void loadSessionQuizzes()
 
     return () => controller.abort()
-  }, [resourceReloadKey, session?.id, sessionsRepository])
-
-  useEffect(() => {
-    const activeSessionId = session?.id
-    const activeMaterialId = session?.materialId
-    if (!activeSessionId || !activeMaterialId) return
-
-    const controller = new AbortController()
-    const loadClassroomResources = async () => {
-      try {
-        const context = await findClassroomContext(
-          classroomsRepository,
-          activeMaterialId,
-          getRememberedClassroomId(),
-          controller.signal,
-        )
-        if (!context || controller.signal.aborted) {
-          setResourceWeeks([])
-          return
-        }
-
-        rememberClassroomId(context.classroomId)
-        setResolvedClassroomId(context.classroomId)
-
-        const listedSessions = await sessionsRepository.list(controller.signal)
-        const sessions = [
-          { id: activeSessionId, materialId: activeMaterialId },
-          ...listedSessions.filter((item) => item.id !== activeSessionId),
-        ]
-        const sessionByMaterial = selectSessionsByMaterial(sessions)
-
-        if (controller.signal.aborted) return
-        const orderedWeeks = [...context.weeks].sort(
-          (left, right) => left.weekNumber - right.weekNumber,
-        )
-        setResourceWeeks(orderedWeeks.map((week) => ({
-          id: week.id,
-          materials: week.materials.map((material) => {
-            const materialSession = sessionByMaterial.get(material.id)
-            return {
-              id: material.id,
-              sessionId: materialSession?.id,
-              status: material.status,
-              title: material.title,
-            }
-          }),
-          title: week.title,
-        })))
-      } catch {
-        if (!controller.signal.aborted) setResourceWeeks([])
-      }
-    }
-
-    void loadClassroomResources()
-    return () => controller.abort()
-  }, [
-    classroomsRepository,
-    resourceReloadKey,
-    session?.id,
-    session?.materialId,
-    sessionsRepository,
-  ])
+  }, [quizReloadKey, session?.id, sessionsRepository])
 
   useEffect(() => {
     const workspace = workspaceRef.current
@@ -674,7 +601,7 @@ export function SessionDetailPage() {
       setEmbeddedQuizReviewSummary(undefined)
       setLockedQuizId(result.activeQuizId)
       setEmbeddedQuizId(result.activeQuizId)
-      setResourceReloadKey((key) => key + 1)
+      setQuizReloadKey((key) => key + 1)
     }
   }
 
@@ -689,7 +616,7 @@ export function SessionDetailPage() {
         }))
         setCurrentPage(nextSession.currentPage)
       }
-      setResourceReloadKey((key) => key + 1)
+      setQuizReloadKey((key) => key + 1)
       setError(null)
     } catch (requestError) {
       setError(getRequestErrorMessage(requestError))
@@ -758,21 +685,7 @@ export function SessionDetailPage() {
         {activeSession.materialTitle} 학습 화면입니다.
       </p>
 
-      <section className="flex h-full min-h-0 mobile-phone:flex-col">
-        {isResourcePanelOpen ? (
-          <SessionResourcePanel
-            activeMaterialId={activeSession.materialId}
-            isPending={isActionPending || chat.isTurnPending}
-            onClose={() => setIsResourcePanelOpen(false)}
-            resourcePath={(material) =>
-              material.sessionId
-                ? sessionDetailPath(material.sessionId)
-                : materialViewerPath(material.id)
-            }
-            weeks={resourceWeeks}
-          />
-        ) : null}
-
+      <section className={`flex h-full min-h-0 ${isTablet || isPhone ? 'flex-col' : ''}`} ref={measureArea}>
         {isPhone ? (
           <MobileWorkspaceTabs
             active={mobilePane}
@@ -780,15 +693,17 @@ export function SessionDetailPage() {
             onChange={setMobilePane}
           />
         ) : null}
+        {isTablet ? <TabletWorkspaceControls canSplit={canSplit} contentLabel={embeddedQuizId ? '퀴즈' : '자료'} onChange={setTabletPane} value={activeTabletPane} /> : null}
 
         <div
           className="study-session-content h-full min-h-0 min-w-0 flex-1"
+          data-tablet-pane={isTablet ? activeTabletPane : undefined}
           ref={workspaceRef}
           style={chatPanelWidth === null
             ? undefined
             : { '--chat-panel-width': `${chatPanelWidth}px` } as CSSProperties}
         >
-          <div className={isPhone && mobilePane !== 'content' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
+          <div className={contentHidden ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
           <Suspense
             fallback={
               <div
@@ -834,9 +749,6 @@ export function SessionDetailPage() {
                 isPending={isActionPending || chat.isTurnPending}
                 materialTitle={activeSession.materialTitle}
                 onMovePage={handlePageNavigation}
-                onOpenResources={isResourcePanelOpen
-                  ? undefined
-                  : () => setIsResourcePanelOpen(true)}
                 totalPages={totalPages}
               />
             )}
@@ -862,7 +774,7 @@ export function SessionDetailPage() {
             <span className="h-full w-px bg-stone-200 transition-colors group-hover:bg-brand-400" />
           </div>
 
-          <div className={isPhone && mobilePane !== 'learning' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
+          <div className={learningHidden ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
           {lockedQuizId ? (
             <QuizChatLockPanel
               isQuizVisible={embeddedQuizId === lockedQuizId}
@@ -949,7 +861,7 @@ export function SessionDetailPage() {
             onOpenQuiz={handleOpenQuizHistory}
             onOverviewPageSelect={(pageNumber) => void handlePageNavigation(pageNumber)}
             onRequestQuiz={() => setIsSelectingQuizType(true)}
-            onReloadQuizzes={() => setResourceReloadKey((key) => key + 1)}
+            onReloadQuizzes={() => setQuizReloadKey((key) => key + 1)}
             onTurnCompleted={applyTurnResult}
             quizzes={sessionQuizzes}
             quizzesError={sessionQuizzesError}
@@ -1043,59 +955,4 @@ function isTurnInProgressError(error: unknown): error is ApiClientError {
   return error instanceof ApiClientError
     && error.status === 409
     && error.code === 'TURN_IN_PROGRESS'
-}
-
-type ClassroomsRepository = ReturnType<typeof createClassroomsRepository>
-
-async function findClassroomContext(
-  repository: ClassroomsRepository,
-  materialId: string,
-  preferredClassroomId: string | null,
-  signal: AbortSignal,
-): Promise<{ classroom: Classroom; classroomId: string; weeks: ClassroomWeek[] } | null> {
-  if (preferredClassroomId) {
-    try {
-      const [classroom, weeks] = await Promise.all([
-        repository.get(preferredClassroomId, signal),
-        repository.listWeeks(preferredClassroomId, signal),
-      ])
-      if (weeksContainMaterial(weeks, materialId)) {
-        return { classroom, classroomId: preferredClassroomId, weeks }
-      }
-    } catch {
-      if (signal.aborted) return null
-    }
-  }
-
-  const classrooms = await repository.list('', signal)
-  for (const classroom of classrooms) {
-    if (classroom.id === preferredClassroomId) continue
-    try {
-      const weeks = await repository.listWeeks(classroom.id, signal)
-      if (weeksContainMaterial(weeks, materialId)) {
-        return { classroom, classroomId: classroom.id, weeks }
-      }
-    } catch {
-      if (signal.aborted) return null
-    }
-  }
-  return null
-}
-
-function weeksContainMaterial(weeks: ClassroomWeek[], materialId: string): boolean {
-  return weeks.some((week) =>
-    week.materials.some((material) => material.id === materialId),
-  )
-}
-
-function selectSessionsByMaterial(
-  sessions: Array<Pick<LearningSession, 'id' | 'materialId'>>,
-): Map<string, Pick<LearningSession, 'id' | 'materialId'>> {
-  const selected = new Map<string, Pick<LearningSession, 'id' | 'materialId'>>()
-  sessions.forEach((item) => {
-    if (item.materialId && !selected.has(item.materialId)) {
-      selected.set(item.materialId, item)
-    }
-  })
-  return selected
 }

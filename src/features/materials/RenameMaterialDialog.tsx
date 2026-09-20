@@ -41,6 +41,9 @@ export function RenameMaterialDialog({
       aria-label="자료 이름 변경"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSaving) onClose()
+      }}
       role="dialog"
     >
       <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>

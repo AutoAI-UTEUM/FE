@@ -41,8 +41,7 @@ describe('SessionPageViewer', () => {
     expect(screen.getByRole('button', { name: '너비 맞춤' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('reopens the resource list from the viewer toolbar', () => {
-    const onOpenResources = vi.fn()
+  it('links back to the classroom without rendering a resource-list control', () => {
     render(
       <MemoryRouter>
         <SessionPageViewer
@@ -50,7 +49,6 @@ describe('SessionPageViewer', () => {
           currentPage={1}
           file={undefined}
           onMovePage={vi.fn()}
-          onOpenResources={onOpenResources}
           totalPages={3}
         />
       </MemoryRouter>,
@@ -58,8 +56,7 @@ describe('SessionPageViewer', () => {
 
     expect(screen.getByRole('link', { name: '주차 페이지로' })).toHaveAttribute('href', '/classrooms/12')
     expect(screen.getByRole('link', { name: '주차 페이지로' })).not.toHaveTextContent('주차 페이지로')
-    fireEvent.click(screen.getByRole('button', { name: '자료 목록' }))
-    expect(onOpenResources).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: '자료 목록' })).not.toBeInTheDocument()
   })
 
   it('moves pages with arrow keys and zooms with control-wheel', () => {

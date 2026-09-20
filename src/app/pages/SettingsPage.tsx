@@ -1,9 +1,8 @@
-import { ChevronLeft, Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
+import { Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { createUserSettingsRepository, getRoleLabel, useAuth, type AiAnswerStyle, type UserPreferences } from '../../features/auth'
-import { createFeedbackRepository, type FeedbackCategory } from '../../features/feedback'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { cx } from '../../shared/lib/cx'
 import {
@@ -19,14 +18,13 @@ import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { useTheme, type ThemeMode } from '../../shared/theme'
 import { useResponsiveViewport } from '../../shared/responsive'
 
-type SettingsSection = 'account' | 'appearance' | 'assistant' | 'feedback' | 'notification' | 'password' | 'profile'
+type SettingsSection = 'account' | 'appearance' | 'assistant' | 'notification' | 'password' | 'profile'
 
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: '프로필' },
   { id: 'appearance', label: '화면 모드' },
   { id: 'notification', label: '알림' },
   { id: 'assistant', label: 'AI 학습 도우미' },
-  { id: 'feedback', label: '피드백' },
   { id: 'password', label: '비밀번호 변경' },
   { id: 'account', label: '회원 탈퇴' },
 ]
@@ -49,21 +47,19 @@ const THEME_OPTIONS: Array<{
 
 export function SettingsPage() {
   usePageTitle('설정')
-  const navigate = useNavigate()
   const { isMobileWeb } = useResponsiveViewport()
 
   return (
     <PageContainer>
-      {/* 모바일은 뒤로·제목·저장이 한 행이라 SettingsContent가 헤더까지 그린다. */}
+      {/* 모바일은 제목과 저장 작업이 한 행이라 SettingsContent가 헤더까지 그린다. */}
       {isMobileWeb ? null : <PageHeader title="설정" />}
-      <SettingsContent onBack={() => navigate(-1)} variant="page" />
+      <SettingsContent variant="page" />
     </PageContainer>
   )
 }
 
-export function SettingsContent({ className, onBack, variant = 'dialog' }: {
+export function SettingsContent({ className, variant = 'dialog' }: {
   className?: string
-  onBack?: () => void
   variant?: 'dialog' | 'page'
 } = {}) {
   const { apiRequest, logout, rawApiRequest, updateUser, user, withdraw } = useAuth()
@@ -79,9 +75,6 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
   const [answerStyle, setAnswerStyle] = useState<AiAnswerStyle>('NORMAL')
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(true)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
-  const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>('GENERAL')
-  const [feedbackMessage, setFeedbackMessage] = useState('')
-  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -94,7 +87,6 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const repository = useMemo(() => createUserSettingsRepository(apiRequest, rawApiRequest), [apiRequest, rawApiRequest])
-  const feedbackRepository = useMemo(() => createFeedbackRepository(apiRequest), [apiRequest])
 
   useEffect(() => {
     repository.getPreferences().then((preferences) => {
@@ -140,21 +132,6 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
       showToast(getRequestErrorMessage(error), 'danger')
     } finally {
       setIsSavingPreferences(false)
-    }
-  }
-
-  async function submitFeedback(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!feedbackMessage.trim() || isSubmittingFeedback) return
-    setIsSubmittingFeedback(true)
-    try {
-      await feedbackRepository.create({ category: feedbackCategory, message: feedbackMessage.trim(), pageUrl: window.location.href })
-      setFeedbackMessage('')
-      showToast('피드백을 보냈습니다.', 'success')
-    } catch (error) {
-      showToast(getRequestErrorMessage(error), 'danger')
-    } finally {
-      setIsSubmittingFeedback(false)
     }
   }
 
@@ -233,16 +210,6 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
       {/* 태블릿 가로는 데스크톱과 같은 좌측 카테고리 + 본문 2열, 세로는 스택. */}
       {isMobileWeb && variant === 'page' ? (
         <div className="mb-4 flex items-center gap-3">
-          {onBack ? (
-            <button
-              aria-label="뒤로"
-              className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              onClick={onBack}
-              type="button"
-            >
-              <ChevronLeft aria-hidden="true" size={18} />
-            </button>
-          ) : null}
           <h1 className="min-w-0 flex-1 truncate type-page-title font-bold text-stone-950">설정</h1>
           {section === 'profile' ? (
             <>
@@ -376,17 +343,6 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
             <AppearanceSection mode={mode} onChange={setMode} />
           ) : null}
 
-          {section === 'feedback' ? (
-            <FeedbackSection
-              category={feedbackCategory}
-              isSubmitting={isSubmittingFeedback}
-              message={feedbackMessage}
-              onCategoryChange={setFeedbackCategory}
-              onMessageChange={setFeedbackMessage}
-              onSubmit={submitFeedback}
-            />
-          ) : null}
-
           {section === 'notification' || section === 'assistant' ? (
             <Card as="section" className="border-0 px-0">
               {section !== 'assistant' ? (
@@ -461,7 +417,7 @@ export function SettingsContent({ className, onBack, variant = 'dialog' }: {
           ) : null}
         </div>
       </div>
-      <input accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); event.target.value = '' }} ref={avatarInputRef} type="file" />
+      <input aria-label="프로필 이미지 선택" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); event.target.value = '' }} ref={avatarInputRef} type="file" />
     </>
   )
 }
@@ -511,55 +467,6 @@ function AppearanceSection({
         ))}
       </div>
     </Card>
-  )
-}
-
-function FeedbackSection({
-  category,
-  isSubmitting,
-  message,
-  onCategoryChange,
-  onMessageChange,
-  onSubmit,
-}: {
-  category: FeedbackCategory
-  isSubmitting: boolean
-  message: string
-  onCategoryChange: (category: FeedbackCategory) => void
-  onMessageChange: (message: string) => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-}) {
-  return (
-    <form onSubmit={onSubmit}>
-      <h2 className="type-section-title font-bold text-stone-950">피드백</h2>
-      <p className="mt-1 type-body text-stone-500">서비스 이용 중 발견한 문제나 의견을 보내주세요.</p>
-      <label className="mt-4 block type-control font-semibold text-stone-800">
-        분류
-        <select
-          className="mt-1.5 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body text-stone-800 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          onChange={(event) => onCategoryChange(event.target.value as FeedbackCategory)}
-          value={category}
-        >
-          <option value="GENERAL">일반 문의</option>
-          <option value="BUG">오류 신고</option>
-          <option value="FEATURE_REQUEST">기능 제안</option>
-        </select>
-      </label>
-      <label className="mt-4 block type-control font-semibold text-stone-800">
-        내용
-        <textarea
-          className="mt-1.5 min-h-24 w-full resize-none rounded-lg border border-stone-300 px-3 py-2.5 type-body text-stone-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          maxLength={2000}
-          onChange={(event) => onMessageChange(event.target.value)}
-          value={message}
-        />
-      </label>
-      <div className="mt-4 flex justify-end">
-        <Button disabled={!message.trim() || isSubmitting} type="submit">
-          {isSubmitting ? '전송 중' : '보내기'}
-        </Button>
-      </div>
-    </form>
   )
 }
 

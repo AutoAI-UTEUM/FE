@@ -67,6 +67,7 @@ describe('SignupPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
 
     expect(screen.getByText('이름을 입력하세요.')).toBeInTheDocument()
+    expect(screen.getByText('소속을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('이메일을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('비밀번호를 입력하세요.')).toBeInTheDocument()
     expect(
@@ -75,7 +76,7 @@ describe('SignupPage', () => {
     expect(screen.getByText('필수 약관에 동의해 주세요.')).toBeInTheDocument()
   })
 
-  it('shows password strength without optional profile fields', () => {
+  it('shows password strength with the required affiliation field', () => {
     renderSignup()
 
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
@@ -105,7 +106,7 @@ describe('SignupPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '비밀번호 확인 표시' }))
     expect(screen.getByLabelText('비밀번호 확인')).toHaveAttribute('type', 'text')
 
-    expect(screen.queryByLabelText(/소속/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('소속')).toBeRequired()
     expect(screen.queryByRole('checkbox', { name: /학습 소식 이메일 수신/ })).not.toBeInTheDocument()
   })
 
@@ -116,6 +117,9 @@ describe('SignupPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
     fireEvent.change(screen.getByLabelText('이름'), {
       target: { value: '학습자' },
+    })
+    fireEvent.change(screen.getByLabelText('소속'), {
+      target: { value: '울산대학교' },
     })
     fireEvent.change(screen.getByLabelText('이메일'), {
       target: { value: 'new@example.com' },
@@ -143,10 +147,10 @@ describe('SignupPage', () => {
     const signupBody = JSON.parse(String(signupCall?.[1]?.body))
     expect(signupBody).toMatchObject({
       email: 'new@example.com',
+      affiliation: '울산대학교',
       learningEmailOptIn: false,
       role: 'INSTRUCTOR',
     })
-    expect(signupBody).not.toHaveProperty('affiliation')
     expect(signupBody).not.toHaveProperty('confirmPassword')
   })
 

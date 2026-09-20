@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,7 +17,7 @@ afterEach(() => {
 })
 
 describe('AuthLayout', () => {
-  it('places the backend service status in secondary auth pages', async () => {
+  it('hides the service status and divider on the signup page', () => {
     render(
       <MemoryRouter initialEntries={['/signup']}>
         <Routes>
@@ -28,29 +28,7 @@ describe('AuthLayout', () => {
       </MemoryRouter>,
     )
 
-    const statusButton = await screen.findByRole('button', {
-      name: '서버 온라인',
-    })
-    expect(statusButton.closest('footer')).toHaveAccessibleName(
-      '서비스 연결 상태',
-    )
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:8080/api/health',
-      expect.any(Object),
-    )
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:8080/api/health/ready',
-      expect.any(Object),
-    )
-
-    fireEvent.click(statusButton)
-
-    await waitFor(() => {
-      const healthRequests = vi
-        .mocked(globalThis.fetch)
-        .mock.calls.filter(([input]) => String(input).endsWith('/api/health'))
-      expect(healthRequests).toHaveLength(2)
-    })
+    expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
   })
 
   it('hides the service status and divider on the forgot-password page', () => {
@@ -95,10 +73,10 @@ describe('AuthLayout', () => {
     )
 
     render(
-      <MemoryRouter initialEntries={['/signup']}>
+      <MemoryRouter initialEntries={['/reset-password']}>
         <Routes>
           <Route element={<AuthLayout />}>
-            <Route path="/signup" element={<h1>회원가입 폼</h1>} />
+            <Route path="/reset-password" element={<h1>비밀번호 재설정 폼</h1>} />
           </Route>
         </Routes>
       </MemoryRouter>,

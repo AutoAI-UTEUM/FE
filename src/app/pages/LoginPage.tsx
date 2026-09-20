@@ -41,6 +41,8 @@ export function LoginPage() {
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const isSessionExpired = searchParams.get('reason') === 'session-expired'
   const isIdleExpired = searchParams.get('reason') === 'idle'
+  const isAbsoluteExpired = searchParams.get('reason') === 'absolute-expired'
+  const isInactive = searchParams.get('reason') === 'inactive'
 
   useEffect(() => {
     clearGoogleSignup()
@@ -101,14 +103,18 @@ export function LoginPage() {
         <h1 className="type-page-title font-bold text-stone-900">로그인</h1>
       </div>
 
-      {isSessionExpired || isIdleExpired ? (
+      {isSessionExpired || isIdleExpired || isAbsoluteExpired || isInactive ? (
         <p
           className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 type-body font-medium text-amber-900"
           role="alert"
         >
           {isIdleExpired
-            ? '30분 동안 활동이 없어 로그아웃되었습니다.'
-            : '세션이 만료되었습니다. 다시 로그인하세요.'}
+            ? '장시간 활동이 없어 로그아웃되었습니다.'
+            : isAbsoluteExpired
+              ? '보안을 위해 다시 로그인해 주세요.'
+              : isInactive
+                ? '현재 사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.'
+                : '세션이 만료되었습니다. 다시 로그인하세요.'}
         </p>
       ) : null}
 

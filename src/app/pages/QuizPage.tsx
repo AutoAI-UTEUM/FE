@@ -36,7 +36,7 @@ import {
 import { createSessionsRepository, type SessionQuizSummary } from '../../features/sessions'
 import { diagnosisPath, routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { MobileWorkspaceTabs, useResponsiveViewport } from '../../shared/responsive'
+import { MobileWorkspaceTabs, useResponsiveViewport, useElementWidth, TabletWorkspaceControls, type TabletPane } from '../../shared/responsive'
 
 const DEFAULT_REVIEW_CHAT_WIDTH = 660
 const MIN_REVIEW_CHAT_WIDTH = 360
@@ -94,7 +94,11 @@ export function QuizWorkspace({
   const [reviewChatWidth, setReviewChatWidth] = useState<number | null>(null)
   const [reviewChatMaxWidth, setReviewChatMaxWidth] = useState(DEFAULT_REVIEW_CHAT_WIDTH)
   const [mobileReviewPane, setMobileReviewPane] = useState<'quiz' | 'review'>('quiz')
-  const { isPhone } = useResponsiveViewport()
+  const { isPhone, isTablet } = useResponsiveViewport()
+  const [measureArea, areaWidth] = useElementWidth()
+  const [tabletPane, setTabletPane] = useState<TabletPane>('both')
+  const canSplit = areaWidth >= 720
+  const activeTabletPane = tabletPane === 'both' && !canSplit ? 'content' : tabletPane
   const reviewWorkspaceRef = useRef<HTMLDivElement | null>(null)
   const questions = quiz?.questions ?? []
   const question = questions[currentQuestionIndex] ?? questions[0]
@@ -328,6 +332,8 @@ export function QuizWorkspace({
 
   return (
     <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
+      <div className={isTablet && shouldShowReviewChat ? 'tablet-review-workspace flex min-h-0 flex-col' : 'min-w-0'} ref={measureArea}>
+      {shouldShowReviewChat && isTablet ? <TabletWorkspaceControls canSplit={canSplit} contentLabel="퀴즈" learningLabel="복습" onChange={setTabletPane} value={activeTabletPane} /> : null}
       {shouldShowReviewChat && isPhone ? (
         <MobileWorkspaceTabs
           active={mobileReviewPane}
@@ -337,6 +343,7 @@ export function QuizWorkspace({
       ) : null}
       <div
         aria-label={shouldShowReviewChat ? '퀴즈 복습 작업 영역' : undefined}
+        data-tablet-pane={isTablet ? activeTabletPane : undefined}
         className={shouldShowReviewChat
           ? `study-session-content min-h-[940px] min-w-0 overflow-hidden bg-white mobile-web:min-h-0 mobile-web:h-[calc(100dvh-8rem)] lg:min-h-0 ${embedded ? 'lg:h-full' : 'lg:h-[calc(100dvh-7rem)]'}`
           : 'min-w-0'}
@@ -346,7 +353,7 @@ export function QuizWorkspace({
           ? { '--chat-panel-width': `${reviewChatWidth}px` } as CSSProperties
           : undefined}
       >
-      <section aria-label="퀴즈 문항" className={`${isPhone && mobileReviewPane !== 'quiz' ? 'hidden' : ''} h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0`}>
+      <section aria-label="퀴즈 문항" className={`${(isPhone && mobileReviewPane !== 'quiz') || (isTablet && shouldShowReviewChat && activeTabletPane === 'learning') ? 'hidden' : ''} h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0`}>
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
           <div className="flex justify-end">
             <span className="whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
@@ -488,7 +495,7 @@ export function QuizWorkspace({
         </div>
       ) : null}
       {shouldShowReviewChat && resolvedMaterialId ? (
-        <div className={isPhone && mobileReviewPane !== 'review' ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
+        <div className={(isPhone && mobileReviewPane !== 'review') || (isTablet && activeTabletPane === 'content') ? 'hidden' : 'min-h-0 min-w-0 overflow-hidden'}>
         <DocumentChatPanel
           className="!min-h-0 !rounded-none !border-0"
           key={`${resolvedMaterialId}-quiz`}
@@ -498,6 +505,7 @@ export function QuizWorkspace({
         />
         </div>
       ) : null}
+      </div>
       </div>
     </QuizFrame>
   )

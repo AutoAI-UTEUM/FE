@@ -32,6 +32,11 @@ describe('remote auth repository', () => {
           data: {
             accessToken: 'access-token',
             expiresIn: 3600,
+            session: {
+              absoluteExpiresAt: '2026-10-04T04:00:00Z',
+              idleExpiresAt: '2026-09-20T06:00:00Z',
+              idleTimeoutSeconds: 7200,
+            },
             tokenType: 'Bearer',
             user: {
               email: 'learner@example.com',
@@ -46,6 +51,7 @@ describe('remote auth repository', () => {
       )
     const repository = getAuthRepository()
     const values = {
+      affiliation: ' 울산대학교 ',
       email: ' Learner@example.com ',
       name: ' 학습자 ',
       password: 'password123',
@@ -55,6 +61,12 @@ describe('remote auth repository', () => {
     await repository.signup(values)
     await expect(repository.login(values)).resolves.toEqual({
       accessToken: 'access-token',
+      expiresIn: 3600,
+      session: {
+        absoluteExpiresAt: '2026-10-04T04:00:00Z',
+        idleExpiresAt: '2026-09-20T06:00:00Z',
+        idleTimeoutSeconds: 7200,
+      },
       user: {
         email: 'learner@example.com',
         id: 1,
@@ -64,6 +76,7 @@ describe('remote auth repository', () => {
     })
 
     expectJsonRequest(fetchMock, 0, '/api/auth/signup', {
+      affiliation: '울산대학교',
       email: 'learner@example.com',
       learningEmailOptIn: false,
       name: '학습자',
@@ -102,6 +115,7 @@ describe('remote auth repository', () => {
 
     const failure = await getAuthRepository()
       .signup({
+        affiliation: '울산대학교',
         email: 'learner@example.com',
         name: '학습자',
         password: 'password',
@@ -225,6 +239,55 @@ describe('remote auth repository', () => {
       'http://localhost:8080/api/auth/email-availability?email=existing%40example.com',
     )
     expect(init?.method).toBeUndefined()
+  })
+
+  it('preserves refresh metadata and records activity without rotating tokens', async () => {
+    const session = {
+      absoluteExpiresAt: '2026-10-04T04:00:00Z',
+      idleExpiresAt: '2026-09-20T06:00:00Z',
+      idleTimeoutSeconds: 7200,
+    }
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            accessToken: 'refreshed-access-token',
+            expiresIn: 900,
+            session,
+            tokenType: 'Bearer',
+          },
+          message: '갱신 완료',
+          success: true,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: session,
+          message: '활동 기록 완료',
+          success: true,
+        }),
+      )
+
+    const repository = getAuthRepository()
+    await expect(repository.refresh()).resolves.toEqual({
+      accessToken: 'refreshed-access-token',
+      expiresIn: 900,
+      session,
+    })
+    await expect(
+      repository.recordSessionActivity('refreshed-access-token'),
+    ).resolves.toEqual(session)
+
+    const [activityUrl, activityInit] = fetchMock.mock.calls[1] ?? []
+    expect(activityUrl).toBe(
+      'http://localhost:8080/api/auth/session/activity',
+    )
+    expect(activityInit?.method).toBe('POST')
+    expect(new Headers(activityInit?.headers).get('Authorization')).toBe(
+      'Bearer refreshed-access-token',
+    )
+    expect(activityInit?.credentials).toBe('include')
   })
 })
 

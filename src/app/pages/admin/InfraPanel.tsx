@@ -11,6 +11,7 @@ import type {
   InfraRange,
 } from '../../../features/admin'
 import { Button } from '../../../shared/ui'
+import { TabletChartValues } from '../../../shared/responsive'
 import {
   AdminErrorMessage,
   formatCount,
@@ -272,7 +273,7 @@ function DailyCostChart({ currency, daily, range }: { currency: string; daily: A
   const slotWidth = (COST_CHART_RIGHT - COST_CHART_LEFT) / daily.length
   const chartHeight = COST_CHART_BOTTOM - COST_CHART_TOP
   return (
-    <div className="mt-2 overflow-x-auto pb-1">
+    <div><div className="mt-2 overflow-x-auto pb-1" role="region" aria-label="일별 비용 그래프" tabIndex={0}>
       <svg aria-label={`${range.from}부터 ${range.to}까지 일별 AWS 비용`} className="h-auto min-w-[680px] w-full" role="img" viewBox="0 0 860 230">
         <title>{range.from}부터 {range.to}까지 일별 AWS 비용</title>
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
@@ -292,7 +293,7 @@ function DailyCostChart({ currency, daily, range }: { currency: string; daily: A
           return (
             <g key={item.date}>
               {item.total > 0 ? <text className="fill-stone-700 type-micro font-semibold" textAnchor="middle" x={x} y={Math.max(COST_CHART_TOP + 10, y - 8)}>{formatMoney(item.total, currency)}</text> : null}
-              <rect aria-label={`${item.date}: ${formatMoney(item.total, currency)}`} className="fill-brand-700" data-cost-date={item.date} height={barHeight} rx="2" width="28" x={x - 14} y={y}>
+              <rect role="img" aria-label={`${item.date}: ${formatMoney(item.total, currency)}`} className="fill-brand-700" data-cost-date={item.date} height={barHeight} rx="2" width="28" x={x - 14} y={y}>
                 <title>{item.date}: {formatMoney(item.total, currency)}</title>
               </rect>
               <text className="fill-stone-500 type-micro" textAnchor="middle" x={x} y="216">{formatMonthDay(item.date)}</text>
@@ -300,6 +301,8 @@ function DailyCostChart({ currency, daily, range }: { currency: string; daily: A
           )
         })}
       </svg>
+    </div>
+    <TabletChartValues label="일별 비용" columns={['날짜', '비용']} rows={daily.map(day => [day.date, formatMoney(day.total, currency)])} />
     </div>
   )
 }
@@ -344,7 +347,7 @@ export function InfraLineChart({
       </div>
       {values.length === 0 ? <PanelMessage message="선택한 기간의 지표가 없습니다." /> : (
         <>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label={`${title} 그래프 영역`} tabIndex={0}>
             <svg aria-label={ariaLabel} className="h-auto min-w-[720px] w-full" role="img" viewBox="0 0 1200 128">
               <title>{ariaLabel}. {latestSummary}</title>
               {[0, 0.5, 1].map((ratio) => {
@@ -383,6 +386,7 @@ export function InfraLineChart({
             </svg>
           </div>
           <p className="sr-only">{latestSummary}</p>
+          <TabletChartValues label={title} columns={['지표', '시각', '값']} rows={series.flatMap(item => item.points.map(point => [item.label, formatChartTime(point.t, range), formatValue(point.v)]))} />
         </>
       )}
     </section>

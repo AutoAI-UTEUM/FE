@@ -89,6 +89,46 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '임시 비밀번호 발급' }))
     expect(await screen.findByText('Temporary1234')).toBeInTheDocument()
   })
+
+  it('shows xAI credits, risk and performs a manual sync', async () => {
+    const requested: Array<{ method: string; path: string }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = input instanceof Request ? input : null
+      const url = new URL(request?.url ?? String(input), 'http://localhost')
+      const method = init?.method ?? request?.method ?? 'GET'
+      requested.push({ method, path: url.pathname })
+      if (url.pathname === '/api/admin/users') {
+        return success({ items: [], page: 0, size: 17, totalElements: 0, totalPages: 0 })
+      }
+      if (url.pathname === '/api/admin/xai/overview' || (url.pathname === '/api/admin/xai/sync' && method === 'POST')) {
+        return success({ available: true, averageDailyCost7d: '4.85', currentMonthCostUsd: '72.75', fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', prepaidBalanceUsd: '125.00', projectedDepletionAt: '2026-12-01T08:00:00Z', riskLevel: 'WARNING', stale: false, totalAvailableUsd: '352.25' })
+      }
+      if (url.pathname === '/api/admin/xai/credits') {
+        return success({ available: true, fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', postpaidUsedUsd: '72.75', prepaidBalanceUsd: '125.00', stale: false })
+      }
+      if (url.pathname === '/api/admin/xai/status') {
+        return success({ available: true, lastFailureAt: null, lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', recentErrorClassification: null })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <ResponsiveViewportProvider>
+        <TestAuthProvider>
+          <MemoryRouter><AdminPage /></MemoryRouter>
+        </TestAuthProvider>
+      </ResponsiveViewportProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'xAI 관리' }))
+    expect(await screen.findByText('$352.25')).toBeInTheDocument()
+    expect(screen.getByText('잔액 주의')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '후불 한도 사용률' })).toHaveAttribute('aria-valuenow', '24.25')
+
+    fireEvent.click(screen.getByRole('button', { name: '지금 동기화' }))
+    await waitFor(() => expect(requested.filter(({ method, path }) => method === 'POST' && path === '/api/admin/xai/sync')).toHaveLength(1))
+    expect(await screen.findByText('xAI 비용과 크레딧을 최신 정보로 동기화했습니다.')).toBeInTheDocument()
+  })
 })
 
 function countRequests(paths: string[], path: string) {

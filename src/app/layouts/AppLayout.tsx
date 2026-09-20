@@ -5,13 +5,16 @@ import {
   Check,
   ChevronsLeft,
   ChevronsRight,
+  CircleDollarSign,
   CircleUserRound,
   ClipboardCheck,
   FileCheck2,
   LayoutGrid,
   List,
   LogOut,
+  MessageSquareText,
   NotebookPen,
+  PanelLeft,
   ServerCog,
   Settings,
   Sparkles,
@@ -23,7 +26,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Link,
-  NavLink,
   Outlet,
   useLocation,
   useNavigate,
@@ -34,7 +36,6 @@ import {
   CLASSROOMS_CHANGED_EVENT,
   createClassroomsRepository,
   JOIN_REQUESTS_CHANGED_EVENT,
-  type Classroom,
 } from '../../features/classrooms'
 import {
   createNotificationsRepository,
@@ -42,7 +43,7 @@ import {
   type AppNotificationType,
 } from '../../features/notifications'
 import { cx } from '../../shared/lib/cx'
-import { useResponsiveViewport } from '../../shared/responsive'
+import { useResponsiveViewport, useFocusScope } from '../../shared/responsive'
 import { SERVICE_NAME } from '../../shared/config/brand'
 import { formatDateTime } from '../../shared/lib/format'
 import {
@@ -55,7 +56,7 @@ import {
 import { SettingsContent } from '../pages/SettingsPage'
 
 /*
- * `inBottomNav`는 폰 하단 바에 올릴 메뉴를 고른다.
+ * `inBottomNav`는 모바일 하단 바에 우선 노출할 메뉴를 고른다.
  * 하단 바는 최우측 프로필까지 네 칸이므로 내비는 3개까지만 올리고,
  * 나머지는 프로필 메뉴 위쪽에 모은다.
  */
@@ -74,17 +75,25 @@ const learnerNavigation: NavigationItem[] = [
   { icon: FileCheck2, label: '시험', to: routes.exams },
 ]
 
+const BOTTOM_NAV_WIDE_MIN_WIDTH = 420
+
 export function AppLayout() {
   const { apiRequest, logout, rawApiRequest, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { isMobileWeb, isPhone, isTablet, mode } = useResponsiveViewport()
-  /*
-   * 태블릿은 방향에 따라 사이드바를 나눈다.
-   * 세로는 가로 여유가 없어 68px 아이콘 전용, 가로는 176px 라벨까지 보여준다.
-   */
-  const isTabletRail = mode === 'tablet-portrait'
-  const isSettingsRoute = location.pathname === routes.settings
+  const { isMobileWeb, isPhone, isTablet, mode, viewportWidth } = useResponsiveViewport()
+  /* 태블릿 세로는 하단 내비, 가로는 공간에 따라 레일 또는 사이드바를 쓴다. */
+  const [tabletMenuPath, setTabletMenuPath] = useState<string | null>(null)
+  const tabletMenuOpen = tabletMenuPath === `${location.pathname}${location.search}`
+  const isTabletPortrait = mode === 'tablet-portrait'
+  const tabletUsesRail = mode === 'tablet-landscape' && viewportWidth < 1024
+  const isTabletRail = tabletUsesRail && !tabletMenuOpen
+  const tabletNavigationRef = useRef<HTMLElement>(null)
+  useFocusScope(tabletNavigationRef, tabletUsesRail && tabletMenuOpen, () => setTabletMenuPath(null))
+  const isProfileRoute =
+    location.pathname === routes.feedback ||
+    location.pathname === routes.settings ||
+    location.pathname === routes.updates
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
   const [sidebarPreference, setSidebarPreference] = useState<{
     isCollapsed: boolean
@@ -103,7 +112,6 @@ export function AppLayout() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
-  const [sidebarClassrooms, setSidebarClassrooms] = useState<Classroom[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsError, setNotificationsError] = useState<string | null>(null)
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true)
@@ -136,10 +144,18 @@ export function AppLayout() {
       ? instructorNavigation
       : learnerNavigation, [isAdmin, isInstructor])
   const homeRoute = isAdmin ? routes.admin : routes.classrooms
-  const bottomNavigation = primaryNavigation.filter((item) => item.inBottomNav)
-  const overflowNavigation = primaryNavigation.filter((item) => !item.inBottomNav)
-  /* 폰은 하단 탭 바, 태블릿은 72px 세로 레일, 데스크톱은 기존 사이드바. */
-  const hasBottomNav = isPhone && !isStudyWorkspace
+  const bottomNavigationLimit = viewportWidth < BOTTOM_NAV_WIDE_MIN_WIDTH ? 2 : 3
+  const bottomNavigation = primaryNavigation
+    .filter((item) => item.inBottomNav)
+    .slice(0, bottomNavigationLimit)
+  const overflowNavigation = primaryNavigation.filter(
+    (item) => !bottomNavigation.includes(item),
+  )
+  const usesBottomNavigationLayout = isPhone || isTabletPortrait
+  const hasBottomNav = usesBottomNavigationLayout && !isStudyWorkspace
+  const hasActiveOverflowNavigation = overflowNavigation.some((item) =>
+    isNavigationItemActive(item, location.pathname, location.search, isAdmin),
+  )
   const avatarSource = user?.avatarUrl
   const isDirectAvatarSource = avatarSource?.startsWith('blob:')
     || avatarSource?.startsWith('data:')
@@ -188,7 +204,9 @@ export function AppLayout() {
   }, [avatarSource, isDirectAvatarSource, rawApiRequest])
 
   useEffect(() => {
-    if (isAdmin) return
+    if (!isInstructor) {
+      return
+    }
 
     let cancelled = false
     const refresh = () => {
@@ -196,14 +214,9 @@ export function AppLayout() {
         .list()
         .then((items) => {
           if (!cancelled) {
-            setSidebarClassrooms(
-              isInstructor
-                ? items.filter((item) => item.status === 'ACTIVE')
-                : items,
+            setPendingJoinRequestCount(
+              items.reduce((sum, item) => sum + item.pendingRequestCount, 0),
             )
-            setPendingJoinRequestCount(isInstructor
-              ? items.reduce((sum, item) => sum + item.pendingRequestCount, 0)
-              : 0)
           }
         })
         .catch(() => undefined)
@@ -217,7 +230,7 @@ export function AppLayout() {
       window.removeEventListener(CLASSROOMS_CHANGED_EVENT, refresh)
       window.removeEventListener(JOIN_REQUESTS_CHANGED_EVENT, refresh)
     }
-  }, [classroomsRepository, isAdmin, isInstructor])
+  }, [classroomsRepository, isInstructor])
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -248,7 +261,11 @@ export function AppLayout() {
     if (!isNotificationsOpen) return
 
     const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!notificationsRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        !notificationsRef.current?.contains(target)
+        && !bottomMenuContainerRef.current?.contains(target)
+      ) {
         setIsNotificationsOpen(false)
       }
     }
@@ -334,6 +351,11 @@ export function AppLayout() {
 
   function openSettings() {
     setIsMenuOpen(false)
+    setIsNotificationsOpen(false)
+    if (isTabletPortrait) {
+      navigate(routes.settings)
+      return
+    }
     setIsSettingsOpen(true)
   }
 
@@ -399,24 +421,96 @@ export function AppLayout() {
       className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
       role="menu"
     >
+      {hasBottomNav ? (
+        <div className="border-b border-stone-100 px-2.5 py-2.5">
+          <p className="truncate type-control font-semibold text-stone-900">{user?.name}</p>
+          <p className="mt-0.5 type-micro text-stone-400">{roleLabel}</p>
+        </div>
+      ) : null}
       {/* 하단 바 네 칸에 자리가 없어 빠진 메뉴. 레일·사이드바가 보이는 곳에서는 중복이다. */}
       {hasBottomNav && overflowNavigation.length > 0 ? (
         <>
-          {overflowNavigation.map((item) => (
-            <Link
-              className="flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              key={item.label}
-              onClick={() => setIsMenuOpen(false)}
-              role="menuitem"
-              to={item.to}
-            >
-              <item.icon aria-hidden="true" size={15} />
-              {item.label}
-            </Link>
-          ))}
+          {overflowNavigation.map((item) => {
+            const active = isNavigationItemActive(
+              item,
+              location.pathname,
+              location.search,
+              isAdmin,
+            )
+
+            return (
+              <Link
+                aria-current={active ? 'page' : undefined}
+                className={cx(
+                  'flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
+                  active && 'bg-brand-50 font-semibold text-brand-700',
+                )}
+                key={item.label}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  setIsNotificationsOpen(false)
+                }}
+                role="menuitem"
+                to={item.to}
+              >
+                <item.icon aria-hidden="true" size={15} />
+                {item.label}
+                {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
+                  <span className="ml-auto min-w-5 rounded-full bg-brand-600 px-1.5 text-center type-micro font-bold leading-5 text-white">
+                    {pendingJoinRequestCount > 99 ? '99+' : pendingJoinRequestCount}
+                  </span>
+                ) : null}
+              </Link>
+            )
+          })}
           <div className="mx-2 my-1 h-px bg-stone-100" />
         </>
       ) : null}
+      {isTabletPortrait && !isAdmin ? (
+        <button
+          className="flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          onClick={() => {
+            setIsMenuOpen(false)
+            setIsLoadingNotifications(true)
+            setNotificationReloadKey((key) => key + 1)
+            setIsNotificationsOpen(true)
+          }}
+          role="menuitem"
+          type="button"
+        >
+          <Bell aria-hidden="true" size={15} />
+          알림
+          {unreadNotificationCount > 0 ? (
+            <span className="ml-auto min-w-5 rounded-full bg-brand-600 px-1.5 text-center type-micro font-bold leading-5 text-white">
+              {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      <Link
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        onClick={() => {
+          setIsMenuOpen(false)
+          setIsNotificationsOpen(false)
+        }}
+        role="menuitem"
+        to={routes.updates}
+      >
+        <CalendarDays aria-hidden="true" size={15} />
+        업데이트
+      </Link>
+      <Link
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        onClick={() => {
+          setIsMenuOpen(false)
+          setIsNotificationsOpen(false)
+        }}
+        role="menuitem"
+        to={routes.feedback}
+      >
+        <MessageSquareText aria-hidden="true" size={15} />
+        피드백
+      </Link>
       <button
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={openSettings}
@@ -428,7 +522,7 @@ export function AppLayout() {
       </button>
       <div className="mx-2 my-1 h-px bg-stone-100" />
       <button
-        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-rose-700 hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={() => void handleLogout()}
         role="menuitem"
         type="button"
@@ -441,29 +535,53 @@ export function AppLayout() {
 
   return (
     <div
+      data-tablet-app={isTablet ? 'true' : undefined}
+      data-study-workspace={isStudyWorkspace ? 'true' : undefined}
       className={cx(
         'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:max-w-full mobile-web:overflow-x-hidden',
         /*
-         * 폰은 상단 바·본문·하단 바가 세로로 쌓이고, 태블릿은 레일이 옆에 선다.
+         * 폰과 태블릿 세로는 본문·하단 바가 세로로 쌓이고, 태블릿 가로는 레일이 옆에 선다.
          * 루트가 실제로 flex여야 main이 남은 높이를 받아 매직 넘버 없이 화면을 채운다.
          */
         isStudyWorkspace
-          ? cx('h-dvh overflow-hidden', isPhone && 'flex flex-col', isTablet && 'flex flex-row')
+          ? cx(
+              'h-dvh overflow-hidden',
+              usesBottomNavigationLayout && 'flex flex-col',
+              isTablet && !isTabletPortrait && 'flex flex-row',
+            )
           : isAdminFixedHeightWorkspace
-            ? cx('flex h-dvh overflow-hidden', isTablet ? 'flex-row' : 'flex-col lg:flex-row')
-            : cx('min-h-dvh', isPhone && 'flex flex-col', isTablet && 'flex flex-row'),
+            ? cx(
+                'flex h-dvh overflow-hidden',
+                isTabletPortrait
+                  ? 'flex-col'
+                  : isTablet
+                    ? 'flex-row'
+                    : 'flex-col lg:flex-row',
+              )
+            : cx(
+                'min-h-dvh',
+                usesBottomNavigationLayout && 'flex flex-col',
+                isTablet && !isTabletPortrait && 'flex flex-row',
+              ),
       )}
     >
+      {tabletUsesRail && tabletMenuOpen ? <><button aria-label="주요 메뉴 닫기" className="fixed inset-0 z-40 bg-stone-950/35" onClick={() => setTabletMenuPath(null)} type="button" /><div aria-hidden="true" className="w-[68px] shrink-0" /></> : null}
       <aside
+        ref={tabletNavigationRef}
+        role={tabletUsesRail && tabletMenuOpen ? 'dialog' : undefined}
+        aria-modal={tabletUsesRail && tabletMenuOpen ? true : undefined}
+        aria-label={tabletUsesRail && tabletMenuOpen ? '주요 메뉴' : undefined}
         className={cx(
           isTablet
             // 태블릿은 가로 스크롤 띠 대신 72px 세로 레일을 쓴다.
             ? cx(
                 'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-stone-200 bg-white py-4 dark:bg-[#222327] mobile-safe-top',
-                isTabletRail ? 'w-[68px] px-2' : 'w-[204px] px-2.5',
+                isTabletRail ? 'w-[68px] px-2' : 'w-[240px] px-2.5',
+                tabletUsesRail && tabletMenuOpen && '!fixed inset-y-0 left-0 !z-50 shadow-xl',
               )
             : 'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
-          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-52 lg:px-2.5 mobile-phone:!px-4'),
+          isTabletPortrait && 'hidden',
+          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-60 lg:px-2.5 mobile-phone:!px-4'),
           isAdminFixedHeightWorkspace && 'shrink-0',
         )}
       >
@@ -482,19 +600,22 @@ export function AppLayout() {
             )}
           >
             <Link
+              aria-label={`${SERVICE_NAME} 홈`}
               className={cx(
-                'flex shrink-0 items-center gap-2.5 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
-                isTabletRail && 'justify-center px-0',
-                !isTablet && isCollapsed && 'lg:justify-center lg:px-0',
+                'flex shrink-0 items-center gap-2.5 rounded-lg px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
+                isTabletRail && 'justify-center !px-0',
+                !isTablet && isCollapsed && 'lg:justify-center lg:!px-0',
               )}
               to={homeRoute}
             >
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
-                <BookOpenCheck aria-hidden="true" size={16} />
-              </span>
+              {isTabletRail || (!isTablet && isCollapsed && !isMobileWeb) ? (
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
+                  <BookOpenCheck aria-hidden="true" size={16} />
+                </span>
+              ) : null}
               <span
                 className={cx(
-                  'type-section-title font-bold',
+                  'type-brand-title font-bold',
                   isTabletRail && 'hidden',
                   !isTablet && isCollapsed && !isMobileWeb && 'lg:hidden',
                 )}
@@ -510,6 +631,7 @@ export function AppLayout() {
               )}
             >
               {!isAdmin && !isTablet ? notificationsTrigger : null}
+              {tabletUsesRail ? <button aria-expanded={tabletMenuOpen} aria-label={tabletMenuOpen ? '메뉴 접기' : '메뉴 펼치기'} className="flex size-11 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100" onClick={(event) => { event.currentTarget.focus(); setTabletMenuPath(tabletMenuOpen ? null : `${location.pathname}${location.search}`) }} type="button">{tabletMenuOpen ? <ChevronsLeft aria-hidden="true" size={18} /> : <ChevronsRight aria-hidden="true" size={18} />}</button> : null}
               <button
                 aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 className="hidden size-7 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 lg:flex mobile-web:!hidden"
@@ -522,11 +644,7 @@ export function AppLayout() {
                 title={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 type="button"
               >
-                {isCollapsed ? (
-                  <ChevronsRight aria-hidden="true" size={15} />
-                ) : (
-                  <ChevronsLeft aria-hidden="true" size={15} />
-                )}
+                <PanelLeft aria-hidden="true" size={16} />
               </button>
             </div>
           </div>
@@ -583,24 +701,6 @@ export function AppLayout() {
                     </span>
                   ) : null}
                 </Link>
-                {item.label === '강의실' && sidebarClassrooms.length > 0 ? (
-                  <div className={cx('ml-5 hidden border-l border-stone-200 py-1 pl-2 lg:flex lg:flex-col lg:gap-0.5 tablet-landscape:flex tablet-landscape:flex-col tablet-landscape:gap-0.5', isCollapsed && 'lg:hidden')}>
-                    {sidebarClassrooms.map((classroom) => (
-                      <NavLink
-                        className={({ isActive }) => cx(
-                          'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800',
-                          isActive && 'bg-brand-50 text-brand-700',
-                        )}
-                        key={classroom.id}
-                        title={classroom.name}
-                        to={classroomDetailPath(classroom.id)}
-                      >
-                        <span aria-hidden="true" className={cx('size-2 shrink-0 rounded-full', classroomDotClassName(classroom.color))} />
-                        <span className="truncate">{classroom.name}</span>
-                      </NavLink>
-                    ))}
-                  </div>
-                ) : null}
               </div>
               )
             })}
@@ -620,13 +720,13 @@ export function AppLayout() {
           {isTablet ? (
             /* 태블릿에서는 프로필이 드롭다운이 아니라 설정 페이지 진입점이다. */
             <Link
-              aria-current={isSettingsRoute ? 'page' : undefined}
+              aria-current={isProfileRoute ? 'page' : undefined}
               className={cx(
                 'flex items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
                 isTabletRail
                   ? 'size-12 justify-center'
                   : 'w-full gap-2.5 p-1.5 text-left',
-                isSettingsRoute
+                isProfileRoute
                   ? 'bg-brand-50 text-brand-700'
                   : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800',
               )}
@@ -714,10 +814,12 @@ export function AppLayout() {
           isStudyWorkspace
             ? 'min-h-0 overflow-hidden p-0'
             : cx(
-                'px-4 py-4 sm:px-6 lg:py-5 mobile-phone:px-3 mobile-web:mobile-safe-bottom',
+                'px-4 py-4 sm:px-6 lg:py-5 mobile-phone:px-3',
+                isMobileWeb && !hasBottomNav && 'mobile-safe-bottom',
                 isAdmin ? 'lg:px-8' : 'lg:px-12',
                 isAdminFixedHeightWorkspace && 'min-h-0 overflow-hidden',
               ),
+          hasBottomNav && '!pb-[calc(4.25rem+env(safe-area-inset-bottom))]',
         )}
       >
         <div
@@ -735,32 +837,35 @@ export function AppLayout() {
         </div>
       </main>
 
-      {/* 폰 하단 탭. 내비 3개 + 최우측 프로필로 네 칸. 학습 화면에서는 세로 공간을 통째로 내준다. */}
+      {/* 모바일 하단 탭. 폭에 따라 내비 2~3개 + 최우측 프로필로 세 칸 또는 네 칸을 쓴다. */}
       {hasBottomNav ? (
         <nav
           aria-label="하단 주요 메뉴"
-          className="sticky bottom-0 z-40 flex shrink-0 border-t border-stone-200 bg-white mobile-safe-bottom dark:bg-[#222327]"
+          className={cx(
+            'fixed inset-x-0 bottom-0 z-40 flex shrink-0 border-t border-stone-200 bg-white shadow-[0_-4px_16px_rgba(15,23,42,0.06)] dark:bg-[#222327]',
+            isTabletPortrait
+              ? 'min-h-[calc(4.25rem+env(safe-area-inset-bottom))] items-center pb-[env(safe-area-inset-bottom)]'
+              : 'mobile-safe-bottom',
+          )}
           ref={bottomMenuContainerRef}
         >
           {bottomNavigation.map((item) => {
-            const itemPath = item.to.split('?')[0]
-            const isEntranceRequestsPath = location.pathname.endsWith('/entrance-requests')
-            const isPathActive = location.pathname === itemPath
-              || location.pathname.startsWith(`${itemPath}/`)
-            const isItemActive = isAdmin && item.to.startsWith(routes.admin)
-              ? adminTabFromLocation(item.to) === adminTabFromLocation(`${location.pathname}${location.search}`)
-              : item.to === routes.entranceRequests
-                ? isEntranceRequestsPath
-                : item.to === routes.classrooms
-                  ? isPathActive && !isEntranceRequestsPath
-                  : isPathActive
+            const isItemActive = isNavigationItemActive(
+              item,
+              location.pathname,
+              location.search,
+              isAdmin,
+            )
 
             return (
               <Link
                 aria-current={isItemActive ? 'page' : undefined}
                 className={bottomNavLinkClassName(isItemActive)}
                 key={item.label}
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false)
+                  setIsNotificationsOpen(false)
+                }}
                 to={item.to}
               >
                 <item.icon aria-hidden="true" size={20} />
@@ -780,8 +885,13 @@ export function AppLayout() {
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
             aria-label="프로필 메뉴"
-            className={bottomNavLinkClassName(isMenuOpen)}
-            onClick={() => setIsMenuOpen((open) => !open)}
+            className={bottomNavLinkClassName(
+              isMenuOpen || hasActiveOverflowNavigation || isProfileRoute,
+            )}
+            onClick={() => {
+              setIsNotificationsOpen(false)
+              setIsMenuOpen((open) => !open)
+            }}
             type="button"
           >
             <ProfileAvatar
@@ -796,6 +906,22 @@ export function AppLayout() {
             <div className="absolute right-2 bottom-[calc(100%+8px)] z-30 w-60">
               {profileMenu}
             </div>
+          ) : null}
+          {isTabletPortrait && !isAdmin && isNotificationsOpen ? (
+            <NotificationPanel
+              error={notificationsError}
+              isCollapsed={false}
+              isLoading={isLoadingNotifications}
+              notifications={notifications}
+              onDelete={(notificationId) => void deleteNotification(notificationId)}
+              onMarkRead={() => void markAllNotificationsRead()}
+              onOpen={openNotification}
+              onRetry={() => {
+                setIsLoadingNotifications(true)
+                setNotificationReloadKey((key) => key + 1)
+              }}
+              placement="footer"
+            />
           ) : null}
         </nav>
       ) : null}
@@ -1036,13 +1162,31 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean, isRail = fals
       // 태블릿 레일은 아이콘 위·라벨 아래 52px 정사각.
       // 세로 레일은 라벨 없이 아이콘만. 48px 정사각이면 68px 레일 안에 여백이 남는다.
       ? 'relative inline-flex size-12 shrink-0 items-center justify-center rounded-lg'
-      : 'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control mobile-web:h-11',
+      : 'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-navigation mobile-web:h-11',
     !isRail && isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     isActive
-      ? 'bg-brand-50 font-semibold text-brand-700 shadow-sm'
+      ? 'bg-brand-50 font-semibold text-brand-800'
       : 'font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800',
   )
+}
+
+function isNavigationItemActive(
+  item: NavigationItem,
+  pathname: string,
+  search: string,
+  isAdmin: boolean,
+): boolean {
+  const itemPath = item.to.split('?')[0]
+  const isEntranceRequestsPath = pathname.endsWith('/entrance-requests')
+  const isPathActive = pathname === itemPath || pathname.startsWith(`${itemPath}/`)
+
+  if (isAdmin && item.to.startsWith(routes.admin)) {
+    return adminTabFromLocation(item.to) === adminTabFromLocation(`${pathname}${search}`)
+  }
+  if (item.to === routes.entranceRequests) return isEntranceRequestsPath
+  if (item.to === routes.classrooms) return isPathActive && !isEntranceRequestsPath
+  return isPathActive
 }
 
 const instructorNavigation: NavigationItem[] = [
@@ -1065,6 +1209,7 @@ const adminNavigation: NavigationItem[] = [
   { icon: CircleUserRound, inBottomNav: true, label: '회원', to: routes.admin },
   { icon: List, inBottomNav: true, label: '강의실', to: `${routes.admin}?tab=classrooms` },
   { icon: Sparkles, inBottomNav: true, label: 'AI 사용량', to: `${routes.admin}?tab=ai-usage` },
+  { icon: CircleDollarSign, label: 'xAI 관리', to: `${routes.admin}?tab=xai` },
   { icon: ServerCog, label: '인프라', to: `${routes.admin}?tab=infra` },
   { icon: CalendarDays, label: '업데이트', to: `${routes.admin}?tab=updates` },
 ]
@@ -1072,9 +1217,4 @@ const adminNavigation: NavigationItem[] = [
 function adminTabFromLocation(value: string): string {
   const query = value.split('?')[1] ?? ''
   return new URLSearchParams(query).get('tab') ?? 'users'
-}
-
-function classroomDotClassName(_color: Classroom['color']): string {
-  void _color
-  return 'bg-brand-700'
 }

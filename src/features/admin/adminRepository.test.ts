@@ -77,4 +77,27 @@ describe('admin repository', () => {
       { cache: 'no-store', signal: controller.signal },
     )
   })
+
+  it('connects the administrator xAI monitoring and manual sync endpoints', async () => {
+    const overview = { available: true, totalAvailableUsd: '250.00' }
+    const credits = { available: true, prepaidBalanceUsd: '25.00' }
+    const status = { available: true, recentErrorClassification: null }
+    const request = vi.fn()
+      .mockResolvedValueOnce({ data: overview })
+      .mockResolvedValueOnce({ data: credits })
+      .mockResolvedValueOnce({ data: status })
+      .mockResolvedValueOnce({ data: overview })
+    const repository = createAdminRepository(request as AuthenticatedRequest)
+    const controller = new AbortController()
+
+    await expect(repository.getXaiOverview(controller.signal)).resolves.toBe(overview)
+    await expect(repository.getXaiCredits(controller.signal)).resolves.toBe(credits)
+    await expect(repository.getXaiStatus(controller.signal)).resolves.toBe(status)
+    await expect(repository.syncXai(controller.signal)).resolves.toBe(overview)
+
+    expect(request).toHaveBeenNthCalledWith(1, '/api/admin/xai/overview', { cache: 'no-store', signal: controller.signal })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/admin/xai/credits', { cache: 'no-store', signal: controller.signal })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/admin/xai/status', { cache: 'no-store', signal: controller.signal })
+    expect(request).toHaveBeenNthCalledWith(4, '/api/admin/xai/sync', { method: 'POST', signal: controller.signal })
+  })
 })

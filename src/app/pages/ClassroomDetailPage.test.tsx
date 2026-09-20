@@ -467,6 +467,8 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(await screen.findByRole('heading', { name: '항목 없음' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '전체 항목' })).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByRole('link', { name: '강의' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '강의실 정보' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/수강생 42명/)).not.toBeInTheDocument()
     window.dispatchEvent(new Event('focus'))
 
     expect(await screen.findByRole('button', { name: 'new-lecture' })).toBeInTheDocument()

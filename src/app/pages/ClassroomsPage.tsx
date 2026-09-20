@@ -1,5 +1,4 @@
 import {
-  ArrowRight,
   ArrowDownUp,
   Check,
   DoorOpen,
@@ -18,11 +17,10 @@ import { Link } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, type Classroom } from '../../features/classrooms'
-import { createSessionsRepository, type LearningSession } from '../../features/sessions'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Button, ButtonLink, EmptyState, PageContainer, PageHeader, useToast } from '../../shared/ui'
-import { classroomDetailPath, sessionDetailPath } from '../routes'
+import { Button, EmptyState, PageContainer, PageHeader, useToast } from '../../shared/ui'
+import { classroomDetailPath } from '../routes'
 import { InstructorClassroomsPage } from './instructor/InstructorClassroomsPage'
 
 type ClassroomSort = 'name' | 'progress' | 'recent' | 'unread'
@@ -49,7 +47,6 @@ function LearnerClassroomsPage() {
   const { apiRequest } = useAuth()
   const { show: showToast } = useToast()
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
-  const [latestSession, setLatestSession] = useState<LearningSession | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isJoining, setIsJoining] = useState(false)
@@ -62,7 +59,6 @@ function LearnerClassroomsPage() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const joinInputRef = useRef<HTMLInputElement | null>(null)
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
-  const sessionsRepository = useMemo(() => createSessionsRepository(apiRequest), [apiRequest])
 
   async function loadClassrooms(search = '') {
     setIsLoading(true)
@@ -81,20 +77,6 @@ function LearnerClassroomsPage() {
     repository.list().then((items) => { if (!cancelled) setClassrooms(items) }).catch((requestError) => { if (!cancelled) setError(getRequestErrorMessage(requestError)) }).finally(() => { if (!cancelled) setIsLoading(false) })
     return () => { cancelled = true }
   }, [repository])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    sessionsRepository
-      .list(controller.signal)
-      .then((sessions) => {
-        const latest = sessions
-          .filter((session) => session.status === 'ACTIVE')
-          .sort((left, right) => right.lastActivityAt.localeCompare(left.lastActivityAt))[0]
-        setLatestSession(latest ?? null)
-      })
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [sessionsRepository])
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -161,7 +143,7 @@ function LearnerClassroomsPage() {
         actions={<>
           <button
             aria-label="강의실 검색"
-            className="flex h-10 min-w-56 flex-1 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 sm:min-w-72 xl:flex-none"
+            className="flex h-10 w-full min-w-0 flex-[1_1_100%] items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 min-[520px]:w-auto min-[520px]:min-w-56 min-[520px]:flex-1 sm:min-w-72 xl:flex-none"
             onClick={() => setIsSearchOpen(true)}
             type="button"
           >
@@ -172,11 +154,11 @@ function LearnerClassroomsPage() {
             </kbd>
           </button>
 
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 min-[520px]:flex-none">
             <button
               aria-expanded={isSortOpen}
               aria-haspopup="menu"
-              className="flex h-10 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 type-body font-medium text-stone-700 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-stone-200 bg-white px-3 type-body font-medium text-stone-700 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               onClick={() => setIsSortOpen((open) => !open)}
               type="button"
             >
@@ -213,32 +195,12 @@ function LearnerClassroomsPage() {
             ) : null}
           </div>
 
-          <Button className="h-10" onClick={() => setIsJoinOpen(true)}>
+          <Button className="h-10 min-w-0 flex-1 whitespace-nowrap min-[520px]:flex-none" onClick={() => setIsJoinOpen(true)}>
             <Plus aria-hidden="true" size={15} />
             강의실 참여
           </Button>
         </>}
       />
-
-      {latestSession ? (
-        <section className="flex flex-col gap-4 rounded-lg bg-stone-100 px-5 py-4 sm:flex-row sm:items-center">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-rose-50 type-micro font-bold text-rose-700">
-            PDF
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate type-body font-bold text-stone-950">
-              이어서 학습하기 — {latestSession.materialTitle}
-            </h2>
-            <p className="mt-1 type-caption text-stone-400">
-              {latestSession.currentPage}쪽까지 학습했습니다.
-            </p>
-          </div>
-          <ButtonLink to={sessionDetailPath(latestSession.id)}>
-            {latestSession.currentPage}쪽부터 계속
-            <ArrowRight aria-hidden="true" size={14} />
-          </ButtonLink>
-        </section>
-      ) : null}
 
       {error ? <EmptyState action={<Button onClick={() => void loadClassrooms()} variant="secondary">다시 시도</Button>} description={error} title="강의실을 불러오지 못했습니다" /> : null}
       {!error && isLoading ? <p className="py-16 text-center type-body text-stone-500" role="status">강의실을 불러오는 중입니다.</p> : null}
@@ -249,38 +211,28 @@ function LearnerClassroomsPage() {
         <h2 className="sr-only" id="classroom-list-heading">
           참여 중인 강의실
         </h2>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 tablet-landscape:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 tablet-landscape:grid-cols-3">
           {sortedClassrooms.map((classroom) => (
-            <Link className="flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" key={classroom.id} to={classroomDetailPath(classroom.id)}>
-              <div className="flex items-start gap-4">
-                <span className={`flex size-11 shrink-0 items-center justify-center rounded-lg type-body font-bold ${getClassroomTone(classroom)}`}>
-                  {classroom.name.slice(0, 1)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate type-card-title font-bold text-stone-950">{classroom.name}</h2>
-                  <p className="mt-0.5 truncate type-micro text-stone-400">
-                    {classroom.instructorName} · {classroom.currentWeek ?? 1}주차
-                  </p>
-                </div>
-                <span className={classroom.status === 'ACTIVE'
-                  ? 'rounded-full bg-[#E7F6EC] px-2 py-1 type-micro font-semibold text-[#12833E]'
-                  : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'}>
-                  {classroom.status === 'ACTIVE' ? '수강 중' : '종료'}
-                </span>
-              </div>
-              <div className="mt-auto pt-5">
+            <Link
+              aria-label={`${classroom.name} 강의실 열기`}
+              className={`flex min-h-[180px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${classroom.status === 'ACTIVE' ? '' : 'opacity-60'}`}
+              key={classroom.id}
+              to={classroomDetailPath(classroom.id)}
+            >
+              <h2 className="truncate type-card-title font-bold text-stone-950">
+                {classroom.name}
+              </h2>
+              <p className="mt-1 truncate type-caption text-stone-500">
+                {formatAcademicTerm(classroom.startDate)} · {classroom.currentWeek ?? classroom.weekCount}주차 · {classroom.instructorName}
+              </p>
+              <div className="mt-auto pt-7">
                 <div className="flex items-center justify-between type-micro">
-                  <span className="text-stone-400">진도</span>
-                  <strong className="text-brand-700">{classroom.progressRate}%</strong>
+                  <span className="text-stone-500">진도</span>
+                  <strong className="text-stone-950">{classroom.progressRate}%</strong>
                 </div>
-                <div className="mt-1.5 h-1 rounded-full bg-stone-100">
+                <div className="mt-2 h-1 rounded-full bg-stone-100">
                   <span className="block h-full rounded-full bg-brand-600" style={{ width: `${Math.min(100, Math.max(0, classroom.progressRate))}%` }} />
                 </div>
-                <p className="mt-3 truncate type-caption text-stone-500">
-                  {classroom.progressRate >= 100
-                    ? '모든 자료를 학습했어요'
-                    : `${classroom.currentWeek ?? 1}주차 학습 이어가기`}
-                </p>
               </div>
             </Link>
           ))}
@@ -301,6 +253,9 @@ function LearnerClassroomsPage() {
           aria-label="강의실 검색"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsSearchOpen(false)
+          }}
           role="dialog"
         >
           <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
@@ -336,6 +291,9 @@ function LearnerClassroomsPage() {
           aria-labelledby="join-classroom-title"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isJoining) setIsJoinOpen(false)
+          }}
           role="dialog"
         >
           <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-2xl">
@@ -399,7 +357,8 @@ function LearnerClassroomsPage() {
   )
 }
 
-function getClassroomTone(_classroom: Classroom): string {
-  void _classroom
-  return 'bg-brand-50 text-brand-700'
+function formatAcademicTerm(startDate: string): string {
+  const [year, month] = startDate.split('-').map(Number)
+  if (!year || !month) return '학기 미정'
+  return `${year} ${month <= 8 ? 1 : 2}학기`
 }

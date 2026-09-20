@@ -43,10 +43,10 @@ export function ExamEditor({ onChange, value }: ExamEditorProps) {
     </div>
     {value.questions.length === 0 ? <p className="rounded-lg border border-dashed border-stone-300 py-10 text-center type-body text-stone-500">초안은 문항 없이 저장할 수 있습니다.</p> : null}
     {value.questions.map((question, index) => <section className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={index}>
-      <div className="flex items-center gap-3">
+      <div className="tablet-exam-question-tools flex items-center gap-3">
         <strong className="type-body text-stone-900">{index + 1}번</strong>
         {question.sourceContextNumber ? <span className="rounded-full bg-brand-50 px-2 py-1 type-micro font-semibold text-brand-700">참고 자료 {question.sourceContextNumber}번</span> : null}
-        <select className="h-9 rounded-lg border border-stone-300 bg-white px-2.5 type-control" onChange={(event) => updateQuestion(index, createQuestion(event.target.value as ExamQuestionType, question.questionText, question.points))} value={question.questionType}>
+        <select aria-label={`${index + 1}번 문항 유형`} className="h-9 rounded-lg border border-stone-300 bg-white px-2.5 type-control" onChange={(event) => updateQuestion(index, createQuestion(event.target.value as ExamQuestionType, question.questionText, question.points))} value={question.questionType}>
           {Object.entries(typeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
         </select>
         <label className="ml-auto flex items-center gap-2 type-caption text-stone-500">배점

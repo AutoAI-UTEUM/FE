@@ -61,7 +61,7 @@ describe('shared ui', () => {
 
     expect(screen.getByTestId('page-container')).toHaveClass(
       'app-page-frame',
-      'space-y-5',
+      'space-y-4',
     )
     expect(screen.getByTestId('page-container')).toHaveAttribute(
       'data-page-container',

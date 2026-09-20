@@ -24,7 +24,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { cx } from '../../../shared/lib/cx'
 import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { useResponsiveViewport } from '../../../shared/responsive'
+import { TabletMasterDetail, useResponsiveViewport } from '../../../shared/responsive'
 import { Button, ButtonLink, EmptyState } from '../../../shared/ui'
 import { classroomStudentReportsPath } from '../../routes'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
@@ -102,7 +102,7 @@ function StudentLearningTable({
   repository: ReturnType<typeof createClassroomsRepository>
   students: ClassroomStudent[]
 }) {
-  const { isMobileWeb } = useResponsiveViewport()
+  const { isMobileWeb, isTablet } = useResponsiveViewport()
   const [searchQuery, setSearchQuery] = useState('')
   const [sort, setSort] = useState<StudentSort>({ direction: 'desc', key: 'recentActivity' })
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
@@ -168,6 +168,9 @@ function StudentLearningTable({
     if (!analyticsByStudentId[`${classroomId}:${studentId}`]) void loadStudentDetails(studentId)
   }
 
+  const selectedStudent = students.find((student) => student.id === expandedStudentId)
+  const selectedKey = `${classroomId}:${expandedStudentId}`
+
   return (
     <section aria-label="수강생별 학습 현황" className={cx('flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white', className)}>
       <div className="flex shrink-0 flex-col gap-3 border-b border-stone-100 px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
@@ -200,11 +203,19 @@ function StudentLearningTable({
           </label>
         </div>
       </div>
-      <div
-        aria-label="수강생별 학습 현황 목록"
-        className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable]"
-        role="region"
-        tabIndex={0}
+      <TabletMasterDetail
+        listLabel="수강생별 학습 현황 목록"
+        enabled={isTablet}
+        onClose={() => setExpandedStudentId(null)}
+        title={selectedStudent ? `${selectedStudent.name} 학습 현황` : '학습 현황'}
+        detail={selectedStudent ? <StudentLearningDetails
+          analytics={analyticsByStudentId[selectedKey]}
+          detailId={`student-learning-detail-${selectedStudent.id}`}
+          error={detailErrors[selectedKey]}
+          isLoading={loadingStudentIds.has(selectedKey)}
+          onRetry={() => void loadStudentDetails(selectedStudent.id)}
+          student={selectedStudent}
+        /> : null}
       >
         <div className="min-w-[920px] mobile-web:min-w-0">
           <div
@@ -230,7 +241,7 @@ function StudentLearningTable({
             const detailKey = `${classroomId}:${student.id}`
             const analytics = analyticsByStudentId[detailKey]
             return <article aria-label={`${student.name} 학습 현황`} className="overflow-hidden border-b border-stone-100 bg-white last:border-b-0" key={student.id}>
-              <div className="group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_84px_20px] items-center gap-4 px-5 transition-colors hover:bg-stone-50 mobile-web:grid-cols-[minmax(0,1fr)_auto_auto_auto] mobile-web:gap-3 mobile-web:px-3 mobile-web:py-3">
+              <div className="tablet-student-row group grid min-h-16 w-full grid-cols-[minmax(220px,1fr)_90px_90px_120px_130px_84px_20px] items-center gap-4 px-5 transition-colors hover:bg-stone-50 mobile-web:grid-cols-[minmax(0,1fr)_auto_auto_auto] mobile-web:gap-3 mobile-web:px-3 mobile-web:py-3">
                 <button
                   aria-controls={detailId}
                   aria-expanded={isExpanded}
@@ -267,7 +278,7 @@ function StudentLearningTable({
                 <ChevronDown aria-hidden="true" className={cx('shrink-0 text-stone-400 transition-transform', isExpanded && 'rotate-180 text-brand-700')} size={15} />
                 </button>
               </div>
-              {isExpanded ? <StudentLearningDetails
+              {isExpanded && !isTablet ? <StudentLearningDetails
                 analytics={analytics}
                 detailId={detailId}
                 error={detailErrors[detailKey]}
@@ -279,7 +290,7 @@ function StudentLearningTable({
             })}
           </div>
         </div>
-      </div>
+      </TabletMasterDetail>
     </section>
   )
 }
@@ -391,7 +402,8 @@ function StudentLearningDetails({
 }
 
 function StudentSummaryMetric({ label, value }: { label: string; value: string }) {
-  return <strong aria-label={`${label} ${value}`} className="whitespace-nowrap text-center type-caption text-stone-900">{value}</strong>
+  const { isTablet } = useResponsiveViewport()
+  return <strong aria-label={`${label} ${value}`} className="whitespace-nowrap text-center type-caption text-stone-900">{isTablet ? <span className="mr-1 font-normal text-stone-500">{label}</span> : null}{value}</strong>
 }
 
 function StudentQuizSummary({

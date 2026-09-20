@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import { AuthProvider } from '../../../features/auth'
+import * as responsive from '../../../shared/responsive'
 import { ToastProvider } from '../../../shared/ui'
 import { InstructorCalendarPage } from './InstructorCalendarPage'
 import { InstructorClassroomsPage } from './InstructorClassroomsPage'
@@ -470,13 +471,28 @@ describe('instructor pages', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '강의실 검색' }))
 
-    expect(
-      screen.getByRole('dialog', { name: '강의실 검색' }),
-    ).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: '강의실 검색' })
+    expect(dialog).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '검색 닫기' })).toHaveTextContent(
       'esc',
     )
     expect(screen.queryByText('⌘K로 어디서든 열기')).not.toBeInTheDocument()
+
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: '검색어' }))
+    expect(dialog).toBeInTheDocument()
+    fireEvent.mouseDown(dialog)
+    expect(screen.queryByRole('dialog', { name: '강의실 검색' })).not.toBeInTheDocument()
+  })
+
+  it('closes the classroom composer from its backdrop', () => {
+    renderInstructorPage(<InstructorClassroomsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: '강의실 만들기' }))
+    const dialog = screen.getByRole('dialog', { name: '강의실 만들기' })
+    fireEvent.mouseDown(within(dialog).getByLabelText('강의실 이름'))
+    expect(dialog).toBeInTheDocument()
+    fireEvent.mouseDown(dialog)
+    expect(screen.queryByRole('dialog', { name: '강의실 만들기' })).not.toBeInTheDocument()
   })
 
   it('uses the simplified classroom card actions', async () => {
@@ -645,6 +661,46 @@ describe('instructor pages', () => {
     expect(screen.queryByText(/자동으로 파생/)).not.toBeInTheDocument()
   })
 
+  it('stacks the selected-day schedule below a full-width calendar in tablet portrait', () => {
+    const viewportSpy = vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
+      isMobileWeb: true,
+      isPhone: false,
+      isTablet: true,
+      mode: 'tablet-portrait',
+      viewportWidth: 1024,
+      visibleHeight: 1366,
+      visibleTop: 0,
+    })
+    const widthSpy = vi.spyOn(responsive, 'useElementWidth').mockReturnValue([vi.fn(), 1000])
+
+    const { unmount } = renderCalendar()
+
+    const calendar = screen.getByRole('region', { name: '캘린더 본문' })
+    const schedule = screen.getByRole('complementary')
+    const layout = calendar.parentElement
+    const toolbar = screen.getByRole('toolbar', { name: '캘린더 도구' })
+    const dateButton = within(calendar).getAllByRole('button').find((button) =>
+      /^\d{4}년 \d+월 \d+일 .+ 선택$/.test(button.getAttribute('aria-label') ?? ''),
+    )
+
+    expect(dateButton).toBeDefined()
+    fireEvent.click(dateButton!)
+
+    expect(layout).toHaveStyle({ gridTemplateColumns: 'minmax(0,1fr)' })
+    expect(calendar.nextElementSibling).toBe(schedule)
+    expect(within(toolbar).getByRole('group', { name: '캘린더 보기' })).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: '일정 추가' })).toBeInTheDocument()
+    const previousPeriodButton = within(toolbar).getByRole('button', { name: '이전 기간' })
+    expect(previousPeriodButton.firstElementChild).toHaveClass('size-7')
+    expect(previousPeriodButton.parentElement).toHaveClass('absolute', 'left-1/2', '-translate-x-1/2')
+    expect(within(toolbar).getByRole('group', { name: '캘린더 보기' }).parentElement).toHaveClass('ml-auto')
+    expect(dateButton?.firstElementChild).toHaveClass('size-7', 'rounded-full')
+
+    unmount()
+    viewportSpy.mockRestore()
+    widthSpy.mockRestore()
+  })
+
   it('uses distinct colors for Saturday and Sunday dates', () => {
     renderCalendar()
 
@@ -704,6 +760,17 @@ describe('instructor pages', () => {
     expect(screen.getByLabelText('종료일')).toHaveAttribute('type', 'date')
     expect(screen.getByRole('switch', { name: '기간' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('switch', { name: '시간' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('closes the calendar composer from its backdrop', () => {
+    renderCalendar()
+
+    fireEvent.click(screen.getByRole('button', { name: '일정 추가' }))
+    const dialog = screen.getByRole('dialog', { name: '일정 추가' })
+    fireEvent.mouseDown(within(dialog).getByLabelText('일정 이름'))
+    expect(dialog).toBeInTheDocument()
+    fireEvent.mouseDown(dialog)
+    expect(screen.queryByRole('dialog', { name: '일정 추가' })).not.toBeInTheDocument()
   })
 
   it('opens the learning status for the classroom selected in the URL', async () => {
