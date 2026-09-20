@@ -1,5 +1,5 @@
-import { ArrowRight, CheckCircle2, ClipboardCheck, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
 import {
@@ -8,12 +8,9 @@ import {
   type SessionQuizSummary,
 } from '../../../features/sessions'
 import { getRequestErrorMessage } from '../../../shared/api'
-import { formatDateTime } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import {
-  Badge,
   Button,
-  ButtonLink,
   EmptyState,
   PageContainer,
   PageHeader,
@@ -24,6 +21,11 @@ interface ReviewQuizItem {
   quiz: SessionQuizSummary
   session: LearningSession
 }
+
+const quizDateFormatter = new Intl.DateTimeFormat('ko-KR', {
+  day: 'numeric',
+  month: 'numeric',
+})
 
 export function LearnerReviewQuizzesPage() {
   usePageTitle('복습 퀴즈')
@@ -85,36 +87,9 @@ export function LearnerReviewQuizzesPage() {
     }
   }, [repository])
 
-  const reviewTarget = items.find(
-    ({ quiz }) => quiz.submitted && quiz.passed === false,
-  )
-
   return (
     <PageContainer>
-      <PageHeader
-        title="복습 퀴즈"
-        titleAccessory={
-          <p className="type-caption text-stone-400">AI 채팅에서 만든 퀴즈 {items.length}세트</p>
-        }
-      />
-
-      {reviewTarget ? (
-        <section className="flex flex-col gap-4 rounded-lg border border-rose-100 bg-rose-50/60 px-5 py-4 sm:flex-row sm:items-center">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-rose-600">
-            <RotateCcw aria-hidden="true" size={17} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="type-body font-bold text-stone-950">오늘 다시 풀어볼 퀴즈</h2>
-            <p className="mt-1 truncate type-caption text-stone-500">
-              {reviewTarget.session.materialTitle} · {reviewTarget.quiz.title}
-            </p>
-          </div>
-          <ButtonLink to={quizDetailPath(reviewTarget.quiz.quizId)}>
-            다시 풀기
-            <ArrowRight aria-hidden="true" size={14} />
-          </ButtonLink>
-        </section>
-      ) : null}
+      <PageHeader title="복습 퀴즈" />
 
       {isLoading ? (
         <p className="py-16 text-center type-body text-stone-500" role="status">
@@ -138,39 +113,30 @@ export function LearnerReviewQuizzesPage() {
       {!error && items.length > 0 ? (
         <section aria-label="복습 퀴즈 목록" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {items.map(({ quiz, session }) => (
-            <article
-              className="flex min-h-48 flex-col rounded-lg border border-stone-200 bg-white p-5"
+            <Link
+              aria-label={`${quiz.title} ${quiz.submitted ? '결과 보기' : '풀기'}`}
+              className="flex min-h-32 flex-col rounded-lg border border-stone-200 bg-white p-4 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               key={`${session.id}-${quiz.quizId}`}
+              to={quizDetailPath(quiz.quizId)}
             >
-              <div className="flex items-center gap-2">
-                <span className="flex size-9 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
-                  <ClipboardCheck aria-hidden="true" size={16} />
+              <div className="flex items-center justify-between gap-3 type-caption">
+                <span className={`flex min-w-0 items-center gap-2 ${getQuizStatusTextClass(quiz)}`}>
+                  <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${getQuizStatusDotClass(quiz)}`} />
+                  {getQuizStatus(quiz)}
                 </span>
-                <Badge tone={getQuizTone(quiz)}>{getQuizStatus(quiz)}</Badge>
+                <strong className={`shrink-0 font-medium ${getQuizStatusTextClass(quiz)}`}>
+                  {quiz.submitted && quiz.score !== undefined
+                    ? `${quiz.score}/${quiz.maxScore ?? quiz.score}`
+                    : `-/${quiz.maxScore ?? '-'}`}
+                </strong>
               </div>
-              <h2 className="mt-4 line-clamp-2 type-body font-bold text-stone-950">
+              <h2 className="mt-3 line-clamp-2 type-body font-bold text-stone-950">
                 {quiz.title}
               </h2>
-              <p className="mt-1 truncate type-caption text-stone-400">
-                {session.materialTitle}
-                {quiz.createdAt ? ` · ${formatDateTime(quiz.createdAt)}` : ''}
+              <p className="mt-auto pt-3 type-caption text-stone-500">
+                {quiz.createdAt ? formatQuizDate(quiz.createdAt) : '생성 날짜 없음'}
               </p>
-              {quiz.submitted && quiz.score !== undefined ? (
-                <p className="mt-3 flex items-center gap-1.5 type-caption font-semibold text-stone-600">
-                  <CheckCircle2 aria-hidden="true" size={13} />
-                  {quiz.score}/{quiz.maxScore ?? quiz.score}점
-                </p>
-              ) : null}
-              <ButtonLink
-                className="mt-auto"
-                size="sm"
-                to={quizDetailPath(quiz.quizId)}
-                variant="secondary"
-              >
-                {quiz.submitted ? '결과 보기' : '풀기'}
-                <ArrowRight aria-hidden="true" size={13} />
-              </ButtonLink>
-            </article>
+            </Link>
           ))}
         </section>
       ) : null}
@@ -195,9 +161,17 @@ function getQuizStatus(quiz: SessionQuizSummary): string {
   return quiz.passed ? '완료' : '복습 필요'
 }
 
-function getQuizTone(
-  quiz: SessionQuizSummary,
-): 'danger' | 'info' | 'success' {
-  if (!quiz.submitted) return 'info'
-  return quiz.passed ? 'success' : 'danger'
+function getQuizStatusTextClass(quiz: SessionQuizSummary): string {
+  if (!quiz.submitted) return 'text-cyan-800'
+  return quiz.passed ? 'text-emerald-700' : 'text-rose-600'
+}
+
+function getQuizStatusDotClass(quiz: SessionQuizSummary): string {
+  if (!quiz.submitted) return 'bg-cyan-600'
+  return quiz.passed ? 'bg-emerald-500' : 'bg-rose-500'
+}
+
+function formatQuizDate(iso: string): string {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? iso : quizDateFormatter.format(date)
 }

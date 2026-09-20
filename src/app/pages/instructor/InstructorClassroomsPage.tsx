@@ -278,7 +278,7 @@ export function InstructorClassroomsPage() {
       {!error && classrooms.length > 0 ? (
         <section
           aria-label="운영 강의실"
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 tablet-landscape:grid-cols-3"
+          className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 tablet-landscape:grid-cols-3"
         >
           {classrooms.map((classroom) => (
             <ClassroomCard
@@ -354,6 +354,7 @@ export function InstructorClassroomsPage() {
           onConfirm={() => void regenerateInviteCode(inviteCodeRegenerationTarget)}
         />
       ) : null}
+
     </PageContainer>
   )
 }
@@ -451,7 +452,7 @@ function ClassroomCard({
         <span
           className={
             isActive
-              ? 'rounded-full bg-[#E7F6EC] px-2 py-1 type-micro font-semibold text-[#12833E]'
+              ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 type-micro font-semibold text-emerald-800'
               : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'
           }
         >
@@ -556,6 +557,9 @@ function SearchDialog({
       aria-label="강의실 검색"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       role="dialog"
     >
       <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
@@ -782,6 +786,9 @@ function CreateClassroomDialog({
       aria-labelledby="create-classroom-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) onClose()
+      }}
       role="dialog"
     >
       <form

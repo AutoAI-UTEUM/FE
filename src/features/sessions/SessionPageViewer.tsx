@@ -7,7 +7,6 @@ import {
   Minus,
   MoveHorizontal,
   MoveVertical,
-  PanelLeftOpen,
   Plus,
   type LucideIcon,
 } from 'lucide-react'
@@ -32,7 +31,6 @@ interface SessionPageViewerProps {
   isPending?: boolean
   materialTitle?: string
   onMovePage: (page: number) => void
-  onOpenResources?: () => void
   totalPages: number
 }
 
@@ -48,7 +46,6 @@ export function SessionPageViewer({
   isPending = false,
   materialTitle,
   onMovePage,
-  onOpenResources,
   totalPages,
 }: SessionPageViewerProps) {
   const [zoom, setZoom] = useState(100)
@@ -273,14 +270,6 @@ export function SessionPageViewer({
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {onOpenResources ? (
-            <ToolbarButton
-              icon={PanelLeftOpen}
-              label="자료 목록"
-              onClick={onOpenResources}
-              showLabel={false}
-            />
-          ) : null}
           <div className="flex h-8 items-center gap-1 rounded-lg border border-stone-200 px-1.5 mobile-web:hidden">
             <ToolbarIconButton
               icon={Minus}

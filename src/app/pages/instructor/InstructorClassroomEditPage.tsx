@@ -286,7 +286,7 @@ export function InstructorClassroomEditPage() {
         </div>
       </form>
       {isDeleteDialogOpen ? (
-        <div aria-labelledby="delete-classroom-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4" role="dialog">
+        <div aria-labelledby="delete-classroom-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeleteDialog() }} role="dialog">
           <form className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 shadow-2xl" onSubmit={deleteClassroomPermanently}>
             <div className="flex items-start justify-between gap-4">
               <div>

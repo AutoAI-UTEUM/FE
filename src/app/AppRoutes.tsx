@@ -17,6 +17,7 @@ const ClassroomsPage = lazy(() => import('./pages/ClassroomsPage').then((module)
 const ClassroomDetailPage = lazy(() => import('./pages/ClassroomDetailPage').then((module) => ({ default: module.ClassroomDetailPage })))
 const DiagnosisPage = lazy(() => import('./pages/DiagnosisPage').then((module) => ({ default: module.DiagnosisPage })))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })))
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then((module) => ({ default: module.FeedbackPage })))
 const EntranceRequestsPage = lazy(() => import('./pages/EntranceRequestsPage').then((module) => ({ default: module.EntranceRequestsPage })))
 const ExamDetailPage = lazy(() => import('./pages/ExamDetailPage').then((module) => ({ default: module.ExamDetailPage })))
 const InstructorExamSubmissionPage = lazy(() => import('./pages/InstructorExamSubmissionPage').then((module) => ({ default: module.InstructorExamSubmissionPage })))
@@ -68,6 +69,8 @@ export function AppRoutes() {
             <Route path={routes.admin} element={<AdminPage />} />
           </Route>
           <Route path={routes.settings} element={<SettingsPage />} />
+          <Route path={routes.feedback} element={<FeedbackPage />} />
+          <Route path={routes.updates} element={<UpdatesPage />} />
           <Route element={<RequireNonAdmin />}>
           <Route path={routes.classrooms} element={<ClassroomsPage />} />
           <Route path={routes.materials} element={<MaterialsPage />} />
@@ -76,7 +79,6 @@ export function AppRoutes() {
           <Route path={routes.sessionDetail} element={<SessionDetailPage />} />
           <Route path={routes.quizDetail} element={<QuizPage />} />
           <Route path={routes.diagnosis} element={<DiagnosisPage />} />
-          <Route path={routes.updates} element={<UpdatesPage />} />
           <Route path={routes.calendar} element={<InstructorCalendarPage />} />
           <Route path={routes.classroomCalendar} element={<InstructorCalendarPage />} />
           <Route path={routes.notes} element={<LearnerNotesPage />} />

@@ -5,13 +5,16 @@ import {
   Check,
   ChevronsLeft,
   ChevronsRight,
+  CircleDollarSign,
   CircleUserRound,
   ClipboardCheck,
   FileCheck2,
   LayoutGrid,
   List,
   LogOut,
+  MessageSquareText,
   NotebookPen,
+  PanelLeft,
   ServerCog,
   Settings,
   Sparkles,
@@ -23,7 +26,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Link,
-  NavLink,
   Outlet,
   useLocation,
   useNavigate,
@@ -34,7 +36,6 @@ import {
   CLASSROOMS_CHANGED_EVENT,
   createClassroomsRepository,
   JOIN_REQUESTS_CHANGED_EVENT,
-  type Classroom,
 } from '../../features/classrooms'
 import {
   createNotificationsRepository,
@@ -89,7 +90,10 @@ export function AppLayout() {
   const isTabletRail = tabletUsesRail && !tabletMenuOpen
   const tabletNavigationRef = useRef<HTMLElement>(null)
   useFocusScope(tabletNavigationRef, tabletUsesRail && tabletMenuOpen, () => setTabletMenuPath(null))
-  const isSettingsRoute = location.pathname === routes.settings
+  const isProfileRoute =
+    location.pathname === routes.feedback ||
+    location.pathname === routes.settings ||
+    location.pathname === routes.updates
   const isStudyWorkspace = /^\/sessions\/[^/]+\/?$/.test(location.pathname)
   const [sidebarPreference, setSidebarPreference] = useState<{
     isCollapsed: boolean
@@ -108,7 +112,6 @@ export function AppLayout() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
-  const [sidebarClassrooms, setSidebarClassrooms] = useState<Classroom[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsError, setNotificationsError] = useState<string | null>(null)
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true)
@@ -201,7 +204,9 @@ export function AppLayout() {
   }, [avatarSource, isDirectAvatarSource, rawApiRequest])
 
   useEffect(() => {
-    if (isAdmin) return
+    if (!isInstructor) {
+      return
+    }
 
     let cancelled = false
     const refresh = () => {
@@ -209,14 +214,9 @@ export function AppLayout() {
         .list()
         .then((items) => {
           if (!cancelled) {
-            setSidebarClassrooms(
-              isInstructor
-                ? items.filter((item) => item.status === 'ACTIVE')
-                : items,
+            setPendingJoinRequestCount(
+              items.reduce((sum, item) => sum + item.pendingRequestCount, 0),
             )
-            setPendingJoinRequestCount(isInstructor
-              ? items.reduce((sum, item) => sum + item.pendingRequestCount, 0)
-              : 0)
           }
         })
         .catch(() => undefined)
@@ -230,7 +230,7 @@ export function AppLayout() {
       window.removeEventListener(CLASSROOMS_CHANGED_EVENT, refresh)
       window.removeEventListener(JOIN_REQUESTS_CHANGED_EVENT, refresh)
     }
-  }, [classroomsRepository, isAdmin, isInstructor])
+  }, [classroomsRepository, isInstructor])
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -487,6 +487,30 @@ export function AppLayout() {
           ) : null}
         </button>
       ) : null}
+      <Link
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        onClick={() => {
+          setIsMenuOpen(false)
+          setIsNotificationsOpen(false)
+        }}
+        role="menuitem"
+        to={routes.updates}
+      >
+        <CalendarDays aria-hidden="true" size={15} />
+        업데이트
+      </Link>
+      <Link
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        onClick={() => {
+          setIsMenuOpen(false)
+          setIsNotificationsOpen(false)
+        }}
+        role="menuitem"
+        to={routes.feedback}
+      >
+        <MessageSquareText aria-hidden="true" size={15} />
+        피드백
+      </Link>
       <button
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={openSettings}
@@ -498,7 +522,7 @@ export function AppLayout() {
       </button>
       <div className="mx-2 my-1 h-px bg-stone-100" />
       <button
-        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-rose-700 hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={() => void handleLogout()}
         role="menuitem"
         type="button"
@@ -552,12 +576,12 @@ export function AppLayout() {
             // 태블릿은 가로 스크롤 띠 대신 72px 세로 레일을 쓴다.
             ? cx(
                 'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-stone-200 bg-white py-4 dark:bg-[#222327] mobile-safe-top',
-                isTabletRail ? 'w-[68px] px-2' : 'w-[204px] px-2.5',
+                isTabletRail ? 'w-[68px] px-2' : 'w-[240px] px-2.5',
                 tabletUsesRail && tabletMenuOpen && '!fixed inset-y-0 left-0 !z-50 shadow-xl',
               )
             : 'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
           isTabletPortrait && 'hidden',
-          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-52 lg:px-2.5 mobile-phone:!px-4'),
+          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-60 lg:px-2.5 mobile-phone:!px-4'),
           isAdminFixedHeightWorkspace && 'shrink-0',
         )}
       >
@@ -578,18 +602,20 @@ export function AppLayout() {
             <Link
               aria-label={`${SERVICE_NAME} 홈`}
               className={cx(
-                'flex shrink-0 items-center gap-2.5 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
-                isTabletRail && 'justify-center px-0',
-                !isTablet && isCollapsed && 'lg:justify-center lg:px-0',
+                'flex shrink-0 items-center gap-2.5 rounded-lg px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
+                isTabletRail && 'justify-center !px-0',
+                !isTablet && isCollapsed && 'lg:justify-center lg:!px-0',
               )}
               to={homeRoute}
             >
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
-                <BookOpenCheck aria-hidden="true" size={16} />
-              </span>
+              {isTabletRail || (!isTablet && isCollapsed && !isMobileWeb) ? (
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
+                  <BookOpenCheck aria-hidden="true" size={16} />
+                </span>
+              ) : null}
               <span
                 className={cx(
-                  'type-section-title font-bold',
+                  'type-brand-title font-bold',
                   isTabletRail && 'hidden',
                   !isTablet && isCollapsed && !isMobileWeb && 'lg:hidden',
                 )}
@@ -618,11 +644,7 @@ export function AppLayout() {
                 title={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
                 type="button"
               >
-                {isCollapsed ? (
-                  <ChevronsRight aria-hidden="true" size={15} />
-                ) : (
-                  <ChevronsLeft aria-hidden="true" size={15} />
-                )}
+                <PanelLeft aria-hidden="true" size={16} />
               </button>
             </div>
           </div>
@@ -679,24 +701,6 @@ export function AppLayout() {
                     </span>
                   ) : null}
                 </Link>
-                {item.label === '강의실' && sidebarClassrooms.length > 0 && !isTabletRail ? (
-                  <div className={cx('ml-5 hidden border-l border-stone-200 py-1 pl-2 lg:flex lg:flex-col lg:gap-0.5 tablet-landscape:flex tablet-landscape:flex-col tablet-landscape:gap-0.5', isCollapsed && 'lg:hidden')}>
-                    {sidebarClassrooms.map((classroom) => (
-                      <NavLink
-                        className={({ isActive }) => cx(
-                          'flex min-h-8 items-center gap-2 rounded-md px-2 type-caption font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800',
-                          isActive && 'bg-brand-50 text-brand-700',
-                        )}
-                        key={classroom.id}
-                        title={classroom.name}
-                        to={classroomDetailPath(classroom.id)}
-                      >
-                        <span aria-hidden="true" className={cx('size-2 shrink-0 rounded-full', classroomDotClassName(classroom.color))} />
-                        <span className="truncate">{classroom.name}</span>
-                      </NavLink>
-                    ))}
-                  </div>
-                ) : null}
               </div>
               )
             })}
@@ -716,13 +720,13 @@ export function AppLayout() {
           {isTablet ? (
             /* 태블릿에서는 프로필이 드롭다운이 아니라 설정 페이지 진입점이다. */
             <Link
-              aria-current={isSettingsRoute ? 'page' : undefined}
+              aria-current={isProfileRoute ? 'page' : undefined}
               className={cx(
                 'flex items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
                 isTabletRail
                   ? 'size-12 justify-center'
                   : 'w-full gap-2.5 p-1.5 text-left',
-                isSettingsRoute
+                isProfileRoute
                   ? 'bg-brand-50 text-brand-700'
                   : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800',
               )}
@@ -882,7 +886,7 @@ export function AppLayout() {
             aria-haspopup="menu"
             aria-label="프로필 메뉴"
             className={bottomNavLinkClassName(
-              isMenuOpen || hasActiveOverflowNavigation || isSettingsRoute,
+              isMenuOpen || hasActiveOverflowNavigation || isProfileRoute,
             )}
             onClick={() => {
               setIsNotificationsOpen(false)
@@ -1158,11 +1162,11 @@ function navLinkClassName(isActive: boolean, isCollapsed: boolean, isRail = fals
       // 태블릿 레일은 아이콘 위·라벨 아래 52px 정사각.
       // 세로 레일은 라벨 없이 아이콘만. 48px 정사각이면 68px 레일 안에 여백이 남는다.
       ? 'relative inline-flex size-12 shrink-0 items-center justify-center rounded-lg'
-      : 'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-control mobile-web:h-11',
+      : 'relative inline-flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 type-navigation mobile-web:h-11',
     !isRail && isCollapsed && 'lg:w-9 lg:justify-center lg:px-0',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
     isActive
-      ? 'bg-brand-50 font-semibold text-brand-700 shadow-sm'
+      ? 'bg-brand-50 font-semibold text-brand-800'
       : 'font-medium text-stone-500 hover:bg-stone-50 hover:text-stone-800',
   )
 }
@@ -1205,6 +1209,7 @@ const adminNavigation: NavigationItem[] = [
   { icon: CircleUserRound, inBottomNav: true, label: '회원', to: routes.admin },
   { icon: List, inBottomNav: true, label: '강의실', to: `${routes.admin}?tab=classrooms` },
   { icon: Sparkles, inBottomNav: true, label: 'AI 사용량', to: `${routes.admin}?tab=ai-usage` },
+  { icon: CircleDollarSign, label: 'xAI 관리', to: `${routes.admin}?tab=xai` },
   { icon: ServerCog, label: '인프라', to: `${routes.admin}?tab=infra` },
   { icon: CalendarDays, label: '업데이트', to: `${routes.admin}?tab=updates` },
 ]
@@ -1212,9 +1217,4 @@ const adminNavigation: NavigationItem[] = [
 function adminTabFromLocation(value: string): string {
   const query = value.split('?')[1] ?? ''
   return new URLSearchParams(query).get('tab') ?? 'users'
-}
-
-function classroomDotClassName(_color: Classroom['color']): string {
-  void _color
-  return 'bg-brand-700'
 }

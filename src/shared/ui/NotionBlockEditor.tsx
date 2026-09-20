@@ -5,16 +5,25 @@ import {
   type Block,
 } from '@blocknote/core'
 import { ko } from '@blocknote/core/locales'
-import { filterSuggestionItems } from '@blocknote/core/extensions'
+import {
+  filterSuggestionItems,
+  SuggestionMenu as SuggestionMenuExtension,
+} from '@blocknote/core/extensions'
 import '@blocknote/core/fonts/inter.css'
 import { BlockNoteView } from '@blocknote/mantine'
 import '@blocknote/mantine/style.css'
 import {
+  type DefaultReactGridSuggestionItem,
+  getDefaultReactEmojiPickerItems,
   getDefaultReactSlashMenuItems,
   SuggestionMenuController,
+  useBlockNoteEditor,
   useCreateBlockNote,
+  useExtension,
 } from '@blocknote/react'
+import { Search } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { cx } from '../lib/cx'
 import { useTheme } from '../theme'
@@ -116,6 +125,7 @@ export function NotionBlockEditor({
       role="group"
     >
       <BlockNoteView
+        emojiPicker={false}
         editor={editor}
         onChange={() => {
           if (isInitializingRef.current) return
@@ -128,6 +138,7 @@ export function NotionBlockEditor({
         slashMenu={false}
         theme={isDark ? 'dark' : 'light'}
       >
+        <SearchableEmojiPicker portalElement={floatingUiRoot} />
         <SuggestionMenuController
           getItems={async (query) =>
             filterSuggestionItems(getNotionSlashMenuItems(editor), query)
@@ -136,6 +147,153 @@ export function NotionBlockEditor({
         />
       </BlockNoteView>
     </div>
+  )
+}
+
+interface EmojiPickerPosition {
+  left: number
+  maxHeight: number
+  top: number
+}
+
+function SearchableEmojiPicker({ portalElement }: { portalElement: HTMLElement }) {
+  const editor = useBlockNoteEditor()
+  const suggestionMenu = useExtension(SuggestionMenuExtension)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const isDetachedRef = useRef(false)
+  const [position, setPosition] = useState<EmojiPickerPosition | null>(null)
+  const [query, setQuery] = useState('')
+  const [items, setItems] = useState<DefaultReactGridSuggestionItem[]>([])
+
+  useEffect(() => {
+    suggestionMenu.addSuggestionMenu({ triggerCharacter: ':' })
+    const unsubscribe = suggestionMenu.store.subscribe(({ currentVal }) => {
+      if (currentVal?.show && currentVal.triggerCharacter === ':') {
+        const pickerWidth = Math.min(496, window.innerWidth - 32)
+        const top = currentVal.referencePos.bottom + 8
+        isDetachedRef.current = false
+        setPosition({
+          left: Math.max(
+            16,
+            Math.min(currentVal.referencePos.left, window.innerWidth - pickerWidth - 16),
+          ),
+          maxHeight: Math.max(160, window.innerHeight - top - 16),
+          top,
+        })
+        setQuery(currentVal.query)
+      } else if (!isDetachedRef.current) {
+        setPosition(null)
+      }
+    })
+
+    return () => {
+      unsubscribe()
+      suggestionMenu.removeSuggestionMenu(':')
+    }
+  }, [suggestionMenu])
+
+  useEffect(() => {
+    if (!position) return
+    let cancelled = false
+    void getDefaultReactEmojiPickerItems(editor, query)
+      .then((nextItems) => {
+        if (!cancelled) setItems(nextItems)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editor, position, query])
+
+  useEffect(() => {
+    if (!position) return
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !pickerRef.current?.contains(event.target)
+      ) {
+        isDetachedRef.current = false
+        setPosition(null)
+        suggestionMenu.closeMenu()
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
+  }, [position, suggestionMenu])
+
+  if (!position) return null
+
+  function focusSearch() {
+    if (isDetachedRef.current) return
+    isDetachedRef.current = true
+    suggestionMenu.clearQuery()
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  function insertEmoji(item: DefaultReactGridSuggestionItem) {
+    item.onItemClick()
+    isDetachedRef.current = false
+    setPosition(null)
+    editor.focus()
+  }
+
+  return createPortal(
+    <div
+      aria-label="아이콘 선택"
+      className="notion-emoji-picker notion-emoji-picker-popover"
+      ref={pickerRef}
+      role="dialog"
+      style={{
+        left: position.left,
+        maxHeight: position.maxHeight,
+        top: position.top,
+      }}
+    >
+      <label className="notion-emoji-picker-search">
+        <Search aria-hidden="true" size={16} />
+        <span className="sr-only">아이콘 검색</span>
+        <input
+          aria-label="아이콘 검색"
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={focusSearch}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              isDetachedRef.current = false
+              setPosition(null)
+              editor.focus()
+            }
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          placeholder="아이콘 검색"
+          ref={inputRef}
+          type="search"
+          value={query}
+        />
+      </label>
+      <div
+        aria-label="아이콘 목록"
+        className="notion-emoji-picker-grid"
+        role="grid"
+      >
+        {items.map((item) => (
+          <button
+            aria-label={`${item.id} 삽입`}
+            className="notion-emoji-picker-item"
+            key={item.id}
+            onClick={() => insertEmoji(item)}
+            type="button"
+          >
+            {item.icon ?? item.id}
+          </button>
+        ))}
+        {items.length === 0 ? (
+          <p className="notion-emoji-picker-empty">검색 결과가 없습니다.</p>
+        ) : null}
+      </div>
+    </div>,
+    portalElement,
   )
 }
 

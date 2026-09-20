@@ -103,15 +103,11 @@ describe('SessionDetailPage', () => {
     expect(screen.getByLabelText('질문')).toHaveValue('작성 중인 질문')
   })
 
-  it('opens the phone resource list as a focused dismissible drawer', async () => {
+  it('does not render the removed resource list on phone', async () => {
     renderPhoneSessionDetail()
 
-    const openButton = await screen.findByRole('button', { name: '자료 목록' })
-    fireEvent.click(openButton)
-
-    expect(screen.getByRole('dialog', { name: '자료 목록' })).toHaveAttribute('aria-modal', 'true')
-    await waitFor(() => expect(screen.getByRole('button', { name: '자료 목록 닫기' })).toHaveFocus())
-    fireEvent.click(screen.getByRole('button', { name: '자료 목록 바깥 영역 닫기' }))
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    expect(screen.queryByRole('button', { name: '자료 목록' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '자료 목록' })).not.toBeInTheDocument()
   })
 
@@ -124,17 +120,11 @@ describe('SessionDetailPage', () => {
     ).toHaveAttribute('href', '/classrooms/12')
   })
 
-  it('starts with the resource list closed and allows reopening it', async () => {
+  it('does not render a resource list control in the PDF toolbar', async () => {
     renderSessionDetail()
 
-    expect(await screen.findByRole('button', { name: '자료 목록' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '자료 목록 닫기' })).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '자료 목록' }))
-    expect(await screen.findByRole('button', { name: '자료 목록 닫기' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '자료 목록 닫기' }))
-    expect(screen.getByRole('button', { name: '자료 목록' })).toBeInTheDocument()
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    expect(screen.queryByRole('button', { name: '자료 목록' })).not.toBeInTheDocument()
   })
 
   it('moves and explains the next page from a typed navigation command', async () => {
@@ -395,63 +385,10 @@ describe('SessionDetailPage', () => {
     expect(await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
   })
 
-  it('keeps the left panel material-only and shows submitted quiz history in My Quizzes', async () => {
+  it('shows submitted quiz history in My Quizzes', async () => {
     renderSessionDetail()
 
-    fireEvent.click(await screen.findByRole('button', { name: '자료 목록' }))
-    const firstWeekLabel = await screen.findByText('핵심 개념')
-    const secondWeekLabel = screen.getByText('심화 학습')
-    expect(
-      firstWeekLabel.compareDocumentPosition(secondWeekLabel)
-      & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(screen.getByText('1주차')).toBeInTheDocument()
-    expect(screen.getByText('2주차')).toBeInTheDocument()
-    expect(screen.getByText('1주차')).toHaveClass('whitespace-nowrap')
-    expect(screen.queryByText('8.3 - 8.9')).not.toBeInTheDocument()
-    expect(screen.queryByText('8.10 - 8.16')).not.toBeInTheDocument()
-    expect(screen.getAllByText('시험 대비 요약.pdf')).toHaveLength(2)
-    const longMaterialTitle = screen.getByText('강의 노트 5주차.pdf')
-    expect(longMaterialTitle).toHaveClass(
-      'overflow-hidden',
-      'text-ellipsis',
-      'whitespace-nowrap',
-    )
-    expect(longMaterialTitle).toHaveAttribute(
-      'title',
-      '강의 노트 5주차.pdf',
-    )
-    const materialLink = longMaterialTitle.closest('a')
-    const materialListItem = materialLink?.closest('li')
-    const materialList = materialListItem?.parentElement
-    const materialSection = materialList?.parentElement
-    const weekList = materialSection?.parentElement
-    const resourcePanel = longMaterialTitle.closest('aside')
-    expect(materialLink).toHaveClass(
-      'min-w-0',
-      'w-full',
-      'max-w-full',
-      'overflow-hidden',
-      'min-h-8.5',
-      'py-1.5',
-    )
-    expect(weekList).toHaveClass('gap-2')
-    expect(materialListItem).toHaveClass('min-w-0', 'w-full', 'max-w-full')
-    expect(materialList).toHaveClass('min-w-0', 'w-full', 'max-w-full')
-    expect(materialSection).toHaveClass(
-      'min-w-0',
-      'w-full',
-      'max-w-full',
-      'overflow-hidden',
-    )
-    expect(resourcePanel).not.toHaveClass('[scrollbar-gutter:stable_both-edges]')
-    expect(screen.queryByText('학습 확인 퀴즈')).not.toBeInTheDocument()
-    expect(screen.queryByText('강의실 자료')).not.toBeInTheDocument()
-    expect(screen.queryByText('1/5')).not.toBeInTheDocument()
-    expect(screen.queryByText(/^자료 \d+개$/)).not.toBeInTheDocument()
-    expect(screen.queryByText('등록된 자료가 없습니다.')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('tab', { name: /내 퀴즈/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /내 퀴즈/ }))
     expect(await screen.findByText('학습 확인 퀴즈')).toBeInTheDocument()
     expect(screen.getByText('객관식')).toBeInTheDocument()
     expect(screen.getByText('48 / 100점')).toBeInTheDocument()

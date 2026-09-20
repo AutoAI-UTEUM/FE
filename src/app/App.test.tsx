@@ -7,7 +7,6 @@ import {
   AuthProvider,
   type AuthUser,
 } from '../features/auth'
-import { CLASSROOMS_CHANGED_EVENT } from '../features/classrooms'
 import * as responsive from '../shared/responsive'
 import { ToastProvider } from '../shared/ui'
 import {
@@ -167,10 +166,13 @@ describe('AppRoutes', () => {
       'lg:px-12',
       'lg:py-5',
     )
-    expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
-    expect(
-      within(screen.getByRole('complementary')).getByText('으뜸'),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-60')
+    const sidebar = screen.getByRole('complementary')
+    const brandLink = within(sidebar).getByRole('link', { name: '으뜸 홈' })
+    expect(within(sidebar).getByText('으뜸')).toHaveClass('type-brand-title')
+    expect(brandLink.querySelector('svg')).not.toBeInTheDocument()
+    expect(within(sidebar).getByRole('link', { name: '강의실' })).toHaveClass('type-navigation')
+    expect(within(sidebar).getByRole('link', { name: '강의실' })).not.toHaveClass('shadow-sm')
     expect(
       within(screen.getByRole('complementary')).queryByText('Uteum'),
     ).not.toBeInTheDocument()
@@ -195,7 +197,7 @@ describe('AppRoutes', () => {
     expect(await screen.findByRole('heading', { name: '회원' })).toBeInTheDocument()
     const adminNavigation = screen.getByRole('navigation', { name: '관리자 메뉴' })
     expect(adminNavigation).toBeInTheDocument()
-    expect(within(adminNavigation).getAllByRole('button')).toHaveLength(5)
+    expect(within(adminNavigation).getAllByRole('button')).toHaveLength(6)
     fireEvent.click(within(adminNavigation).getByRole('button', { name: '인프라' }))
     expect(await screen.findByRole('heading', { name: '인프라' })).toBeInTheDocument()
     expect(
@@ -204,6 +206,7 @@ describe('AppRoutes', () => {
       ),
     ).toBe(true)
     expect(screen.getByRole('link', { name: '강의실' })).toHaveAttribute('href', '/admin?tab=classrooms')
+    expect(screen.getByRole('link', { name: 'xAI 관리' })).toHaveAttribute('href', '/admin?tab=xai')
     expect(screen.getByRole('link', { name: '업데이트' })).toHaveAttribute('href', '/admin?tab=updates')
     expect(screen.queryByRole('button', { name: /알림/ })).not.toBeInTheDocument()
 
@@ -213,7 +216,9 @@ describe('AppRoutes', () => {
 
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
     fireEvent.click(profileTrigger)
-    expect(screen.queryByRole('menuitem', { name: '업데이트' })).not.toBeInTheDocument()
+    const [profileMenu] = screen.getAllByRole('menu')
+    expect(within(profileMenu).getByRole('menuitem', { name: '업데이트' })).toHaveAttribute('href', '/updates')
+    expect(within(profileMenu).getByRole('menuitem', { name: '피드백' })).toHaveAttribute('href', '/feedback')
   })
 
   it('shows nullable admin AI token totals as unavailable', async () => {
@@ -310,7 +315,7 @@ describe('AppRoutes', () => {
     expect(
       await screen.findByRole('heading', { name: '내 강의실' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-60')
     expect(screen.getByRole('main')).toHaveClass(
       'px-4',
       'py-4',
@@ -365,7 +370,8 @@ describe('AppRoutes', () => {
     const [profileMenu] = screen.getAllByRole('menu')
     expect(within(profileMenu).queryByText('learner@test.com')).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '화면 모드' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: '도움말 · 피드백' })).not.toBeInTheDocument()
+    expect(within(profileMenu).getByRole('menuitem', { name: '업데이트' })).toHaveAttribute('href', '/updates')
+    expect(within(profileMenu).getByRole('menuitem', { name: '피드백' })).toHaveAttribute('href', '/feedback')
     const [settingsMenuItem] = screen.getAllByRole('menuitem', { name: '설정' })
     fireEvent.click(settingsMenuItem)
 
@@ -376,7 +382,7 @@ describe('AppRoutes', () => {
       'max-w-[560px]',
     )
     expect(settingsDialog.firstElementChild).not.toHaveClass('h-[66dvh]', 'max-h-[66dvh]', 'overflow-y-auto')
-    expect(within(settingsDialog).getByRole('button', { name: '피드백' })).toBeInTheDocument()
+    expect(within(settingsDialog).queryByRole('button', { name: '피드백' })).not.toBeInTheDocument()
     fireEvent.click(within(settingsDialog).getByRole('button', { name: '화면 모드' }))
     expect(within(settingsDialog).getByRole('button', { name: '라이트 모드' })).toBeInTheDocument()
 
@@ -389,12 +395,14 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
   })
 
-  it('keeps development updates out of the profile menu', () => {
+  it('opens the updates page from the profile menu', async () => {
     renderRoute('/')
 
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
     fireEvent.click(profileTrigger)
-    expect(screen.queryByRole('menuitem', { name: '업데이트' })).not.toBeInTheDocument()
+    const [profileMenu] = screen.getAllByRole('menu')
+    fireEvent.click(within(profileMenu).getByRole('menuitem', { name: '업데이트' }))
+    expect(await screen.findByRole('heading', { name: '업데이트' })).toBeInTheDocument()
   })
 
   it('applies saved profile changes to the shared sidebar profile', async () => {
@@ -437,7 +445,7 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
   })
 
-  it('shows enrolled classrooms in the learner sidebar', async () => {
+  it('does not duplicate enrolled classrooms inside the learner sidebar', async () => {
     installApiFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/classrooms') {
@@ -468,57 +476,11 @@ describe('AppRoutes', () => {
 
     renderRoute('/')
 
-    expect(await screen.findByRole('link', { name: '자연어처리 개론' })).toHaveAttribute(
-      'href',
-      '/classrooms/12',
-    )
+    expect(await screen.findByRole('heading', { name: '내 강의실' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('complementary')).queryByRole('link', { name: '자연어처리 개론' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '알림 0개' })).toBeInTheDocument()
-  })
-
-  it('refreshes the sidebar when the classroom list changes', async () => {
-    let isDeleted = false
-    installApiFixtureServer((request) => {
-      const url = new URL(request.url)
-      if (request.method === 'GET' && url.pathname === '/api/classrooms') {
-        return apiSuccess({
-          items: isDeleted ? [] : [{
-            classroomId: 12,
-            color: 'BLUE',
-            description: '강의자 강의실',
-            endDate: '2026-11-15',
-            instructorName: '강의자',
-            learnerCount: 20,
-            name: '삭제할 강의실',
-            pendingRequestCount: 0,
-            progressRate: 30,
-            startDate: '2026-08-03',
-            status: 'ACTIVE',
-            weekCount: 15,
-          }],
-          page: 0,
-          size: 100,
-          totalElements: isDeleted ? 0 : 1,
-          totalPages: isDeleted ? 0 : 1,
-        })
-      }
-      return undefined
-    })
-
-    renderRoute('/', {
-      email: 'instructor@example.com',
-      name: '강의자',
-      role: 'INSTRUCTOR',
-    })
-
-    const sidebar = screen.getByRole('complementary')
-    expect(await within(sidebar).findByRole('link', { name: '삭제할 강의실' })).toBeInTheDocument()
-
-    isDeleted = true
-    window.dispatchEvent(new Event(CLASSROOMS_CHANGED_EVENT))
-
-    await waitFor(() => {
-      expect(within(sidebar).queryByRole('link', { name: '삭제할 강의실' })).not.toBeInTheDocument()
-    })
   })
 
   it('shows an access error for learners on instructor-only routes', () => {
@@ -529,11 +491,12 @@ describe('AppRoutes', () => {
     ).toBeInTheDocument()
   })
 
-  it('opens the learner calendar without instructor schedule commands', async () => {
+  it('allows learners to add personal schedules from the calendar', async () => {
     renderRoute('/calendar')
 
     expect(await screen.findByRole('heading', { name: '캘린더' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '일정 추가' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '일정 추가' }))
+    expect(screen.getByRole('dialog', { name: '일정 추가' })).toBeInTheDocument()
   })
 
   it('renders instructor navigation and management routes', async () => {
@@ -572,9 +535,11 @@ describe('AppRoutes', () => {
     expect(
       await screen.findByRole('heading', { name: '입장 요청' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('complementary')).toHaveClass('lg:w-52')
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-60')
     expect(screen.getByRole('link', { name: '강의실' })).toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: '자연어처리 개론' })).toHaveAttribute('href', '/classrooms/12')
+    expect(
+      within(screen.getByRole('complementary')).queryByRole('link', { name: '자연어처리 개론' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '캘린더' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '학습 현황' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '공지 관리' })).not.toBeInTheDocument()

@@ -791,6 +791,9 @@ export function AuthProvider({
           aria-labelledby="exam-idle-warning-title"
           aria-modal="true"
           className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-950/45 px-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) noteUserActivity()
+          }}
           role="dialog"
         >
           <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-6 shadow-2xl">

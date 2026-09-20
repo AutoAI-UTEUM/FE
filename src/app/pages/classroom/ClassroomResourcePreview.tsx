@@ -100,7 +100,7 @@ export function ClassroomResourceUploadDialog({
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget && !isUploading) onClose()
       }}
       role="dialog"
     >

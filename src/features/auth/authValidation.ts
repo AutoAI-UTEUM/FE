@@ -15,7 +15,7 @@ export interface GoogleAuthValues {
 }
 
 export interface SignupFormValues extends LoginFormValues {
-  affiliation?: string
+  affiliation: string
   learningEmailOptIn?: boolean
   name: string
   role: SignupRole
@@ -66,7 +66,9 @@ export function validateSignupForm(values: SignupFormValues): SignupFormErrors {
     errors.name = '이름은 2자 이상이어야 합니다.'
   }
 
-  if ((values.affiliation?.trim().length ?? 0) > 100) {
+  if (!values.affiliation?.trim()) {
+    errors.affiliation = '소속을 입력하세요.'
+  } else if (values.affiliation.trim().length > 100) {
     errors.affiliation = '소속은 100자 이하로 입력하세요.'
   }
 

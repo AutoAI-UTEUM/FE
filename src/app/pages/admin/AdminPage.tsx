@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KeyRound, RefreshCw, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleDollarSign, Copy, KeyRound, RefreshCw, Search, TriangleAlert, WifiOff, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
@@ -6,6 +6,9 @@ import {
   createAdminRepository,
   type AdminClassroomDetail,
   type AdminClassroomSummary,
+  type AdminXaiCredits,
+  type AdminXaiOverview,
+  type AdminXaiStatus,
   type AdminPageResult,
   type AdminSort,
   type AdminUserDetail,
@@ -32,12 +35,13 @@ import {
 } from './adminShared'
 import { InfraPanel } from './InfraPanel'
 
-export type AdminTab = 'users' | 'classrooms' | 'ai-usage' | 'infra' | 'updates'
+export type AdminTab = 'users' | 'classrooms' | 'ai-usage' | 'xai' | 'infra' | 'updates'
 
 const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: 'users', label: '회원' },
   { id: 'classrooms', label: '강의실' },
   { id: 'ai-usage', label: 'AI 사용량' },
+  { id: 'xai', label: 'xAI 관리' },
   { id: 'infra', label: '인프라' },
   { id: 'updates', label: '업데이트' },
 ]
@@ -84,6 +88,7 @@ export function AdminPage() {
         {tab === 'users' ? <UsersPanel repository={repository} /> : null}
         {tab === 'classrooms' ? <ClassroomsPanel repository={repository} /> : null}
         {tab === 'ai-usage' ? <AiUsagePanel repository={repository} /> : null}
+        {tab === 'xai' ? <XaiManagementPanel repository={repository} /> : null}
         {tab === 'infra' ? <InfraPanel repository={repository} /> : null}
         {tab === 'updates' ? <DevelopmentUpdatesPanel showTitle={false} /> : null}
       </section>
@@ -259,7 +264,7 @@ function UserRows({ currentUserId, detail, expanded, onResetPassword, onToggle, 
 }
 
 function PasswordResetDialog({ onClose, result }: { onClose: () => void; result: { message: string; name: string; temporaryPassword: string } }) {
-  return <div aria-labelledby="password-reset-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 px-4" role="dialog"><section className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between gap-3"><h2 className="type-dialog-title font-bold text-stone-950" id="password-reset-title">임시 비밀번호 발급 완료</h2><button aria-label="닫기" className="flex size-9 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div><p className="mt-2 type-body text-stone-600">{result.name} 회원에게 아래 비밀번호를 전달하세요. 이 값은 닫은 뒤 다시 확인할 수 없습니다.</p><div className="mt-5 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3"><code className="min-w-0 flex-1 break-all type-body font-bold text-stone-950">{result.temporaryPassword}</code><Button aria-label="임시 비밀번호 복사" onClick={() => void navigator.clipboard.writeText(result.temporaryPassword)} size="sm" title="복사" variant="secondary"><Copy aria-hidden="true" size={15} /></Button></div>{result.message ? <p className="mt-3 type-caption text-stone-500">{result.message}</p> : null}<div className="mt-5 flex justify-end"><Button onClick={onClose}>확인</Button></div></section></div>
+  return <div aria-labelledby="password-reset-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 px-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog"><section className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between gap-3"><h2 className="type-dialog-title font-bold text-stone-950" id="password-reset-title">임시 비밀번호 발급 완료</h2><button aria-label="닫기" className="flex size-9 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div><p className="mt-2 type-body text-stone-600">{result.name} 회원에게 아래 비밀번호를 전달하세요. 이 값은 닫은 뒤 다시 확인할 수 없습니다.</p><div className="mt-5 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3"><code className="min-w-0 flex-1 break-all type-body font-bold text-stone-950">{result.temporaryPassword}</code><Button aria-label="임시 비밀번호 복사" onClick={() => void navigator.clipboard.writeText(result.temporaryPassword)} size="sm" title="복사" variant="secondary"><Copy aria-hidden="true" size={15} /></Button></div>{result.message ? <p className="mt-3 type-caption text-stone-500">{result.message}</p> : null}<div className="mt-5 flex justify-end"><Button onClick={onClose}>확인</Button></div></section></div>
 }
 
 function ClassroomsPanel({ repository }: { repository: Repository }) {
@@ -366,6 +371,160 @@ function AiUsagePanel({ repository }: { repository: Repository }) {
   </div>
 }
 
+function XaiManagementPanel({ repository }: { repository: Repository }) {
+  const [overview, setOverview] = useState<AdminXaiOverview | null>(null)
+  const [credits, setCredits] = useState<AdminXaiCredits | null>(null)
+  const [status, setStatus] = useState<AdminXaiStatus | null>(null)
+  const [error, setError] = useState<AdminErrorInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.all([
+      repository.getXaiOverview(controller.signal),
+      repository.getXaiCredits(controller.signal),
+      repository.getXaiStatus(controller.signal),
+    ])
+      .then(([nextOverview, nextCredits, nextStatus]) => {
+        if (controller.signal.aborted) return
+        setOverview(nextOverview)
+        setCredits(nextCredits)
+        setStatus(nextStatus)
+        setError(null)
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setError(toAdminError(reason))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [repository])
+
+  async function sync() {
+    setSyncing(true)
+    setSyncMessage(null)
+    setError(null)
+    try {
+      const nextOverview = await repository.syncXai()
+      const [nextCredits, nextStatus] = await Promise.all([
+        repository.getXaiCredits(),
+        repository.getXaiStatus(),
+      ])
+      setOverview(nextOverview)
+      setCredits(nextCredits)
+      setStatus(nextStatus)
+      setSyncMessage('xAI 비용과 크레딧을 최신 정보로 동기화했습니다.')
+    } catch (reason) {
+      setError(toAdminError(reason))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const available = overview?.available || credits?.available || status?.available
+  const stale = overview?.stale === true || credits?.stale === true
+  const usedPercent = ratioPercent(credits?.postpaidUsedUsd, credits?.postpaidLimitUsd)
+
+  return (
+    <div className="min-h-full">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-3">
+        <div>
+          <h2 className="type-section-title font-bold text-stone-950">xAI 비용 및 크레딧</h2>
+          <p className="mt-1 type-caption text-stone-500">잔액, 이번 달 비용과 소진 위험을 확인합니다.</p>
+        </div>
+        <Button disabled={loading || syncing || !available} onClick={() => void sync()} size="sm" variant="secondary">
+          <RefreshCw aria-hidden="true" className={syncing ? 'animate-spin' : undefined} size={15} />
+          {syncing ? '동기화 중' : '지금 동기화'}
+        </Button>
+      </div>
+
+      {error ? <AdminErrorMessage error={error} /> : null}
+      {syncMessage ? <p className="border-b border-emerald-100 bg-emerald-50 px-4 py-3 type-body text-emerald-800" role="status">{syncMessage}</p> : null}
+      {stale ? <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3 type-body text-amber-900" role="status"><TriangleAlert aria-hidden="true" className="mt-0.5 shrink-0" size={16} /><span>최신 동기화에 실패해 마지막으로 확인된 정보를 표시하고 있습니다.</span></div> : null}
+
+      {loading ? <PanelMessage message="xAI 관리 정보를 불러오는 중입니다." /> : !available ? (
+        <div className="flex min-h-72 flex-col items-center justify-center px-5 py-12 text-center">
+          <span className="flex size-11 items-center justify-center rounded-full bg-stone-100 text-stone-500"><WifiOff aria-hidden="true" size={20} /></span>
+          <h3 className="mt-4 type-section-title font-bold text-stone-900">xAI 관리 연동을 사용할 수 없습니다.</h3>
+          <p className="mt-2 max-w-lg type-body text-stone-500">Management API 설정을 확인한 뒤 다시 접속해 주세요. 인증 정보는 이 화면에 표시되지 않습니다.</p>
+          {status?.recentErrorClassification ? <p className="mt-3 type-caption font-semibold text-amber-800">{xaiFailureLabel(status.recentErrorClassification)}</p> : null}
+        </div>
+      ) : (
+        <div>
+          <section aria-labelledby="xai-balance-title">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-4 py-3">
+              <h3 className="type-control font-bold text-stone-900" id="xai-balance-title">비용 요약</h3>
+              <XaiRiskBadge risk={overview?.riskLevel ?? null} />
+            </div>
+            <dl className="grid sm:grid-cols-2 xl:grid-cols-4">
+              <XaiMetric label="사용 가능 잔액" value={formatUsd(overview?.totalAvailableUsd)} emphasized />
+              <XaiMetric label="선불 잔액" value={formatUsd(overview?.prepaidBalanceUsd)} />
+              <XaiMetric label="이번 달 사용 비용" value={formatUsd(overview?.currentMonthCostUsd)} />
+              <XaiMetric label="최근 일평균 비용" value={formatUsd(overview?.averageDailyCost7d)} />
+            </dl>
+          </section>
+
+          <section className="border-t border-stone-200 px-4 py-5" aria-labelledby="xai-postpaid-title">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="type-control font-bold text-stone-900" id="xai-postpaid-title">후불 한도</h3>
+                  <span className="type-caption text-stone-500">잔여 {formatUsd(credits?.postpaidRemainingUsd)}</span>
+                </div>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-label="후불 한도 사용률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={usedPercent ?? undefined}>
+                  <span className="block h-full rounded-full bg-brand-700" style={{ width: `${usedPercent ?? 0}%` }} />
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-4 type-body">
+                  <div><dt className="text-stone-500">사용</dt><dd className="mt-1 font-semibold text-stone-900">{formatUsd(credits?.postpaidUsedUsd)}</dd></div>
+                  <div className="text-right"><dt className="text-stone-500">월 한도</dt><dd className="mt-1 font-semibold text-stone-900">{formatUsd(credits?.postpaidLimitUsd)}</dd></div>
+                </dl>
+              </div>
+              <div className="border-t border-stone-100 pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-5">
+                <h3 className="type-control font-bold text-stone-900">예상 소진</h3>
+                <p className="mt-3 type-section-title font-bold text-stone-950">{overview?.projectedDepletionAt ? formatDate(overview.projectedDepletionAt) : '예측 불가'}</p>
+                <p className="mt-1 type-caption text-stone-500">현재 잔액과 평균 사용 비용을 기준으로 계산됩니다.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="border-t border-stone-200 px-4 py-5" aria-labelledby="xai-sync-title">
+            <h3 className="type-control font-bold text-stone-900" id="xai-sync-title">연동 상태</h3>
+            <dl className="mt-4 grid gap-x-8 gap-y-4 type-body sm:grid-cols-2 xl:grid-cols-4">
+              <XaiDetail label="상태" value={stale ? '이전 데이터' : '정상'} />
+              <XaiDetail label="마지막 성공" value={formatOptionalDateTime(status?.lastSuccessfulSyncAt ?? overview?.lastSuccessfulSyncAt)} />
+              <XaiDetail label="데이터 조회" value={formatOptionalDateTime(overview?.fetchedAt ?? credits?.fetchedAt)} />
+              <XaiDetail label="최근 실패" value={status?.lastFailureAt ? `${formatDateTime(status.lastFailureAt)} · ${xaiFailureLabel(status.recentErrorClassification)}` : '없음'} />
+            </dl>
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function XaiMetric({ emphasized = false, label, value }: { emphasized?: boolean; label: string; value: string }) {
+  return <div className="border-b border-stone-100 px-4 py-4 sm:border-r sm:[&:nth-child(2n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(2n)]:border-r xl:last:border-r-0"><dt className="type-caption text-stone-500">{label}</dt><dd className={`mt-1 font-bold ${emphasized ? 'type-page-title text-brand-700' : 'type-section-title text-stone-950'}`}>{value}</dd></div>
+}
+
+function XaiDetail({ label, value }: { label: string; value: string }) {
+  return <div><dt className="type-caption text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-800">{value}</dd></div>
+}
+
+function XaiRiskBadge({ risk }: { risk: AdminXaiOverview['riskLevel'] }) {
+  const style = risk === 'CRITICAL'
+    ? 'border-rose-200 bg-rose-50 text-rose-800'
+    : risk === 'WARNING'
+      ? 'border-amber-200 bg-amber-50 text-amber-800'
+      : risk === 'NORMAL'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-stone-200 bg-stone-50 text-stone-600'
+  const label = risk === 'CRITICAL' ? '소진 위험' : risk === 'WARNING' ? '잔액 주의' : risk === 'NORMAL' ? '정상' : '판단 대기'
+  return <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 type-caption font-semibold ${style}`}><CircleDollarSign aria-hidden="true" size={14} />{label}</span>
+}
+
 function UsageLayout({ ranking, charts }: { ranking: ReactNode; charts: ReactNode }) {
   const { isTablet } = useResponsiveViewport()
   const [measureArea, areaWidth] = useElementWidth()
@@ -461,3 +620,7 @@ function tokenTotal(value: { inputTokens: number | null; outputTokens: number | 
 function sumNullableTokenTotals(values: Array<{ inputTokens: number | null; outputTokens: number | null; reasoningTokens: number | null }>) { const totals = values.map(tokenTotal).filter((value): value is number => value !== null); return totals.length === 0 ? null : totals.reduce((sum, value) => sum + value, 0) }
 function formatMonthDay(value: string) { const [, month, day] = value.split('-'); return `${Number(month)}/${Number(day)}` }
 function formatCompactNumber(value: number | null | undefined) { if (value == null) return '-'; return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1, notation: 'compact' }).format(value) }
+function formatUsd(value: string | null | undefined) { if (value == null || value.trim() === '') return '-'; const amount = Number(value); return Number.isFinite(amount) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(amount) : '-' }
+function formatOptionalDateTime(value: string | null | undefined) { return value ? formatDateTime(value) : '-' }
+function ratioPercent(value: string | null | undefined, total: string | null | undefined) { const amount = Number(value); const maximum = Number(total); return Number.isFinite(amount) && Number.isFinite(maximum) && maximum > 0 ? Math.min(100, Math.max(0, amount / maximum * 100)) : null }
+function xaiFailureLabel(value: AdminXaiStatus['recentErrorClassification']) { return value === 'CONFIGURATION_ERROR' ? '연동 설정 오류' : value === 'TEMPORARY_FAILURE' ? '일시적인 통신 오류' : '확인된 오류 없음' }

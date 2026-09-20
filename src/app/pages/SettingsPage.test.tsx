@@ -66,6 +66,7 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 학습 도우미' }))
     expect(screen.getByLabelText('AI 답변 스타일')).toBeInTheDocument()
 
+    expect(screen.queryByRole('button', { name: '피드백' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '업데이트' })).not.toBeInTheDocument()
   })
 
@@ -96,30 +97,6 @@ describe('SettingsPage', () => {
         newMaterialNotification: false,
         studyReminder: false,
       })
-    })
-  })
-
-  it('submits feedback from the settings menu', async () => {
-    renderSettings()
-    fireEvent.click(screen.getByRole('button', { name: '피드백' }))
-
-    expect(screen.getByRole('heading', { name: '피드백' })).toBeInTheDocument()
-    expect(screen.queryByText('도움말 · 피드백')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '취소' })).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('분류'), { target: { value: 'BUG' } })
-    fireEvent.change(screen.getByLabelText('내용'), { target: { value: '설정 화면에서 문제가 발생합니다.' } })
-    fireEvent.click(screen.getByRole('button', { name: '보내기' }))
-
-    expect(await screen.findByText('피드백을 보냈습니다.')).toBeInTheDocument()
-    expect(screen.getByLabelText('내용')).toHaveValue('')
-    const feedbackCall = vi.mocked(globalThis.fetch).mock.calls.find(([input]) =>
-      String(input instanceof Request ? input.url : input).endsWith('/api/feedback'))
-    expect(feedbackCall?.[1]?.method).toBe('POST')
-    expect(JSON.parse(String(feedbackCall?.[1]?.body))).toMatchObject({
-      category: 'BUG',
-      clientVersion: '0.1.0',
-      message: '설정 화면에서 문제가 발생합니다.',
-      pageUrl: expect.any(String),
     })
   })
 

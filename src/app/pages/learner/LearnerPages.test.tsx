@@ -10,6 +10,7 @@ import { LearnerReviewQuizzesPage } from './LearnerReviewQuizzesPage'
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   window.localStorage.clear()
   window.sessionStorage.clear()
 })
@@ -176,16 +177,25 @@ describe('learner collection pages', () => {
 
     expect(await screen.findByText('학습 확인 퀴즈')).toBeInTheDocument()
     expect(screen.getByText('복습 필요')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /결과 보기/ })).toHaveAttribute(
+    expect(screen.queryByText(/AI 채팅에서 만든 퀴즈/)).not.toBeInTheDocument()
+    expect(screen.queryByText('오늘 다시 풀어볼 퀴즈')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /다시 풀기/ })).not.toBeInTheDocument()
+    const quizLink = screen.getByRole('link', { name: /학습 확인 퀴즈 결과 보기/ })
+    expect(quizLink).toHaveAttribute(
       'href',
       '/quizzes/50',
     )
+    expect(quizLink).toHaveTextContent('2/5')
+    expect(quizLink).not.toHaveTextContent('시험 대비 요약.pdf')
+    expect(quizLink).toHaveTextContent('8. 1.')
+    expect(quizLink).not.toHaveTextContent(/오전|오후|\d{1,2}:\d{2}/)
   })
 })
 
 function mockLearnerCollectionApi(
   options: { noteContent?: string; noteContents?: string[]; notesUnavailable?: boolean } = {},
 ) {
+  vi.stubEnv('VITE_API_BASE_URL', '/api')
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(
       input instanceof Request ? input.url : String(input),

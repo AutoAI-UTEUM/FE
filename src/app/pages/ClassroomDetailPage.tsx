@@ -396,7 +396,7 @@ export function ClassroomDetailPage() {
 
   return <ClassroomWorkspaceContainer className="lg:overflow-hidden">
     <ClassroomWorkspaceHeader
-      actions={<ClassroomHeaderInfoBar classroom={classroom} inviteCodeDisabled={isReadOnly} onInviteCodeClick={() => void copyInviteCode(classroom, classroomsRepository, setClassroom, showToast)} showInviteCode={isInstructor} />}
+      actions={isInstructor ? <ClassroomHeaderInfoBar classroom={classroom} inviteCodeDisabled={isReadOnly} onInviteCodeClick={() => void copyInviteCode(classroom, classroomsRepository, setClassroom, showToast)} showInviteCode /> : undefined}
       activeTab="course"
       classroom={classroom}
       showClassroomSummary={false}
