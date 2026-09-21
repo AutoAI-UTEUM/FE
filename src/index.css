@@ -68,10 +68,7 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 @custom-variant tablet-portrait (&:where([data-responsive-mode='tablet-portrait'], [data-responsive-mode='tablet-portrait'] *));
 @custom-variant tablet-landscape (&:where([data-responsive-mode='tablet-landscape'], [data-responsive-mode='tablet-landscape'] *));
 
-/*
- * Manrope 800의 숫자 글리프만 우선 사용한다. 그 밖의 문자는 다음 폰트인
- * Noto Sans KR로 자연스럽게 대체되므로 혼합 문장도 별도 마크업이 필요 없다.
- */
+/* Manrope 800 숫자는 독립 수치에만 적용해 이메일·URL의 혼합 조판을 막는다. */
 @font-face {
   font-family: "Uteum Numeric";
   font-style: normal;
@@ -87,6 +84,9 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 
 @theme {
   --font-sans:
+    "Noto Sans KR Variable", "Noto Sans KR", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
+  --font-numeric:
     "Uteum Numeric", "Noto Sans KR Variable", "Noto Sans KR", ui-sans-serif,
     system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -128,13 +128,19 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 }
 
 @utility type-metric {
+  font-family: var(--font-numeric);
   font-size: 1.875rem;
   line-height: 2.25rem;
 }
 
 @utility type-metric-compact {
+  font-family: var(--font-numeric);
   font-size: 1.375rem;
   line-height: 1.75rem;
+}
+
+@utility font-numeric {
+  font-family: var(--font-numeric);
 }
 
 @utility type-brand-title {
