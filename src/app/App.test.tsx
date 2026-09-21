@@ -38,6 +38,16 @@ function previousWeekRange() {
   return { from: format(from), to: format(to) }
 }
 
+function currentWeekRange() {
+  const to = new Date()
+  const from = new Date(to)
+  from.setDate(from.getDate() - 6)
+  const format = (value: Date) =>
+    new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(value)
+
+  return { from: format(from), to: format(to) }
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -195,10 +205,10 @@ describe('AppRoutes', () => {
     })
 
     expect(await screen.findByRole('heading', { name: '회원' })).toBeInTheDocument()
-    const adminNavigation = screen.getByRole('navigation', { name: '관리자 메뉴' })
+    const adminNavigation = screen.getByRole('navigation', { name: '주요 메뉴' })
     expect(adminNavigation).toBeInTheDocument()
-    expect(within(adminNavigation).getAllByRole('button')).toHaveLength(6)
-    fireEvent.click(within(adminNavigation).getByRole('button', { name: '인프라' }))
+    expect(within(adminNavigation).getAllByRole('link')).toHaveLength(5)
+    fireEvent.click(within(adminNavigation).getByRole('link', { name: '인프라' }))
     expect(await screen.findByRole('heading', { name: '인프라' })).toBeInTheDocument()
     expect(
       screen.getAllByRole('button', { name: '프로필 메뉴' }).some((button) =>
@@ -206,11 +216,11 @@ describe('AppRoutes', () => {
       ),
     ).toBe(true)
     expect(screen.getByRole('link', { name: '강의실' })).toHaveAttribute('href', '/admin?tab=classrooms')
-    expect(screen.getByRole('link', { name: 'xAI 관리' })).toHaveAttribute('href', '/admin?tab=xai')
+    expect(screen.getByRole('link', { name: 'AI 관리' })).toHaveAttribute('href', '/admin?tab=ai-usage')
     expect(screen.getByRole('link', { name: '업데이트' })).toHaveAttribute('href', '/admin?tab=updates')
     expect(screen.queryByRole('button', { name: /알림/ })).not.toBeInTheDocument()
 
-    fireEvent.click(within(adminNavigation).getByRole('button', { name: '업데이트' }))
+    fireEvent.click(within(adminNavigation).getByRole('link', { name: '업데이트' }))
     expect(await screen.findByRole('heading', { name: '업데이트' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: '개발 파트' })).toBeInTheDocument()
 
@@ -222,11 +232,12 @@ describe('AppRoutes', () => {
   })
 
   it('shows nullable admin AI token totals as unavailable', async () => {
+    const currentRange = currentWeekRange()
     installApiFixtureServer((request) => {
       const url = new URL(request.url)
       if (url.pathname === '/api/admin/ai-usage/summary') {
         return apiSuccess({
-          daily: [{ date: '2026-08-30', callCount: 4, successCount: 3, failCount: 1, inputTokens: null, outputTokens: null, reasoningTokens: null }],
+          daily: [{ date: currentRange.to, callCount: 4, successCount: 3, failCount: 1, inputTokens: null, outputTokens: null, reasoningTokens: null }],
           features: [{ feature: 'TURN', callCount: 4, inputTokens: null, outputTokens: null, reasoningTokens: null }],
         })
       }
@@ -237,11 +248,11 @@ describe('AppRoutes', () => {
     })
 
     renderRoute('/admin', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
-    fireEvent.click(await screen.findByRole('button', { name: 'AI 사용량' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'AI 관리' }))
 
     expect(await screen.findByRole('heading', { name: '일별 호출' })).toBeInTheDocument()
-    expect(screen.getByText('총 토큰').parentElement).toHaveTextContent('-')
-    expect(screen.getByTitle('2026-08-30: 성공 3건, 실패 1건, 토큰 -')).toBeInTheDocument()
+    expect(screen.getByText('총 토큰 / 호출').parentElement).toHaveTextContent('-')
+    expect(screen.getByTitle(`${currentRange.to}: 성공 3건, 실패 1건, 토큰 -`)).toBeInTheDocument()
   })
 
   it('renders the reported dev AI usage response using the current token sum for a selected KST week', async () => {
@@ -270,15 +281,15 @@ describe('AppRoutes', () => {
     })
 
     renderRoute('/admin', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
-    fireEvent.click(await screen.findByRole('button', { name: 'AI 사용량' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'AI 관리' }))
     await screen.findByRole('heading', { name: '일별 호출' })
     expect(screen.getByRole('button', { name: '다음 주' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '이전 주' }))
 
     expect(await screen.findByTitle(`${selectedRange.from}: 성공 6건, 실패 0건, 토큰 17,296`)).toBeInTheDocument()
-    expect(screen.getByText('총 호출').parentElement).toHaveTextContent('6건')
-    expect(screen.getAllByText('실패', { exact: true })[0].parentElement).toHaveTextContent('0건')
-    expect(screen.getByText('총 토큰').parentElement).toHaveTextContent('17,296')
+    expect(screen.getByText('총 토큰 / 호출').parentElement).toHaveTextContent('17,296')
+    expect(screen.getByText('총 토큰 / 호출').parentElement).toHaveTextContent('호출 6건')
+    expect(screen.getByText('실패율').parentElement).toHaveTextContent('실패 0건 / 6건')
     expect(screen.getByTitle('학습 대화: 4건, 토큰 9,343')).toBeInTheDocument()
     expect(screen.getByTitle('퀴즈 평가: 1건, 토큰 3,770')).toBeInTheDocument()
     expect(screen.getByTitle('진단: 1건, 토큰 4,183')).toBeInTheDocument()
@@ -287,7 +298,7 @@ describe('AppRoutes', () => {
       const latest = usageRequests.filter((url) => url.pathname.endsWith(`/${endpoint}`)).at(-1)
       expect(latest?.searchParams.get('from')).toBe(selectedRange.from)
       expect(latest?.searchParams.get('to')).toBe(selectedRange.to)
-      if (endpoint === 'users') expect(latest?.searchParams.get('limit')).toBe('20')
+      if (endpoint === 'users') expect(latest?.searchParams.get('limit')).toBe('3')
     }
   })
 

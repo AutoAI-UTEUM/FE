@@ -7,7 +7,7 @@
   min-height: 26rem;
   padding: 1.25rem 2.25rem 5rem 3.25rem;
   color: #1c1917;
-  font-family: Pretendard, Inter, system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.7;
 }

@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
+import '@fontsource-variable/noto-sans-kr'
 
 import { App } from './app/App'
 import { AppErrorBoundary } from './app/AppErrorBoundary'

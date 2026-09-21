@@ -88,8 +88,8 @@ for (const role of ['LEARNER', 'INSTRUCTOR', 'ADMIN'] as const) {
             expect.soft(pageOverflow, 'Admin updates must not create page-level vertical scrolling').toBeLessThanOrEqual(2)
             await expect(page.getByRole('group', { name: '개발 파트' })).toBeVisible()
             await expect(
-              page.getByRole('navigation', { name: '관리자 메뉴' })
-                .getByRole('button', { name: '업데이트' }),
+              page.getByRole('navigation', { name: '주요 메뉴' })
+                .getByRole('link', { name: '업데이트' }),
             ).toHaveAttribute('aria-current', 'page')
           }
         })
