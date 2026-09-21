@@ -403,6 +403,8 @@ function AiManagementPanel({ repository }: { repository: Repository }) {
   const available = overview?.available || credits?.available || status?.available
   const stale = overview?.stale === true || credits?.stale === true
   const usedPercent = ratioPercent(credits?.postpaidUsedUsd, credits?.postpaidLimitUsd)
+  const prepaidAvailableUsd = overview?.prepaidAvailableUsd ?? credits?.prepaidAvailableUsd
+  const postpaidRemainingUsd = overview?.postpaidRemainingUsd ?? credits?.postpaidRemainingUsd
 
   function moveWeek(offset: -1 | 1) {
     setUsageLoading(true)
@@ -453,7 +455,7 @@ function AiManagementPanel({ repository }: { repository: Repository }) {
         <div className="flex flex-col gap-2.5 rounded-[14px] bg-[#1B2436] px-5 py-[18px] text-white">
           <div className="flex items-start justify-between gap-2"><dt className="type-caption text-stone-300">사용 가능 잔액</dt><XaiRiskBadge risk={overview?.riskLevel ?? null} /></div>
           <dd className="type-metric font-extrabold tracking-normal tabular-nums">{formatUsd(overview?.totalAvailableUsd)}</dd>
-          <p className="type-caption text-[#8D99AD]">선불 잔액 {formatUsd(overview?.prepaidBalanceUsd)} · 후불 한도 {formatUsd(credits?.postpaidLimitUsd)}</p>
+          <p className="type-caption text-[#8D99AD]">선불 가용 {formatUsd(prepaidAvailableUsd)} · 후불 잔여 {formatUsd(postpaidRemainingUsd)}</p>
         </div>
         <AiOverviewMetric label="이번 달 사용 비용" value={formatUsd(overview?.currentMonthCostUsd)} detail={`최근 일평균 ${formatUsd(overview?.averageDailyCost7d)}`} />
         <AiOverviewMetric label="총 토큰 / 호출" value={formatCount(totals.tokens)} detail={`호출 ${formatCount(totals.calls)}건 · 호출당 ${formatCount(tokensPerCall)}`} />
