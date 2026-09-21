@@ -68,10 +68,27 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 @custom-variant tablet-portrait (&:where([data-responsive-mode='tablet-portrait'], [data-responsive-mode='tablet-portrait'] *));
 @custom-variant tablet-landscape (&:where([data-responsive-mode='tablet-landscape'], [data-responsive-mode='tablet-landscape'] *));
 
+/*
+ * Manrope 800의 숫자 글리프만 우선 사용한다. 그 밖의 문자는 다음 폰트인
+ * Noto Sans KR로 자연스럽게 대체되므로 혼합 문장도 별도 마크업이 필요 없다.
+ */
+@font-face {
+  font-family: "Uteum Numeric";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource/manrope/files/manrope-latin-800-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0024-0025,
+    U+002B-003A,
+    U+20A9;
+}
+
 @theme {
   --font-sans:
-    "Pretendard Variable", Pretendard, ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", sans-serif;
+    "Uteum Numeric", "Noto Sans KR Variable", "Noto Sans KR", ui-sans-serif,
+    system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* 역할과 페이지 종류에 관계없이 사용하는 기본 콘텐츠 프레임. */
@@ -103,6 +120,21 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 @utility type-page-title {
   font-size: 1.375rem;
   line-height: 1.875rem;
+}
+
+@utility type-admin-title {
+  font-size: 1.625rem;
+  line-height: 2.25rem;
+}
+
+@utility type-metric {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+}
+
+@utility type-metric-compact {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
 }
 
 @utility type-brand-title {

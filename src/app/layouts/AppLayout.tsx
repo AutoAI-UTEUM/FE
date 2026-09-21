@@ -5,7 +5,6 @@ import {
   Check,
   ChevronsLeft,
   ChevronsRight,
-  CircleDollarSign,
   CircleUserRound,
   ClipboardCheck,
   FileCheck2,
@@ -1208,13 +1207,13 @@ function bottomNavLinkClassName(isActive: boolean): string {
 const adminNavigation: NavigationItem[] = [
   { icon: CircleUserRound, inBottomNav: true, label: '회원', to: routes.admin },
   { icon: List, inBottomNav: true, label: '강의실', to: `${routes.admin}?tab=classrooms` },
-  { icon: Sparkles, inBottomNav: true, label: 'AI 사용량', to: `${routes.admin}?tab=ai-usage` },
-  { icon: CircleDollarSign, label: 'xAI 관리', to: `${routes.admin}?tab=xai` },
+  { icon: Sparkles, inBottomNav: true, label: 'AI 관리', to: `${routes.admin}?tab=ai-usage` },
   { icon: ServerCog, label: '인프라', to: `${routes.admin}?tab=infra` },
   { icon: CalendarDays, label: '업데이트', to: `${routes.admin}?tab=updates` },
 ]
 
 function adminTabFromLocation(value: string): string {
   const query = value.split('?')[1] ?? ''
-  return new URLSearchParams(query).get('tab') ?? 'users'
+  const tab = new URLSearchParams(query).get('tab') ?? 'users'
+  return tab === 'xai' ? 'ai-usage' : tab
 }
