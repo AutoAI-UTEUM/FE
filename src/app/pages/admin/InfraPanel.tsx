@@ -96,8 +96,10 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   }, [refreshKey, repository])
 
   return (
-    <div className="h-full mobile-web:min-h-0 min-h-[620px] overflow-auto bg-[#F7F8FA]">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 mobile-phone:flex-col mobile-phone:items-stretch">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 mobile-phone:flex-col mobile-phone:items-stretch">
+        <h1 className="type-admin-title font-bold text-stone-950">인프라</h1>
+        <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
         <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
           <SegmentedControl
             label="환경"
@@ -135,13 +137,12 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
         }} className="size-9 shrink-0 p-0 mobile-web:size-11 mobile-phone:self-end" disabled={isRefreshing} size="sm" title="새로고침" variant="secondary">
           <RefreshCw aria-hidden="true" className={isRefreshing ? 'animate-spin' : undefined} size={15} />
         </Button>
+        </div>
       </div>
 
-      <div className="space-y-4 p-4">
-        <InfraSummary app={app} cost={cost} metrics={metrics} />
-        <SystemSection app={app} range={range} metrics={metrics} />
-        <CostSection state={cost} />
-      </div>
+      <InfraSummary app={app} cost={cost} metrics={metrics} />
+      <SystemSection app={app} range={range} metrics={metrics} />
+      <CostSection state={cost} />
     </div>
   )
 }
@@ -152,24 +153,23 @@ function InfraSummary({ app, cost, metrics }: { app: LoadState<InfraApp>; cost: 
   const costData = cost.data
   const statusFailed = (metricData?.latest?.status ?? 0) >= 1
   return (
-    <section aria-label="서버 상태" className="overflow-hidden rounded-lg border border-stone-200 bg-white">
+    <section aria-label="서버 상태" className="shrink-0">
       {metrics.error ? <AdminErrorMessage error={metrics.error} /> : null}
       {!metrics.loading && metricData && !metricData.available ? <PanelMessage message={unavailableMessage(metricData.reason, 'metrics')} /> : null}
       {metricData?.stale ? <StaleNotice /> : null}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+        <SummaryMetric dark detail={appData?.available ? formatUptime(appData.uptimeSeconds) : '가동 시간 데이터 없음'} danger={statusFailed} label="상태" value={metricData?.latest?.status == null ? '-' : statusFailed ? '실패' : '정상'} />
         <SummaryMetric danger={(metricData?.latest?.cpu ?? 0) > 80} label="CPU" value={formatPercent(metricData?.latest?.cpu)} />
         <SummaryMetric danger={(metricData?.latest?.mem ?? 0) > 85} label="메모리" value={formatPercent(metricData?.latest?.mem)} />
         <SummaryMetric danger={(metricData?.latest?.disk ?? 0) > 80} label="디스크" value={formatPercent(metricData?.latest?.disk)} />
-        <SummaryMetric label="가동 시간" value={appData?.available ? formatUptime(appData.uptimeSeconds) : '-'} />
-        <SummaryMetric danger={statusFailed} label="상태" value={metricData?.latest?.status == null ? '-' : statusFailed ? '실패' : '정상'} valueClassName={!statusFailed && metricData?.latest?.status != null ? 'text-emerald-700' : undefined} />
         <SummaryMetric label="AWS 비용" value={costData?.available ? formatMoney(costData.monthToDate?.total ?? 0, costData.currency ?? 'USD') : '-'} />
       </div>
     </section>
   )
 }
 
-function SummaryMetric({ danger = false, label, value, valueClassName }: { danger?: boolean; label: string; value: string; valueClassName?: string }) {
-  return <div className="min-w-0 border-r border-b border-stone-100 px-4 py-2.5 xl:border-b-0"><p className="type-micro text-stone-500">{label}</p><p className={`mt-0.5 truncate type-section-title font-bold ${danger ? 'text-rose-700' : valueClassName ?? 'text-stone-950'}`} title={value}>{value}</p>{value === '-' ? <span className="block type-micro text-stone-400">데이터 없음</span> : null}</div>
+function SummaryMetric({ dark = false, danger = false, detail, label, value }: { dark?: boolean; danger?: boolean; detail?: string; label: string; value: string }) {
+  return <article className={`flex min-h-32 min-w-0 flex-col gap-2.5 rounded-[14px] px-5 py-[18px] ${dark ? 'bg-[#1B2436] text-white' : 'border border-stone-200 bg-white'}`}><p className={`type-caption font-medium ${dark ? 'text-[#A9B4C7]' : 'text-stone-500'}`}>{label}</p><p className={`type-metric truncate font-extrabold tracking-normal tabular-nums ${danger ? 'text-rose-700' : dark ? 'text-white' : 'text-stone-950'}`} title={value}>{value}</p><span className={`mt-auto type-caption ${dark ? 'text-[#8D99AD]' : 'text-stone-400'}`}>{detail ?? (value === '-' ? '데이터 없음' : '현재 조회 값')}</span></article>
 }
 
 function SystemSection({ app, metrics, range }: { app: LoadState<InfraApp>; metrics: LoadState<InfraMetrics>; range: InfraRange }) {
@@ -212,7 +212,7 @@ function CostSection({ state }: { state: LoadState<InfraCost> }) {
   const canGoPrevious = allDaily.length > 0 && selectedWeek.from > allDaily[0].date
   const canGoNext = weekOffset < 0
   return (
-    <section aria-labelledby="cost-title" className="rounded-lg border border-stone-200 bg-white">
+    <section aria-labelledby="cost-title" className="shrink-0 rounded-[14px] border border-stone-200 bg-white">
       <SectionHeader
         detail={data?.updatedAt ? `비용 데이터 기준 ${formatDateTime(data.updatedAt)}` : undefined}
         id="cost-title"

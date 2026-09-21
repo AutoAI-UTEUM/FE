@@ -14,14 +14,9 @@ afterEach(() => {
 describe('AdminPage', () => {
   it('refreshes the selected AI usage range from an icon-only button', async () => {
     const requestedPaths: string[] = []
-    const requestedUserPageSizes: string[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
       requestedPaths.push(url.pathname)
-      if (url.pathname === '/api/admin/users') {
-        requestedUserPageSizes.push(url.searchParams.get('size') ?? '')
-        return success({ items: [], page: 0, size: 17, totalElements: 0, totalPages: 0 })
-      }
       if (url.pathname === '/api/admin/ai-usage/summary') {
         return success({ daily: [], features: [] })
       }
@@ -34,18 +29,17 @@ describe('AdminPage', () => {
     render(
       <ResponsiveViewportProvider>
         <TestAuthProvider>
-          <MemoryRouter><AdminPage /></MemoryRouter>
+          <MemoryRouter initialEntries={['/?tab=ai-usage']}><AdminPage /></MemoryRouter>
         </TestAuthProvider>
       </ResponsiveViewportProvider>,
     )
 
-    await waitFor(() => expect(requestedUserPageSizes).toContain('17'))
-    fireEvent.click(screen.getByRole('button', { name: 'AI 사용량' }))
     await waitFor(() => expect(countRequests(requestedPaths, '/api/admin/ai-usage/summary')).toBe(1))
-    expect(screen.getByRole('region', { name: 'AI 사용량 상세' })).toHaveClass('overflow-hidden')
+    expect(screen.getByRole('region', { name: 'AI 사용량 상세' })).toBeVisible()
     expect(screen.getByRole('region', { name: '사용자별 호출 목록' })).toHaveClass('overflow-y-auto')
+    expect(screen.queryByRole('button', { name: 'xAI 관리' })).not.toBeInTheDocument()
 
-    const refreshButton = screen.getByRole('button', { name: 'AI 사용량 새로고침' })
+    const refreshButton = screen.getByRole('button', { name: 'AI 관리 새로고침' })
     expect(refreshButton).toHaveAttribute('title', '새로고침')
     expect(refreshButton).toHaveTextContent('')
     fireEvent.click(refreshButton)
@@ -100,6 +94,12 @@ describe('AdminPage', () => {
       if (url.pathname === '/api/admin/users') {
         return success({ items: [], page: 0, size: 17, totalElements: 0, totalPages: 0 })
       }
+      if (url.pathname === '/api/admin/ai-usage/summary') {
+        return success({ daily: [], features: [{ callCount: 4, feature: 'TURN', inputTokens: 10, outputTokens: 20, reasoningTokens: 30 }] })
+      }
+      if (url.pathname === '/api/admin/ai-usage/users') {
+        return success({ items: [] })
+      }
       if (url.pathname === '/api/admin/xai/overview' || (url.pathname === '/api/admin/xai/sync' && method === 'POST')) {
         return success({ available: true, averageDailyCost7d: '4.85', currentMonthCostUsd: '72.75', fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', prepaidBalanceUsd: '125.00', projectedDepletionAt: '2026-12-01T08:00:00Z', riskLevel: 'WARNING', stale: false, totalAvailableUsd: '352.25' })
       }
@@ -115,19 +115,20 @@ describe('AdminPage', () => {
     render(
       <ResponsiveViewportProvider>
         <TestAuthProvider>
-          <MemoryRouter><AdminPage /></MemoryRouter>
+          <MemoryRouter initialEntries={['/?tab=ai-usage']}><AdminPage /></MemoryRouter>
         </TestAuthProvider>
       </ResponsiveViewportProvider>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'xAI 관리' }))
     expect(await screen.findByText('$352.25')).toBeInTheDocument()
-    expect(screen.getByText('잔액 주의')).toBeInTheDocument()
+    expect(screen.queryByText('잔액, 이번 달 비용과 소진 위험을 확인합니다.')).not.toBeInTheDocument()
+    expect(screen.getByText('잔액 주의').querySelector('svg')).not.toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: '기능별 AI 호출 가로 막대 차트' })).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '후불 한도 사용률' })).toHaveAttribute('aria-valuenow', '24.25')
 
-    fireEvent.click(screen.getByRole('button', { name: '지금 동기화' }))
+    fireEvent.click(screen.getByRole('button', { name: 'AI 관리 새로고침' }))
     await waitFor(() => expect(requested.filter(({ method, path }) => method === 'POST' && path === '/api/admin/xai/sync')).toHaveLength(1))
-    expect(await screen.findByText('xAI 비용과 크레딧을 최신 정보로 동기화했습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('AI 사용량과 비용 정보를 최신 상태로 동기화했습니다.')).not.toBeInTheDocument()
   })
 })
 
