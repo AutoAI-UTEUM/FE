@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AdminRepository, InfraApp, InfraCost, InfraMetrics } from '../../../features/admin'
+import type { AdminRepository, AdminXaiOverview, AdminXaiUsage, InfraApp, InfraCost, InfraMetrics } from '../../../features/admin'
 import { ApiClientError } from '../../../shared/api'
 import { TestAuthProvider } from '../../../test/TestAuthProvider'
 import { InfraLineChart, InfraPanel } from './InfraPanel'
@@ -61,6 +61,33 @@ const app: InfraApp = {
   uptimeSeconds: 3 * 86400 + 4 * 3600 + 12 * 60,
 }
 
+const xaiOverview: AdminXaiOverview = {
+  available: true,
+  averageDailyCost7d: '1.25',
+  currentMonthCostUsd: '37.14',
+  fetchedAt: '2026-09-01T00:30:00Z',
+  lastSuccessfulSyncAt: '2026-09-01T00:30:00Z',
+  postpaidLimitUsd: '0',
+  postpaidRemainingUsd: '0',
+  prepaidAvailableUsd: '56.77',
+  prepaidBalanceUsd: '93.91',
+  prepaidUsedThisPeriodUsd: '37.14',
+  projectedDepletionAt: null,
+  riskLevel: 'NORMAL',
+  stale: false,
+  totalAvailableUsd: '56.77',
+}
+
+const xaiUsage: AdminXaiUsage = {
+  from: '2026-08-26',
+  granularity: 'DAY',
+  groupBy: 'FEATURE',
+  items: [{ callCount: 2, costUsd: '1.50', date: '2026-09-01', group: '학습 대화', tokenCount: 1000 }],
+  metric: 'COST',
+  to: '2026-09-01',
+  unknownCostCalls: 0,
+}
+
 function points(first: number, second: number) {
   return [
     { t: '2026-09-01T00:00:00Z', v: first },
@@ -73,6 +100,8 @@ function createRepository(overrides: Partial<AdminRepository> = {}) {
     getInfraApp: vi.fn().mockResolvedValue(app),
     getInfraCost: vi.fn().mockResolvedValue(cost),
     getInfraMetrics: vi.fn().mockResolvedValue(metrics),
+    getXaiOverview: vi.fn().mockResolvedValue(xaiOverview),
+    getXaiUsage: vi.fn().mockResolvedValue(xaiUsage),
     ...overrides,
   } as unknown as AdminRepository
 }
@@ -96,14 +125,13 @@ describe('InfraPanel', () => {
     expect(within(serverSection).getByText('82.4%')).toHaveClass('text-rose-700')
     expect(within(serverSection).getByText('90.1%')).toHaveClass('text-rose-700')
     expect(within(serverSection).getByText('41.3%')).not.toHaveClass('text-rose-700')
-    expect(within(serverSection).getByText('정상')).toBeInTheDocument()
+    expect(screen.getByText('정상')).toBeInTheDocument()
     expect(await screen.findByText('$42.75')).toBeInTheDocument()
     expect(screen.getByText('50.0%')).toBeInTheDocument()
     expect(screen.getByText('3일 4시간 12분')).toBeInTheDocument()
     expect(screen.getByText('100건')).toBeInTheDocument()
-    const systemHeader = screen.getByRole('heading', { name: '시스템' }).parentElement
+    fireEvent.click(screen.getByRole('button', { name: 'AWS 주간 비용 상세 보기' }))
     const costHeader = screen.getByRole('heading', { name: 'AWS 비용' }).parentElement
-    expect(systemHeader).toHaveTextContent('조회')
     expect(costHeader).toHaveTextContent('조회')
     expect(costHeader?.textContent).not.toMatch(/:\d{2}:\d{2}/)
     expect(container.querySelectorAll('[data-cost-date]')).toHaveLength(7)
@@ -117,7 +145,7 @@ describe('InfraPanel', () => {
 
     expect(await screen.findByText('인프라 조회가 비활성화되어 있습니다.')).toBeInTheDocument()
     expect(await screen.findByText('$42.75')).toBeInTheDocument()
-    expect(screen.getByText('3일 4시간 12분')).toBeInTheDocument()
+    expect(screen.getAllByText('3일 4시간 12분')).toHaveLength(1)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -182,6 +210,7 @@ describe('InfraPanel', () => {
   it('shows AWS daily costs in fixed seven-day ranges', async () => {
     const { repository } = renderPanel()
     await screen.findByText('$42.75')
+    fireEvent.click(screen.getByRole('button', { name: 'AWS 주간 비용 상세 보기' }))
 
     const rangeControl = screen.getByLabelText('AWS 비용 조회 기간')
     expect(rangeControl).toHaveTextContent('08.25 - 08.31')

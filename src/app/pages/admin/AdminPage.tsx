@@ -57,13 +57,17 @@ export function AdminPage() {
   usePageTitle(activeTab.title ?? activeTab.label)
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-5 overflow-hidden">
+      <header className="shrink-0">
+        <p className="type-caption text-[#5F6675]">관리자 <span className="px-1 text-[#5F6675]">/</span> <span className="font-medium text-[#4B5563]">{activeTab.label}</span></p>
+        <h1 className="mt-1 type-admin-title font-bold text-[#111827]">{activeTab.title ?? activeTab.label}</h1>
+      </header>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === 'users' ? <UsersPanel repository={repository} /> : null}
         {tab === 'classrooms' ? <ClassroomsPanel repository={repository} /> : null}
         {tab === 'ai-usage' ? <AiManagementPanel repository={repository} /> : null}
-        {tab === 'infra' ? <InfraPanel repository={repository} /> : null}
-        {tab === 'updates' ? <DevelopmentUpdatesPanel /> : null}
+        {tab === 'infra' ? <InfraPanel repository={repository} showTitle={false} /> : null}
+        {tab === 'updates' ? <DevelopmentUpdatesPanel adminConsole showTitle={false} /> : null}
       </section>
     </div>
   )
@@ -73,14 +77,8 @@ function isAdminTab(value: string | null): value is AdminTab {
   return tabs.some((item) => item.id === value)
 }
 
-function AdminSummaryCard({ dark = false, detail, label, value, valueClassName = '' }: { dark?: boolean; detail: string; label: string; value: string; valueClassName?: string }) {
-  return (
-    <article className={`flex min-h-32 min-w-0 flex-col gap-2.5 rounded-[14px] px-5 py-[18px] ${dark ? 'bg-[#1B2436] text-white' : 'border border-stone-200 bg-white text-stone-950'}`}>
-      <p className={`type-caption font-medium ${dark ? 'text-[#A9B4C7]' : 'text-stone-500'}`}>{label}</p>
-      <strong className={`type-metric font-extrabold tracking-normal tabular-nums ${valueClassName}`}>{value}</strong>
-      <p className={`mt-auto type-caption ${dark ? 'text-[#8D99AD]' : 'text-stone-400'}`}>{detail}</p>
-    </article>
-  )
+function AdminSummaryStrip({ items }: { items: Array<{ detail: string; label: string; unit?: string; value: string }> }) {
+  return <section aria-label="회원 요약" className="grid shrink-0 overflow-hidden rounded-[18px] border border-[#E6EAF0] bg-white [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">{items.map((item, index) => <article className={`flex min-h-[118px] min-w-0 flex-col justify-center gap-2 px-6 py-4 ${index > 0 ? 'border-l border-[#EEF1F5]' : ''}`} key={item.label}><p className="type-caption font-medium text-[#111827]">{item.label}</p><div className="flex items-baseline gap-1"><strong className="font-numeric text-[2.5rem] font-medium leading-none tracking-normal text-[#111827]">{item.value}</strong>{item.unit ? <span className="font-numeric type-dialog-title font-medium text-[#111827]">{item.unit}</span> : null}</div><p className="type-micro text-[#5F6675]">{item.detail}</p></article>)}</section>
 }
 
 function formatShare(value: number | undefined, total: number | undefined) {
@@ -113,15 +111,19 @@ function UsersPanel({ repository }: { repository: Repository }) {
   const [loading, setLoading] = useState(true)
   const [resetResult, setResetResult] = useState<{ message: string; name: string; temporaryPassword: string } | null>(null)
   const [roleCounts, setRoleCounts] = useState<Partial<Record<AdminUserRole, number>>>({})
+  const [activeUsers, setActiveUsers] = useState<number | undefined>()
   const totalUsers = result?.totalElements
 
   useEffect(() => {
     const controller = new AbortController()
-    Promise.all((['INSTRUCTOR', 'LEARNER', 'ADMIN'] as const).map(async (targetRole) => {
-      const data = await repository.listUsers({ page: 0, role: targetRole, size: 1 }, controller.signal)
-      return [targetRole, data.totalElements] as const
-    }))
-      .then((entries) => setRoleCounts(Object.fromEntries(entries)))
+    Promise.all([
+      Promise.all((['INSTRUCTOR', 'LEARNER', 'ADMIN'] as const).map(async (targetRole) => {
+        const data = await repository.listUsers({ page: 0, role: targetRole, size: 1 }, controller.signal)
+        return [targetRole, data.totalElements] as const
+      })),
+      repository.listUsers({ page: 0, size: 1, status: 'ACTIVE' }, controller.signal),
+    ])
+      .then(([entries, active]) => { setRoleCounts(Object.fromEntries(entries)); setActiveUsers(active.totalElements) })
       .catch(() => undefined)
     return () => controller.abort()
   }, [repository])
@@ -182,16 +184,15 @@ function UsersPanel({ repository }: { repository: Repository }) {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
-      <h1 className="type-admin-title shrink-0 font-bold text-stone-950">회원</h1>
-      <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-        <AdminSummaryCard dark detail="현재 등록 회원" label="전체 회원" value={formatCount(totalUsers)} />
-        <AdminSummaryCard detail={`전체의 ${formatShare(roleCounts.INSTRUCTOR, totalUsers)}`} label="강의자" value={formatCount(roleCounts.INSTRUCTOR)} />
-        <AdminSummaryCard detail={`전체의 ${formatShare(roleCounts.LEARNER, totalUsers)}`} label="학습자" value={formatCount(roleCounts.LEARNER)} />
-        <AdminSummaryCard detail={currentUser?.name ?? '관리 계정'} label="관리자" value={formatCount(roleCounts.ADMIN)} />
-      </div>
-      <section aria-labelledby="admin-users-list-title" className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-[22px] py-5">
+    <div className="flex h-full min-h-0 w-full flex-col gap-[14px] overflow-y-auto pb-1">
+      <AdminSummaryStrip items={[
+        { detail: '현재 등록 회원', label: '전체 회원', unit: '명', value: formatCount(totalUsers) },
+        { detail: `전체의 ${formatShare(roleCounts.INSTRUCTOR, totalUsers)}`, label: '강의자', unit: '명', value: formatCount(roleCounts.INSTRUCTOR) },
+        { detail: `전체의 ${formatShare(roleCounts.LEARNER, totalUsers)}`, label: '학습자', unit: '명', value: formatCount(roleCounts.LEARNER) },
+        { detail: `전체의 ${formatShare(activeUsers, totalUsers)}`, label: '활성 회원', unit: '명', value: formatCount(activeUsers) },
+      ]} />
+      <section aria-labelledby="admin-users-list-title" className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[18px] border border-[#E6EAF0] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-[22px] py-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="type-section-title font-bold text-stone-950" id="admin-users-list-title">회원 목록</h2>
           <p className="type-caption text-stone-400">{result ? formatPageRange(result.page, result.size, result.totalElements) : '-'}</p>
@@ -210,15 +211,13 @@ function UsersPanel({ repository }: { repository: Repository }) {
       {error ? <AdminErrorMessage error={error} /> : null}
       <TabletMasterDetail enabled={isTablet} onClose={() => setExpandedId(null)} title="회원 상세" detail={expandedId !== null ? <div className="p-4">{detail ? <><h4 className="type-section-title font-bold">{detail.name}</h4><p className="mt-2 break-all text-stone-500">{detail.email}</p><dl className="mt-5 grid gap-4 type-body"><div><dt>역할</dt><dd>{roleLabel(detail.role)}</dd></div><div><dt>상태</dt><dd><StatusBadge status={detail.status} /></dd></div><div><dt>소속</dt><dd>{detail.affiliation || '-'}</dd></div><div><dt>가입일</dt><dd>{formatDate(detail.createdAt)}</dd></div><div><dt>인증</dt><dd>{detail.authProvider}</dd></div><div><dt>최근 활동</dt><dd>{formatDetailedRelativeActivityDate(detail.lastActiveAt ?? undefined)}</dd></div><div><dt>동의 일시</dt><dd>{detail.consentedAt ? formatDateTime(detail.consentedAt) : '-'}</dd></div></dl>{detail.authProvider === 'LOCAL' && detail.status === 'ACTIVE' && detail.id !== currentUser?.id ? <Button className="mt-5" onClick={() => void resetPassword(detail)} variant="secondary">임시 비밀번호 발급</Button> : null}</> : <p role="status">상세 정보를 불러오는 중입니다.</p>}</div> : null}>
         {isTablet ? <div aria-label="회원 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((user) => <button aria-label={`${user.name} 상세 정보`} aria-expanded={expandedId === user.id} className="tablet-summary-row w-full px-4 py-4 text-left hover:bg-stone-50" key={user.id} onClick={() => toggleDetail(user.id)} type="button"><span className="min-w-0"><strong className="block break-words">{user.name}</strong><span className="block break-all type-caption text-stone-500">{user.email}</span></span><span>{roleLabel(user.role)}</span><StatusBadge status={user.status} /></button>)}</div> : isMobileWeb ? <div aria-label="회원 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((user) => <MobileUserRow currentUserId={currentUser?.id} detail={expandedId === user.id ? detail : null} expanded={expandedId === user.id} key={user.id} onResetPassword={() => void resetPassword(user)} onToggle={() => toggleDetail(user.id)} user={user} />)}</div> : <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500">
+          <thead className="sticky top-0 z-10 bg-white type-micro font-medium text-[#5F6675]">
             <tr>
-              <th className="w-[16%] px-4 py-2.5"><SortButton active={sort === 'NAME'} direction="asc" label="회원 · ID" onClick={() => { setPage(0); setSort('NAME') }} /></th>
-              <th className="w-[22%] px-4 py-2.5">이메일</th>
-              <th className="w-[15%] px-4 py-2.5">역할</th>
-              <th className="w-[14%] px-4 py-2.5"><SortButton active={sort === 'RECENT'} direction="desc" label="가입일" onClick={() => { setPage(0); setSort('RECENT') }} /></th>
-              <th className="w-[13%] px-4 py-2.5"><SortButton active={sort === 'RECENT_ACTIVITY_DESC' || sort === 'RECENT_ACTIVITY_ASC'} direction={sort === 'RECENT_ACTIVITY_ASC' ? 'asc' : 'desc'} label="최근 활동" onClick={() => { setPage(0); setSort(sort === 'RECENT_ACTIVITY_DESC' ? 'RECENT_ACTIVITY_ASC' : 'RECENT_ACTIVITY_DESC') }} toggleable /></th>
-              <th className="w-[10%] px-4 py-2.5">인증</th>
-              <th className="w-[8%] px-4 py-2.5">상태</th>
+              <th className="w-[25%] border-b border-[#EEF1F5] px-4 py-2.5"><SortButton active={sort === 'NAME'} direction="asc" label="회원 · ID" onClick={() => { setPage(0); setSort('NAME') }} /></th>
+              <th className="w-[35%] border-b border-[#EEF1F5] px-4 py-2.5">이메일</th>
+              <th className="w-[14%] border-b border-[#EEF1F5] px-4 py-2.5">역할</th>
+              <th className="w-[16%] border-b border-[#EEF1F5] px-4 py-2.5"><SortButton active={sort === 'RECENT_ACTIVITY_DESC' || sort === 'RECENT_ACTIVITY_ASC'} direction={sort === 'RECENT_ACTIVITY_ASC' ? 'asc' : 'desc'} label="최근 활동" onClick={() => { setPage(0); setSort(sort === 'RECENT_ACTIVITY_DESC' ? 'RECENT_ACTIVITY_ASC' : 'RECENT_ACTIVITY_DESC') }} toggleable /></th>
+              <th className="w-[10%] border-b border-[#EEF1F5] px-4 py-2.5 text-right">상태</th>
               <th className="w-10 px-2 py-2.5"><span className="sr-only">상세</span></th>
             </tr>
           </thead>
@@ -251,13 +250,11 @@ function UserRows({ currentUserId, detail, expanded, onResetPassword, onToggle, 
         <td className="px-4 py-3"><p className="truncate font-semibold text-stone-950">{user.name} <span className="font-normal text-stone-400">#{user.id}</span></p></td>
         <td className="truncate px-4 py-3 text-stone-500" title={user.email}>{user.email}</td>
         <td className="px-4 py-3"><p className="font-medium text-stone-800">{roleLabel(user.role)}</p></td>
-        <td className="px-4 py-3 text-stone-500">{formatDate(user.createdAt)}</td>
         <td className="px-4 py-3 text-stone-500">{formatDetailedRelativeActivityDate(user.lastActiveAt ?? undefined)}</td>
-        <td className="px-4 py-3 type-caption font-semibold text-stone-500">{user.authProvider}</td>
-        <td className="px-4 py-3"><StatusBadge status={user.status} /></td>
+        <td className="px-4 py-3 text-right"><StatusBadge status={user.status} /></td>
         <td className="px-2 py-3"><button aria-expanded={expanded} aria-label={`${user.name} 상세 정보`} className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-800" onClick={onToggle} type="button">{expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button></td>
       </tr>
-      {expanded ? <tr className="border-b border-stone-100 bg-[#F7F8FA]"><td className="px-4 py-3 type-caption text-stone-600" colSpan={8}>{detail ? <div className="flex flex-wrap items-center gap-x-8 gap-y-2"><span>소속 <strong className="text-stone-900">{detail.affiliation || '-'}</strong></span><span>동의 일시 <strong className="text-stone-900">{detail.consentedAt ? formatDateTime(detail.consentedAt) : '-'}</strong></span>{canResetPassword ? <Button onClick={onResetPassword} size="sm" variant="secondary"><KeyRound aria-hidden="true" size={14} />임시 비밀번호 발급</Button> : null}</div> : '상세 정보를 불러오는 중입니다.'}</td></tr> : null}
+      {expanded ? <tr className="border-b border-stone-100 bg-[#F7F8FA]"><td className="px-4 py-3 type-caption text-stone-600" colSpan={6}>{detail ? <div className="flex flex-wrap items-center gap-x-8 gap-y-2"><span>가입일 <strong className="text-stone-900">{formatDate(user.createdAt)}</strong></span><span>인증 <strong className="text-stone-900">{user.authProvider}</strong></span><span>소속 <strong className="text-stone-900">{detail.affiliation || '-'}</strong></span><span>동의 일시 <strong className="text-stone-900">{detail.consentedAt ? formatDateTime(detail.consentedAt) : '-'}</strong></span>{canResetPassword ? <Button onClick={onResetPassword} size="sm" variant="secondary"><KeyRound aria-hidden="true" size={14} />임시 비밀번호 발급</Button> : null}</div> : '상세 정보를 불러오는 중입니다.'}</td></tr> : null}
     </>
   )
 }
@@ -276,12 +273,6 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
   const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const maxMembers = Math.max(1, ...(result?.items.map((item) => item.memberCount) ?? []))
-  const totalMembers = result?.items.reduce((sum, item) => sum + item.memberCount, 0)
-  const occupiedClassrooms = result?.items.filter((item) => item.memberCount > 0).length
-  const mostPopularClassroom = result?.items.reduce<AdminClassroomSummary | null>(
-    (current, item) => current === null || item.memberCount > current.memberCount ? item : current,
-    null,
-  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -310,16 +301,9 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
   }, [expandedId, repository])
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
-      <h1 className="type-admin-title shrink-0 font-bold text-stone-950">강의실</h1>
-      <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-        <AdminSummaryCard dark detail="현재 운영 중인 전체 강의실" label="전체 강의실" value={formatCount(result?.totalElements)} />
-        <AdminSummaryCard detail={`현재 페이지 ${formatCount(result?.items.length)}개 기준`} label="수강 인원" value={totalMembers == null ? '-' : `${formatCount(totalMembers)}명`} />
-        <AdminSummaryCard detail={`빈 강의실 ${formatCount((result?.items.length ?? 0) - (occupiedClassrooms ?? 0))}개`} label="운영 강의실" value={formatCount(occupiedClassrooms)} />
-        <AdminSummaryCard detail={mostPopularClassroom?.name ?? '강의실 없음'} label="최다 수강" value={mostPopularClassroom ? `${formatCount(mostPopularClassroom.memberCount)}명` : '-'} />
-      </div>
-      <section aria-labelledby="admin-classrooms-list-title" className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-[22px] py-5"><div className="flex items-baseline gap-3"><h2 className="type-section-title font-bold text-stone-950" id="admin-classrooms-list-title">강의실 목록</h2><span className="type-caption text-stone-400">{result ? formatPageRange(result.page, result.size, result.totalElements) : '-'}</span></div><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden pb-1">
+      <section aria-labelledby="admin-classrooms-list-title" className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[18px] border border-[#E6EAF0] bg-white px-[22px] py-5">
+      <div className="flex items-center justify-between gap-3 pb-4"><div className="flex items-baseline gap-3"><h2 className="type-dialog-title font-bold text-stone-950" id="admin-classrooms-list-title">강의실 목록</h2><span className="type-caption text-stone-400">{result ? formatPageRange(result.page, result.size, result.totalElements) : '-'}</span></div><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
       {error ? <AdminErrorMessage error={error} /> : null}
       <TabletMasterDetail enabled={isTablet} onClose={() => setExpandedId(null)} title="강의실 상세" detail={expandedId !== null ? <div className="p-4">{detail ? <><h4 className="type-section-title font-bold">{detail.name}</h4><p className="mt-2 type-body">개설자 {detail.instructor.name}</p><p className="mt-4 type-control font-semibold">참여 회원 {detail.members.length}명</p><ul className="mt-2 divide-y divide-stone-100">{detail.members.map((member) => <li className="flex flex-wrap justify-between gap-2 py-3" key={member.userId}><span>{member.name}</span><span className="text-stone-500">{roleLabel(member.role)}</span></li>)}</ul></> : <p role="status">상세 정보를 불러오는 중입니다.</p>}</div> : null}>
         {isTablet ? <div aria-label="강의실 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((classroom) => <button aria-label={`${classroom.name} 상세 정보`} aria-expanded={expandedId === classroom.id} className="tablet-summary-row w-full px-4 py-4 text-left hover:bg-stone-50" key={classroom.id} onClick={() => toggleDetail(classroom.id)} type="button"><span className="min-w-0"><strong className="block break-words">{classroom.name}</strong><span className="block type-caption text-stone-500">{classroom.instructor.name}</span></span><span>{classroom.memberCount}명</span><StatusBadge status={classroom.status} /></button>)}</div> : isMobileWeb ? <div aria-label="강의실 목록" className="divide-y divide-stone-100" role="region">{result?.items.map((classroom) => <MobileClassroomRow classroom={classroom} detail={expandedId === classroom.id ? detail : null} expanded={expandedId === classroom.id} key={classroom.id} onToggle={() => toggleDetail(classroom.id)} />)}</div> : <table className="w-full min-w-[820px] table-fixed border-collapse text-left"><thead className="sticky top-0 z-10 bg-[#F7F8FA] type-caption font-semibold text-stone-500"><tr><th className="w-[31%] px-4 py-2.5"><SortButton active={sort === 'NAME'} direction="asc" label="강의실 · ID" onClick={() => { setPage(0); setSort('NAME') }} /></th><th className="w-[16%] px-4 py-2.5">개설자</th><th className="w-[24%] px-4 py-2.5">수강 인원</th><th className="w-[14%] px-4 py-2.5"><SortButton active={sort === 'RECENT'} direction="desc" label="생성일" onClick={() => { setPage(0); setSort('RECENT') }} /></th><th className="w-[10%] px-4 py-2.5">상태</th><th className="w-10 px-2 py-2.5"><span className="sr-only">상세</span></th></tr></thead><tbody>
@@ -434,9 +418,8 @@ function AiManagementPanel({ repository }: { repository: Repository }) {
     }
   }
 
-  return <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
-    <div className="flex shrink-0 flex-wrap items-end justify-between gap-4">
-      <h1 className="type-admin-title font-bold text-stone-950">AI 토큰 및 비용 관리</h1>
+  return <div className="flex h-full min-h-0 w-full flex-col gap-[14px] overflow-y-auto pb-1">
+    <div className="flex shrink-0 flex-wrap items-end justify-end gap-4">
       <div className="flex items-center gap-2">
       <div aria-label="AI 사용량 조회 기간" className="flex h-10 items-center gap-0.5 overflow-hidden rounded-[10px] border border-stone-200 bg-white p-1 mobile-web:h-11">
         <button aria-label="이전 주" className="flex size-[30px] items-center justify-center rounded-[7px] text-stone-500 hover:bg-stone-100 hover:text-stone-900 disabled:opacity-40 mobile-web:size-9" disabled={usageLoading} onClick={() => moveWeek(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button>

@@ -123,6 +123,24 @@ export interface AdminXaiStatus {
   recentErrorClassification: XaiManagementFailureType | null
 }
 
+export interface AdminXaiUsagePoint {
+  date: string
+  group: string
+  costUsd: string | null
+  tokenCount: number | null
+  callCount: number | null
+}
+
+export interface AdminXaiUsage {
+  from: string
+  to: string
+  granularity: 'DAY'
+  metric: 'COST' | 'TOKENS' | 'CALLS'
+  groupBy: 'MODEL' | 'FEATURE'
+  unknownCostCalls: number
+  items: AdminXaiUsagePoint[]
+}
+
 export type InfraEnv = 'prod' | 'dev'
 export type InfraRange = '1h' | '6h' | '24h' | '7d'
 
@@ -218,6 +236,7 @@ export interface AdminRepository {
   getXaiOverview: (signal?: AbortSignal) => Promise<AdminXaiOverview>
   getXaiCredits: (signal?: AbortSignal) => Promise<AdminXaiCredits>
   getXaiStatus: (signal?: AbortSignal) => Promise<AdminXaiStatus>
+  getXaiUsage: (params: { from: string; to: string; metric?: 'COST' | 'TOKENS' | 'CALLS'; groupBy?: 'MODEL' | 'FEATURE' }, signal?: AbortSignal) => Promise<AdminXaiUsage>
   syncXai: (signal?: AbortSignal) => Promise<AdminXaiOverview>
 }
 
@@ -300,6 +319,13 @@ export function createAdminRepository(request: AuthenticatedRequest): AdminRepos
         cache: 'no-store',
         signal,
       })
+      return response.data
+    },
+    async getXaiUsage(params, signal) {
+      const response = await request<AdminXaiUsage>(
+        `/api/admin/xai/usage?${toQuery({ from: params.from, to: params.to, granularity: 'DAY', metric: params.metric ?? 'COST', groupBy: params.groupBy ?? 'FEATURE' })}`,
+        { cache: 'no-store', signal },
+      )
       return response.data
     },
     async syncXai(signal) {

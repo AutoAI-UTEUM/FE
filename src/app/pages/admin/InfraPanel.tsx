@@ -1,8 +1,10 @@
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import type {
   AdminRepository,
+  AdminXaiOverview,
+  AdminXaiUsage,
   InfraApp,
   InfraCost,
   InfraEnv,
@@ -35,23 +37,18 @@ const emptyState = <T,>(): LoadState<T> => ({
   receivedAt: null,
 })
 
-const emptySeries = {
-  cpu: [],
-  netIn: [],
-  netOut: [],
-  mem: [],
-  disk: [],
-  status: [],
-}
-
-export function InfraPanel({ repository }: { repository: AdminRepository }) {
+export function InfraPanel({ repository, showTitle = true }: { repository: AdminRepository; showTitle?: boolean }) {
   const [env, setEnv] = useState<InfraEnv>('prod')
   const [range, setRange] = useState<InfraRange>('24h')
   const [refreshKey, setRefreshKey] = useState(0)
   const [metrics, setMetrics] = useState<LoadState<InfraMetrics>>(emptyState)
   const [cost, setCost] = useState<LoadState<InfraCost>>(emptyState)
   const [app, setApp] = useState<LoadState<InfraApp>>(emptyState)
-  const isRefreshing = metrics.loading || cost.loading || app.loading
+  const [xaiOverview, setXaiOverview] = useState<LoadState<AdminXaiOverview>>(emptyState)
+  const [xaiUsage, setXaiUsage] = useState<LoadState<AdminXaiUsage>>(emptyState)
+  const [detailPanel, setDetailPanel] = useState<'aws' | 'xai' | null>(null)
+  const isRefreshing = metrics.loading || cost.loading || app.loading || xaiOverview.loading || xaiUsage.loading
+  const xaiRange = weekEndingAt(localDate(new Date()))
 
   useEffect(() => {
     const controller = new AbortController()
@@ -83,6 +80,24 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
 
   useEffect(() => {
     const controller = new AbortController()
+    Promise.all([
+      repository.getXaiOverview(controller.signal),
+      repository.getXaiUsage({ from: xaiRange.from, to: xaiRange.to }, controller.signal),
+    ]).then(([overview, usage]) => {
+      const receivedAt = new Date().toISOString()
+      setXaiOverview({ data: overview, error: null, loading: false, receivedAt })
+      setXaiUsage({ data: usage, error: null, loading: false, receivedAt })
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      const nextError = toAdminError(error)
+      setXaiOverview((current) => ({ ...current, error: nextError, loading: false }))
+      setXaiUsage((current) => ({ ...current, error: nextError, loading: false }))
+    })
+    return () => controller.abort()
+  }, [refreshKey, repository, xaiRange.from, xaiRange.to])
+
+  useEffect(() => {
+    const controller = new AbortController()
     repository.getInfraApp(controller.signal)
       .then((data) => {
         setApp({ data, error: null, loading: false, receivedAt: new Date().toISOString() })
@@ -96,10 +111,9 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   }, [refreshKey, repository])
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 mobile-phone:flex-col mobile-phone:items-stretch">
-        <h1 className="type-admin-title font-bold text-stone-950">인프라</h1>
-        <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
+    <div className="flex h-full min-h-0 w-full flex-col gap-[14px] overflow-y-auto pb-1">
+      <div className={`flex shrink-0 flex-wrap items-end gap-4 mobile-phone:flex-col mobile-phone:items-stretch ${showTitle ? 'justify-between' : 'justify-end'}`}>
+        {showTitle ? <h1 className="type-admin-title font-bold text-stone-950">인프라</h1> : null}
         <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
           <SegmentedControl
             label="환경"
@@ -128,53 +142,54 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
               <option value="7d">최근 7일</option>
             </select>
           </label>
-        </div>
-        <Button aria-label="인프라 새로고침" onClick={() => {
+          <Button aria-label="인프라 새로고침" onClick={() => {
           setMetrics((current) => ({ ...current, error: null, loading: true }))
           setCost((current) => ({ ...current, error: null, loading: true }))
           setApp((current) => ({ ...current, error: null, loading: true }))
+          setXaiOverview((current) => ({ ...current, error: null, loading: true }))
+          setXaiUsage((current) => ({ ...current, error: null, loading: true }))
           setRefreshKey((key) => key + 1)
-        }} className="size-9 shrink-0 p-0 mobile-web:size-11 mobile-phone:self-end" disabled={isRefreshing} size="sm" title="새로고침" variant="secondary">
-          <RefreshCw aria-hidden="true" className={isRefreshing ? 'animate-spin' : undefined} size={15} />
-        </Button>
+          }} className="size-9 shrink-0 p-0 mobile-web:size-11 mobile-phone:self-end" disabled={isRefreshing} size="sm" title="새로고침" variant="secondary">
+            <RefreshCw aria-hidden="true" className={isRefreshing ? 'animate-spin' : undefined} size={15} />
+          </Button>
         </div>
       </div>
 
-      <InfraSummary app={app} cost={cost} metrics={metrics} />
-      <SystemSection app={app} range={range} metrics={metrics} />
-      <CostSection state={cost} />
+      <InfraSummary cost={cost} metrics={metrics} xai={xaiOverview} />
+      <div className="grid min-h-[28rem] gap-[14px] xl:grid-cols-[minmax(360px,1fr)_minmax(440px,1fr)]">
+        <section className="overflow-hidden rounded-[18px] border border-[#E6EAF0] bg-white px-[22px] py-5" aria-labelledby="application-summary-title">
+          <h2 className="type-dialog-title font-bold text-[#111827]" id="application-summary-title">애플리케이션</h2>
+          {app.error ? <div className="mt-4"><AdminErrorMessage error={app.error} /></div> : null}
+          <div className="mt-4"><AppStatusTable data={app.data} /></div>
+        </section>
+        <WeeklyCostsSection cost={cost.data} onOpen={setDetailPanel} range={xaiRange} usage={xaiUsage.data} />
+      </div>
+      {detailPanel ? <CostDetailDrawer cost={cost.data} onClose={() => setDetailPanel(null)} type={detailPanel} usage={xaiUsage.data} /> : null}
     </div>
   )
 }
 
-function InfraSummary({ app, cost, metrics }: { app: LoadState<InfraApp>; cost: LoadState<InfraCost>; metrics: LoadState<InfraMetrics> }) {
+function InfraSummary({ cost, metrics, xai }: { cost: LoadState<InfraCost>; metrics: LoadState<InfraMetrics>; xai: LoadState<AdminXaiOverview> }) {
   const metricData = metrics.data
-  const appData = app.data
   const costData = cost.data
-  const statusFailed = (metricData?.latest?.status ?? 0) >= 1
   return (
-    <section aria-label="서버 상태" className="shrink-0">
+    <section aria-label="서버 상태" className="shrink-0 overflow-hidden rounded-[18px] border border-[#E6EAF0] bg-white px-6 py-4">
       {metrics.error ? <AdminErrorMessage error={metrics.error} /> : null}
       {!metrics.loading && metricData && !metricData.available ? <PanelMessage message={unavailableMessage(metricData.reason, 'metrics')} /> : null}
       {metricData?.stale ? <StaleNotice /> : null}
-      <div className="grid gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-        <SummaryMetric dark detail={appData?.available ? formatUptime(appData.uptimeSeconds) : '가동 시간 데이터 없음'} danger={statusFailed} label="상태" value={metricData?.latest?.status == null ? '-' : statusFailed ? '실패' : '정상'} />
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
         <SummaryMetric danger={(metricData?.latest?.cpu ?? 0) > 80} label="CPU" value={formatPercent(metricData?.latest?.cpu)} />
         <SummaryMetric danger={(metricData?.latest?.mem ?? 0) > 85} label="메모리" value={formatPercent(metricData?.latest?.mem)} />
         <SummaryMetric danger={(metricData?.latest?.disk ?? 0) > 80} label="디스크" value={formatPercent(metricData?.latest?.disk)} />
+        <SummaryMetric label="AI 사용 비용" value={xai.data?.available && xai.data.currentMonthCostUsd != null ? formatMoney(Number(xai.data.currentMonthCostUsd), 'USD') : '-'} />
         <SummaryMetric label="AWS 비용" value={costData?.available ? formatMoney(costData.monthToDate?.total ?? 0, costData.currency ?? 'USD') : '-'} />
       </div>
     </section>
   )
 }
 
-function SummaryMetric({ dark = false, danger = false, detail, label, value }: { dark?: boolean; danger?: boolean; detail?: string; label: string; value: string }) {
-  return <article className={`flex min-h-32 min-w-0 flex-col gap-2.5 rounded-[14px] px-5 py-[18px] ${dark ? 'bg-[#1B2436] text-white' : 'border border-stone-200 bg-white'}`}><p className={`type-caption font-medium ${dark ? 'text-[#A9B4C7]' : 'text-stone-500'}`}>{label}</p><p className={`type-metric truncate font-extrabold tracking-normal tabular-nums ${danger ? 'text-rose-700' : dark ? 'text-white' : 'text-stone-950'}`} title={value}>{value}</p><span className={`mt-auto type-caption ${dark ? 'text-[#8D99AD]' : 'text-stone-400'}`}>{detail ?? (value === '-' ? '데이터 없음' : '현재 조회 값')}</span></article>
-}
-
-function SystemSection({ app, metrics, range }: { app: LoadState<InfraApp>; metrics: LoadState<InfraMetrics>; range: InfraRange }) {
-  const series = metrics.data?.series ?? emptySeries
-  return <section aria-labelledby="system-title" className="overflow-hidden rounded-lg border border-stone-200 bg-white"><SectionHeader id="system-title" label="조회" title="시스템" updatedAt={metrics.data?.to ?? app.receivedAt} />{app.error ? <AdminErrorMessage error={app.error} /> : null}{metrics.loading || app.loading ? <PanelMessage message="시스템 상태를 불러오는 중입니다." /> : <div className="grid xl:grid-cols-[minmax(340px,1fr)_minmax(0,1.45fr)]"><AppStatusTable data={app.data} /><div className="min-w-0 border-t border-stone-200 xl:border-t-0 xl:border-l"><InfraLineChart ariaLabel="CPU, 메모리, 디스크 사용률 추이" formatValue={formatPercent} range={range} series={[{ color: '#20263A', label: 'CPU', points: series.cpu }, { color: '#10B981', label: '메모리', points: series.mem }, { color: '#E11D48', label: '디스크', points: series.disk }]} title="리소스 사용률" yMax={100} /><InfraLineChart ariaLabel="네트워크 수신 및 송신 추이" formatValue={formatBytes} range={range} series={[{ color: '#2563EB', label: '수신', points: series.netIn }, { color: '#F59E0B', label: '송신', points: series.netOut }]} title="네트워크" /></div></div>}</section>
+function SummaryMetric({ danger = false, label, value }: { danger?: boolean; label: string; value: string }) {
+  return <article className="flex min-h-[104px] min-w-0 flex-col justify-center gap-2 border-l border-[#EEF1F5] px-6 first:border-l-0"><p className="type-caption font-medium text-[#111827]">{label}</p><p className={`font-numeric truncate text-[2.25rem] font-medium leading-none tracking-normal ${danger ? 'text-rose-700' : 'text-[#111827]'}`} title={value}>{value}</p><span className="type-micro text-[#5F6675]">{value === '-' ? '데이터 없음' : '현재 조회 값'}</span></article>
 }
 
 function AppStatusTable({ data }: { data: InfraApp | null }) {
@@ -189,9 +204,144 @@ function AppStatusTable({ data }: { data: InfraApp | null }) {
     ['HTTP 요청', `${formatCount(data.http.requestCount)}건`, `평균 ${data.http.averageResponseTimeMs == null ? '-' : `${data.http.averageResponseTimeMs.toFixed(1)}ms`}`],
     ['5xx 오류', formatPercent(errorPercent), `${formatCount(data.http.serverErrorCount)}건 / ${formatCount(data.http.requestCount)}건`],
     ['DB 풀', `${formatCount(data.db.activeConnections)} / ${formatCount(data.db.maxConnections)}`, `유휴 ${formatCount(data.db.idleConnections)} · 사용률 ${formatPercent(dbPercent)}`],
+    ['가동 시간', formatUptime(data.uptimeSeconds), '현재 애플리케이션 프로세스'],
     ['AI 서비스', data.aiService.status === 'UP' ? '정상' : '응답 없음', data.aiService.checkedAt ? `${formatDateTime(data.aiService.checkedAt)} 확인` : '확인 시각 없음'],
   ]
-  return <div className="min-w-0"><h3 className="border-b border-stone-100 px-4 py-3 type-control font-bold text-stone-700">애플리케이션</h3><table className="w-full table-fixed type-caption"><thead className="bg-[#F7F8FA] text-left text-stone-500"><tr><th className="w-[34%] px-4 py-2">항목</th><th className="w-[25%] px-4 py-2 text-right">값</th><th className="px-4 py-2">상세</th></tr></thead><tbody>{rows.map(([label, value, detail]) => <tr className="border-b border-stone-100" key={label}><th className="px-4 py-2.5 text-left font-semibold text-stone-800">{label}</th><td className={`px-4 py-2.5 text-right font-semibold ${label === 'AI 서비스' && value === '정상' ? 'text-emerald-700' : label === '5xx 오류' && (errorPercent ?? 0) > 0 ? 'text-amber-700' : 'text-stone-700'}`}>{value}</td><td className="truncate px-4 py-2.5 text-stone-400" title={detail}>{detail}</td></tr>)}</tbody></table></div>
+  return <div className="min-w-0"><table className="w-full table-fixed type-caption"><thead className="bg-[#F7F8FA] text-left text-stone-500"><tr><th className="w-[34%] px-4 py-2">항목</th><th className="w-[25%] px-4 py-2 text-right">값</th><th className="px-4 py-2">상세</th></tr></thead><tbody>{rows.map(([label, value, detail]) => <tr className="border-b border-stone-100 last:border-b-0" key={label}><th className="px-4 py-2.5 text-left font-semibold text-stone-800">{label}</th><td className={`px-4 py-2.5 text-right font-semibold ${label === 'AI 서비스' && value === '정상' ? 'text-emerald-700' : label === '5xx 오류' && (errorPercent ?? 0) > 0 ? 'text-amber-700' : 'text-stone-700'}`}>{value}</td><td className="truncate px-4 py-2.5 text-stone-400" title={detail}>{detail}</td></tr>)}</tbody></table></div>
+}
+
+function WeeklyCostsSection({
+  cost,
+  onOpen,
+  range,
+  usage,
+}: {
+  cost: InfraCost | null
+  onOpen: (type: 'aws' | 'xai') => void
+  range: { from: string; to: string }
+  usage: AdminXaiUsage | null
+}) {
+  const awsByDate = new Map((cost?.daily ?? []).map((item) => [item.date, item.total]))
+  const xaiByDate = new Map<string, number>()
+  for (const item of usage?.items ?? []) {
+    const amount = numberOrNull(item.costUsd)
+    if (amount == null) continue
+    xaiByDate.set(item.date, (xaiByDate.get(item.date) ?? 0) + amount)
+  }
+  const dates = Array.from({ length: 7 }, (_, index) => shiftIsoDate(range.from, index))
+  const awsDaily = dates.map((date) => ({ date, total: awsByDate.get(date) ?? null }))
+  const xaiDaily = dates.map((date) => ({ date, total: xaiByDate.get(date) ?? null }))
+
+  return (
+    <section aria-label="주간 비용" className="overflow-hidden rounded-[18px] border border-[#E6EAF0] bg-white px-[22px] py-5">
+      <WeeklyCostChart
+        color="#1B2436"
+        daily={awsDaily}
+        label="AWS 주간 비용"
+        onOpen={() => onOpen('aws')}
+        total={cost?.available ? sumKnown(awsDaily) : null}
+      />
+      <div className="my-5 border-t border-[#EEF1F5]" />
+      <WeeklyCostChart
+        color="#7C3AED"
+        daily={xaiDaily}
+        label="xAI 주간 비용"
+        onOpen={() => onOpen('xai')}
+        total={usage ? sumKnown(xaiDaily) : null}
+      />
+    </section>
+  )
+}
+
+function WeeklyCostChart({
+  color,
+  daily,
+  label,
+  onOpen,
+  total,
+}: {
+  color: string
+  daily: Array<{ date: string; total: number | null }>
+  label: string
+  onOpen: () => void
+  total: number | null
+}) {
+  const max = Math.max(0, ...daily.map((item) => item.total ?? 0))
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <div><h2 className="type-dialog-title font-bold text-[#111827]">{label}</h2><p className="mt-1 type-caption text-[#5F6675]">합계 {total == null ? '-' : formatMoney(total, 'USD')}</p></div>
+        <button aria-label={`${label} 상세 보기`} className="flex size-9 items-center justify-center rounded-[10px] border border-[#E3E6EE] text-[#5F6675] hover:bg-[#F7F8FA]" onClick={onOpen} title="상세 보기" type="button"><ArrowUpRight aria-hidden="true" size={16} /></button>
+      </div>
+      <div className="mt-4 grid h-[118px] grid-cols-7 items-end gap-2" role="img" aria-label={`${label} 일별 막대 그래프`}>
+        {daily.map((item) => {
+          const height = item.total == null || item.total <= 0 || max <= 0 ? 3 : Math.max(6, Math.round((item.total / max) * 82))
+          return <div className="flex min-w-0 flex-col items-center justify-end gap-2" key={item.date} title={`${item.date}: ${item.total == null ? '데이터 없음' : formatMoney(item.total, 'USD')}`}><span className="w-full max-w-9 rounded-t-[4px]" style={{ backgroundColor: item.total == null ? '#E3E6EE' : color, height }} /><span className="type-micro text-[#8D95A5]">{formatMonthDay(item.date)}</span></div>
+        })}
+      </div>
+    </div>
+  )
+}
+
+function CostDetailDrawer({
+  cost,
+  onClose,
+  type,
+  usage,
+}: {
+  cost: InfraCost | null
+  onClose: () => void
+  type: 'aws' | 'xai'
+  usage: AdminXaiUsage | null
+}) {
+  const xaiRows = aggregateXaiUsage(usage)
+  return (
+    <div aria-modal="true" className="fixed inset-0 z-[90] bg-stone-950/35" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog">
+      <aside className="absolute inset-y-0 right-0 flex w-[min(560px,94vw)] flex-col bg-white shadow-2xl">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#E3E6EE] px-6">
+          <h2 className="type-section-title font-bold text-[#171A22]">{type === 'aws' ? 'AWS 비용 상세' : 'xAI 비용 상세'}</h2>
+          <button aria-label="비용 상세 닫기" className="flex size-10 items-center justify-center rounded-lg text-[#5F6675] hover:bg-[#F7F8FA]" onClick={onClose} type="button"><X aria-hidden="true" size={18} /></button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {type === 'aws' ? (
+            cost ? <CostSection state={{ data: cost, error: null, loading: false, receivedAt: cost.updatedAt ?? null }} /> : <PanelMessage message="AWS 비용 데이터가 없습니다." />
+          ) : usage ? (
+            <><DetailTotal label="선택 주간 xAI 비용" value={formatMoney(xaiRows.reduce((sum, item) => sum + item.total, 0), 'USD')} /><DetailRows rows={xaiRows.map((item) => ({ label: item.label, value: formatMoney(item.total, 'USD') }))} />{usage.unknownCostCalls > 0 ? <p className="mt-4 type-caption text-amber-700">비용을 확인할 수 없는 호출 {formatCount(usage.unknownCostCalls)}건이 제외되었습니다.</p> : null}</>
+          ) : <PanelMessage message="xAI 비용 데이터가 없습니다." />}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function DetailTotal({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-[14px] bg-[#1B2436] px-5 py-5 text-white"><p className="type-caption text-[#A9B4C7]">{label}</p><p className="mt-2 font-numeric text-[2rem] font-extrabold tracking-normal">{value}</p></div>
+}
+
+function DetailRows({ rows }: { rows: Array<{ label: string; value: string }> }) {
+  if (rows.length === 0) return <PanelMessage message="비용 내역이 없습니다." />
+  return <dl className="mt-5 divide-y divide-[#EEF1F5]">{rows.map((row) => <div className="flex items-center justify-between gap-4 py-4" key={row.label}><dt className="min-w-0 truncate type-body text-[#3C4152]" title={row.label}>{row.label}</dt><dd className="shrink-0 font-numeric type-body font-bold text-[#171A22]">{row.value}</dd></div>)}</dl>
+}
+
+function aggregateXaiUsage(usage: AdminXaiUsage | null) {
+  const totals = new Map<string, number>()
+  for (const item of usage?.items ?? []) {
+    const amount = numberOrNull(item.costUsd)
+    if (amount == null) continue
+    const label = `${formatMonthDay(item.date)} · ${item.group}`
+    totals.set(label, (totals.get(label) ?? 0) + amount)
+  }
+  return Array.from(totals, ([label, total]) => ({ label, total })).sort((first, second) => second.total - first.total)
+}
+
+function numberOrNull(value: string | null | undefined) {
+  if (value == null || value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function sumKnown(items: Array<{ total: number | null }>) {
+  return items.reduce((sum, item) => sum + (item.total ?? 0), 0)
 }
 
 function CostSection({ state }: { state: LoadState<InfraCost> }) {

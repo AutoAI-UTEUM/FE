@@ -122,10 +122,7 @@ export function AppLayout() {
   const roleLabel = getRoleLabel(user?.role)
   const isAdmin = isAdminRole(user?.role)
   const isInstructor = isInstructorRole(user?.role)
-  const activeAdminTab = adminTabFromLocation(`${location.pathname}${location.search}`)
-  const isAdminFixedHeightWorkspace = isAdmin
-    && location.pathname === routes.admin
-    && (activeAdminTab === 'ai-usage' || activeAdminTab === 'updates')
+  const isAdminFixedHeightWorkspace = isAdmin && location.pathname === routes.admin
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
     [apiRequest],
@@ -538,6 +535,7 @@ export function AppLayout() {
       data-study-workspace={isStudyWorkspace ? 'true' : undefined}
       className={cx(
         'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:max-w-full mobile-web:overflow-x-hidden',
+        isAdmin && 'bg-[#E8EBF0]',
         /*
          * 폰과 태블릿 세로는 본문·하단 바가 세로로 쌓이고, 태블릿 가로는 레일이 옆에 선다.
          * 루트가 실제로 flex여야 main이 남은 높이를 받아 매직 넘버 없이 화면을 채운다.
@@ -815,7 +813,7 @@ export function AppLayout() {
             : cx(
                 'px-4 py-4 sm:px-6 lg:py-5 mobile-phone:px-3',
                 isMobileWeb && !hasBottomNav && 'mobile-safe-bottom',
-                isAdmin ? 'lg:px-8' : 'lg:px-12',
+                isAdmin ? 'lg:px-10 lg:py-6' : 'lg:px-12',
                 isAdminFixedHeightWorkspace && 'min-h-0 overflow-hidden',
               ),
           hasBottomNav && '!pb-[calc(4.25rem+env(safe-area-inset-bottom))]',
@@ -826,7 +824,7 @@ export function AppLayout() {
             isStudyWorkspace
               ? 'min-h-0 flex-1'
               : isAdminFixedHeightWorkspace
-                ? 'h-full min-h-0 w-full min-w-0'
+                ? 'flex min-h-0 w-full min-w-0 flex-1 flex-col'
               : isAdmin
                 ? 'w-full min-w-0'
                 : 'app-page-frame'

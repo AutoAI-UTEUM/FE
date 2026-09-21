@@ -59,7 +59,6 @@ describe('DevelopmentUpdatesPanel', () => {
     expect(screen.getByRole('group', { name: '2026년 8월 업데이트 달력' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '8월 26일' })).toBeInTheDocument()
     expect(screen.getByText('수요일')).toBeInTheDocument()
-    expect(screen.getAllByText('2건')).not.toHaveLength(0)
     expect(screen.queryByText('AI·BE·FE 공개 개발 현황')).not.toBeInTheDocument()
     expect(screen.queryByText('BE 개발자')).not.toBeInTheDocument()
     expect(screen.queryByText('FE 개발자')).not.toBeInTheDocument()

@@ -5,6 +5,8 @@ export type {
   AdminXaiCredits,
   AdminXaiOverview,
   AdminXaiStatus,
+  AdminXaiUsage,
+  AdminXaiUsagePoint,
   AdminPageResult,
   AdminSort,
   AdminUserDetail,

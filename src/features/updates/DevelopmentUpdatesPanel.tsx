@@ -17,7 +17,17 @@ const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
 const defaultRepository = createGithubUpdatesRepository((input, init) => fetch(input, init))
 
-export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = true }: { initialDate?: Date; repository?: UpdatesRepository; showTitle?: boolean }) {
+export function DevelopmentUpdatesPanel({
+  adminConsole = false,
+  initialDate,
+  repository,
+  showTitle = true,
+}: {
+  adminConsole?: boolean
+  initialDate?: Date
+  repository?: UpdatesRepository
+  showTitle?: boolean
+}) {
   const activeRepository = repository ?? defaultRepository
   const { isTablet } = useResponsiveViewport()
   const [measureArea, areaWidth] = useElementWidth()
@@ -93,20 +103,20 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
     <section aria-label={showTitle ? undefined : '업데이트'} aria-labelledby={showTitle ? 'development-updates-title' : undefined} className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1" ref={measureArea}>
       {showTitle ? <h1 className="type-admin-title shrink-0 font-bold text-stone-950" id="development-updates-title">업데이트</h1> : null}
 
-      <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+      {!adminConsole ? <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
         <UpdateSummaryCard dark detail={latestUpdate ? `최근 배포 ${formatCompactDate(latestUpdate.date)}` : '배포 기록 없음'} label={`${visibleMonth.getMonth() + 1}월 배포`} value={updates.length} />
         <UpdateSummaryCard detail={`전체의 ${formatShare(feCount, updates.length)}`} label="FE" value={feCount} />
         <UpdateSummaryCard detail={`전체의 ${formatShare(aiBeCount, updates.length)}`} label="AI · BE" value={aiBeCount} />
         <UpdateSummaryCard detail={`${visibleMonth.getMonth() + 1}월 ${daysInMonth}일 중`} label="배포한 날" value={activeDays} />
-      </div>
+      </div> : null}
 
-      <section className="shrink-0 rounded-[14px] border border-stone-200 bg-white px-[22px] py-5" aria-label={`${monthLabel} 업데이트 달력`}>
+      <div className={cx(adminConsole ? 'grid min-h-[34rem] flex-1 items-stretch gap-[14px] xl:grid-cols-2' : 'contents')}>
+      <section className={cx('shrink-0 border border-stone-200 bg-white px-[22px] py-5', adminConsole ? 'h-full min-h-0 rounded-[18px]' : 'rounded-[14px]')} aria-label={`${monthLabel} 업데이트 달력`}>
         <div aria-label="업데이트 도구" className={cx('flex flex-wrap items-center justify-between gap-3', areaWidth < 700 && 'justify-center')} role="toolbar">
           <div className="flex min-w-0 items-center gap-2">
             <button aria-label="이전 달" className="flex size-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button>
             <strong className="min-w-28 text-center type-control font-bold text-stone-900">{monthLabel}</strong>
             <button aria-label="다음 달" className="flex size-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(1)} type="button"><ChevronRight aria-hidden="true" size={15} /></button>
-            <span className="hidden type-caption text-stone-400 sm:inline">날짜를 눌러 해당 배포만 보기</span>
           </div>
           <div className="flex items-center gap-2">
             <div aria-label="개발 파트" className="flex h-10 rounded-[10px] border border-stone-200 bg-white p-1" role="group">
@@ -132,15 +142,13 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
                 return <button aria-label={`${visibleMonth.getFullYear()}년 ${visibleMonth.getMonth() + 1}월 ${calendarDay.day}일, ${dayUpdates.length > 0 ? `업데이트 ${dayUpdates.length}건` : '업데이트 없음'}`} aria-pressed={isSelected} className={cx('flex min-h-[66px] min-w-0 flex-col items-start justify-between gap-1.5 rounded-[10px] border p-2 text-left transition-colors', isSelected ? 'border-[#1B2436] bg-[#1B2436] text-white' : 'border-stone-100 bg-white hover:bg-stone-50')} key={calendarDay.dateKey} onClick={() => setSelectedDateKey(calendarDay.dateKey)} type="button"><span className={cx('type-caption font-semibold', isSelected ? 'text-white' : isToday ? 'text-stone-950' : 'text-stone-600')}>{calendarDay.day}</span><span className="flex flex-wrap gap-1" aria-hidden="true">{dayParts.map((part) => <span className={cx('rounded px-1.5 py-0.5 type-micro font-bold', isSelected ? 'bg-white/15 text-white' : PART_COLORS[part])} key={part}>{UPDATE_PART_LABELS[part]}</span>)}</span></button>
               })}
             </div>
-            <div className="mt-4 flex items-center gap-4 type-micro text-stone-400"><span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-blue-50" />FE 배포</span><span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-violet-50" />AI·BE 배포</span></div>
           </div>
         )}
       </section>
 
-      <aside aria-label="월별 업데이트 목록" className="flex min-h-[18rem] shrink-0 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white px-[22px] py-5">
+      <aside aria-label="월별 업데이트 목록" className={cx('flex shrink-0 flex-col overflow-hidden border border-stone-200 bg-white px-[22px] py-5', adminConsole ? 'h-full min-h-0 rounded-[18px]' : 'min-h-[18rem] rounded-[14px]')}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-2"><h3 className="type-section-title font-bold text-stone-950">{activeDate.label}</h3><span className="type-caption text-stone-400">{activeDate.weekday}</span><span className="type-caption text-stone-400">{activeDateUpdates.length}건</span></div>
-          {selectedDateKey ? <button className="h-8 rounded-lg border border-stone-200 px-3 type-caption text-stone-600 hover:bg-stone-50" onClick={() => setSelectedDateKey(null)} type="button">최근 배포 보기</button> : null}
+          <div className="flex items-baseline gap-2"><h3 className="type-section-title font-bold text-stone-950">{activeDate.label}</h3><span className="type-caption text-stone-400">{activeDate.weekday}</span></div>
         </div>
         {isUnavailablePart ? <PanelState>{PART_LABELS[partFilter]} 공개 저장소 활동을 확인할 수 없습니다.</PanelState> : activeDateUpdates.length === 0 ? <PanelState>선택한 날짜의 공개 개발 기록이 없습니다.</PanelState> : (
           <div aria-label="업데이트 기록" className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]" role="region" tabIndex={0}>
@@ -150,6 +158,7 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
           </div>
         )}
       </aside>
+      </div>
     </section>
   )
 }

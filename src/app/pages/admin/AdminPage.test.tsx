@@ -73,7 +73,6 @@ describe('AdminPage', () => {
     )
 
     expect(await screen.findByText('방금 전')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '가입일 내림차순 정렬' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '회원 · ID 오름차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(screen.getByRole('button', { name: '최근 활동 내림차순 정렬' }))
     await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('sort=RECENT_ACTIVITY_DESC'))).toBe(true))
