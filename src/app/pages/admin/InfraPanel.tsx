@@ -118,7 +118,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto">
-      <AdminPanelHeading title="인프라" />
+      <AdminPanelHeading aside={[metrics.error, app.error, xai.error].filter((error): error is AdminErrorInfo => error !== null).map((error, index) => <div className="overflow-hidden rounded-xl border border-rose-100" key={index}><AdminErrorMessage error={error} /></div>)} title="인프라" />
       <div className="flex shrink-0 flex-wrap items-center gap-2 mobile-phone:justify-between">
           <select aria-label="환경" className="h-11 min-w-36 rounded-xl border border-stone-300 bg-transparent px-4 type-control text-stone-700 outline-none focus:border-brand-600" onChange={(event) => {
             setMetrics((current) => ({ ...current, error: null, loading: true }))
@@ -143,7 +143,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
           </label>
       </div>
 
-      <InfraSummary app={app} cost={cost} metrics={metrics} range={range} xai={xai} xaiUsage={xaiUsage} />
+      <InfraSummary cost={cost} metrics={metrics} range={range} xai={xai} xaiUsage={xaiUsage} />
       <div className="grid min-h-[650px] gap-4 xl:flex-1 xl:grid-cols-2">
         <ApplicationOverview app={app} />
         <WeeklyCosts cost={cost} onOpen={setActiveDrawer} xai={xai} xaiUsage={xaiUsage} />
@@ -153,26 +153,23 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   )
 }
 
-function InfraSummary({ app, cost, metrics, range, xai, xaiUsage }: { app: LoadState<InfraApp>; cost: LoadState<InfraCost>; metrics: LoadState<InfraMetrics>; range: InfraRange; xai: LoadState<AdminXaiOverview>; xaiUsage: LoadState<AiUsageSummary> }) {
+function InfraSummary({ cost, metrics, range, xai, xaiUsage }: { cost: LoadState<InfraCost>; metrics: LoadState<InfraMetrics>; range: InfraRange; xai: LoadState<AdminXaiOverview>; xaiUsage: LoadState<AiUsageSummary> }) {
   const metricData = metrics.data
   const costData = cost.data
   const xaiCost = xai.data?.currentMonthCostUsd
   const xaiCalls = xaiUsage.data?.daily.map((day) => day.callCount) ?? []
   return (
     <section aria-label="서버 상태" className="shrink-0">
-      {metrics.error ? <AdminErrorMessage error={metrics.error} /> : null}
       {!metrics.loading && metricData && !metricData.available ? <p className="sr-only" role="status">{unavailableMessage(metricData.reason)}</p> : null}
       {metricData?.stale ? <StaleNotice /> : null}
-      {app.error ? <AdminErrorMessage error={app.error} /> : null}
-      {xai.error ? <AdminErrorMessage error={xai.error} /> : null}
       <AdminMetricStrip
         inlineGraph
         items={[
           { danger: (metricData?.latest?.cpu ?? 0) > 80, label: 'CPU', series: trend(metricData?.series?.cpu) ?? sample(metricData?.latest?.cpu), seriesTrend: pointTrend(metricData?.series?.cpu), value: metricData?.latest?.cpu == null ? '-' : metricData.latest.cpu.toFixed(1), unit: metricData?.latest?.cpu == null ? undefined : '%', delta: range === '24h' ? deltaFromAverage(metricData?.latest?.cpu, metricData?.series?.cpu) : undefined, detail: range === '24h' ? '24시간 평균' : '' },
           { danger: (metricData?.latest?.mem ?? 0) > 85, label: '메모리', series: trend(metricData?.series?.mem) ?? sample(metricData?.latest?.mem), seriesTrend: pointTrend(metricData?.series?.mem), value: metricData?.latest?.mem == null ? '-' : metricData.latest.mem.toFixed(1), unit: metricData?.latest?.mem == null ? undefined : '%', delta: range === '24h' ? deltaFromAverage(metricData?.latest?.mem, metricData?.series?.mem) : undefined, detail: range === '24h' ? '24시간 평균' : '' },
           { danger: (metricData?.latest?.disk ?? 0) > 80, label: '디스크', series: trend(metricData?.series?.disk) ?? sample(metricData?.latest?.disk), seriesTrend: pointTrend(metricData?.series?.disk), value: metricData?.latest?.disk == null ? '-' : metricData.latest.disk.toFixed(1), unit: metricData?.latest?.disk == null ? undefined : '%', delta: range === '24h' ? deltaFromAverage(metricData?.latest?.disk, metricData?.series?.disk) : undefined, detail: range === '24h' ? '24시간 평균' : '' },
-          { label: 'AI 사용 비용', series: xaiCalls.length ? xaiCalls : sample(xaiCost == null ? null : Number(xaiCost)), seriesLabel: xaiCalls.length ? '최근 7일 AI 호출 수 추이' : '이번 달 AI 비용 현재 값', value: xaiCost == null ? '-' : formatMoney(Number(xaiCost), 'USD'), detail: '지난달 대비' },
-          { label: 'AWS 비용', series: costData?.daily?.length ? costData.daily.map((day) => day.total) : sample(costData?.monthToDate?.total), value: costData?.available ? formatMoney(costData.monthToDate?.total ?? 0, costData.currency ?? 'USD') : '-', detail: '지난달 대비' },
+          { label: 'AI 사용 비용', series: xaiCalls.length ? xaiCalls : sample(xaiCost == null ? null : Number(xaiCost)), seriesLabel: xaiCalls.length ? '최근 7일 AI 호출 수 추이' : '이번 달 AI 비용 현재 값', ...moneyParts(xaiCost == null ? null : Number(xaiCost), 'USD'), detail: '지난달 대비' },
+          { label: 'AWS 비용', series: costData?.daily?.length ? costData.daily.map((day) => day.total) : sample(costData?.monthToDate?.total), ...moneyParts(costData?.available ? costData.monthToDate?.total ?? 0 : null, costData?.currency ?? 'USD'), detail: '지난달 대비' },
         ]}
       />
     </section>
@@ -414,6 +411,12 @@ function formatMoney(value: number, currency: string) {
   } catch {
     return `${currency} ${value.toFixed(2)}`
   }
+}
+
+/** KPI 스트립용. 통화 기호를 %처럼 값 오른쪽 단위 칸에 둔다. */
+function moneyParts(value: number | null, currency: string) {
+  if (value == null || !Number.isFinite(value)) return { value: '-' }
+  return { unit: currency === 'USD' ? '$' : currency, value: value.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) }
 }
 
 function formatBarMoney(value: number, currency: string) {

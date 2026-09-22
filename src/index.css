@@ -335,6 +335,13 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
   --color-stone-800: #3c4152;
   --color-stone-900: #171a22;
   --color-stone-950: #171a22;
+  /* 아래 액센트는 라이트/다크 블록에서 값을 덮어쓴다. 여기 없으면 bg-accent-* 유틸리티가 생성되지 않는다. */
+  --color-accent-blue-50: #eff6ff;
+  --color-accent-blue-600: #2563eb;
+  --color-accent-blue-700: #1d4ed8;
+  --color-accent-violet-50: #f5f3ff;
+  --color-accent-violet-600: #6d28d9;
+  --color-accent-violet-700: #5b21b6;
 }
 
 :root {
@@ -381,7 +388,7 @@ html:not(.dark) {
   --color-cyan-900: #155e75;
 
   /*
-    공통 UI의 유채색 액센트. 파랑은 증가 추세와 FE,
+    공통 UI의 유채색 액센트. 파랑은 감소 추세와 FE, 빨강은 증가 추세,
     보라는 xAI와 AI·BE를 가리킨다.
   */
   --color-accent-blue-50: #eff6ff;
