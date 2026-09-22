@@ -282,7 +282,7 @@ export function LearnerNotesPage() {
           {groupedItems.map((group) => (
             <article
               aria-label={`${group.label} 노트 모음`}
-              className="min-w-0 self-start overflow-hidden rounded-lg border border-stone-200 bg-white"
+              className="min-w-0 self-start overflow-hidden rounded-3xl border border-stone-200 bg-white"
               key={group.id}
             >
               <header className="flex min-h-14 items-center gap-3 border-b border-stone-200 bg-stone-50/70 px-4 py-3">

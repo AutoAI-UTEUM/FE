@@ -38,7 +38,7 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
       </section>
     )
   }
-  return <aside className="flex min-h-0 flex-col rounded-lg border border-stone-200 bg-white lg:h-full lg:overflow-hidden tablet-portrait:h-full tablet-portrait:overflow-hidden tablet-landscape:h-full tablet-landscape:overflow-hidden">
+  return <aside className="flex min-h-0 flex-col rounded-3xl border border-stone-200 bg-white lg:h-full lg:overflow-hidden tablet-portrait:h-full tablet-portrait:overflow-hidden tablet-landscape:h-full tablet-landscape:overflow-hidden">
     <nav aria-label="강의실 주차" className="min-h-0 flex-1 space-y-0.5 px-1.5 py-3 lg:overflow-y-auto tablet-portrait:overflow-y-auto tablet-landscape:overflow-y-auto">
       <button aria-current={selectedWeekNumber === null ? 'page' : undefined} className={railButtonClass(selectedWeekNumber === null)} onClick={() => onSelect(null)} type="button"><span className="flex size-6 items-center justify-center rounded-md bg-white text-stone-500 ring-1 ring-stone-200"><BookOpen size={13} /></span><strong className="min-w-0 flex-1 truncate text-left type-caption">전체 항목</strong></button>
       {weeks.map((week) => {
@@ -109,7 +109,7 @@ export function ClassroomContentPanel({
     if (file) onDrop(file)
   }
 
-  return <div className="flex flex-col gap-4 rounded-lg border border-stone-200 bg-white p-3 lg:h-full lg:min-h-0 lg:overflow-hidden tablet-portrait:h-full tablet-portrait:min-h-0 tablet-portrait:overflow-hidden tablet-landscape:h-full tablet-landscape:min-h-0 tablet-landscape:overflow-hidden" onDragLeave={() => setDragging(null)} onDragOver={dragOver} onDrop={drop}>
+  return <div className="flex flex-col gap-4 rounded-3xl border border-stone-200 bg-white p-3 lg:h-full lg:min-h-0 lg:overflow-hidden tablet-portrait:h-full tablet-portrait:min-h-0 tablet-portrait:overflow-hidden tablet-landscape:h-full tablet-landscape:min-h-0 tablet-landscape:overflow-hidden" onDragLeave={() => setDragging(null)} onDragOver={dragOver} onDrop={drop}>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mobile-phone:items-stretch">
       <ContentFilterButtons filter={filter} onFilter={onFilter} />
       {canManage ? <AddItemButtons disabled={isUploading} onAdd={onAdd} /> : null}

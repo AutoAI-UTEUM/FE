@@ -173,10 +173,10 @@ describe('AppRoutes', () => {
       'px-4',
       'py-4',
       'sm:px-6',
-      'lg:px-12',
+      'lg:px-[clamp(16px,3vw,40px)]',
       'lg:py-5',
     )
-    expect(screen.getByRole('complementary')).toHaveClass('lg:w-60')
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-[232px]')
     const sidebar = screen.getByRole('complementary')
     const brandLink = within(sidebar).getByRole('link', { name: '으뜸 홈' })
     expect(within(sidebar).getByText('으뜸')).toHaveClass('type-brand-title')
@@ -207,7 +207,7 @@ describe('AppRoutes', () => {
     expect(await screen.findByRole('heading', { name: '회원' })).toBeInTheDocument()
     const adminNavigation = screen.getByRole('navigation', { name: '주요 메뉴' })
     expect(adminNavigation).toBeInTheDocument()
-    expect(within(adminNavigation).getAllByRole('link')).toHaveLength(5)
+    expect(within(adminNavigation).getAllByRole('link')).toHaveLength(4)
     fireEvent.click(within(adminNavigation).getByRole('link', { name: '인프라' }))
     expect(await screen.findByRole('heading', { name: '인프라' })).toBeInTheDocument()
     expect(
@@ -216,13 +216,12 @@ describe('AppRoutes', () => {
       ),
     ).toBe(true)
     expect(screen.getByRole('link', { name: '강의실' })).toHaveAttribute('href', '/admin?tab=classrooms')
-    expect(screen.getByRole('link', { name: 'AI 관리' })).toHaveAttribute('href', '/admin?tab=ai-usage')
     expect(screen.getByRole('link', { name: '업데이트' })).toHaveAttribute('href', '/admin?tab=updates')
     expect(screen.queryByRole('button', { name: /알림/ })).not.toBeInTheDocument()
 
     fireEvent.click(within(adminNavigation).getByRole('link', { name: '업데이트' }))
     expect(await screen.findByRole('heading', { name: '업데이트' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: '개발 파트' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '개발 파트' })).toBeInTheDocument()
 
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
     fireEvent.click(profileTrigger)
@@ -247,8 +246,7 @@ describe('AppRoutes', () => {
       return undefined
     })
 
-    renderRoute('/admin', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
-    fireEvent.click(await screen.findByRole('link', { name: 'AI 관리' }))
+    renderRoute('/admin?tab=ai-usage', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
 
     expect(await screen.findByRole('heading', { name: '일별 호출' })).toBeInTheDocument()
     expect(screen.getByText('총 토큰 / 호출').parentElement).toHaveTextContent('-')
@@ -280,8 +278,7 @@ describe('AppRoutes', () => {
       ] : [] })
     })
 
-    renderRoute('/admin', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
-    fireEvent.click(await screen.findByRole('link', { name: 'AI 관리' }))
+    renderRoute('/admin?tab=ai-usage', { email: 'admin@example.com', name: '관리자', role: 'ADMIN' })
     await screen.findByRole('heading', { name: '일별 호출' })
     expect(screen.getByRole('button', { name: '다음 주' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '이전 주' }))
@@ -326,12 +323,12 @@ describe('AppRoutes', () => {
     expect(
       await screen.findByRole('heading', { name: '내 강의실' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('complementary')).toHaveClass('lg:w-60')
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-[232px]')
     expect(screen.getByRole('main')).toHaveClass(
       'px-4',
       'py-4',
       'sm:px-6',
-      'lg:px-12',
+      'lg:px-[clamp(16px,3vw,40px)]',
       'lg:py-5',
     )
     expect(container.querySelector('main > .app-page-frame')).toBeInTheDocument()
@@ -546,7 +543,7 @@ describe('AppRoutes', () => {
     expect(
       await screen.findByRole('heading', { name: '입장 요청' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('complementary')).toHaveClass('lg:w-60')
+    expect(screen.getByRole('complementary')).toHaveClass('lg:w-[232px]')
     expect(screen.getByRole('link', { name: '강의실' })).toBeInTheDocument()
     expect(
       within(screen.getByRole('complementary')).queryByRole('link', { name: '자연어처리 개론' }),

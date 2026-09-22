@@ -52,6 +52,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Generate public update snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/generate-updates-snapshot.mjs
+
       - name: Resolve expected entry asset
         id: build_metadata
         shell: bash

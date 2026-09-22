@@ -215,7 +215,7 @@ function LearnerClassroomsPage() {
           {sortedClassrooms.map((classroom) => (
             <Link
               aria-label={`${classroom.name} 강의실 열기`}
-              className={`flex min-h-[180px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${classroom.status === 'ACTIVE' ? '' : 'opacity-60'}`}
+              className={`flex min-h-[180px] flex-col rounded-3xl border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${classroom.status === 'ACTIVE' ? '' : 'opacity-60'}`}
               key={classroom.id}
               to={classroomDetailPath(classroom.id)}
             >
@@ -279,7 +279,7 @@ function LearnerClassroomsPage() {
               </button>
             </div>
             <div className="min-h-44 px-4 py-4">
-              {classrooms.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase())).map((item) => <Link className="block rounded-lg px-3 py-3 type-body font-semibold text-stone-800 hover:bg-stone-50" key={item.id} onClick={() => setIsSearchOpen(false)} to={classroomDetailPath(item.id)}>{item.name}<span className="ml-2 type-caption font-normal text-stone-400">{item.instructorName}</span></Link>)}
+              {classrooms.filter((item) => item.name.toLowerCase().includes(searchQuery.trim().toLowerCase())).map((item) => <Link className="block rounded-lg px-3 py-3 type-body font-semibold tracking-[-0.01em] text-stone-800 hover:bg-stone-50" key={item.id} onClick={() => setIsSearchOpen(false)} to={classroomDetailPath(item.id)}>{item.name}<span className="ml-2 type-caption font-normal tracking-normal text-stone-400">{item.instructorName}</span></Link>)}
               {!searchQuery.trim() ? <p className="py-12 text-center type-body text-stone-500">검색할 강의실 이름을 입력하세요</p> : null}
             </div>
           </div>
@@ -331,7 +331,7 @@ function LearnerClassroomsPage() {
               </label>
               <input
                 autoComplete="off"
-                className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 type-body font-medium tracking-wider text-stone-900 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-stone-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+                className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 type-invite-code text-stone-900 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-stone-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
                 id="classroom-invite-code"
                 onChange={(event) => setInviteCode(event.target.value)}
                 placeholder="예: EDU-2026"

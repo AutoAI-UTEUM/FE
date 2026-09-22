@@ -38,6 +38,10 @@ export default defineConfig(({ mode }) => {
         ? {}
         : {
             proxy: {
+              '/updates-snapshot.json': {
+                target: 'https://dev.uteum.com',
+                changeOrigin: true,
+              },
               '/api': {
                 target: proxyTarget,
                 changeOrigin: true,

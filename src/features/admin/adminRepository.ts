@@ -51,6 +51,7 @@ export interface AdminPageResult<T> {
 
 export interface AiUsageDaily {
   date: string
+  costUsd?: string | null
   callCount: number
   successCount: number
   failCount: number
