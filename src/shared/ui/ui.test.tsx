@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   Button,
   ButtonLink,
+  Card,
   EmptyState,
   ErrorState,
   MarkdownEditor,
@@ -67,6 +68,11 @@ describe('shared ui', () => {
       'data-page-container',
       'standard',
     )
+  })
+
+  it('uses the shared rounded panel style for cards', () => {
+    render(<Card>내용</Card>)
+    expect(screen.getByText('내용')).toHaveClass('rounded-3xl', 'border-stone-200', 'bg-white')
   })
 
   it('renders error state as an alert', () => {

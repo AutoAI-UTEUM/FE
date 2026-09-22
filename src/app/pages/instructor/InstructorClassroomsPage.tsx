@@ -241,7 +241,7 @@ export function InstructorClassroomsPage() {
             >
               <Search aria-hidden="true" size={15} />
               <span className="flex-1">강의실 검색</span>
-              <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 type-micro">
+              <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 type-micro tracking-[0.02em]">
                 ⌘K
               </kbd>
             </button>
@@ -429,7 +429,7 @@ function ClassroomCard({
 
   return (
     <article
-      className={`flex min-h-[252px] flex-col rounded-lg border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 ${isActive ? '' : 'opacity-60'}`}
+      className={`flex min-h-[252px] flex-col rounded-3xl border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 ${isActive ? '' : 'opacity-60'}`}
     >
       <div className="flex items-start gap-4">
         <span
@@ -462,7 +462,7 @@ function ClassroomCard({
       <div className="mt-4 flex min-h-14 items-center gap-3 rounded-lg bg-stone-50 px-4 py-2.5">
         <div className="min-w-0 flex-1">
           <p className="type-micro text-stone-400">초대코드</p>
-          <strong className="block truncate font-mono type-section-title tracking-wide text-stone-900">
+          <strong className="block truncate type-invite-code text-stone-900">
             {isActive
               ? (classroom.inviteCode ?? '코드 확인')
               : '비활성화됨'}

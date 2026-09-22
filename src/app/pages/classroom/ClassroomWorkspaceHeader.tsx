@@ -46,7 +46,7 @@ export function ClassroomHeaderInfoBar({
           type="button"
         >
           <KeyRound aria-hidden="true" size={14} />
-          <span className="font-mono">{classroom.inviteCode ?? '초대 코드'}</span>
+          <span className="type-invite-code">{classroom.inviteCode ?? '초대 코드'}</span>
         </button>
       ) : null}
     </div>

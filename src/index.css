@@ -85,6 +85,14 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
     U+20A9;
 }
 
+@font-face {
+  font-family: "Uteum Invite Code";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../node_modules/@fontsource/manrope/files/manrope-latin-600-normal.woff2") format("woff2");
+}
+
 @theme {
   --font-sans:
     "Uteum Numeric", "Noto Sans KR Variable", "Noto Sans KR", ui-sans-serif,
@@ -94,7 +102,7 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 /* 역할과 페이지 종류에 관계없이 사용하는 기본 콘텐츠 프레임. */
 @utility app-page-frame {
   width: 100%;
-  max-width: 1760px;
+  max-width: 100%;
   min-width: 0;
   margin-inline: auto;
 }
@@ -102,109 +110,138 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 /* 역할 기반 타이포그래피. 화면별 임의 px 값 대신 의미에 따라 사용한다. */
 @utility type-display {
   font-size: 1.75rem;
-  line-height: 2.375rem;
+  line-height: normal;
 }
 
 @utility type-auth-intro {
   font-size: 2.5rem;
-  line-height: 1.35;
-  letter-spacing: 0;
+  line-height: normal;
+  letter-spacing: normal;
 }
 
 @utility type-auth-description {
   font-size: 0.9375rem;
-  line-height: 1.5rem;
-  letter-spacing: 0;
+  line-height: normal;
+  letter-spacing: normal;
 }
 
 @utility type-page-title {
-  font-size: 1.375rem;
-  line-height: 1.875rem;
+  font-size: 1.625rem;
+  line-height: normal;
+  letter-spacing: -0.01em;
 }
 
 @utility type-admin-title {
   font-size: 1.625rem;
-  line-height: 2.25rem;
+  line-height: normal;
+  letter-spacing: -0.01em;
 }
 
 @utility type-metric {
   font-size: 1.875rem;
-  line-height: 2.25rem;
+  line-height: 1;
+}
+
+/* 관리자 KPI의 대표 숫자. 시안의 46px. */
+@utility type-metric-hero {
+  font-size: 2.875rem;
+  line-height: 1;
+  letter-spacing: normal;
+}
+
+@container (max-width: 15rem) {
+  .type-metric-inline-compact {
+    font-size: 2.375rem;
+  }
 }
 
 @utility type-metric-compact {
   font-size: 1.375rem;
-  line-height: 1.75rem;
+  line-height: 1;
 }
 
 @utility type-brand-title {
   font-size: 1.25rem;
-  line-height: 1.75rem;
+  line-height: normal;
+  letter-spacing: -0.01em;
 }
 
 @utility type-navigation {
   font-size: 0.875rem;
-  line-height: 1.25rem;
+  line-height: normal;
 }
 
 @utility type-card-title {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
+  font-size: 1.125rem;
+  line-height: normal;
+  letter-spacing: -0.01em;
 }
 
 @utility type-dialog-title {
   font-size: 1.125rem;
-  line-height: 1.625rem;
+  line-height: normal;
 }
 
 @utility type-section-title {
-  font-size: 1rem;
-  line-height: 1.5rem;
+  font-size: 1.125rem;
+  line-height: normal;
+  letter-spacing: -0.01em;
 }
 
 @utility type-body {
   font-size: 0.875rem;
-  line-height: 1.375rem;
+  line-height: normal;
 }
 
 /* 학습 채팅은 작은 화면의 밀도를 유지하고 넓은 데스크톱에서 읽기 크기를 확보한다. */
 .type-chat-body {
   font-size: 0.875rem;
-  line-height: 1.375rem;
+  line-height: normal;
 }
 
 @media (min-width: 768px) {
   .type-chat-body {
     font-size: 0.9375rem;
-    line-height: 1.5rem;
+    line-height: normal;
   }
 }
 
 @media (min-width: 1440px) {
   .type-chat-body {
     font-size: 1rem;
-    line-height: 1.625rem;
+    line-height: normal;
   }
 }
 
 @utility type-control {
   font-size: 0.8125rem;
-  line-height: 1.25rem;
+  line-height: normal;
 }
 
 @utility type-caption {
   font-size: 0.75rem;
-  line-height: 1.125rem;
+  line-height: normal;
 }
 
 @utility type-micro {
   font-size: 0.6875rem;
-  line-height: 1rem;
+  line-height: normal;
 }
 
 @utility type-compact-action {
   font-size: 0.625rem;
-  line-height: 0.875rem;
+  line-height: normal;
+}
+
+@utility type-invite-code {
+  font-family: "Uteum Invite Code", "Noto Sans KR Variable", sans-serif;
+  font-size: 1.0625rem;
+  line-height: normal;
+  letter-spacing: 0.02em;
+}
+
+@utility type-graph-label {
+  line-height: 1.2;
 }
 
 /*
@@ -215,7 +252,7 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 @media (min-width: 1280px) and (max-width: 2048px) and (max-height: 1200px) {
   .type-display {
     font-size: 1.875rem;
-    line-height: 2.5rem;
+    line-height: normal;
   }
 
   .type-auth-intro {
@@ -225,52 +262,52 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
   .type-auth-description,
   .type-body {
     font-size: 1rem;
-    line-height: 1.5625rem;
+    line-height: normal;
   }
 
   .type-page-title {
-    font-size: 1.5rem;
-    line-height: 2rem;
+    font-size: 1.625rem;
+    line-height: normal;
   }
 
   .type-card-title {
-    font-size: 1.375rem;
-    line-height: 1.875rem;
+    font-size: 1.125rem;
+    line-height: normal;
   }
 
   .type-dialog-title {
     font-size: 1.25rem;
-    line-height: 1.75rem;
+    line-height: normal;
   }
 
   .type-section-title {
     font-size: 1.125rem;
-    line-height: 1.625rem;
+    line-height: normal;
   }
 
   .type-chat-body {
     font-size: 1.0625rem;
-    line-height: 1.6875rem;
+    line-height: normal;
   }
 
   .type-control {
     font-size: 0.9375rem;
-    line-height: 1.375rem;
+    line-height: normal;
   }
 
   .type-caption {
     font-size: 0.875rem;
-    line-height: 1.25rem;
+    line-height: normal;
   }
 
   .type-micro {
     font-size: 0.8125rem;
-    line-height: 1.125rem;
+    line-height: normal;
   }
 
   .type-compact-action {
     font-size: 0.75rem;
-    line-height: 1rem;
+    line-height: normal;
   }
 }
 
@@ -302,6 +339,8 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 
 :root {
   font-family: var(--font-sans);
+  line-height: normal;
+  letter-spacing: normal;
   color: var(--color-stone-900);
   background: #f6f7f9;
   color-scheme: light;
@@ -340,6 +379,168 @@ html:not(.dark) {
   --color-cyan-700: #155e75;
   --color-cyan-800: #155e75;
   --color-cyan-900: #155e75;
+
+  /*
+    공통 UI의 유채색 액센트. 파랑은 증가 추세와 FE,
+    보라는 xAI와 AI·BE를 가리킨다.
+  */
+  --color-accent-blue-50: #eff6ff;
+  --color-accent-blue-600: #2563eb;
+  --color-accent-blue-700: #1d4ed8;
+  --color-accent-violet-50: #f5f3ff;
+  --color-accent-violet-600: #6d28d9;
+  --color-accent-violet-700: #5b21b6;
+}
+
+/* 인증 후 공통 UI: 숫자만 Manrope, 한글과 UI 문자는 Noto Sans KR. */
+@font-face {
+  font-family: "Uteum Admin Numeric";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("../node_modules/@fontsource/manrope/files/manrope-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0024-0025, U+002B-003A, U+20A9;
+}
+
+@font-face {
+  font-family: "Uteum Admin Numeric";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("../node_modules/@fontsource/manrope/files/manrope-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0024-0025, U+002B-003A, U+20A9;
+}
+
+@font-face {
+  font-family: "Uteum Admin Numeric";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("../node_modules/@fontsource/manrope/files/manrope-latin-700-normal.woff2") format("woff2");
+  unicode-range: U+0024-0025, U+002B-003A, U+20A9;
+}
+
+@font-face {
+  font-family: "Uteum Admin Numeric";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url("../node_modules/@fontsource/manrope/files/manrope-latin-800-normal.woff2") format("woff2");
+  unicode-range: U+0024-0025, U+002B-003A, U+20A9;
+}
+
+[data-app-shell='true'] {
+  --app-card-radius: 1.5rem;
+  --font-sans: "Uteum Admin Numeric", "Noto Sans KR Variable", "Noto Sans KR", sans-serif;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 강의자·학습자·관리자가 같은 표면, 테두리, 텍스트 팔레트를 공유한다. */
+html:not(.dark) [data-app-shell='true'] {
+  --color-brand-50: #f1f4f8;
+  --color-brand-600: #1b2436;
+  --color-brand-700: #1f3a8a;
+  --color-brand-800: #1b2436;
+  --color-brand-900: #16296b;
+  --color-stone-50: #f7f9fc;
+  --color-stone-100: #eef1f5;
+  --color-stone-200: #e6eaf0;
+  --color-stone-300: #c7ceda;
+  --color-stone-400: #8a94a6;
+  --color-stone-500: #6b7280;
+  --color-stone-600: #4b5563;
+  --color-stone-700: #4b5563;
+  --color-stone-800: #374151;
+  --color-stone-900: #111827;
+  --color-stone-950: #111827;
+  --color-accent-blue-50: #eff6ff;
+  --color-accent-blue-600: #2563eb;
+  --color-accent-blue-700: #1d4ed8;
+  --color-accent-violet-50: #f5f3ff;
+  --color-accent-violet-600: #6d28d9;
+  --color-accent-violet-700: #6d28d9;
+  --color-blue-50: #eff6ff;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-violet-50: #f5f3ff;
+  --color-violet-700: #6d28d9;
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #047857;
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fde68a;
+  --color-amber-200: #fde68a;
+  --color-amber-500: #f59e0b;
+  --color-amber-700: #92400e;
+  --color-amber-800: #92400e;
+  --color-amber-900: #92400e;
+  --color-rose-50: #fef2f2;
+  --color-rose-100: #fecaca;
+  --color-rose-200: #fecaca;
+  --color-rose-600: #e11d48;
+  --color-rose-700: #be123c;
+  --color-rose-800: #be123c;
+  --color-red-50: #fef2f2;
+  --color-red-200: #fecaca;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-admin-xai-secondary: #cbb9f2;
+  --color-admin-schedule-bg: #eef2ff;
+  --color-admin-schedule-text: #1f3a8a;
+}
+
+[data-app-shell='true'] :is(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+[data-app-shell='true'] [role='img'] :is(.type-caption, .type-micro) {
+  line-height: 1.2;
+}
+
+/* 수업 뷰어를 제외한 주요 콘텐츠 패널은 관리자 카드와 같은 24px 모서리를 쓴다. */
+[data-app-shell='true']:not([data-study-workspace='true']) main :is(section, article, aside, form).rounded-lg.border.bg-white,
+[data-app-shell='true']:not([data-study-workspace='true']) main :is(section, article, aside, form).rounded-xl.border.bg-white,
+[data-app-shell='true']:not([data-study-workspace='true']) main :is(section, article, aside, form).rounded-2xl.border.bg-white,
+[data-app-shell='true']:not([data-study-workspace='true']) main div.rounded-lg.border.bg-white.overflow-hidden,
+[data-app-shell='true']:not([data-study-workspace='true']) main div.rounded-xl.border.bg-white.overflow-hidden,
+[data-app-shell='true']:not([data-study-workspace='true']) main div.rounded-2xl.border.bg-white.overflow-hidden {
+  border-radius: var(--app-card-radius, 1.5rem);
+}
+
+html:not(.dark) [data-app-shell='true'] :is(input, textarea),
+html:not(.dark) [data-app-shell='true'] :is(button, a).border-stone-200,
+html:not(.dark) [data-app-shell='true'] :is(button, a).border-stone-300 {
+  border-color: #e3e8ef;
+}
+
+html:not(.dark) [data-app-shell='true'] select {
+  border-color: #c7ceda;
+}
+
+html:not(.dark) [data-app-shell='true'] .bg-brand-700 {
+  background-color: #1b2436;
+}
+
+html:not(.dark) [data-app-shell='true'] .border-brand-700 {
+  border-color: #1b2436;
+}
+
+html:not(.dark) [data-app-shell='true'] tbody tr {
+  border-color: #f4f6f9;
+}
+
+html:not(.dark) [data-app-shell='true'] thead {
+  border-color: #eef1f5;
+}
+
+html:not(.dark) [data-app-shell='true'] thead th {
+  color: #9aa3b2;
+}
+
+html:not(.dark) [data-app-shell='true'] .profile-avatar {
+  background-color: #eef2f7;
 }
 
 html.dark {
@@ -365,6 +566,13 @@ html.dark {
   --color-stone-800: #d4d3cf;
   --color-stone-900: #e8e7e3;
   --color-stone-950: #f4f3f0;
+  /* 액센트는 어두운 배경에서 대비가 죽어 한 단계 밝힌다. */
+  --color-accent-blue-50: #1e2740;
+  --color-accent-blue-600: #7ea2ff;
+  --color-accent-blue-700: #9db7ff;
+  --color-accent-violet-50: #2a2140;
+  --color-accent-violet-600: #a78bfa;
+  --color-accent-violet-700: #c4b5fd;
   color-scheme: dark;
   color: #e8e7e3;
   background: #1b1c20;
@@ -502,13 +710,13 @@ body {
   margin: 0;
   background: #f6f7f9;
   font-size: 0.875rem;
-  line-height: 1.375rem;
+  line-height: normal;
 }
 
 @media (min-width: 1280px) and (max-width: 2048px) and (max-height: 1200px) {
   body {
     font-size: 1rem;
-    line-height: 1.5625rem;
+    line-height: normal;
   }
 }
 
@@ -610,15 +818,15 @@ a[aria-disabled="true"],
 /* PDF 학습 패널의 질문·답변 글자 크기는 사용자 선택을 우선한다. */
 .learning-text-scope[data-learning-text-size='small'] .type-chat-body {
   font-size: 0.875rem;
-  line-height: 1.375rem;
+  line-height: normal;
 }
 
 .learning-text-scope[data-learning-text-size='medium'] .type-chat-body {
   font-size: 1rem;
-  line-height: 1.625rem;
+  line-height: normal;
 }
 
 .learning-text-scope[data-learning-text-size='large'] .type-chat-body {
   font-size: 1.125rem;
-  line-height: 1.75rem;
+  line-height: normal;
 }

@@ -2,10 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AdminRepository, InfraApp, InfraCost, InfraMetrics } from '../../../features/admin'
+import type { AdminRepository, AdminXaiOverview, InfraApp, InfraCost, InfraMetrics } from '../../../features/admin'
 import { ApiClientError } from '../../../shared/api'
 import { TestAuthProvider } from '../../../test/TestAuthProvider'
-import { InfraLineChart, InfraPanel } from './InfraPanel'
+import { InfraPanel } from './InfraPanel'
 
 afterEach(() => {
   cleanup()
@@ -61,6 +61,21 @@ const app: InfraApp = {
   uptimeSeconds: 3 * 86400 + 4 * 3600 + 12 * 60,
 }
 
+const xai: AdminXaiOverview = {
+  available: true,
+  averageDailyCost7d: '1.25',
+  currentMonthCostUsd: '12.50',
+  fetchedAt: '2026-09-01T00:30:00Z',
+  lastSuccessfulSyncAt: '2026-09-01T00:30:00Z',
+  postpaidLimitUsd: null,
+  postpaidRemainingUsd: null,
+  prepaidBalanceUsd: null,
+  projectedDepletionAt: null,
+  riskLevel: null,
+  stale: false,
+  totalAvailableUsd: null,
+}
+
 function points(first: number, second: number) {
   return [
     { t: '2026-09-01T00:00:00Z', v: first },
@@ -73,6 +88,9 @@ function createRepository(overrides: Partial<AdminRepository> = {}) {
     getInfraApp: vi.fn().mockResolvedValue(app),
     getInfraCost: vi.fn().mockResolvedValue(cost),
     getInfraMetrics: vi.fn().mockResolvedValue(metrics),
+    getXaiOverview: vi.fn().mockResolvedValue(xai),
+    getAiUsageSummary: vi.fn().mockResolvedValue({ daily: [{ date: '2026-09-01', callCount: 5, successCount: 4, failCount: 1, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 }], features: [{ feature: 'TURN', callCount: 5, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 }] }),
+    getAiUsageUsers: vi.fn().mockResolvedValue([{ userId: 1, name: '학습자', email: 'learner@example.com', status: 'ACTIVE', callCount: 5, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 }]),
     ...overrides,
   } as unknown as AdminRepository
 }
@@ -89,25 +107,122 @@ function renderPanel(repository = createRepository()) {
 }
 
 describe('InfraPanel', () => {
-  it('renders server thresholds, cost and the BE app metrics contract', async () => {
-    const { container } = renderPanel()
+  it('opens the reference-style AWS and xAI detail drawers without fabricating costs', async () => {
+    const { repository } = renderPanel()
+    await screen.findByText('$42.75')
+
+    fireEvent.click(screen.getByRole('button', { name: 'AWS 비용 상세 보기' }))
+    expect(screen.getByRole('dialog', { name: 'AWS 사용량 · 비용' })).toHaveTextContent('서비스별 비용')
+    expect(screen.getByRole('dialog')).toHaveTextContent('EC2')
+    fireEvent.click(screen.getByRole('button', { name: '상세 패널 닫기' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'xAI 상세 보기' }))
+    expect(await screen.findByText('학습자')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'xAI 사용량 · 호출' })).toHaveTextContent('기능별 호출')
+    expect(repository.getAiUsageSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders server thresholds, cost and the application overview without the detail box', async () => {
+    renderPanel()
 
     const serverSection = await screen.findByRole('region', { name: '서버 상태' })
-    expect(within(serverSection).getByText('82.4%')).toHaveClass('text-rose-700')
-    expect(within(serverSection).getByText('90.1%')).toHaveClass('text-rose-700')
-    expect(within(serverSection).getByText('41.3%')).not.toHaveClass('text-rose-700')
-    expect(within(serverSection).getByText('정상')).toBeInTheDocument()
+    expect(within(serverSection).getByText('82.4')).toHaveClass('text-rose-700')
+    expect(within(serverSection).getByText('90.1')).toHaveClass('text-rose-700')
+    expect(within(serverSection).getByText('41.3')).not.toHaveClass('text-rose-700')
+    expect(within(serverSection).getByText('CPU', { selector: 'p' }).parentElement?.querySelector('.type-metric-compact')).toHaveTextContent('%')
+    expect(screen.getAllByText('정상').length).toBeGreaterThan(0)
     expect(await screen.findByText('$42.75')).toBeInTheDocument()
-    expect(screen.getByText('50.0%')).toBeInTheDocument()
-    expect(screen.getByText('3일 4시간 12분')).toBeInTheDocument()
-    expect(screen.getByText('100건')).toBeInTheDocument()
-    const systemHeader = screen.getByRole('heading', { name: '시스템' }).parentElement
-    const costHeader = screen.getByRole('heading', { name: 'AWS 비용' }).parentElement
-    expect(systemHeader).toHaveTextContent('조회')
-    expect(costHeader).toHaveTextContent('조회')
-    expect(costHeader?.textContent).not.toMatch(/:\d{2}:\d{2}/)
-    expect(container.querySelectorAll('[data-cost-date]')).toHaveLength(7)
-    expect(container.querySelector('[data-cost-date="2026-08-31"]')).toHaveClass('fill-brand-700')
+    expect(screen.getAllByText('50.0%').length).toBeGreaterThan(0)
+    expect(screen.getByText(/가동 3일 4시간 12분/)).toBeInTheDocument()
+    expect(screen.getAllByText('100건').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: '애플리케이션' })).toBeInTheDocument()
+    for (const label of ['CPU 추이', '메모리 추이', '디스크 추이', '최근 7일 AI 호출 수 추이', 'AWS 비용 추이']) {
+      expect(await screen.findByRole('img', { name: new RegExp(label) })).toBeInTheDocument()
+    }
+    const cpuGraph = screen.getByRole('img', { name: 'CPU 추이' })
+    expect(cpuGraph).toHaveClass('w-[64px]')
+    expect(cpuGraph.querySelector('path[stroke]')).toHaveAttribute('stroke', 'var(--color-rose-700)')
+    expect(cpuGraph.parentElement).toHaveClass('items-end')
+    expect(screen.queryByText('상세 모니터링')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '시스템' })).not.toBeInTheDocument()
+  })
+
+  it('colors falling graphs blue and unchanged graphs black', async () => {
+    renderPanel(createRepository({
+      getInfraMetrics: vi.fn().mockResolvedValue({
+        ...metrics,
+        series: { ...metrics.series, cpu: points(80, 40), mem: points(50, 50) },
+      }),
+    }))
+    const cpuGraph = await screen.findByRole('img', { name: 'CPU 추이' })
+    const memoryGraph = screen.getByRole('img', { name: '메모리 추이' })
+    expect(cpuGraph.querySelector('path[stroke]')).toHaveAttribute('stroke', 'var(--color-accent-blue-600)')
+    expect(memoryGraph.querySelector('path[stroke]')).toHaveAttribute('stroke', '#1B2436')
+  })
+
+  it('keeps seven dated chart slots and leaves missing days without bars', async () => {
+    const yesterday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    renderPanel(createRepository({
+      getInfraCost: vi.fn().mockResolvedValue({ ...cost, daily: [{ date: yesterday, total: 2.5 }] }),
+      getAiUsageSummary: vi.fn().mockResolvedValue({
+        daily: [{ date: yesterday, callCount: 3, successCount: 3, failCount: 0, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 }],
+        features: [],
+      }),
+    }))
+
+    const awsChart = await screen.findByRole('img', { name: 'AWS 주간 비용 그래프' })
+    const xaiChart = await screen.findByRole('img', { name: 'xAI 최근 7일 호출 그래프' })
+    for (const chart of [awsChart, xaiChart]) {
+      expect(chart.querySelectorAll('[data-chart-date]')).toHaveLength(7)
+      expect(chart.querySelectorAll('[title]')).toHaveLength(1)
+      expect(chart.querySelector('[data-chart-date]:last-child')).toHaveAttribute('data-chart-date', yesterday)
+    }
+    expect(screen.getByRole('region', { name: '주간 비용' })).toHaveTextContent('$2.50')
+    expect(within(awsChart).getByText('2.50$')).toBeInTheDocument()
+    expect(within(xaiChart).queryByText(/\$/)).not.toBeInTheDocument()
+    expect(screen.queryByText('이번 달 누적 비용 · 일별 비용 API는 아직 없습니다.')).not.toBeInTheDocument()
+    expect(screen.queryByText('최근 7일 호출 수')).not.toBeInTheDocument()
+  })
+
+  it('shows the actual daily AWS cost above the focused bar', async () => {
+    const yesterday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    const dayBefore = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 48 * 60 * 60 * 1000))
+    renderPanel(createRepository({
+      getInfraCost: vi.fn().mockResolvedValue({ ...cost, daily: [{ date: dayBefore, total: 1.25 }, { date: yesterday, total: 2.5 }] }),
+    }))
+
+    const chart = await screen.findByRole('img', { name: 'AWS 주간 비용 그래프' })
+    expect(within(chart).getByText('1.25$')).toBeInTheDocument()
+    fireEvent.focus(chart.querySelector(`[data-chart-date="${yesterday}"]`)!)
+    expect(within(chart).getByText('2.50$')).toBeInTheDocument()
+    expect(within(chart).queryByText('1.25$')).not.toBeInTheDocument()
+  })
+
+  it('shows an xAI cost badge only when a daily cost is supplied', async () => {
+    const yesterday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    renderPanel(createRepository({
+      getAiUsageSummary: vi.fn().mockResolvedValue({
+        daily: [{ date: yesterday, costUsd: '2.90', callCount: 3, successCount: 3, failCount: 0, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 }],
+        features: [],
+      }),
+    }))
+
+    const chart = await screen.findByRole('img', { name: 'xAI 주간 비용 그래프' })
+    expect(within(chart).getByText('2.90$')).toBeInTheDocument()
+  })
+
+  it('shows seven dates but no bars when daily data is empty', async () => {
+    renderPanel(createRepository({
+      getInfraCost: vi.fn().mockResolvedValue({ ...cost, daily: [] }),
+      getAiUsageSummary: vi.fn().mockResolvedValue({ daily: [], features: [] }),
+    }))
+
+    const awsChart = await screen.findByRole('img', { name: 'AWS 주간 비용 그래프' })
+    const xaiChart = await screen.findByRole('img', { name: 'xAI 최근 7일 호출 그래프' })
+    for (const chart of [awsChart, xaiChart]) {
+      expect(chart.querySelectorAll('[data-chart-date]')).toHaveLength(7)
+      expect(chart.querySelectorAll('[title]')).toHaveLength(0)
+    }
   })
 
   it('treats disabled metrics as information while other sections still render', async () => {
@@ -117,7 +232,7 @@ describe('InfraPanel', () => {
 
     expect(await screen.findByText('인프라 조회가 비활성화되어 있습니다.')).toBeInTheDocument()
     expect(await screen.findByText('$42.75')).toBeInTheDocument()
-    expect(screen.getByText('3일 4시간 12분')).toBeInTheDocument()
+    expect(screen.getByText(/가동 3일 4시간 12분/)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -132,7 +247,27 @@ describe('InfraPanel', () => {
 
     expect(await screen.findByText('마지막 성공값 표시 중 (AWS 응답 실패)')).toBeInTheDocument()
     const serverSection = screen.getByRole('region', { name: '서버 상태' })
-    expect(within(serverSection).getByText('CPU', { selector: 'p' }).parentElement).toHaveTextContent('-데이터 없음')
+    expect(within(serverSection).getByText('CPU', { selector: 'p' }).parentElement).toHaveTextContent('CPU-24시간 평균')
+  })
+
+  it('compares infrastructure metrics with the 24-hour average using only reference copy', async () => {
+    renderPanel()
+    const serverSection = await screen.findByRole('region', { name: '서버 상태' })
+    await within(serverSection).findByText('+21.2')
+    expect(within(serverSection).getAllByText('24시간 평균')).toHaveLength(3)
+    expect(within(serverSection).getAllByText('지난달 대비')).toHaveLength(2)
+    expect(within(serverSection).queryByText('이번 달 누적 비용 · 그래프는 호출 수')).not.toBeInTheDocument()
+  })
+
+  it('shows a measured point when only one infrastructure sample is available', async () => {
+    renderPanel(createRepository({
+      getInfraMetrics: vi.fn().mockResolvedValue({
+        ...metrics,
+        series: { ...metrics.series!, cpu: [{ t: '2026-09-01T01:00:00Z', v: 82.4 }] },
+      }),
+    }))
+
+    expect(await screen.findByRole('img', { name: 'CPU 추이 · 측정값 1개' })).toBeInTheDocument()
   })
 
   it('uses the shared administrator re-login error for 403 responses', async () => {
@@ -149,53 +284,18 @@ describe('InfraPanel', () => {
     expect(await screen.findByText('$42.75')).toBeInTheDocument()
   })
 
-  it('reloads only metrics for filters and reloads every section manually', async () => {
-    const repository = createRepository({
-      getInfraCost: vi.fn()
-        .mockResolvedValueOnce(cost)
-        .mockResolvedValueOnce({
-          ...cost,
-          monthToDate: { ...cost.monthToDate, total: 43.5 },
-          updatedAt: '2026-09-01T01:30:00Z',
-        }),
-    })
+  it('reloads only metrics for filters without showing a manual refresh button', async () => {
+    const repository = createRepository()
     renderPanel(repository)
     await screen.findByText('$42.75')
 
-    fireEvent.click(screen.getByRole('button', { name: '개발' }))
+    fireEvent.change(screen.getByLabelText('환경'), { target: { value: 'dev' } })
     fireEvent.change(screen.getByLabelText('조회 기간'), { target: { value: '6h' } })
     await waitFor(() => expect(vi.mocked(repository.getInfraMetrics).mock.calls.at(-1)?.[0]).toEqual({ env: 'dev', range: '6h' }))
     expect(repository.getInfraCost).toHaveBeenCalledTimes(1)
     expect(repository.getInfraApp).toHaveBeenCalledTimes(1)
 
-    const metricsCalls = vi.mocked(repository.getInfraMetrics).mock.calls.length
-    const refreshButton = screen.getByRole('button', { name: '인프라 새로고침' })
-    expect(refreshButton).toHaveAttribute('title', '새로고침')
-    expect(refreshButton).toHaveTextContent('')
-    fireEvent.click(refreshButton)
-    await waitFor(() => expect(repository.getInfraCost).toHaveBeenCalledTimes(2))
-    expect(await screen.findByText('$43.50')).toBeInTheDocument()
-    expect(repository.getInfraApp).toHaveBeenCalledTimes(2)
-    expect(repository.getInfraMetrics).toHaveBeenCalledTimes(metricsCalls + 1)
-  })
-
-  it('shows AWS daily costs in fixed seven-day ranges', async () => {
-    const { repository } = renderPanel()
-    await screen.findByText('$42.75')
-
-    const rangeControl = screen.getByLabelText('AWS 비용 조회 기간')
-    expect(rangeControl).toHaveTextContent('08.25 - 08.31')
-    expect(screen.getByLabelText('2026-08-31: $2.25')).toBeInTheDocument()
-    expect(screen.queryByLabelText('2026-08-24: $1.25')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'AWS 비용 다음 주' })).toBeDisabled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'AWS 비용 이전 주' }))
-
-    expect(rangeControl).toHaveTextContent('08.18 - 08.24')
-    expect(screen.getByLabelText('2026-08-24: $1.25')).toBeInTheDocument()
-    expect(screen.queryByLabelText('2026-08-31: $2.25')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'AWS 비용 다음 주' })).toBeEnabled()
-    expect(repository.getInfraCost).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: '인프라 새로고침' })).not.toBeInTheDocument()
   })
 
   it('does not poll when time passes', async () => {
@@ -214,49 +314,5 @@ describe('InfraPanel', () => {
     expect(repository.getInfraMetrics).toHaveBeenCalledTimes(counts[0])
     expect(repository.getInfraCost).toHaveBeenCalledTimes(counts[1])
     expect(repository.getInfraApp).toHaveBeenCalledTimes(counts[2])
-  })
-})
-
-describe('InfraLineChart', () => {
-  it('restarts the SVG path after null points and provides an accessible label', () => {
-    const { container } = render(
-      <InfraLineChart
-        ariaLabel="CPU 추이"
-        formatValue={(value) => value == null ? '-' : `${value}%`}
-        range="24h"
-        series={[{
-          color: '#000',
-          label: 'CPU',
-          points: [
-            { t: '2026-09-01T00:00:00Z', v: 10 },
-            { t: '2026-09-01T00:30:00Z', v: null },
-            { t: '2026-09-01T01:00:00Z', v: 30 },
-          ],
-        }]}
-        title="사용률"
-        yMax={100}
-      />,
-    )
-
-    expect(screen.getByRole('img', { name: 'CPU 추이' })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'CPU 추이' })).toHaveAttribute('viewBox', '0 0 1200 128')
-    expect(container.querySelector('path[data-series="CPU"]')).toHaveAttribute('stroke-width', '1.25')
-    expect(container.querySelector('path[data-series="CPU"]')?.getAttribute('d')?.match(/M/g)).toHaveLength(2)
-    const timeTicks = container.querySelectorAll('[data-time-tick="true"]')
-    expect(timeTicks.item(0)).toHaveAttribute('text-anchor', 'start')
-    expect(timeTicks.item(timeTicks.length - 1)).toHaveAttribute('text-anchor', 'end')
-  })
-
-  it('shows the empty message when every point is unavailable', () => {
-    render(
-      <InfraLineChart
-        ariaLabel="빈 지표"
-        formatValue={() => '-'}
-        range="1h"
-        series={[{ color: '#000', label: 'CPU', points: [] }]}
-        title="사용률"
-      />,
-    )
-    expect(screen.getByText('선택한 기간의 지표가 없습니다.')).toBeInTheDocument()
   })
 })

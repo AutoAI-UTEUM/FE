@@ -377,7 +377,7 @@ function BasicInformationSection({
         <div>
           <p className="type-caption font-semibold text-stone-700">강의실 코드</p>
           <div className="mt-1 flex min-h-11 items-center gap-2 rounded-lg bg-stone-50 px-3">
-            <strong className="min-w-0 flex-1 truncate font-mono type-body tracking-wider text-stone-900">{inviteCode}</strong>
+            <strong className="min-w-0 flex-1 truncate type-invite-code text-stone-900">{inviteCode}</strong>
             <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-brand-700" onClick={onCopyInviteCode} type="button">복사</button>
             <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-stone-600" onClick={onRegenerateInviteCode} type="button">재발급</button>
           </div>
