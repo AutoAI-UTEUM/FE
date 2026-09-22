@@ -54,15 +54,19 @@ export function AdminErrorMessage({ error }: { error: AdminErrorInfo }) {
  * 표시줄은 h1과 같은 말을 되풀이하고 상위 위치는 사이드바가 이미 알려주므로
  * 보조기기에는 숨긴다.
  */
-export function AdminPanelHeading({ id, title }: { id?: string; title: string }) {
+export function AdminPanelHeading({ aside, id, title }: { aside?: ReactNode; id?: string; title: string }) {
   return (
-    <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
-      <p aria-hidden="true" className="flex items-center gap-1.5 type-caption text-stone-400">
-        <span>관리자</span>
-        <span className="text-stone-300">/</span>
-        <span className="font-medium text-stone-600">{title}</span>
-      </p>
-      <h1 className="type-admin-title font-bold text-stone-950" id={id}>{title}</h1>
+    <div className="flex shrink-0 flex-wrap items-start justify-between gap-x-6 gap-y-3">
+      <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
+        <p aria-hidden="true" className="flex items-center gap-1.5 type-caption text-stone-400">
+          <span>관리자</span>
+          <span className="text-stone-300">/</span>
+          <span className="font-medium text-stone-600">{title}</span>
+        </p>
+        <h1 className="type-admin-title font-bold text-stone-950" id={id}>{title}</h1>
+      </div>
+      {/* 오류 등 보조 메시지 자리. 제목 오른쪽에 두어 본문 레이아웃을 밀지 않는다. */}
+      {aside ? <div className="flex min-w-0 flex-1 basis-80 flex-col gap-2">{aside}</div> : null}
     </div>
   )
 }
@@ -136,13 +140,13 @@ export function AdminMetricStrip({ ariaLabel, inlineGraph = false, items }: { ar
                 <>
                   <span
                     aria-hidden="true"
-                    className={`inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-white ${item.delta.up === null ? 'bg-stone-400' : item.delta.up ? 'bg-accent-blue-600' : 'bg-rose-600'}`}
+                    className={`inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-white ${item.delta.up === null ? 'bg-stone-400' : item.delta.up ? 'bg-rose-600' : 'bg-accent-blue-600'}`}
                   >
                     <svg className="size-3.5 shrink-0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 16 16">
                       {item.delta.up === null ? <path d="M3 8h10m-4-4 4 4-4 4" /> : item.delta.up ? <path d="M8 13V3m-4 4 4-4 4 4" /> : <path d="M8 3v10m-4-4 4 4 4-4" />}
                     </svg>
                   </span>
-                  <span className={`type-micro font-bold ${item.delta.up === null ? 'text-stone-500' : item.delta.up ? 'text-accent-blue-700' : 'text-rose-700'}`}>
+                  <span className={`type-micro font-bold ${item.delta.up === null ? 'text-stone-500' : item.delta.up ? 'text-rose-700' : 'text-accent-blue-700'}`}>
                     {item.delta.value}
                   </span>
                 </>

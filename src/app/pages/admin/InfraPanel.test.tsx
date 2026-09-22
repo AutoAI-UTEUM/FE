@@ -109,7 +109,7 @@ function renderPanel(repository = createRepository()) {
 describe('InfraPanel', () => {
   it('opens the reference-style AWS and xAI detail drawers without fabricating costs', async () => {
     const { repository } = renderPanel()
-    await screen.findByText('$42.75')
+    await screen.findByTitle('42.75$')
 
     fireEvent.click(screen.getByRole('button', { name: 'AWS 비용 상세 보기' }))
     expect(screen.getByRole('dialog', { name: 'AWS 사용량 · 비용' })).toHaveTextContent('서비스별 비용')
@@ -131,7 +131,7 @@ describe('InfraPanel', () => {
     expect(within(serverSection).getByText('41.3')).not.toHaveClass('text-rose-700')
     expect(within(serverSection).getByText('CPU', { selector: 'p' }).parentElement?.querySelector('.type-metric-compact')).toHaveTextContent('%')
     expect(screen.getAllByText('정상').length).toBeGreaterThan(0)
-    expect(await screen.findByText('$42.75')).toBeInTheDocument()
+    expect(await screen.findByTitle('42.75$')).toBeInTheDocument()
     expect(screen.getAllByText('50.0%').length).toBeGreaterThan(0)
     expect(screen.getByText(/가동 3일 4시간 12분/)).toBeInTheDocument()
     expect(screen.getAllByText('100건').length).toBeGreaterThan(0)
@@ -231,7 +231,7 @@ describe('InfraPanel', () => {
     }))
 
     expect(await screen.findByText('인프라 조회가 비활성화되어 있습니다.')).toBeInTheDocument()
-    expect(await screen.findByText('$42.75')).toBeInTheDocument()
+    expect(await screen.findByTitle('42.75$')).toBeInTheDocument()
     expect(screen.getByText(/가동 3일 4시간 12분/)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -281,13 +281,13 @@ describe('InfraPanel', () => {
 
     expect(await screen.findByText(/관리자 권한이 변경되었어요/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '다시 로그인' })).toBeInTheDocument()
-    expect(await screen.findByText('$42.75')).toBeInTheDocument()
+    expect(await screen.findByTitle('42.75$')).toBeInTheDocument()
   })
 
   it('reloads only metrics for filters without showing a manual refresh button', async () => {
     const repository = createRepository()
     renderPanel(repository)
-    await screen.findByText('$42.75')
+    await screen.findByTitle('42.75$')
 
     fireEvent.change(screen.getByLabelText('환경'), { target: { value: 'dev' } })
     fireEvent.change(screen.getByLabelText('조회 기간'), { target: { value: '6h' } })
@@ -301,7 +301,7 @@ describe('InfraPanel', () => {
   it('does not poll when time passes', async () => {
     const repository = createRepository()
     renderPanel(repository)
-    await screen.findByText('$42.75')
+    await screen.findByTitle('42.75$')
     const counts = [
       vi.mocked(repository.getInfraMetrics).mock.calls.length,
       vi.mocked(repository.getInfraCost).mock.calls.length,
