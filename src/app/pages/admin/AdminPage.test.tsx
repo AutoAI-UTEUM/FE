@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -12,6 +12,90 @@ afterEach(() => {
 })
 
 describe('AdminPage', () => {
+  it('sorts every member column in both directions across fetched pages', async () => {
+    const members = [
+      { id: 2, name: '나', email: 'z@example.com', role: 'LEARNER', status: 'DELETED', lastActiveAt: '2026-09-20T00:00:00Z' },
+      { id: 1, name: '가', email: 'a@example.com', role: 'INSTRUCTOR', status: 'ACTIVE', lastActiveAt: '2026-09-21T00:00:00Z' },
+    ].map((member) => ({ ...member, authProvider: 'LOCAL', createdAt: '2026-09-01T00:00:00Z' }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname !== '/api/admin/users') return new Response(null, { status: 404 })
+      const page = Number(url.searchParams.get('page'))
+      return success({ items: [members[page]], page, size: 100, totalElements: 2, totalPages: 2 })
+    })
+    render(<ResponsiveViewportProvider><TestAuthProvider><MemoryRouter><AdminPage /></MemoryRouter></TestAuthProvider></ResponsiveViewportProvider>)
+    const rows = () => within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    await waitFor(() => expect(rows()).toHaveLength(2))
+    expect(screen.queryByRole('combobox', { name: '정렬' })).not.toBeInTheDocument()
+    for (const label of ['회원 · ID', '이메일', '역할', '최근 활동', '상태']) {
+      const first = screen.getByRole('button', { name: new RegExp(`^${label} .* 정렬$`) })
+      fireEvent.click(first)
+      await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(`^${label} .* 정렬$`) })).toHaveAttribute('aria-pressed', 'true'))
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label} .* 정렬$`) }))
+      await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(`^${label} .* 정렬$`) })).toHaveAttribute('aria-pressed', 'true'))
+    }
+    fireEvent.click(screen.getByRole('button', { name: '이메일 오름차순 정렬' }))
+    await waitFor(() => expect(rows()[0]).toHaveTextContent('a@example.com'))
+    fireEvent.click(screen.getByRole('button', { name: '이메일 내림차순 정렬' }))
+    await waitFor(() => expect(rows()[0]).toHaveTextContent('z@example.com'))
+  })
+
+  it('sorts classroom owner, created date, size and status in both directions', async () => {
+    const classrooms = [
+      { id: 2, name: '나 강의', instructor: { id: 2, name: '나 선생' }, memberCount: 9, status: 'DELETED', createdAt: '2026-09-20T00:00:00Z' },
+      { id: 1, name: '가 강의', instructor: { id: 1, name: '가 선생' }, memberCount: 2, status: 'ACTIVE', createdAt: '2026-09-21T00:00:00Z' },
+    ]
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname !== '/api/admin/classrooms') return new Response(null, { status: 404 })
+      const page = Number(url.searchParams.get('page'))
+      return success({ items: [classrooms[page]], page, size: 100, totalElements: 2, totalPages: 2 })
+    })
+    render(<ResponsiveViewportProvider><TestAuthProvider><MemoryRouter initialEntries={['/?tab=classrooms']}><AdminPage /></MemoryRouter></TestAuthProvider></ResponsiveViewportProvider>)
+    const rows = () => within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    await waitFor(() => expect(rows()).toHaveLength(2))
+    for (const label of ['강의실 · ID', '개설자', '생성일', '수강 인원', '상태']) {
+      const button = () => screen.getByRole('button', { name: new RegExp(`^${label} .* 정렬$`) })
+      fireEvent.click(button())
+      await waitFor(() => expect(button()).toHaveAttribute('aria-pressed', 'true'))
+      fireEvent.click(button())
+      await waitFor(() => expect(button()).toHaveAttribute('aria-pressed', 'true'))
+    }
+    fireEvent.click(screen.getByRole('button', { name: '수강 인원 오름차순 정렬' }))
+    await waitFor(() => expect(rows()[0]).toHaveTextContent('2명'))
+    fireEvent.click(screen.getByRole('button', { name: '수강 인원 내림차순 정렬' }))
+    await waitFor(() => expect(rows()[0]).toHaveTextContent('9명'))
+  })
+  it('shows week-over-week change for every member metric without changing totals during search', async () => {
+    const now = new Date()
+    const daysAgo = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString()
+    const members = [
+      { id: 1, role: 'INSTRUCTOR', createdAt: daysAgo(30), lastActiveAt: daysAgo(20) },
+      { id: 2, role: 'LEARNER', createdAt: daysAgo(30), lastActiveAt: daysAgo(20) },
+      { id: 3, role: 'INSTRUCTOR', createdAt: daysAgo(2), lastActiveAt: daysAgo(1) },
+      { id: 4, role: 'LEARNER', createdAt: daysAgo(2), lastActiveAt: daysAgo(1) },
+    ].map((member) => ({ ...member, authProvider: 'LOCAL', email: `member${member.id}@example.com`, name: `회원${member.id}`, status: 'ACTIVE' }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname !== '/api/admin/users') return new Response(null, { status: 404 })
+      return success({ items: url.searchParams.has('q') ? [members[0]] : members, page: 0, size: 100, totalElements: url.searchParams.has('q') ? 1 : 4, totalPages: 1 })
+    })
+
+    render(<ResponsiveViewportProvider><TestAuthProvider><MemoryRouter><AdminPage /></MemoryRouter></TestAuthProvider></ResponsiveViewportProvider>)
+
+    expect(await screen.findByText('+2')).toBeInTheDocument()
+    expect(screen.getAllByText('+1')).toHaveLength(2)
+    expect(screen.getByText('+50%p')).toBeInTheDocument()
+    expect(screen.getByText('주간 활성', { selector: 'p' }).parentElement?.querySelector('.type-metric-compact')).toHaveTextContent('%')
+    expect(screen.getByText('+50%p').previousElementSibling?.querySelector('svg path')).toHaveAttribute('d', 'M8 13V3m-4 4 4-4 4 4')
+    expect(screen.getByText('+50%p').closest('[title]')).toHaveAttribute('title', expect.stringContaining('참고값'))
+    expect(screen.getAllByText('지난주 대비')).toHaveLength(4)
+    fireEvent.change(screen.getByPlaceholderText('이름 또는 이메일 검색'), { target: { value: '회원1' } })
+    fireEvent.submit(screen.getByPlaceholderText('이름 또는 이메일 검색').closest('form')!)
+    await waitFor(() => expect(screen.getByText('1–1 / 1')).toBeInTheDocument())
+    expect(screen.getByText('+2')).toBeInTheDocument()
+  })
+
   it('refreshes the selected AI usage range from an icon-only button', async () => {
     const requestedPaths: string[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -73,7 +157,11 @@ describe('AdminPage', () => {
     )
 
     expect(await screen.findByText('방금 전')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '가입일 내림차순 정렬' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('주간 활성', { selector: 'p' }).parentElement).toHaveTextContent('100%')
+    expect(await screen.findByRole('img', { name: '최근 7일 누적 전체 회원 수' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '최근 7일 누적 강의자 수' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '최근 7일 누적 학습자 수' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '최근 7일 마지막 활동일별 회원 수' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '회원 · ID 오름차순 정렬' })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(screen.getByRole('button', { name: '최근 활동 내림차순 정렬' }))
     await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('sort=RECENT_ACTIVITY_DESC'))).toBe(true))

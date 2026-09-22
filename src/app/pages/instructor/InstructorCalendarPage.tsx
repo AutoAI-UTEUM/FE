@@ -474,9 +474,9 @@ function MonthView({
               )}
               key={date.toISOString()}
             >
-              {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className="flex size-11 items-start justify-start"><span className={cx('flex size-7 items-center justify-center rounded-full type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : getWeekendDateClassName(date, isCurrentMonth))}>{date.getDate()}</span></button> : <span
+              {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className="flex size-11 items-start justify-start"><span className={cx('flex size-7 items-center justify-center rounded-full type-body font-semibold leading-none', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : getWeekendDateClassName(date, isCurrentMonth))}>{date.getDate()}</span></button> : <span
                 className={cx(
-                  'flex size-7 items-center justify-center rounded-full type-body font-semibold',
+                  'flex size-7 items-center justify-center rounded-full type-body font-semibold leading-none',
                   isToday
                     ? 'bg-brand-600 font-bold text-white'
                     : getWeekendDateClassName(date, isCurrentMonth),
@@ -532,7 +532,7 @@ function WeekView({
             className="min-h-48 min-w-0 rounded-lg border border-stone-200 bg-stone-50/60 p-3"
             key={date.toISOString()}
           >
-            {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className="flex min-h-11 w-full items-center justify-center gap-2"><span className={cx('type-caption font-semibold', index === 5 ? 'text-sky-700' : index === 6 ? 'text-rose-600' : 'text-stone-500')}>{WEEKDAY_LABELS[index]}</span><span className={cx('flex size-7 items-center justify-center rounded-full type-body font-semibold', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : getWeekendDateClassName(date, true))}>{date.getDate()}</span></button> : <div className="flex items-center gap-2">
+            {onSelectDay ? <button type="button" aria-label={`${formatCalendarDate(date)} 선택`} aria-pressed={selectedDay && isSameDay(date, selectedDay)} onClick={() => onSelectDay(date)} className="flex min-h-11 w-full items-center justify-center gap-2"><span className={cx('type-caption font-semibold', index === 5 ? 'text-sky-700' : index === 6 ? 'text-rose-600' : 'text-stone-500')}>{WEEKDAY_LABELS[index]}</span><span className={cx('flex size-7 items-center justify-center rounded-full type-body font-semibold leading-none', selectedDay && isSameDay(date, selectedDay) ? 'bg-brand-600 text-white' : getWeekendDateClassName(date, true))}>{date.getDate()}</span></button> : <div className="flex items-center gap-2">
               <span
                 className={cx(
                   'type-caption font-semibold',
@@ -547,7 +547,7 @@ function WeekView({
               </span>
               <span
                 className={cx(
-                  'flex size-7 items-center justify-center rounded-full type-caption font-semibold',
+                  'flex size-7 items-center justify-center rounded-full type-caption font-semibold leading-none',
                   isSameDay(date, today)
                     ? 'bg-brand-600 text-white'
                     : getWeekendDateClassName(date, true),

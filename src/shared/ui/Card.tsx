@@ -14,7 +14,7 @@ export function Card({
 }: PropsWithChildren<CardProps>) {
   return (
     <Component
-      className={cx('rounded-xl border border-stone-200 bg-white', className)}
+      className={cx('rounded-3xl border border-stone-200 bg-white', className)}
     >
       {children}
     </Component>

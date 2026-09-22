@@ -16,7 +16,6 @@ import {
   PanelLeft,
   ServerCog,
   Settings,
-  Sparkles,
   Trash2,
   UserPlus,
   X,
@@ -98,10 +97,9 @@ export function AppLayout() {
     isCollapsed: boolean
     pathname: string
   } | null>(null)
-  const isCollapsed =
-    sidebarPreference?.pathname === location.pathname
-      ? sidebarPreference.isCollapsed
-      : isStudyWorkspace
+  const isCollapsed = sidebarPreference?.pathname === location.pathname
+    ? sidebarPreference.isCollapsed
+    : isStudyWorkspace
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuContainerRef = useRef<HTMLDivElement | null>(null)
   const mobileMenuContainerRef = useRef<HTMLDivElement | null>(null)
@@ -122,10 +120,7 @@ export function AppLayout() {
   const roleLabel = getRoleLabel(user?.role)
   const isAdmin = isAdminRole(user?.role)
   const isInstructor = isInstructorRole(user?.role)
-  const activeAdminTab = adminTabFromLocation(`${location.pathname}${location.search}`)
-  const isAdminFixedHeightWorkspace = isAdmin
-    && location.pathname === routes.admin
-    && (activeAdminTab === 'ai-usage' || activeAdminTab === 'updates')
+  const isAdminFixedHeightWorkspace = isAdmin && location.pathname === routes.admin
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
     [apiRequest],
@@ -534,10 +529,12 @@ export function AppLayout() {
 
   return (
     <div
+      data-app-shell="true"
+      data-admin-console={isAdmin ? 'true' : undefined}
       data-tablet-app={isTablet ? 'true' : undefined}
       data-study-workspace={isStudyWorkspace ? 'true' : undefined}
       className={cx(
-        'bg-[#F6F7F9] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:max-w-full mobile-web:overflow-x-hidden',
+        'bg-[#E8EBF0] text-stone-900 dark:bg-[#1b1c20] lg:flex mobile-web:max-w-full mobile-web:overflow-x-hidden',
         /*
          * 폰과 태블릿 세로는 본문·하단 바가 세로로 쌓이고, 태블릿 가로는 레일이 옆에 선다.
          * 루트가 실제로 flex여야 main이 남은 높이를 받아 매직 넘버 없이 화면을 채운다.
@@ -574,13 +571,13 @@ export function AppLayout() {
           isTablet
             // 태블릿은 가로 스크롤 띠 대신 72px 세로 레일을 쓴다.
             ? cx(
-                'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-stone-200 bg-white py-4 dark:bg-[#222327] mobile-safe-top',
-                isTabletRail ? 'w-[68px] px-2' : 'w-[240px] px-2.5',
+                'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-[#E6EAF0] bg-white py-4 dark:bg-[#222327] mobile-safe-top',
+                isTabletRail ? 'w-[68px] px-2' : 'w-[232px] px-2.5',
                 tabletUsesRail && tabletMenuOpen && '!fixed inset-y-0 left-0 !z-50 shadow-xl',
               )
-            : 'relative z-40 flex border-b border-stone-200 bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
+            : 'relative z-40 flex border-b border-[#E6EAF0] bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-none lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
           isTabletPortrait && 'hidden',
-          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-60 lg:px-2.5 mobile-phone:!px-4'),
+          !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-[232px] lg:px-2.5 mobile-phone:!px-4'),
           isAdminFixedHeightWorkspace && 'shrink-0',
         )}
       >
@@ -607,11 +604,6 @@ export function AppLayout() {
               )}
               to={homeRoute}
             >
-              {isTabletRail || (!isTablet && isCollapsed && !isMobileWeb) ? (
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-brand-600 text-white">
-                  <BookOpenCheck aria-hidden="true" size={16} />
-                </span>
-              ) : null}
               <span
                 className={cx(
                   'type-brand-title font-bold',
@@ -621,6 +613,7 @@ export function AppLayout() {
               >
                 {SERVICE_NAME}
               </span>
+              <span aria-hidden="true" className={cx('type-brand-title font-bold', isTabletRail ? 'block' : 'hidden', !isTablet && isCollapsed && !isMobileWeb && 'lg:block')}>으</span>
             </Link>
             <div
               className={cx(
@@ -764,7 +757,7 @@ export function AppLayout() {
         </div>
 
         <div
-          className="relative hidden lg:mt-auto lg:flex lg:items-center lg:gap-1 mobile-web:!hidden"
+          className="relative hidden lg:mt-auto lg:flex lg:items-center lg:gap-1 lg:border-t lg:border-stone-100 lg:pt-3 mobile-web:!hidden"
           ref={menuContainerRef}
         >
           <button
@@ -815,7 +808,7 @@ export function AppLayout() {
             : cx(
                 'px-4 py-4 sm:px-6 lg:py-5 mobile-phone:px-3',
                 isMobileWeb && !hasBottomNav && 'mobile-safe-bottom',
-                isAdmin ? 'lg:px-8' : 'lg:px-12',
+                'lg:px-[clamp(16px,3vw,40px)]',
                 isAdminFixedHeightWorkspace && 'min-h-0 overflow-hidden',
               ),
           hasBottomNav && '!pb-[calc(4.25rem+env(safe-area-inset-bottom))]',
@@ -941,7 +934,7 @@ function ProfileAvatar({
   return (
     <span
       className={cx(
-        'flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-200 font-semibold text-stone-600',
+        'profile-avatar flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-200 font-semibold text-stone-600',
         className,
       )}
     >
@@ -1207,7 +1200,6 @@ function bottomNavLinkClassName(isActive: boolean): string {
 const adminNavigation: NavigationItem[] = [
   { icon: CircleUserRound, inBottomNav: true, label: '회원', to: routes.admin },
   { icon: List, inBottomNav: true, label: '강의실', to: `${routes.admin}?tab=classrooms` },
-  { icon: Sparkles, inBottomNav: true, label: 'AI 관리', to: `${routes.admin}?tab=ai-usage` },
   { icon: ServerCog, label: '인프라', to: `${routes.admin}?tab=infra` },
   { icon: CalendarDays, label: '업데이트', to: `${routes.admin}?tab=updates` },
 ]

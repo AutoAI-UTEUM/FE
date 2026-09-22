@@ -39,9 +39,24 @@ const ORGANIZATION = 'AutoAI-UTEUM'
 const API_BASE_URL = 'https://api.github.com'
 const KOREAN_TIME_ZONE = 'Asia/Seoul'
 
-export function createGithubUpdatesRepository(fetcher: Fetcher = fetch) {
+export function createGithubUpdatesRepository(fetcher: Fetcher = fetch, snapshotUrl?: string) {
   let repositoriesPromise: Promise<GithubRepositoryDto[]> | undefined
+  let snapshotPromise: Promise<Record<string, MonthlyDevelopmentUpdates> | null> | undefined
   const monthlyCache = new Map<string, Promise<MonthlyDevelopmentUpdates>>()
+
+  function loadSnapshot() {
+    if (!snapshotUrl) return Promise.resolve(null)
+    snapshotPromise ??= fetcher(snapshotUrl, { cache: 'no-cache' })
+      .then(async (response) => {
+        if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null
+        const snapshot: unknown = await response.json()
+        if (!snapshot || typeof snapshot !== 'object' || !('months' in snapshot)) return null
+        const months = snapshot.months
+        return months && typeof months === 'object' ? months as Record<string, MonthlyDevelopmentUpdates> : null
+      })
+      .catch(() => null)
+    return snapshotPromise
+  }
 
   async function listRepositories(): Promise<GithubRepositoryDto[]> {
     repositoriesPromise ??= requestJson<GithubRepositoryDto[]>(
@@ -61,7 +76,9 @@ export function createGithubUpdatesRepository(fetcher: Fetcher = fetch) {
     const cached = monthlyCache.get(cacheKey)
     if (cached) return cached
 
-    const request = listRepositories().then(async (repositories) => {
+    const request = loadSnapshot().then(async (snapshot) => {
+      if (snapshot?.[cacheKey]) return snapshot[cacheKey]
+      const repositories = await listRepositories()
       const matched = repositories.flatMap((repository) => {
         const part = classifyRepository(repository.name)
         return part ? [{ part, repository }] : []

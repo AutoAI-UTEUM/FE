@@ -131,7 +131,7 @@ export function ClassroomStudentsPage() {
   return (
     <ClassroomWorkspaceContainer>
       <ClassroomWorkspaceHeader
-        actions={<><Button onClick={() => void copyInviteCode()} variant="secondary"><KeyRound aria-hidden="true" size={14} /><span className="font-bold">{classroom.inviteCode ?? '초대 코드'}</span><Copy aria-hidden="true" size={13} /></Button><Button disabled={students.length === 0} onClick={exportRoster} variant="secondary"><Download aria-hidden="true" size={14} />명단 내보내기</Button></>}
+        actions={<><Button onClick={() => void copyInviteCode()} variant="secondary"><KeyRound aria-hidden="true" size={14} /><span className="type-invite-code">{classroom.inviteCode ?? '초대 코드'}</span><Copy aria-hidden="true" size={13} /></Button><Button disabled={students.length === 0} onClick={exportRoster} variant="secondary"><Download aria-hidden="true" size={14} />명단 내보내기</Button></>}
         activeTab="learning"
         classroom={classroom}
       />

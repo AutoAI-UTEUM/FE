@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { createGithubUpdatesRepository } from './githubUpdatesRepository'
 
 describe('githubUpdatesRepository', () => {
+  it('uses the deployed snapshot without spending the browser GitHub API quota', async () => {
+    const monthly = { availableParts: ['FE' as const], repositoryUrls: { FE: 'https://github.com/AutoAI-UTEUM/FE' }, updates: [] }
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ months: { '2026-8': monthly } }))
+    const repository = createGithubUpdatesRepository(fetcher, '/updates-snapshot.json')
+
+    await expect(repository.loadMonth(2026, 8)).resolves.toEqual(monthly)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledWith('/updates-snapshot.json', { cache: 'no-cache' })
+  })
+
   it('classifies public repositories and maps commits to Korean calendar dates', async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url = String(input)
