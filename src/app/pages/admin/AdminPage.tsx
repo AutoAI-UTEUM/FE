@@ -572,7 +572,7 @@ function AiManagementPanel({ repository }: { repository: Repository }) {
     <div aria-label="AI 사용량 상세" className="flex shrink-0 flex-col gap-5" role="region">
       <AdminMetricStrip
         items={[
-          { badge: <XaiRiskBadge risk={overview?.riskLevel ?? null} />, detail: `선불 잔액 ${formatUsd(overview?.prepaidBalanceUsd)} · 후불 한도 ${formatUsd(credits?.postpaidLimitUsd)}`, label: '사용 가능 잔액', value: formatUsd(overview?.totalAvailableUsd) },
+          { badge: <XaiRiskBadge risk={overview?.riskLevel ?? null} />, detail: `선불 잔액 ${formatUsd(overview?.prepaidAvailableUsd)} · 후불 한도 ${formatUsd(credits?.postpaidLimitUsd)}`, label: '사용 가능 잔액', value: formatUsd(overview?.totalAvailableUsd) },
           { detail: `최근 일평균 ${formatUsd(overview?.averageDailyCost7d)}`, label: '이번 달 사용 비용', value: formatUsd(overview?.currentMonthCostUsd) },
           { detail: `호출 ${formatCount(totals.calls)}건 · 호출당 ${formatCount(tokensPerCall)}`, label: '총 토큰 / 호출', value: formatCount(totals.tokens) },
           { danger: totals.failures > 0, detail: `실패 ${formatCount(totals.failures)}건 / ${formatCount(totals.calls)}건`, label: '실패율', value: `${failureRate.toFixed(1)}%` },

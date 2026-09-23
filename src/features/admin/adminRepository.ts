@@ -87,12 +87,20 @@ export interface AiUsageUser {
 export type XaiRiskLevel = 'NORMAL' | 'WARNING' | 'CRITICAL'
 export type XaiManagementFailureType = 'CONFIGURATION_ERROR' | 'TEMPORARY_FAILURE'
 
+export type XaiCostSource = 'INTERNAL' | 'INVOICE_PREVIEW'
+
 export interface AdminXaiOverview {
+  /** 원장값. 이번 기간 사용분이 빠지지 않아 화면 표시에는 쓰지 않는다. */
   prepaidBalanceUsd: string | null
+  prepaidUsedThisPeriodUsd: string | null
+  /** 선불 가용액. 잔액을 보여줄 때는 이 값을 쓴다. */
+  prepaidAvailableUsd: string | null
   currentMonthCostUsd: string | null
   postpaidLimitUsd: string | null
+  postpaidUsedUsd: string | null
   postpaidRemainingUsd: string | null
   totalAvailableUsd: string | null
+  costSource: XaiCostSource | null
   averageDailyCost7d: string | null
   projectedDepletionAt: string | null
   riskLevel: XaiRiskLevel | null

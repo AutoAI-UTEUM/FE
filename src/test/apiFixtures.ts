@@ -678,16 +678,21 @@ async function handleDevRoute(
     return apiSuccess({
       available: true,
       averageDailyCost7d: '4.85',
+      costSource: 'INTERNAL',
       currentMonthCostUsd: '72.75',
       fetchedAt: '2026-09-20T08:00:00Z',
       lastSuccessfulSyncAt: '2026-09-20T08:00:00Z',
       postpaidLimitUsd: '300.00',
       postpaidRemainingUsd: '227.25',
+      postpaidUsedUsd: '72.75',
+      // 원장 125.00에서 이번 기간 사용분 15.00을 뺀 값이 가용액이다.
+      prepaidAvailableUsd: '110.00',
       prepaidBalanceUsd: '125.00',
+      prepaidUsedThisPeriodUsd: '15.00',
       projectedDepletionAt: '2026-12-01T08:00:00Z',
       riskLevel: 'NORMAL',
       stale: false,
-      totalAvailableUsd: '352.25',
+      totalAvailableUsd: '337.25',
     })
   }
 
