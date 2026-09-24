@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 
 import { handleApiFixtureRequest } from '../src/test/apiFixtures'
+import { handleTabletFixture } from '../../uteum-tablet-ux/dev/tabletFixtures'
 
 /**
  * dev 전용 mock API — `VITE_DEV_PROXY_TARGET=mock`일 때만 등록된다.
@@ -27,7 +28,8 @@ export function mockApiPlugin(): Plugin {
 
 async function respond(req: IncomingMessage, res: ServerResponse) {
   try {
-    const response = await handleApiFixtureRequest(await toWebRequest(req), {
+    const request = await toWebRequest(req)
+    const response = await handleTabletFixture(request.clone(), 'baseline') ?? await handleApiFixtureRequest(request, {
       mode: 'dev',
     })
     res.statusCode = response.status
