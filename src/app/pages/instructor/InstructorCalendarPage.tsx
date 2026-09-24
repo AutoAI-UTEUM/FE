@@ -143,10 +143,7 @@ export function InstructorCalendarPage() {
 
   return (
     <PageContainer className={cx('lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden lg:space-y-0', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
-      <PageHeader
-        actions={isTablet ? undefined : calendarActions}
-        title="캘린더"
-      />
+      <PageHeader title="캘린더" />
 
       <div ref={measureArea} style={isTablet ? { gridTemplateColumns: mode === 'tablet-landscape' && areaWidth >= 960 ? 'minmax(0,1fr) 18rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', isTablet && 'tablet-calendar')}>
         <section
@@ -234,11 +231,12 @@ export function InstructorCalendarPage() {
               'flex min-w-0 items-center justify-end gap-2',
               isTablet && areaWidth >= 700 && 'ml-auto',
             )}>
-              {isTablet ? calendarActions : !isViewingCurrentMonth && view !== 'list' ? (
+              {!isTablet && !isViewingCurrentMonth && view !== 'list' ? (
                 <Button onClick={moveToCurrentMonth} size="sm" variant="secondary">
                   이번 달
                 </Button>
               ) : null}
+              {calendarActions}
             </span>
           </div>
 

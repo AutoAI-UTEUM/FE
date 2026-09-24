@@ -182,7 +182,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-hidden pb-1 mobile-phone:overflow-y-auto">
       <h1 className="type-admin-title shrink-0 font-bold text-stone-950">회원</h1>
       <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
         <AdminSummaryCard dark detail="현재 등록 회원" label="전체 회원" value={formatCount(totalUsers)} />
@@ -190,7 +190,7 @@ function UsersPanel({ repository }: { repository: Repository }) {
         <AdminSummaryCard detail={`전체의 ${formatShare(roleCounts.LEARNER, totalUsers)}`} label="학습자" value={formatCount(roleCounts.LEARNER)} />
         <AdminSummaryCard detail={currentUser?.name ?? '관리 계정'} label="관리자" value={formatCount(roleCounts.ADMIN)} />
       </div>
-      <section aria-labelledby="admin-users-list-title" className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white">
+      <section aria-labelledby="admin-users-list-title" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white mobile-phone:min-h-[32rem] mobile-phone:flex-none">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-[22px] py-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="type-section-title font-bold text-stone-950" id="admin-users-list-title">회원 목록</h2>
@@ -310,7 +310,7 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
   }, [expandedId, repository])
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-hidden pb-1 mobile-phone:overflow-y-auto">
       <h1 className="type-admin-title shrink-0 font-bold text-stone-950">강의실</h1>
       <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
         <AdminSummaryCard dark detail="현재 운영 중인 전체 강의실" label="전체 강의실" value={formatCount(result?.totalElements)} />
@@ -318,7 +318,7 @@ function ClassroomsPanel({ repository }: { repository: Repository }) {
         <AdminSummaryCard detail={`빈 강의실 ${formatCount((result?.items.length ?? 0) - (occupiedClassrooms ?? 0))}개`} label="운영 강의실" value={formatCount(occupiedClassrooms)} />
         <AdminSummaryCard detail={mostPopularClassroom?.name ?? '강의실 없음'} label="최다 수강" value={mostPopularClassroom ? `${formatCount(mostPopularClassroom.memberCount)}명` : '-'} />
       </div>
-      <section aria-labelledby="admin-classrooms-list-title" className="flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white">
+      <section aria-labelledby="admin-classrooms-list-title" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white mobile-phone:min-h-[32rem] mobile-phone:flex-none">
       <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-[22px] py-5"><div className="flex items-baseline gap-3"><h2 className="type-section-title font-bold text-stone-950" id="admin-classrooms-list-title">강의실 목록</h2><span className="type-caption text-stone-400">{result ? formatPageRange(result.page, result.size, result.totalElements) : '-'}</span></div><FilterSelect label="정렬" onChange={(value) => { setPage(0); setSort(value as AdminSort) }} value={sort} options={[['RECENT', '최근 생성순'], ['NAME', '이름순']]} /></div>
       {error ? <AdminErrorMessage error={error} /> : null}
       <TabletMasterDetail enabled={isTablet} onClose={() => setExpandedId(null)} title="강의실 상세" detail={expandedId !== null ? <div className="p-4">{detail ? <><h4 className="type-section-title font-bold">{detail.name}</h4><p className="mt-2 type-body">개설자 {detail.instructor.name}</p><p className="mt-4 type-control font-semibold">참여 회원 {detail.members.length}명</p><ul className="mt-2 divide-y divide-stone-100">{detail.members.map((member) => <li className="flex flex-wrap justify-between gap-2 py-3" key={member.userId}><span>{member.name}</span><span className="text-stone-500">{roleLabel(member.role)}</span></li>)}</ul></> : <p role="status">상세 정보를 불러오는 중입니다.</p>}</div> : null}>
@@ -453,7 +453,7 @@ function AiManagementPanel({ repository }: { repository: Repository }) {
         <div className="flex flex-col gap-2.5 rounded-[14px] bg-[#1B2436] px-5 py-[18px] text-white">
           <div className="flex items-start justify-between gap-2"><dt className="type-caption text-stone-300">사용 가능 잔액</dt><XaiRiskBadge risk={overview?.riskLevel ?? null} /></div>
           <dd className="type-metric font-extrabold tracking-normal tabular-nums">{formatUsd(overview?.totalAvailableUsd)}</dd>
-          <p className="type-caption text-[#8D99AD]">선불 잔액 {formatUsd(overview?.prepaidBalanceUsd)} · 후불 한도 {formatUsd(credits?.postpaidLimitUsd)}</p>
+          <p className="type-caption text-[#8D99AD]">선불 잔액 {formatUsd(overview?.prepaidAvailableUsd ?? overview?.prepaidBalanceUsd)} · 후불 한도 {formatUsd(credits?.postpaidLimitUsd)}</p>
         </div>
         <AiOverviewMetric label="이번 달 사용 비용" value={formatUsd(overview?.currentMonthCostUsd)} detail={`최근 일평균 ${formatUsd(overview?.averageDailyCost7d)}`} />
         <AiOverviewMetric label="총 토큰 / 호출" value={formatCount(totals.tokens)} detail={`호출 ${formatCount(totals.calls)}건 · 호출당 ${formatCount(tokensPerCall)}`} />

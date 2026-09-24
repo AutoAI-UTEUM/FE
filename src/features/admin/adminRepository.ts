@@ -88,6 +88,8 @@ export type XaiManagementFailureType = 'CONFIGURATION_ERROR' | 'TEMPORARY_FAILUR
 
 export interface AdminXaiOverview {
   prepaidBalanceUsd: string | null
+  prepaidUsedThisPeriodUsd?: string | null
+  prepaidAvailableUsd?: string | null
   currentMonthCostUsd: string | null
   postpaidLimitUsd: string | null
   postpaidRemainingUsd: string | null

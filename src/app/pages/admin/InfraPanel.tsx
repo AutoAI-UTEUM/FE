@@ -99,8 +99,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
     <div className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col gap-[14px] overflow-y-auto pb-1">
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 mobile-phone:flex-col mobile-phone:items-stretch">
         <h1 className="type-admin-title font-bold text-stone-950">인프라</h1>
-        <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
-        <div className="flex flex-wrap items-center gap-3 mobile-phone:justify-between">
+        <div className="flex flex-wrap items-center gap-2 mobile-phone:justify-between">
           <SegmentedControl
             label="환경"
             onChange={(value) => {
@@ -115,7 +114,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
             기간
             <select
               aria-label="조회 기간"
-              className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600 mobile-web:h-11"
+              className="h-10 rounded-[10px] border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600 mobile-web:h-11"
               onChange={(event) => {
                 setMetrics((current) => ({ ...current, error: null, loading: true }))
                 setRange(event.target.value as InfraRange)
@@ -128,13 +127,12 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
               <option value="7d">최근 7일</option>
             </select>
           </label>
-        </div>
         <Button aria-label="인프라 새로고침" onClick={() => {
           setMetrics((current) => ({ ...current, error: null, loading: true }))
           setCost((current) => ({ ...current, error: null, loading: true }))
           setApp((current) => ({ ...current, error: null, loading: true }))
           setRefreshKey((key) => key + 1)
-        }} className="size-9 shrink-0 p-0 mobile-web:size-11 mobile-phone:self-end" disabled={isRefreshing} size="sm" title="새로고침" variant="secondary">
+        }} className="size-10 shrink-0 rounded-[10px] p-0 mobile-web:size-11 mobile-phone:self-end" disabled={isRefreshing} size="sm" title="새로고침">
           <RefreshCw aria-hidden="true" className={isRefreshing ? 'animate-spin' : undefined} size={15} />
         </Button>
         </div>
@@ -417,11 +415,11 @@ function SectionHeader({ detail, id, label = '갱신', title, updatedAt }: { det
 
 function SegmentedControl({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: Array<[string, string]>; value: string }) {
   return (
-    <div aria-label={label} className="flex h-9 items-center rounded-lg bg-stone-100 p-1" role="group">
+    <div aria-label={label} className="flex h-10 items-center gap-0.5 rounded-[10px] border border-stone-200 bg-white p-1 mobile-web:h-11" role="group">
       {options.map(([optionValue, optionLabel]) => (
         <button
           aria-pressed={value === optionValue}
-          className={value === optionValue ? 'h-7 rounded-md bg-white px-3 type-control font-semibold text-stone-950 shadow-sm' : 'h-7 rounded-md px-3 type-control text-stone-500'}
+          className={value === optionValue ? 'h-[30px] rounded-[7px] bg-stone-100 px-3 type-control font-semibold text-stone-950 mobile-web:h-9' : 'h-[30px] rounded-[7px] px-3 type-control text-stone-500 hover:bg-stone-50 mobile-web:h-9'}
           key={optionValue}
           onClick={() => onChange(optionValue)}
           type="button"

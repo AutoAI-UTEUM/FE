@@ -125,7 +125,12 @@ export function AppLayout() {
   const activeAdminTab = adminTabFromLocation(`${location.pathname}${location.search}`)
   const isAdminFixedHeightWorkspace = isAdmin
     && location.pathname === routes.admin
-    && (activeAdminTab === 'ai-usage' || activeAdminTab === 'updates')
+    && (
+      activeAdminTab === 'users'
+      || activeAdminTab === 'classrooms'
+      || activeAdminTab === 'ai-usage'
+      || activeAdminTab === 'updates'
+    )
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
     [apiRequest],

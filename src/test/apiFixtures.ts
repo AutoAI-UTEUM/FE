@@ -683,11 +683,13 @@ async function handleDevRoute(
       lastSuccessfulSyncAt: '2026-09-20T08:00:00Z',
       postpaidLimitUsd: '300.00',
       postpaidRemainingUsd: '227.25',
+      prepaidAvailableUsd: '105.00',
       prepaidBalanceUsd: '125.00',
+      prepaidUsedThisPeriodUsd: '20.00',
       projectedDepletionAt: '2026-12-01T08:00:00Z',
       riskLevel: 'NORMAL',
       stale: false,
-      totalAvailableUsd: '352.25',
+      totalAvailableUsd: '332.25',
     })
   }
 
