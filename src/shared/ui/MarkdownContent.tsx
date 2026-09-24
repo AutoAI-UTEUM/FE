@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import rehypeKatex from 'rehype-katex'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -133,14 +134,17 @@ function normalizeMarkdownLatex(content: string, isStreaming: boolean): string {
     .join('')
 }
 
-export function MarkdownContent({
+const rehypePlugins = [rehypeKatex]
+const remarkPlugins = [remarkGfm, remarkMath]
+
+export const MarkdownContent = memo(function MarkdownContent({
   className,
   content,
   isStreaming = false,
   onPageReferenceClick,
   typography = 'body',
 }: MarkdownContentProps) {
-  const segments = parseToggleBlocks(content)
+  const segments = useMemo(() => parseToggleBlocks(content), [content])
 
   return (
     <div
@@ -194,8 +198,8 @@ export function MarkdownContent({
             },
           } : undefined}
           key={`${segment.kind}-${index}`}
-          rehypePlugins={[rehypeKatex]}
-          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={rehypePlugins}
+          remarkPlugins={remarkPlugins}
         >
           {linkOverviewPageReferences(
             normalizeMarkdownLatex(segment.content, isStreaming),
@@ -205,7 +209,7 @@ export function MarkdownContent({
       ))}
     </div>
   )
-}
+})
 
 const overviewPageReferencePattern = /(?<![\w[])p\.\s*(\d+)(?:\s*[–—-]\s*\d+)?/gi
 const overviewPageHrefPattern = /^#edupilot-page-(\d+)$/
