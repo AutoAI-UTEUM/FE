@@ -273,13 +273,45 @@ interface JoinRequestDto {
   status: JoinRequestStatus
 }
 
+const classroomListRequests = new WeakMap<
+  AuthenticatedRequest,
+  Map<string, Promise<Classroom[]>>
+>()
+
+function requestClassroomList(
+  request: AuthenticatedRequest,
+  path: string,
+  signal?: AbortSignal,
+): Promise<Classroom[]> {
+  const execute = async () => {
+    const { data } = await request<PagedResponse<ClassroomDto>>(path, { signal })
+    return data.items.map(mapClassroom)
+  }
+
+  // A caller-owned abort signal must not cancel another screen's shared request.
+  if (signal) return execute()
+
+  let requests = classroomListRequests.get(request)
+  if (!requests) {
+    requests = new Map()
+    classroomListRequests.set(request, requests)
+  }
+  const existing = requests.get(path)
+  if (existing) return existing
+
+  const pending = execute().finally(() => {
+    if (requests?.get(path) === pending) requests.delete(path)
+  })
+  requests.set(path, pending)
+  return pending
+}
+
 export function createClassroomsRepository(request: AuthenticatedRequest) {
   return {
     async list(query = '', signal?: AbortSignal) {
       const params = new URLSearchParams({ page: '0', size: '100', sort: 'RECENT' })
       if (query.trim()) params.set('q', query.trim())
-      const { data } = await request<PagedResponse<ClassroomDto>>(`/api/classrooms?${params}`, { signal })
-      return data.items.map(mapClassroom)
+      return requestClassroomList(request, `/api/classrooms?${params}`, signal)
     },
     async get(id: string, signal?: AbortSignal) {
       const { data } = await request<ClassroomDto>(`/api/classrooms/${encodeURIComponent(id)}`, { signal })

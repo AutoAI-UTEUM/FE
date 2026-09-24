@@ -42,6 +42,7 @@ export interface SessionChat {
 
 const TURN_IN_PROGRESS_NOTICE = 'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.'
 const TURN_RECOVERY_POLL_INTERVAL_MS = 1_500
+const STREAM_RENDER_INTERVAL_MS = 50
 
 export function useSessionChat(
   repository: SessionsRepository,
@@ -194,44 +195,70 @@ export function useSessionChat(
         .map((message) => message.id))
       const recoveredUiActions: UiAction[] = []
       let completedNoteDraft: NoteDraft | undefined
+      let completedStreamResult: SessionTurnResult | undefined
       let resolveStreamCompleted: (() => void) | undefined
+      let pendingStreamContent = ''
+      let streamRenderTimer: ReturnType<typeof setTimeout> | null = null
+      let acceptsStreamContent = true
       const streamCompleted = new Promise<void>((resolve) => {
         resolveStreamCompleted = resolve
       })
+      const flushStreamContent = () => {
+        if (streamRenderTimer !== null) clearTimeout(streamRenderTimer)
+        streamRenderTimer = null
+        if (!acceptsStreamContent || pendingStreamContent.length === 0) return
+        const content = pendingStreamContent
+        pendingStreamContent = ''
+        updateMessages((current) => {
+          const index = current.findIndex(
+            (message) => message.id === streamMessageId,
+          )
+          if (index < 0) {
+            return [
+              ...current,
+              {
+                content,
+                id: streamMessageId,
+                role: 'assistant',
+                status: 'streaming',
+              },
+            ]
+          }
+          const next = [...current]
+          const message = current[index]
+          next[index] = { ...message, content: `${message.content}${content}` }
+          return next
+        })
+      }
+      const queueStreamContent = (text: string) => {
+        if (!acceptsStreamContent) return
+        pendingStreamContent += text
+        if (streamRenderTimer === null) {
+          streamRenderTimer = setTimeout(flushStreamContent, STREAM_RENDER_INTERVAL_MS)
+        }
+      }
+      const stopStreamContentUpdates = () => {
+        acceptsStreamContent = false
+        pendingStreamContent = ''
+        if (streamRenderTimer !== null) clearTimeout(streamRenderTimer)
+        streamRenderTimer = null
+      }
       streamingMessageIdRef.current = streamMessageId
       const streamPromise = repository
         .stream(
           sessionId,
           {
-            onCompleted: (draft) => {
+            onCompleted: (draft, result) => {
+              flushStreamContent()
               completedNoteDraft = draft
+              completedStreamResult = result
               setStreamNotice(null)
               if (draft) setNoteDraft(draft)
               resolveStreamCompleted?.()
             },
             onContentDelta: (text) => {
               setStreamNotice('답변을 실시간으로 받고 있습니다.')
-              updateMessages((current) => {
-                const index = current.findIndex(
-                  (message) => message.id === streamMessageId,
-                )
-                if (index < 0) {
-                  return [
-                    ...current,
-                    {
-                      content: text,
-                      id: streamMessageId,
-                      role: 'assistant',
-                      status: 'streaming',
-                    },
-                  ]
-                }
-                return current.map((message, messageIndex) =>
-                  messageIndex === index
-                    ? { ...message, content: `${message.content}${text}` }
-                    : message,
-                )
-              })
+              queueStreamContent(text)
             },
             onError: (message) => setStreamNotice(message),
             onStatus: (stage) =>
@@ -257,6 +284,7 @@ export function useSessionChat(
 
       try {
         const result = await repository.submitTurn(sessionId, turn, turnController.signal)
+        stopStreamContentUpdates()
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
         if (result.noteDraft) setNoteDraft(result.noteDraft)
@@ -299,28 +327,24 @@ export function useSessionChat(
           ])
           pollController.abort()
 
-          const [historyResult, sessionResult] = await Promise.allSettled([
-            recoverySource === 'poll'
-              ? recoveredHistoryPromise
-              : repository.listMessages(sessionId),
-            repository.getById(sessionId),
-          ])
-          const recoveredMessages = historyResult.status === 'fulfilled'
-            ? historyResult.value
-            : []
-          const recoveredSession = sessionResult.status === 'fulfilled'
-            ? sessionResult.value
-            : null
-          const result: SessionTurnResult = {
-            activeQuizId: recoveredSession?.activeQuizId,
-            currentPage: recoveredSession?.currentPage,
-            messages: recoveredMessages,
-            noteDraft: completedNoteDraft,
-            pageStatus: recoveredSession?.pageStatus,
-            pendingDiagnosis: recoveredSession?.pendingDiagnosis,
-            uiActions: recoveredSession?.uiActions ?? recoveredUiActions,
-          }
-          appendMessages(recoveredMessages)
+          const result = recoverySource === 'stream' && completedStreamResult
+            ? {
+                ...completedStreamResult,
+                noteDraft: completedNoteDraft ?? completedStreamResult.noteDraft,
+                uiActions: completedStreamResult.uiActions.length > 0
+                  ? completedStreamResult.uiActions
+                  : recoveredUiActions,
+              }
+            : await recoverTurnResult(
+                repository,
+                sessionId,
+                recoverySource === 'poll'
+                  ? recoveredHistoryPromise
+                  : repository.listMessages(sessionId),
+                completedNoteDraft,
+                recoveredUiActions,
+              )
+          appendMessages(result.messages)
           setStreamUiActions(result.uiActions)
           onResult?.(result)
           setStreamNotice(null)
@@ -336,6 +360,7 @@ export function useSessionChat(
         }
         throw error
       } finally {
+        stopStreamContentUpdates()
         streamController.abort()
         await streamPromise
         if (activePollControllerRef.current) activePollControllerRef.current.abort()
@@ -408,12 +433,14 @@ export function useSessionChat(
     activeStreamControllerRef.current = streamController
     activePollControllerRef.current = pollController
     let resolveStreamCompleted: (() => void) | undefined
+    let completedStreamResult: SessionTurnResult | undefined
     const streamCompleted = new Promise<void>((resolve) => {
       resolveStreamCompleted = resolve
     })
     const streamPromise = repository.stream(sessionId, {
-      onCompleted: (draft) => {
+      onCompleted: (draft, result) => {
         if (draft) setNoteDraft(draft)
+        completedStreamResult = result
         resolveStreamCompleted?.()
       },
       onError: () => setStreamNotice(TURN_IN_PROGRESS_NOTICE),
@@ -432,27 +459,16 @@ export function useSessionChat(
         recoveredHistoryPromise.then(() => 'poll' as const),
       ])
       pollController.abort()
-      const [historyResult, sessionResult] = await Promise.allSettled([
-        recoverySource === 'poll'
-          ? recoveredHistoryPromise
-          : repository.listMessages(sessionId),
-        repository.getById(sessionId),
-      ])
-      const recoveredMessages = historyResult.status === 'fulfilled'
-        ? historyResult.value
-        : []
-      const recoveredSession = sessionResult.status === 'fulfilled'
-        ? sessionResult.value
-        : null
-      const result: SessionTurnResult = {
-        activeQuizId: recoveredSession?.activeQuizId,
-        currentPage: recoveredSession?.currentPage,
-        messages: recoveredMessages,
-        pageStatus: recoveredSession?.pageStatus,
-        pendingDiagnosis: recoveredSession?.pendingDiagnosis,
-        uiActions: recoveredSession?.uiActions ?? [],
-      }
-      appendMessages(recoveredMessages)
+      const result = recoverySource === 'stream' && completedStreamResult
+        ? completedStreamResult
+        : await recoverTurnResult(
+            repository,
+            sessionId,
+            recoverySource === 'poll'
+              ? recoveredHistoryPromise
+              : repository.listMessages(sessionId),
+          )
+      appendMessages(result.messages)
       setStreamUiActions(result.uiActions)
       onResult?.(result)
       return result
@@ -491,6 +507,31 @@ export function useSessionChat(
     streamUiActions,
     submitTurn,
     waitForTurnCompletion,
+  }
+}
+
+async function recoverTurnResult(
+  repository: SessionsRepository,
+  sessionId: string,
+  messagesPromise: Promise<SessionMessage[]>,
+  noteDraft?: NoteDraft,
+  fallbackUiActions: UiAction[] = [],
+): Promise<SessionTurnResult> {
+  const [historyResult, sessionResult] = await Promise.allSettled([
+    messagesPromise,
+    repository.getById(sessionId),
+  ])
+  const recoveredSession = sessionResult.status === 'fulfilled'
+    ? sessionResult.value
+    : null
+  return {
+    activeQuizId: recoveredSession?.activeQuizId,
+    currentPage: recoveredSession?.currentPage,
+    messages: historyResult.status === 'fulfilled' ? historyResult.value : [],
+    noteDraft,
+    pageStatus: recoveredSession?.pageStatus,
+    pendingDiagnosis: recoveredSession?.pendingDiagnosis,
+    uiActions: recoveredSession?.uiActions ?? fallbackUiActions,
   }
 }
 

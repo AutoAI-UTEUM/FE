@@ -17,7 +17,7 @@ import {
 
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { cx } from '../../shared/lib/cx'
-import { MarkdownContent } from '../../shared/ui'
+import { MarkdownContent } from '../../shared/ui/MarkdownContent'
 import type { AuthenticatedRequest } from '../auth'
 import {
   createDocumentChatRepository,

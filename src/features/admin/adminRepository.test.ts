@@ -79,8 +79,8 @@ describe('admin repository', () => {
   })
 
   it('connects the administrator xAI monitoring and manual sync endpoints', async () => {
-    const overview = { available: true, totalAvailableUsd: '250.00' }
-    const credits = { available: true, prepaidBalanceUsd: '25.00' }
+    const overview = { available: true, prepaidAvailableUsd: '225.00', totalAvailableUsd: '250.00' }
+    const credits = { available: true, prepaidAvailableUsd: '225.00', prepaidBalanceUsd: '250.00' }
     const status = { available: true, recentErrorClassification: null }
     const request = vi.fn()
       .mockResolvedValueOnce({ data: overview })

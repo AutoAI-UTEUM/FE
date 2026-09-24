@@ -99,6 +99,7 @@ function groupFailures(failures) {
 
 function ownerFor(title) {
   if (title.startsWith('[AI]')) return { prefix: '[AI]', repository: 'AutoAI-UTEUM/BE' }
+  if (title.startsWith('[FE/BE]')) return { prefix: '[FE/BE][성능 조사 필요]', repository: 'AutoAI-UTEUM/FE' }
   if (title.startsWith('[BE/AI]')) return { prefix: '[BE/AI][조사 필요]', repository: 'AutoAI-UTEUM/BE' }
   if (title.startsWith('[BE]')) return { prefix: '[BE]', repository: 'AutoAI-UTEUM/BE' }
   return { prefix: '[FE]', repository: 'AutoAI-UTEUM/FE' }

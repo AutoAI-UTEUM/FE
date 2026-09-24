@@ -209,6 +209,26 @@ describe('remote feature repositories', () => {
     })
   })
 
+  it('maps an optional final turn result from the completed SSE event', async () => {
+    const encoder = new TextEncoder()
+    const rawRequest = vi.fn().mockResolvedValue(new Response(encoder.encode(
+      'event: completed\ndata: {"result":{"messages":[{"content":"완료 답변","createdAt":"2026-09-19T00:00:00Z","messageId":901,"senderType":"AI"}],"state":{"currentPage":3},"uiActions":[]}}\n\n',
+    )))
+    const repository = createSessionsRepository(
+      vi.fn() as AuthenticatedRequest,
+      rawRequest as AuthenticatedRawRequest,
+    )
+    const onCompleted = vi.fn()
+
+    await repository.stream('100', { onCompleted })
+
+    expect(onCompleted).toHaveBeenCalledWith(undefined, expect.objectContaining({
+      currentPage: 3,
+      messages: [expect.objectContaining({ content: '완료 답변', id: '901' })],
+      uiActions: [],
+    }))
+  })
+
   it('loads older session messages with the opaque server cursor', async () => {
     const request = vi.fn().mockResolvedValue(success({
       hasMore: false,

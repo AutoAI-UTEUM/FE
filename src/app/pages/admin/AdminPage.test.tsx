@@ -189,10 +189,10 @@ describe('AdminPage', () => {
         return success({ items: [] })
       }
       if (url.pathname === '/api/admin/xai/overview' || (url.pathname === '/api/admin/xai/sync' && method === 'POST')) {
-        return success({ available: true, averageDailyCost7d: '4.85', currentMonthCostUsd: '72.75', fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', prepaidBalanceUsd: '125.00', projectedDepletionAt: '2026-12-01T08:00:00Z', riskLevel: 'WARNING', stale: false, totalAvailableUsd: '352.25' })
+        return success({ available: true, averageDailyCost7d: '4.85', currentMonthCostUsd: '72.75', fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', prepaidAvailableUsd: '100.00', prepaidBalanceUsd: '125.00', prepaidUsedThisPeriodUsd: '25.00', projectedDepletionAt: '2026-12-01T08:00:00Z', riskLevel: 'WARNING', stale: false, totalAvailableUsd: '327.25' })
       }
       if (url.pathname === '/api/admin/xai/credits') {
-        return success({ available: true, fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', postpaidUsedUsd: '72.75', prepaidBalanceUsd: '125.00', stale: false })
+        return success({ available: true, fetchedAt: '2026-09-20T08:00:00Z', lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', postpaidLimitUsd: '300.00', postpaidRemainingUsd: '227.25', postpaidUsedUsd: '72.75', prepaidAvailableUsd: '100.00', prepaidBalanceUsd: '125.00', prepaidUsedThisPeriodUsd: '25.00', stale: false })
       }
       if (url.pathname === '/api/admin/xai/status') {
         return success({ available: true, lastFailureAt: null, lastSuccessfulSyncAt: '2026-09-20T08:00:00Z', recentErrorClassification: null })
@@ -208,7 +208,8 @@ describe('AdminPage', () => {
       </ResponsiveViewportProvider>,
     )
 
-    expect(await screen.findByText('$352.25')).toBeInTheDocument()
+    expect(await screen.findByText('$327.25')).toBeInTheDocument()
+    expect(screen.getByText('선불 가용 $100.00 · 후불 잔여 $227.25')).toBeInTheDocument()
     expect(screen.queryByText('잔액, 이번 달 비용과 소진 위험을 확인합니다.')).not.toBeInTheDocument()
     expect(screen.getByText('잔액 주의').querySelector('svg')).not.toBeInTheDocument()
     expect(await screen.findByRole('img', { name: '기능별 AI 호출 가로 막대 차트' })).toBeInTheDocument()

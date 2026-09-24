@@ -1,7 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
+import { randomUUID } from 'node:crypto'
+import { handleTabletFixture } from './tabletFixtures'
 
 import { handleApiFixtureRequest } from '../src/test/apiFixtures'
+
+const sessions = new Map<string, Record<string, unknown>>()
 
 /**
  * dev 전용 mock API — `VITE_DEV_PROXY_TARGET=mock`일 때만 등록된다.
@@ -11,31 +15,63 @@ import { handleApiFixtureRequest } from '../src/test/apiFixtures'
  * 테스트와 같은 픽스처를 그대로 서빙해 전 화면 QA를 가능하게 한다.
  */
 export function mockApiPlugin(): Plugin {
+  const installMiddleware = (middlewares: { use(handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): void }) => {
+    middlewares.use((req, res, next) => {
+      if (!req.url?.startsWith('/api')) {
+        next()
+        return
+      }
+      void respond(req, res)
+    })
+  }
+
   return {
     name: 'edupilot-mock-api',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url?.startsWith('/api')) {
-          next()
-          return
-        }
-        void respond(req, res)
-      })
+      installMiddleware(server.middlewares)
+    },
+    configurePreviewServer(server) {
+      installMiddleware(server.middlewares)
     },
   }
 }
 
 async function respond(req: IncomingMessage, res: ServerResponse) {
   try {
-    const response = await handleApiFixtureRequest(await toWebRequest(req), {
+    const request = await toWebRequest(req)
+    const path = new URL(request.url).pathname
+    const sessionId = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('uteum_mock='))?.slice('uteum_mock='.length)
+    const user = sessionId ? sessions.get(sessionId) : undefined
+    if (path === '/api/auth/refresh' && !user) {
+      res.writeHead(401, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ success: false, error: { code: 'TOKEN_INVALID', message: 'Mock signed out', details: [] } }))
+      return
+    }
+    if (path === '/api/users/me' && request.method === 'GET' && user) {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ success: true, data: user, message: 'Mock session restored' }))
+      return
+    }
+    const response = await handleTabletFixture(request.clone(), String(user?.email ?? 'audit')) ?? await handleApiFixtureRequest(request, {
       mode: 'dev',
     })
+    if (path === '/api/auth/login' && response.ok) {
+      const payload = await response.clone().json() as { data: { user: Record<string, unknown> } }
+      const id = randomUUID()
+      if (sessionId) sessions.delete(sessionId)
+      sessions.set(id, payload.data.user)
+      res.setHeader('set-cookie', `uteum_mock=${id}; Path=/api; HttpOnly; SameSite=Lax`)
+    }
+    if (path === '/api/auth/logout') {
+      if (sessionId) sessions.delete(sessionId)
+      res.setHeader('set-cookie', 'uteum_mock=; Path=/api; HttpOnly; SameSite=Lax; Max-Age=0')
+    }
     res.statusCode = response.status
     res.setHeader(
       'content-type',
       response.headers.get('content-type') ?? 'application/json',
     )
-    res.end(await response.text())
+    res.end(Buffer.from(await response.arrayBuffer()))
   } catch (error) {
     res.statusCode = 500
     res.setHeader('content-type', 'application/json')
