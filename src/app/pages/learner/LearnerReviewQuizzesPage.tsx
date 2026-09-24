@@ -115,7 +115,7 @@ export function LearnerReviewQuizzesPage() {
           {items.map(({ quiz, session }) => (
             <Link
               aria-label={`${quiz.title} ${quiz.submitted ? '결과 보기' : '풀기'}`}
-              className="flex min-h-32 flex-col rounded-lg border border-stone-200 bg-white p-4 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              className="flex min-h-32 flex-col rounded-3xl border border-stone-200 bg-white p-4 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               key={`${session.id}-${quiz.quizId}`}
               to={quizDetailPath(quiz.quizId)}
             >

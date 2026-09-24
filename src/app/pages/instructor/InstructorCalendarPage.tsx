@@ -125,30 +125,25 @@ export function InstructorCalendarPage() {
     setIsPickerOpen(false)
   }
 
-  const calendarActions = (
-    <>
-      <SegmentedControl onChange={setView} value={view} />
-      {canManagePersonalEvents ? (
-        <Button
-          aria-label="일정 추가"
-          onClick={() => { setEditingEvent(null); setIsComposerOpen(true) }}
-          size="sm"
-        >
-          <Plus aria-hidden="true" size={14} />
-          개인 일정
-        </Button>
-      ) : null}
-    </>
-  )
-
   return (
     <PageContainer className={cx('lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden lg:space-y-0', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
-      <PageHeader
-        actions={isTablet ? undefined : calendarActions}
-        title="캘린더"
-      />
+      <PageHeader title="캘린더" />
 
-      <div ref={measureArea} style={isTablet ? { gridTemplateColumns: mode === 'tablet-landscape' && areaWidth >= 960 ? 'minmax(0,1fr) 18rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]', isTablet && 'tablet-calendar')}>
+      {/* 관리자 인프라 화면과 같은 자리·같은 모양: 제목 아래 좌측 정렬 드롭다운 행. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 mobile-phone:justify-between">
+        <select
+          aria-label="캘린더 보기"
+          className="h-11 min-w-36 rounded-xl border border-stone-300 bg-transparent px-4 type-control text-stone-700 outline-none focus:border-brand-600"
+          onChange={(event) => setView(event.target.value as CalendarView)}
+          value={view}
+        >
+          <option value="month">월</option>
+          <option value="week">주</option>
+          <option value="list">목록</option>
+        </select>
+      </div>
+
+      <div ref={measureArea} style={isTablet ? { gridTemplateColumns: mode === 'tablet-landscape' && areaWidth >= 960 ? 'minmax(0,1fr) 24rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem]', isTablet && 'tablet-calendar')}>
         <section
           aria-label="캘린더 본문"
           className="flex mobile-web:min-h-0 min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white lg:min-h-0"
@@ -234,7 +229,7 @@ export function InstructorCalendarPage() {
               'flex min-w-0 items-center justify-end gap-2',
               isTablet && areaWidth >= 700 && 'ml-auto',
             )}>
-              {isTablet ? calendarActions : !isViewingCurrentMonth && view !== 'list' ? (
+              {!isTablet && !isViewingCurrentMonth && view !== 'list' ? (
                 <Button onClick={moveToCurrentMonth} size="sm" variant="secondary">
                   이번 달
                 </Button>
@@ -271,6 +266,9 @@ export function InstructorCalendarPage() {
         <MonthlySchedulePanel
           title={isTablet ? `${formatCalendarDate(selectedDay)} 일정` : undefined}
           events={isTablet ? getEventsForDay(events, selectedDay) : visibleMonthEvents}
+          onAddEvent={canManagePersonalEvents
+            ? () => { setEditingEvent(null); setIsComposerOpen(true) }
+            : undefined}
           onSelectEvent={setSelectedEvent}
         />
       </div>
@@ -376,43 +374,6 @@ function MonthYearPicker({
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function SegmentedControl({
-  onChange,
-  value,
-}: {
-  onChange: (value: CalendarView) => void
-  value: CalendarView
-}) {
-  return (
-    <div
-      aria-label="캘린더 보기"
-      className="inline-flex rounded-lg border border-stone-200 bg-white p-1"
-      role="group"
-    >
-      {[
-        ['month', '월'],
-        ['week', '주'],
-        ['list', '목록'],
-      ].map(([option, label]) => (
-        <button
-          aria-pressed={value === option}
-          className={cx(
-            'h-8 min-w-10 rounded-md px-2.5 type-caption font-semibold',
-            value === option
-              ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950'
-              : 'text-stone-500 hover:bg-stone-100 hover:text-stone-900',
-          )}
-          key={option}
-          onClick={() => onChange(option as CalendarView)}
-          type="button"
-        >
-          {label}
-        </button>
-      ))}
     </div>
   )
 }
@@ -625,10 +586,13 @@ function ListView({
 
 function MonthlySchedulePanel({
   events,
+  onAddEvent,
   onSelectEvent,
   title = '이번 달 일정',
 }: {
   events: CalendarEvent[]
+  /** 개인 일정을 만들 수 있을 때만 넘어온다. */
+  onAddEvent?: () => void
   onSelectEvent: (event: CalendarEvent) => void
   title?: string
 }) {
@@ -637,7 +601,15 @@ function MonthlySchedulePanel({
       aria-label={title}
       className="min-h-0 rounded-lg border border-stone-200 bg-white p-4 lg:overflow-auto"
     >
-      <h2 className="type-body font-bold text-stone-900">{title}</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="type-body font-bold text-stone-900">{title}</h2>
+        {onAddEvent ? (
+          <Button aria-label="일정 추가" onClick={onAddEvent} size="sm" variant="secondary">
+            <Plus aria-hidden="true" size={14} />
+            개인 일정
+          </Button>
+        ) : null}
+      </div>
       {events.length > 0 ? (
         <div className="mt-4 grid gap-1">
           {events.map((event) => (
