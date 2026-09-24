@@ -18,10 +18,10 @@ import {
   ButtonLink,
   ErrorState,
   LoadingState,
-  MarkdownContent,
   PageContainer,
   PageHeader,
 } from '../../shared/ui'
+import { MarkdownContent } from '../../shared/ui/MarkdownContent'
 import { routes, sessionDetailPath } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 

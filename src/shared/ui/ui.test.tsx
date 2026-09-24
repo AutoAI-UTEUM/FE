@@ -7,12 +7,12 @@ import {
   ButtonLink,
   EmptyState,
   ErrorState,
-  MarkdownEditor,
-  MarkdownContent,
   PageContainer,
   PageHeader,
   TextInput,
 } from './index'
+import { MarkdownContent } from './MarkdownContent'
+import { MarkdownEditor } from './MarkdownEditor'
 
 describe('shared ui', () => {
   it('renders button variants and disabled state', () => {

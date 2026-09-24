@@ -120,7 +120,7 @@ export interface SessionTurnRequest {
 }
 
 export interface SessionStreamHandlers {
-  onCompleted?: (noteDraft?: NoteDraft) => void
+  onCompleted?: (noteDraft?: NoteDraft, result?: SessionTurnResult) => void
   onContentDelta?: (text: string) => void
   onError?: (message: string) => void
   onStatus?: (message: string) => void
@@ -361,15 +361,7 @@ export function createSessionsRepository(
           signal,
         },
       )
-      return {
-        activeQuizId: mapNullableId(data.state, 'activeQuizId'),
-        currentPage: data.state?.currentPage,
-        messages: (data.messages ?? []).map(mapMessage),
-        noteDraft: mapNoteDraft(data.noteDraft),
-        pageStatus: data.state?.pageStatus,
-        pendingDiagnosis: mapNullableDiagnosis(data.state),
-        uiActions: mapUiActions(data.uiActions),
-      }
+      return mapTurnResult(data)
     },
   }
 }
@@ -403,7 +395,12 @@ function handleStreamMessage(
   }
 
   if (eventType === 'completed') {
-    handlers.onCompleted?.(mapNoteDraft(payload.noteDraft))
+    const result = mapCompletedTurnResult(payload)
+    if (result) {
+      handlers.onCompleted?.(result.noteDraft ?? mapNoteDraft(payload.noteDraft), result)
+    } else {
+      handlers.onCompleted?.(mapNoteDraft(payload.noteDraft))
+    }
     return
   }
 
@@ -434,6 +431,29 @@ function parseStreamPayload(data: string): Record<string, unknown> {
       : {}
   } catch {
     return { text: data }
+  }
+}
+
+function mapCompletedTurnResult(
+  payload: Record<string, unknown>,
+): SessionTurnResult | undefined {
+  const nestedResult = payload.result
+  const candidate = typeof nestedResult === 'object' && nestedResult !== null
+    ? nestedResult as Record<string, unknown>
+    : payload
+  if (!Array.isArray(candidate.messages)) return undefined
+  return mapTurnResult(candidate as unknown as SessionTurnDto)
+}
+
+function mapTurnResult(data: SessionTurnDto): SessionTurnResult {
+  return {
+    activeQuizId: mapNullableId(data.state, 'activeQuizId'),
+    currentPage: data.state?.currentPage,
+    messages: (data.messages ?? []).map(mapMessage),
+    noteDraft: mapNoteDraft(data.noteDraft),
+    pageStatus: data.state?.pageStatus,
+    pendingDiagnosis: mapNullableDiagnosis(data.state),
+    uiActions: mapUiActions(data.uiActions),
   }
 }
 

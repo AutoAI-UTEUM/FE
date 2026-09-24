@@ -524,6 +524,47 @@ describe('ChatPanel', () => {
     expect(screen.queryByText('이어서 질문할게요.')).not.toBeInTheDocument()
   })
 
+  it('uses the completed stream result without refetching session detail', async () => {
+    let completeStream: (() => void) | undefined
+    const listMessages = vi.fn().mockResolvedValue([])
+    const getById = vi.fn()
+    const repository = createRepository({
+      getById,
+      listMessages,
+      stream: vi.fn().mockImplementation((_sessionId, handlers) => new Promise<void>((resolve) => {
+        completeStream = () => {
+          handlers.onCompleted?.(undefined, {
+            currentPage: 3,
+            messages: [{
+              content: '완료 이벤트의 최종 답변입니다.',
+              createdAt: '2026-09-19T00:00:00Z',
+              id: 'stream-result-answer',
+              senderType: 'AI',
+            }],
+            uiActions: [],
+          })
+          resolve()
+        }
+      })),
+      submitTurn: vi.fn().mockRejectedValue(new ApiClientError({
+        code: 'TURN_IN_PROGRESS',
+        message: '이미 처리 중인 턴입니다.',
+        status: 409,
+      })),
+    })
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
+    expect(listMessages).toHaveBeenCalledOnce()
+
+    fireEvent.change(input, { target: { value: '진행 중인 답변을 이어서 받아줘.' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    await act(async () => completeStream?.())
+
+    expect(await screen.findByText('완료 이벤트의 최종 답변입니다.')).toBeInTheDocument()
+    expect(listMessages).toHaveBeenCalledTimes(2)
+    expect(getById).not.toHaveBeenCalled()
+  })
+
   it('polls only the message history when the conflict stream is unavailable', async () => {
     let historyCallCount = 0
     const submitTurn = vi.fn().mockRejectedValue(new ApiClientError({

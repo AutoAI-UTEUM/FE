@@ -4,6 +4,25 @@ import type { AuthenticatedRequest } from '../auth'
 import { createClassroomsRepository } from './classroomsRepository'
 
 describe('classrooms repository', () => {
+  it('shares simultaneous identical classroom list requests across repository instances', async () => {
+    let resolveRequest: ((value: { data: { items: (typeof classroomDto)[] } }) => void) | undefined
+    const request = vi.fn().mockImplementation(() => new Promise((resolve) => {
+      resolveRequest = resolve
+    }))
+    const firstRepository = createClassroomsRepository(request as AuthenticatedRequest)
+    const secondRepository = createClassroomsRepository(request as AuthenticatedRequest)
+
+    const firstResult = firstRepository.list()
+    const secondResult = secondRepository.list()
+
+    expect(request).toHaveBeenCalledOnce()
+    resolveRequest?.({ data: { items: [classroomDto] } })
+    await expect(Promise.all([firstResult, secondResult])).resolves.toEqual([
+      [expect.objectContaining({ id: '12' })],
+      [expect.objectContaining({ id: '12' })],
+    ])
+  })
+
   it('maps classroom lists and sends the documented create body', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ data: { items: [classroomDto], page: 0, size: 20, totalElements: 1, totalPages: 1 } })

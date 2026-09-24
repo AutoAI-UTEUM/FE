@@ -7,7 +7,9 @@ import { createQuestion, isExamDraftValid } from '../../../features/exams/examEd
 import type { CreateExamInput, Exam, ExamsRepository } from '../../../features/exams/examsRepository'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { formatDateTime } from '../../../shared/lib/format'
-import { Badge, Button, MarkdownContent, MarkdownEditor, useToast } from '../../../shared/ui'
+import { Badge, Button, useToast } from '../../../shared/ui'
+import { MarkdownContent } from '../../../shared/ui/MarkdownContent'
+import { MarkdownEditor } from '../../../shared/ui/MarkdownEditor'
 
 export function NoticeDetailPanel({
   canEdit,
