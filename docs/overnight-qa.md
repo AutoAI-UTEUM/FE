@@ -34,8 +34,9 @@ PROD_QA_ADMIN_EMAIL / PROD_QA_ADMIN_PASSWORD
 ```
 
 `QA_ISSUE_TOKEN` is an optional fine-grained GitHub token with issue write access to
-both `AutoAI-UTEUM/FE` and `AutoAI-UTEUM/BE`. Without it, CI stores sanitized issue
-drafts in the run artifact instead of creating issues across repositories.
+both `AutoAI-UTEUM/FE` and `AutoAI-UTEUM/BE`. Without it, the workflow token can create
+FE issues; cross-repository BE/AI failures remain sanitized drafts for the connected
+follow-up to deduplicate and register.
 
 ## Execution
 
