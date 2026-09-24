@@ -1,5 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -258,6 +264,141 @@ describe('AuthProvider', () => {
     expect(activityCallCount).toBe(1)
   })
 
+  it('uses refresh when activity races with access-token expiry', async () => {
+    vi.useFakeTimers()
+    let activityCallCount = 0
+    let refreshCallCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCallCount += 1
+        return Promise.resolve(
+          jsonResponse(
+            createAccessGrantResponse(`access-token-${refreshCallCount}`),
+          ),
+        )
+      }
+      if (url.endsWith('/api/users/me')) {
+        return Promise.resolve(
+          jsonResponse({
+            email: 'learner@test.com',
+            name: '학습자',
+            role: 'LEARNER',
+            userId: 1,
+          }),
+        )
+      }
+      if (url.endsWith('/api/auth/session/activity')) {
+        activityCallCount += 1
+        return Promise.resolve(
+          jsonResponse(
+            {
+              error: {
+                code: 'TOKEN_EXPIRED',
+                details: [],
+                message: '토큰이 만료되었습니다.',
+              },
+              success: false,
+            },
+            401,
+          ),
+        )
+      }
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+
+    renderAuthenticatedRoute(<p>비공개 화면</p>)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(AUTH_ACTIVITY_RECORD_INTERVAL_MS)
+    })
+    fireEvent.pointerDown(window)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(activityCallCount).toBe(1)
+    expect(refreshCallCount).toBe(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('retries failed activity without rotating the refresh token', async () => {
+    vi.useFakeTimers()
+    let activityCallCount = 0
+    let refreshCallCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCallCount += 1
+        return Promise.resolve(jsonResponse(createAccessGrantResponse()))
+      }
+      if (url.endsWith('/api/users/me')) {
+        return Promise.resolve(
+          jsonResponse({
+            email: 'learner@test.com',
+            name: '학습자',
+            role: 'LEARNER',
+            userId: 1,
+          }),
+        )
+      }
+      if (url.endsWith('/api/auth/session/activity')) {
+        activityCallCount += 1
+        if (activityCallCount === 1) {
+          return Promise.resolve(
+            jsonResponse(
+              {
+                error: {
+                  code: 'SERVICE_UNAVAILABLE',
+                  details: [],
+                  message: '잠시 후 다시 시도해 주세요.',
+                },
+                success: false,
+              },
+              503,
+            ),
+          )
+        }
+        return Promise.resolve(jsonResponse(createSessionPolicy()))
+      }
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+
+    renderAuthenticatedRoute(<p>비공개 화면</p>)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(AUTH_ACTIVITY_RECORD_INTERVAL_MS)
+    })
+    fireEvent.pointerDown(window)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(
+      screen.getByText(
+        '세션 활동 기록을 잠시 완료하지 못했습니다. 다음 활동에서 다시 시도합니다.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 연결' }))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(activityCallCount).toBe(2)
+    expect(refreshCallCount).toBe(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('refreshes five minutes before expiry only after recent user activity', async () => {
     vi.useFakeTimers()
     let refreshCallCount = 0
@@ -363,6 +504,30 @@ describe('AuthProvider', () => {
     expect(screen.getByText('로그인 화면')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
+
+  it('uses the role-specific idle timeout returned by the server', async () => {
+    vi.useFakeTimers()
+    mockRestoredSession(createAccessGrantResponse())
+    renderAuthenticatedRoute(<p>비공개 화면</p>)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTH_IDLE_TIMEOUT_MS)
+    })
+    expect(screen.getByText('비공개 화면')).toBeInTheDocument()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        createSessionPolicy().idleTimeoutSeconds * 1000 -
+          AUTH_IDLE_TIMEOUT_MS,
+      )
+    })
+    expect(screen.getByText('로그인 화면')).toBeInTheDocument()
+  })
 })
 
 function AuthenticatedRequestHarness() {
@@ -411,10 +576,12 @@ function renderAuthenticatedRoute(element: ReactNode) {
   )
 }
 
-function mockRestoredSession() {
+function mockRestoredSession(
+  refreshResponse: Record<string, unknown> = { accessToken: 'restored-token' },
+) {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
     const url = String(input)
-    if (url.endsWith('/api/auth/refresh')) return Promise.resolve(jsonResponse({ accessToken: 'restored-token' }))
+    if (url.endsWith('/api/auth/refresh')) return Promise.resolve(jsonResponse(refreshResponse))
     if (url.endsWith('/api/users/me')) {
       return Promise.resolve(jsonResponse({ email: 'learner@test.com', name: '학습자', role: 'LEARNER', userId: 1 }))
     }
