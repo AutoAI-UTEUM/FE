@@ -495,24 +495,59 @@ function PageOutline({
             onClick={() => onMovePage(pageNumber)}
             type="button"
           >
-            <span className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-sm">
-              {renderThumbnails ? (
-                <Page
-                  devicePixelRatio={1}
-                  pageNumber={pageNumber}
-                  renderAnnotationLayer={false}
-                  renderTextLayer={false}
-                  width={88}
-                />
-              ) : (
+            {renderThumbnails ? (
+              <LazyPageThumbnail pageNumber={pageNumber} />
+            ) : (
+              <span className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-sm">
                 <span className="h-full w-full animate-pulse bg-stone-100" />
-              )}
-            </span>
+              </span>
+            )}
             <span className="mt-1 type-micro font-semibold">{pageNumber}</span>
           </button>
         ),
       )}
     </nav>
+  )
+}
+
+function LazyPageThumbnail({ pageNumber }: { pageNumber: number }) {
+  const containerRef = useRef<HTMLSpanElement | null>(null)
+  const [shouldRender, setShouldRender] = useState(
+    () => typeof IntersectionObserver === 'undefined',
+  )
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || shouldRender) return
+    if (typeof IntersectionObserver === 'undefined') return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      setShouldRender(true)
+      observer.disconnect()
+    }, { rootMargin: '240px 0px' })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [shouldRender])
+
+  return (
+    <span
+      className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-sm"
+      data-thumbnail-state={shouldRender ? 'rendered' : 'deferred'}
+      ref={containerRef}
+    >
+      {shouldRender ? (
+        <Page
+          devicePixelRatio={1}
+          pageNumber={pageNumber}
+          renderAnnotationLayer={false}
+          renderTextLayer={false}
+          width={88}
+        />
+      ) : (
+        <span className="h-full w-full animate-pulse bg-stone-100" />
+      )}
+    </span>
   )
 }
 

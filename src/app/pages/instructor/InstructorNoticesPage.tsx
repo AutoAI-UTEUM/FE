@@ -12,7 +12,8 @@ import {
 } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, EmptyState, MarkdownEditor, useToast } from '../../../shared/ui'
+import { Button, EmptyState, useToast } from '../../../shared/ui'
+import { MarkdownEditor } from '../../../shared/ui/MarkdownEditor'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
