@@ -50,14 +50,9 @@ export function validateSignupForm(values: SignupFormValues): SignupFormErrors {
   const errors: SignupFormErrors = { ...validateLoginForm(values) }
 
   // 서버 규칙(8~64자, 영문·숫자 각 1자 이상)과 동일하게 가입 시점에 먼저 거른다.
-  if (
-    values.password &&
-    !errors.password &&
-    (values.password.length > MAX_PASSWORD_LENGTH ||
-      !/[a-z]/i.test(values.password) ||
-      !/\d/.test(values.password))
-  ) {
-    errors.password = '8~64자, 영문·숫자를 포함해야 합니다.'
+  if (values.password && !errors.password) {
+    const passwordError = validatePassword(values.password)
+    if (passwordError) errors.password = passwordError
   }
 
   if (!values.name.trim()) {
@@ -73,6 +68,19 @@ export function validateSignupForm(values: SignupFormValues): SignupFormErrors {
   }
 
   return errors
+}
+
+export function validatePassword(password: string): string | null {
+  if (!password) return '비밀번호를 입력하세요.'
+  if (
+    password.length < MIN_PASSWORD_LENGTH ||
+    password.length > MAX_PASSWORD_LENGTH ||
+    !/[a-z]/i.test(password) ||
+    !/\d/.test(password)
+  ) {
+    return '8~64자, 영문·숫자를 포함해야 합니다.'
+  }
+  return null
 }
 
 export function hasFormErrors(errors: LoginFormErrors | SignupFormErrors): boolean {

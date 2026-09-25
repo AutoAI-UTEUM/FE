@@ -21,6 +21,7 @@ export type {
   AuthSessionPolicy,
   AuthSessionResult,
 } from './authRepository'
+export { getAuthRepository } from './authRepository'
 export type {
   AuthenticatedRawRequest,
   AuthenticatedRequest,
@@ -33,6 +34,7 @@ export {
 export {
   hasFormErrors,
   validateLoginForm,
+  validatePassword,
   validateSignupForm,
   type GoogleAuthValues,
   type LoginFormErrors,

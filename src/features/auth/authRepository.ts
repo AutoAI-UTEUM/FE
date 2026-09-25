@@ -40,6 +40,12 @@ export interface AuthRepository {
     accessToken: string,
     signal?: AbortSignal,
   ) => Promise<AuthSessionPolicy>
+  requestPasswordReset: (email: string, signal?: AbortSignal) => Promise<string>
+  confirmPasswordReset: (
+    token: string,
+    newPassword: string,
+    signal?: AbortSignal,
+  ) => Promise<string>
   refresh: (signal?: AbortSignal) => Promise<AccessGrant>
   signup: (values: SignupFormValues) => Promise<void>
 }
@@ -64,6 +70,10 @@ interface AccessGrantDto {
   accessToken: string
   expiresIn?: number
   session?: AuthSessionPolicy
+}
+
+interface PasswordResetMessageDto {
+  message: string
 }
 
 const LEGACY_ACCESS_TTL_SECONDS = 60 * 60
@@ -153,6 +163,30 @@ const repository: AuthRepository = {
       },
     )
     return data
+  },
+
+  async requestPasswordReset(email, signal) {
+    const { data } = await apiRequest<PasswordResetMessageDto>(
+      '/api/auth/password-reset/request',
+      {
+        body: { email: email.trim().toLowerCase() },
+        method: 'POST',
+        signal,
+      },
+    )
+    return data.message
+  },
+
+  async confirmPasswordReset(token, newPassword, signal) {
+    const { data } = await apiRequest<PasswordResetMessageDto>(
+      '/api/auth/password-reset/confirm',
+      {
+        body: { newPassword, token },
+        method: 'POST',
+        signal,
+      },
+    )
+    return data.message
   },
 
   // refresh 쿠키(edupilot_refresh)로 access 토큰을 재발급받는다 (DEC-004).

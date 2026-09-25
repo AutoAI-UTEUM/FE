@@ -1,13 +1,14 @@
 import { CheckCircle2, ChevronLeft, ChevronRight, LoaderCircle, Send, Sparkles, Trash2, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, rememberClassroomId, type ClassroomStudent } from '../../features/classrooms'
-import { createExamsRepository, type CreateExamInput, type Exam, type ExamQuestion, type ExamQuestionType, type ExamSubmission, type GenerateExamDraftInput, type InstructorSubmissionSummary } from '../../features/exams'
+import { createExamsRepository, type CreateExamInput, type Exam, type ExamAttemptDraft, type ExamQuestion, type ExamQuestionType, type ExamSubmission, type GenerateExamDraftInput, type InstructorSubmissionSummary } from '../../features/exams'
 import { ExamEditor } from '../../features/exams/ExamEditor'
 import { isExamDraftValid } from '../../features/exams/examEditorModel'
 import { getRequestErrorMessage } from '../../shared/api'
+import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { formatDateTime } from '../../shared/lib/format'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { useAsyncJobPolling } from '../../shared/state'
@@ -17,9 +18,9 @@ import { classroomExamSubmissionPath, classroomExamsPath, routes } from '../rout
 
 export function ExamDetailPage() {
   usePageTitle('시험')
-  const { classroomId = '', examId } = useParams(); const { apiRequest, user } = useAuth(); const navigate = useNavigate(); const { show } = useToast()
+  const { classroomId = '', examId } = useParams(); const { apiRequest, rawApiRequest, user } = useAuth(); const navigate = useNavigate(); const { show } = useToast()
   const isInstructor = isInstructorRole(user?.role)
-  const repository = useMemo(() => createExamsRepository(apiRequest), [apiRequest])
+  const repository = useMemo(() => createExamsRepository(apiRequest, rawApiRequest), [apiRequest, rawApiRequest])
   const [exam, setExam] = useState<Exam | null>()
   const [error, setError] = useState<string | null>(null)
   const [isWorking, setIsWorking] = useState(false)
@@ -196,12 +197,20 @@ function AiExamDraftDialog({ initialWeekNumber, onClose, onGenerate }: { initial
 
 function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onResultReady: () => void; repository: ReturnType<typeof createExamsRepository> }) {
   const { setExamInProgress, user } = useAuth()
+  const isServerDraftEnabled = isApiCapabilityEnabled('exam-attempt-drafts')
   const draftStorageKey = createExamDraftStorageKey(exam.id, user?.id)
   const shouldStartAttempt = Boolean(!exam.mySubmission && exam.submittable)
   const [answers, setAnswers] = useState<Record<string, string>>(() => readExamDraft(draftStorageKey, exam.questions)); const [index, setIndex] = useState(0); const [submission, setSubmission] = useState<ExamSubmission | null>(null); const [isSubmitting, setIsSubmitting] = useState(false); const [isRestoringSubmission, setIsRestoringSubmission] = useState(Boolean(exam.mySubmission)); const [error, setError] = useState<string | null>(null)
   const [attemptStartStatus, setAttemptStartStatus] = useState<'starting' | 'ready' | 'error'>(shouldStartAttempt ? 'starting' : 'ready')
   const [attemptStartError, setAttemptStartError] = useState<string | null>(null)
   const [attemptStartRetryKey, setAttemptStartRetryKey] = useState(0)
+  const [draftInitialized, setDraftInitialized] = useState(!shouldStartAttempt || !isServerDraftEnabled)
+  const [draftSyncStatus, setDraftSyncStatus] = useState<'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'conflict'>(shouldStartAttempt && isServerDraftEnabled ? 'loading' : 'idle')
+  const [draftConflict, setDraftConflict] = useState<{ server: ExamAttemptDraft | null } | null>(null)
+  const answersRef = useRef(answers)
+  const draftVersionRef = useRef<number | null>(null)
+  const lastSavedDraftRef = useRef<string | null>(null)
+  const draftSavePromiseRef = useRef<Promise<void> | null>(null)
   const question = exam.questions[index]
   const answeredCount = Object.values(answers).filter((answer) => answer.trim().length > 0).length
   const isLastQuestion = index === exam.questions.length - 1
@@ -230,6 +239,40 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     return () => controller.abort()
   }, [attemptStartRetryKey, exam.id, repository, shouldStartAttempt])
   useEffect(() => {
+    answersRef.current = answers
+  }, [answers])
+  useEffect(() => {
+    if (!shouldStartAttempt || !isServerDraftEnabled) return
+    const controller = new AbortController()
+    const localAnswers = readExamDraft(draftStorageKey, exam.questions)
+    repository.getAttemptDraft(exam.id, controller.signal)
+      .then((serverDraft) => {
+        if (controller.signal.aborted) return
+        if (!serverDraft) {
+          setDraftSyncStatus('idle')
+          return
+        }
+        draftVersionRef.current = serverDraft.version
+        const localSerialized = serializeExamAnswers(localAnswers)
+        const serverSerialized = serializeExamAnswers(serverDraft.answers)
+        if (hasExamAnswers(localAnswers) && localSerialized !== serverSerialized) {
+          setDraftConflict({ server: serverDraft })
+          setDraftSyncStatus('conflict')
+          return
+        }
+        setAnswers(serverDraft.answers)
+        lastSavedDraftRef.current = serverSerialized
+        setDraftSyncStatus('saved')
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setDraftSyncStatus('error')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDraftInitialized(true)
+      })
+    return () => controller.abort()
+  }, [draftStorageKey, exam.id, exam.questions, isServerDraftEnabled, repository, shouldStartAttempt])
+  useEffect(() => {
     const isInProgress = Boolean(!exam.mySubmission && !submission && exam.submittable)
     setExamInProgress(isInProgress)
     return () => setExamInProgress(false)
@@ -242,6 +285,60 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     }
     writeExamDraft(draftStorageKey, answers)
   }, [answers, draftStorageKey, exam.mySubmission, submission])
+  const saveDraftToServer = useCallback(async () => {
+    if (
+      !shouldStartAttempt ||
+      !isServerDraftEnabled ||
+      !draftInitialized ||
+      attemptStartStatus !== 'ready' ||
+      draftConflict ||
+      submission ||
+      draftSavePromiseRef.current
+    ) return
+
+    const snapshot = { ...answersRef.current }
+    const serialized = serializeExamAnswers(snapshot)
+    if (serialized === lastSavedDraftRef.current) return
+
+    setDraftSyncStatus('saving')
+    const task = repository.saveAttemptDraft(
+      exam.id,
+      snapshot,
+      draftVersionRef.current,
+    ).then((result) => {
+      if (result.kind === 'conflict') {
+        if (result.latestDraft) draftVersionRef.current = result.latestDraft.version
+        setDraftConflict({ server: result.latestDraft })
+        setDraftSyncStatus('conflict')
+        return
+      }
+      draftVersionRef.current = result.version
+      lastSavedDraftRef.current = serialized
+      setDraftSyncStatus('saved')
+    }).catch(() => {
+      setDraftSyncStatus('error')
+    }).finally(() => {
+      draftSavePromiseRef.current = null
+    })
+    draftSavePromiseRef.current = task
+    await task
+  }, [attemptStartStatus, draftConflict, draftInitialized, exam.id, isServerDraftEnabled, repository, shouldStartAttempt, submission])
+  useEffect(() => {
+    if (
+      !draftInitialized ||
+      attemptStartStatus !== 'ready' ||
+      draftConflict ||
+      submission
+    ) return
+    if (serializeExamAnswers(answers) === lastSavedDraftRef.current) return
+    const timeoutId = window.setTimeout(() => void saveDraftToServer(), 2_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [answers, attemptStartStatus, draftConflict, draftInitialized, saveDraftToServer, submission])
+  useEffect(() => {
+    if (!shouldStartAttempt || !draftInitialized || draftConflict || submission) return
+    const intervalId = window.setInterval(() => void saveDraftToServer(), 30_000)
+    return () => window.clearInterval(intervalId)
+  }, [draftConflict, draftInitialized, saveDraftToServer, shouldStartAttempt, submission])
   useAsyncJobPolling({ enabled: submission?.status === 'SUBMITTED', fetchNext: fetchSubmission, getDelayMs: getExamPollingDelay, isPending: isExamSubmissionPending, maxDurationMs: 90 * 60_000, onDelayed: handlePollingDelay, onError: handlePollingError, onResult: setSubmission })
   useEffect(() => {
     if (submission?.status === 'GRADED') onResultReady()
@@ -250,6 +347,26 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     setAttemptStartStatus('starting')
     setAttemptStartError(null)
     setAttemptStartRetryKey((current) => current + 1)
+  }
+  function useServerDraft() {
+    const serverDraft = draftConflict?.server
+    if (serverDraft) {
+      setAnswers(serverDraft.answers)
+      draftVersionRef.current = serverDraft.version
+      lastSavedDraftRef.current = serializeExamAnswers(serverDraft.answers)
+      setDraftSyncStatus('saved')
+    } else {
+      draftVersionRef.current = null
+      lastSavedDraftRef.current = null
+      setDraftSyncStatus('idle')
+    }
+    setDraftConflict(null)
+  }
+  function keepCurrentDraft() {
+    draftVersionRef.current = draftConflict?.server?.version ?? null
+    lastSavedDraftRef.current = null
+    setDraftConflict(null)
+    setDraftSyncStatus('idle')
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -273,7 +390,47 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
   if (submission?.status === 'SUBMITTED') return <SubmissionPending error={error} exam={exam} submission={submission} />
   if (submission) return <SubmissionResult exam={exam} submission={submission} />
   if (!question) return <EmptyState title="공개된 문항이 없습니다" description="강의자에게 시험 상태를 문의하세요." />
-  return <form className="overflow-hidden rounded-xl border border-stone-200 bg-white" onSubmit={submit}><div className="border-b border-stone-200 px-5 py-4"><p className="type-body text-stone-600">{exam.description || '시험 문항에 답한 뒤 제출하세요.'}</p><div className="mt-3 flex items-center justify-between type-caption text-stone-500"><span>{index + 1}/{exam.questions.length} 문항</span><span>{answeredCount}개 답변</span></div></div><div className="p-5 sm:p-7">{attemptStartStatus === 'starting' ? <p className="mb-4 type-control font-medium text-stone-500" role="status">응시 시작 시간을 기록하는 중입니다.</p> : null}{attemptStartStatus === 'error' ? <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3"><p className="min-w-0 flex-1 type-control text-rose-700" role="alert">응시 시작을 기록하지 못했습니다. {attemptStartError}</p><Button onClick={retryAttemptStart} size="sm" variant="secondary">다시 시도</Button></div> : null}<QuestionAnswerInput disabled={isSubmitting} onChange={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))} question={question} value={answers[question.id] ?? ''} />{error ? <p className="mt-4 type-body text-rose-700" role="alert">{error}</p> : null}<div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4"><div className="flex gap-2"><Button disabled={index === 0 || isSubmitting} onClick={() => setIndex((current) => current - 1)} variant="secondary"><ChevronLeft size={15} />이전</Button><Button disabled={isLastQuestion || isSubmitting} onClick={() => setIndex((current) => current + 1)} variant="secondary">다음<ChevronRight size={15} /></Button></div>{isLastQuestion ? <Button disabled={!exam.submittable || isSubmitting || attemptStartStatus !== 'ready'} type="submit"><Send size={15} />{isSubmitting ? '제출 중' : attemptStartStatus === 'starting' ? '응시 준비 중' : exam.submittable ? '시험 제출' : '제출 불가'}</Button> : null}</div></div></form>
+  return (
+    <form className="overflow-hidden rounded-xl border border-stone-200 bg-white" onSubmit={submit}>
+      <div className="border-b border-stone-200 px-5 py-4">
+        <p className="type-body text-stone-600">{exam.description || '시험 문항에 답한 뒤 제출하세요.'}</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 type-caption text-stone-500">
+          <span>{index + 1}/{exam.questions.length} 문항</span>
+          <span className="flex items-center gap-3">
+            <span>{answeredCount}개 답변</span>
+            {shouldStartAttempt && isServerDraftEnabled ? (
+              <span aria-live="polite" className={draftSyncStatus === 'error' ? 'text-rose-600' : 'text-stone-400'}>
+                {getDraftSyncLabel(draftSyncStatus)}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      </div>
+      <div className="p-5 sm:p-7">
+        {attemptStartStatus === 'starting' ? <p className="mb-4 type-control font-medium text-stone-500" role="status">응시 시작 시간을 기록하는 중입니다.</p> : null}
+        {attemptStartStatus === 'error' ? <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3"><p className="min-w-0 flex-1 type-control text-rose-700" role="alert">응시 시작을 기록하지 못했습니다. {attemptStartError}</p><Button onClick={retryAttemptStart} size="sm" variant="secondary">다시 시도</Button></div> : null}
+        {draftConflict ? (
+          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3" role="alert">
+            <p className="type-control font-semibold text-amber-900">다른 기기에 저장된 답안과 현재 답안이 다릅니다.</p>
+            <p className="mt-1 type-caption text-amber-800">사용할 답안을 선택하면 이후 변경사항을 서버에 자동 저장합니다.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button onClick={useServerDraft} size="sm" variant="secondary">서버 답안 사용</Button>
+              <Button onClick={keepCurrentDraft} size="sm">현재 답안 유지</Button>
+            </div>
+          </div>
+        ) : null}
+        <QuestionAnswerInput disabled={isSubmitting || Boolean(draftConflict)} onChange={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))} question={question} value={answers[question.id] ?? ''} />
+        {error ? <p className="mt-4 type-body text-rose-700" role="alert">{error}</p> : null}
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
+          <div className="flex gap-2">
+            <Button disabled={index === 0 || isSubmitting || Boolean(draftConflict)} onClick={() => setIndex((current) => current - 1)} variant="secondary"><ChevronLeft size={15} />이전</Button>
+            <Button disabled={isLastQuestion || isSubmitting || Boolean(draftConflict)} onClick={() => setIndex((current) => current + 1)} variant="secondary">다음<ChevronRight size={15} /></Button>
+          </div>
+          {isLastQuestion ? <Button disabled={!exam.submittable || isSubmitting || attemptStartStatus !== 'ready' || Boolean(draftConflict)} type="submit"><Send size={15} />{isSubmitting ? '제출 중' : attemptStartStatus === 'starting' ? '응시 준비 중' : exam.submittable ? '시험 제출' : '제출 불가'}</Button> : null}
+        </div>
+      </div>
+    </form>
+  )
 }
 
 function QuestionAnswerInput({ disabled = false, onChange, question, value }: { disabled?: boolean; onChange: (value: string) => void; question: ExamQuestion; value: string }) {
@@ -556,6 +713,29 @@ function isInstructorSubmissionPending(submission: InstructorSubmissionSummary) 
 function hasPendingInstructorSubmission(submissions: InstructorSubmissionSummary[]) { return submissions.some(isInstructorSubmissionPending) }
 function getExamPollingDelay(elapsedMs: number) { return elapsedMs < 30_000 ? 2000 : 5000 }
 function createRequestId() { return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `exam-${Date.now()}` }
+
+function serializeExamAnswers(answers: Record<string, string>) {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(answers)
+        .filter(([, answer]) => answer.trim().length > 0)
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  )
+}
+
+function hasExamAnswers(answers: Record<string, string>) {
+  return Object.values(answers).some((answer) => answer.trim().length > 0)
+}
+
+function getDraftSyncLabel(status: 'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'conflict') {
+  if (status === 'loading') return '저장 답안 확인 중'
+  if (status === 'saving') return '자동 저장 중'
+  if (status === 'saved') return '서버에 저장됨'
+  if (status === 'error') return '서버 저장 재시도 예정'
+  if (status === 'conflict') return '답안 선택 필요'
+  return '자동 저장 대기'
+}
 
 function createExamDraftStorageKey(examId: number | string, userId?: number) {
   return userId === undefined ? null : `exam-draft:${examId}:${userId}`

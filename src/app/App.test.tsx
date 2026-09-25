@@ -22,6 +22,7 @@ const authenticatedUser: AuthUser = {
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_API_CAPABILITIES', 'reports,password-reset')
   window.localStorage.clear()
   window.sessionStorage.clear()
   installApiFixtureServer()

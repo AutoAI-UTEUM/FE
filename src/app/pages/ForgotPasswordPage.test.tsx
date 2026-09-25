@@ -1,11 +1,19 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { installApiFixtureServer } from '../../test/apiFixtureServer'
 import { ForgotPasswordPage } from './ForgotPasswordPage'
+
+beforeEach(() => {
+  vi.stubEnv('VITE_API_CAPABILITIES', 'password-reset')
+  installApiFixtureServer()
+})
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })
 
 function renderForgotPassword() {
@@ -54,7 +62,7 @@ describe('ForgotPasswordPage', () => {
     expect(screen.getByText('이메일 형식을 확인하세요.')).toBeInTheDocument()
   })
 
-  it('shows the completed state for a valid email', () => {
+  it('requests a reset email and shows the privacy-safe server message', async () => {
     renderForgotPassword()
 
     fireEvent.change(screen.getByLabelText('이메일'), {
@@ -64,8 +72,8 @@ describe('ForgotPasswordPage', () => {
       screen.getByRole('button', { name: '재설정 링크 보내기' }),
     )
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '링크를 보냈어요. 메일함을 확인해 주세요 - 10분간 유효합니다.',
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '등록된 이메일이면 재설정 안내를 발송했습니다.',
     )
   })
 
