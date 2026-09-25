@@ -503,16 +503,23 @@ describe('instructor pages', () => {
     const copyButton = screen.getByRole('button', { name: '자료구조 초대 코드 복사' })
     const regenerateButton = screen.getByRole('button', { name: '자료구조 초대 코드 재발급' })
 
-    expect(classroomLink).toHaveClass('type-card-title')
-    expect(screen.getByText('7QK4-MZ2A')).toHaveClass('type-invite-code')
-    expect(copyButton).toHaveClass('type-compact-action')
-    expect(regenerateButton).toHaveClass('type-compact-action')
-    expect(copyButton.querySelector('svg')).not.toBeInTheDocument()
-    expect(regenerateButton.querySelector('svg')).not.toBeInTheDocument()
+    expect(classroomLink).toHaveClass('type-classroom-title')
+    expect(classroomLink).not.toHaveClass('type-card-title')
+    expect(screen.getByText('7QK4-MZ2A')).toHaveClass('type-invite-code-compact')
+    expect(copyButton).toHaveClass('size-10')
+    expect(regenerateButton).toHaveClass('size-10')
+    expect(copyButton).not.toHaveClass('shadow-sm')
+    expect(regenerateButton).not.toHaveClass('shadow-sm')
+    expect(copyButton).toHaveClass('rounded-lg', 'bg-stone-50')
+    expect(regenerateButton).toHaveClass('rounded-lg', 'bg-stone-50')
+    expect(copyButton.querySelector('svg')).toBeInTheDocument()
+    expect(regenerateButton.querySelector('svg')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '운영 강의실' })).toHaveClass('xl:grid-cols-4')
     expect(screen.getByText('38%')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '자료 관리' })).toHaveAttribute('href', '/classrooms/12')
-    expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/classrooms/12/settings')
-    expect(screen.getByRole('link', { name: '학습현황' })).toHaveAttribute('href', '/classrooms/12/analytics')
+    expect(screen.getByRole('progressbar', { name: '자료구조 평균 진도 38%' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '자료 관리' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '설정' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '학습현황' })).not.toBeInTheDocument()
 
     fetchMock.mockRestore()
   })
@@ -550,14 +557,15 @@ describe('instructor pages', () => {
     fetchMock.mockRestore()
   })
 
-  it('keeps classroom settings available after the classroom is completed', async () => {
+  it('keeps a completed classroom reachable without showing active controls', async () => {
     const fetchMock = stubClassroomsApi('COMPLETED')
     renderInstructorPage(<InstructorClassroomsPage />)
 
-    await screen.findByRole('link', { name: '자료구조' })
+    expect(await screen.findByRole('link', { name: '자료구조' })).toHaveAttribute('href', '/classrooms/12')
 
-    expect(screen.getByRole('link', { name: '보관된 자료 보기' })).toHaveAttribute('href', '/classrooms/12')
-    expect(screen.getByRole('link', { name: '설정' })).toHaveAttribute('href', '/classrooms/12/settings')
+    expect(screen.getByText('비활성화됨')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료구조 초대 코드 복사' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '자료구조 초대 코드 재발급' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '학습현황' })).not.toBeInTheDocument()
 
     fetchMock.mockRestore()
@@ -647,6 +655,7 @@ describe('instructor pages', () => {
   it('places the schedule action inside the schedule panel in a fixed-height layout', () => {
     renderCalendar()
     const viewControls = screen.getByLabelText('캘린더 보기')
+    expect(viewControls.closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
     const addButton = screen.getByRole('button', { name: '일정 추가' })
     const page = screen
       .getByRole('heading', { name: '캘린더' })

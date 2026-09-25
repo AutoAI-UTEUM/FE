@@ -1,8 +1,9 @@
-import { ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, RefreshCcw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCcw } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { cx } from '../../shared/lib/cx'
 import { useElementWidth, useResponsiveViewport } from '../../shared/responsive'
+import { Select } from '../../shared/ui'
 import { createGithubUpdatesRepository, type DevelopmentPart, type DevelopmentUpdate } from './githubUpdatesRepository'
 
 type PartFilter = 'ALL' | 'AI_BE' | 'FE'
@@ -14,10 +15,9 @@ const PART_LABELS: Record<PartFilter, string> = { ALL: '전체', AI_BE: 'AI·BE'
 const PART_COLORS: Record<DevelopmentPart, string> = { AI: 'bg-violet-50 text-violet-700', BE: 'bg-violet-50 text-violet-700', FE: 'bg-blue-50 text-blue-700' }
 const UPDATE_PART_LABELS: Record<DevelopmentPart, string> = { AI: 'AI·BE', BE: 'AI·BE', FE: 'FE' }
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
-const WEEKDAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
 const defaultRepository = createGithubUpdatesRepository((input, init) => fetch(input, init), '/updates-snapshot.json')
 
-export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = true }: { initialDate?: Date; repository?: UpdatesRepository; showTitle?: boolean }) {
+export function DevelopmentUpdatesPanel({ initialDate, pathRoot = '관리자', repository }: { initialDate?: Date; pathRoot?: string; repository?: UpdatesRepository }) {
   const activeRepository = repository ?? defaultRepository
   const { isTablet } = useResponsiveViewport()
   const [measureArea, areaWidth] = useElementWidth()
@@ -60,13 +60,8 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
   const monthFirstDateKey = formatDateKey(visibleMonth)
   const activeDateKey = selectedDateKey ?? updateDateKeys[0] ?? monthFirstDateKey
   const activeDateUpdates = updatesByDate.get(activeDateKey) ?? []
-  const activeDate = formatUpdateDate(activeDateKey)
+  const activeDateLabel = formatUpdateDate(activeDateKey)
   const monthLabel = `${visibleMonth.getFullYear()}년 ${visibleMonth.getMonth() + 1}월`
-  const feCount = updates.filter((update) => update.part === 'FE').length
-  const aiBeCount = updates.length - feCount
-  const activeDays = new Set(updates.map((update) => update.date)).size
-  const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate()
-  const latestUpdate = [...updates].sort((left, right) => right.committedAt.localeCompare(left.committedAt))[0]
   const isUnavailablePart = partFilter === 'AI_BE'
     ? !availableParts.includes('AI') && !availableParts.includes('BE')
     : partFilter !== 'ALL' && !availableParts.includes(partFilter)
@@ -90,30 +85,19 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
   }
 
   return (
-    <section aria-label={showTitle ? undefined : '업데이트'} aria-labelledby={showTitle ? 'development-updates-title' : undefined} className={cx('flex h-full min-h-0 w-full flex-col gap-[14px]', showTitle ? 'overflow-y-auto xl:overflow-hidden' : 'overflow-y-auto pb-1')} ref={measureArea}>
-      {showTitle ? <div className="flex shrink-0 flex-col gap-1.5"><p aria-hidden="true" className="type-caption text-stone-400">관리자 / 업데이트</p><h1 className="type-admin-title font-bold text-stone-950" id="development-updates-title">업데이트</h1></div> : null}
+    <section aria-labelledby="development-updates-title" className="flex h-full min-h-0 w-full flex-col gap-[14px] overflow-y-auto xl:overflow-hidden" ref={measureArea}>
+      <div className="flex shrink-0 flex-col gap-1.5"><p aria-hidden="true" className="type-caption text-stone-400">{pathRoot} / 업데이트</p><h1 className="type-admin-title font-bold text-stone-950" id="development-updates-title">업데이트</h1></div>
 
-      {!showTitle ? <div className="grid shrink-0 gap-[14px] [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-        <UpdateSummaryCard dark detail={latestUpdate ? `최근 배포 ${formatCompactDate(latestUpdate.date)}` : '배포 기록 없음'} label={`${visibleMonth.getMonth() + 1}월 배포`} value={updates.length} />
-        <UpdateSummaryCard detail={`전체의 ${formatShare(feCount, updates.length)}`} label="FE" value={feCount} />
-        <UpdateSummaryCard detail={`전체의 ${formatShare(aiBeCount, updates.length)}`} label="AI · BE" value={aiBeCount} />
-        <UpdateSummaryCard detail={`${visibleMonth.getMonth() + 1}월 ${daysInMonth}일 중`} label="배포한 날" value={activeDays} />
-      </div> : null}
-
-      <div className={cx(showTitle && 'grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:items-stretch xl:overflow-hidden')}>
-      <section className={cx('shrink-0 rounded-3xl border border-stone-200 bg-white px-[22px] py-5', showTitle && 'xl:min-h-0 xl:overflow-y-auto')} aria-label={`${monthLabel} 업데이트 달력`}>
+      <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:items-stretch xl:overflow-hidden">
+      <section className="shrink-0 rounded-3xl border border-stone-200 bg-white px-[22px] py-5 xl:min-h-0 xl:overflow-y-auto" aria-label={`${monthLabel} 업데이트 달력`}>
         <div aria-label="업데이트 도구" className="flex flex-wrap items-center justify-between gap-3" role="toolbar">
           <div className="flex min-w-0 items-center gap-2">
             <button aria-label="이전 달" className="flex size-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={15} /></button>
             <strong className="min-w-28 text-center type-control font-bold text-stone-900">{monthLabel}</strong>
             <button aria-label="다음 달" className="flex size-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 mobile-web:size-11" onClick={() => moveMonth(1)} type="button"><ChevronRight aria-hidden="true" size={15} /></button>
-            {!showTitle ? <span className="hidden type-caption text-stone-400 sm:inline">날짜를 눌러 해당 배포만 보기</span> : null}
           </div>
           <div className="flex items-center gap-2">
-            {showTitle ? <select aria-label="개발 파트" className="h-10 rounded-lg border border-stone-200 bg-white px-3 type-caption text-stone-700" onChange={(event) => changePartFilter(event.target.value as PartFilter)} value={partFilter}>{PARTS.map((part) => <option key={part} value={part}>{PART_LABELS[part]}</option>)}</select> : <div aria-label="개발 파트" className="flex h-10 rounded-[10px] border border-stone-200 bg-white p-1" role="group">
-              {PARTS.map((part) => <button aria-pressed={partFilter === part} className={cx('min-w-11 rounded-[7px] px-3 type-caption font-semibold transition-colors', partFilter === part ? 'bg-[#1B2436] text-white' : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800')} key={part} onClick={() => changePartFilter(part)} type="button">{PART_LABELS[part]}</button>)}
-            </div>}
-            {!showTitle ? <><a aria-label="GitHub 조직 열기" className="inline-flex size-10 items-center justify-center rounded-[10px] border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900" href="https://github.com/AutoAI-UTEUM" rel="noreferrer" target="_blank" title="GitHub 조직 열기"><ExternalLink aria-hidden="true" size={15} /></a><button aria-label="업데이트 새로고침" className="inline-flex size-10 items-center justify-center rounded-[10px] border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900" onClick={reloadUpdates} title="새로고침" type="button"><RefreshCcw aria-hidden="true" className={isLoading ? 'animate-spin' : undefined} size={15} /></button></> : null}
+            <Select aria-label="개발 파트" onChange={(event) => changePartFilter(event.target.value as PartFilter)} value={partFilter}>{PARTS.map((part) => <option key={part} value={part}>{PART_LABELS[part]}</option>)}</Select>
           </div>
         </div>
 
@@ -132,19 +116,18 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
                 return <button aria-label={`${visibleMonth.getFullYear()}년 ${visibleMonth.getMonth() + 1}월 ${calendarDay.day}일, ${dayUpdates.length > 0 ? `업데이트 ${dayUpdates.length}건` : '업데이트 없음'}`} aria-pressed={isSelected} className={cx('flex h-[5.75rem] min-w-0 flex-col items-start justify-between gap-1.5 overflow-hidden rounded-[10px] border p-2 text-left transition-colors', isSelected ? 'border-[#1B2436] bg-[#1B2436] text-white' : isToday ? 'border-[#D6DCE6] bg-white hover:bg-stone-50' : 'border-stone-100 bg-white hover:bg-stone-50')} key={calendarDay.dateKey} onClick={() => setSelectedDateKey(calendarDay.dateKey)} type="button"><span className={cx('type-caption font-semibold leading-none', isSelected ? 'text-white' : isToday ? 'text-stone-950' : 'text-stone-600')}>{calendarDay.day}</span><span className="flex flex-wrap gap-1" aria-hidden="true">{dayParts.map((part) => <span className={cx('rounded px-1.5 py-0.5 type-micro font-bold', isSelected ? 'bg-white/15 text-white' : PART_COLORS[part])} key={part}>{UPDATE_PART_LABELS[part]}</span>)}</span></button>
               })}
             </div>
-            {!showTitle ? <div className="mt-4 flex items-center gap-4 type-micro text-stone-400"><span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-blue-50" />FE 배포</span><span className="flex items-center gap-1.5"><i className="size-2.5 rounded-[3px] bg-violet-50" />AI·BE 배포</span></div> : null}
           </div>
         )}
       </section>
 
-      <aside aria-label="월별 업데이트 목록" className={cx('flex min-h-[18rem] shrink-0 flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white px-[22px] py-5', showTitle && 'max-h-[32rem] xl:h-full xl:min-h-0 xl:max-h-none')}>
+      <aside aria-label="월별 업데이트 목록" className="flex min-h-[18rem] max-h-[32rem] shrink-0 flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white px-[22px] py-5 xl:h-full xl:min-h-0 xl:max-h-none">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-2"><h3 className="type-section-title font-bold text-stone-950">{activeDate.label}{showTitle ? ' 배포' : ''}</h3>{!showTitle ? <><span className="type-caption text-stone-400">{activeDate.weekday}</span><span className="type-caption text-stone-400">{activeDateUpdates.length}건</span></> : null}</div>
+          <div className="flex items-baseline gap-2"><h3 className="type-section-title font-bold text-stone-950">{activeDateLabel} 배포</h3></div>
           {selectedDateKey ? <button className="h-8 rounded-lg border border-stone-200 px-3 type-caption text-stone-600 hover:bg-stone-50" onClick={() => setSelectedDateKey(null)} type="button">최근 배포 보기</button> : null}
         </div>
         {isUnavailablePart ? <PanelState>{PART_LABELS[partFilter]} 공개 저장소 활동을 확인할 수 없습니다.</PanelState> : activeDateUpdates.length === 0 ? <PanelState>선택한 날짜의 공개 개발 기록이 없습니다.</PanelState> : (
           <div aria-label="업데이트 기록" className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]" role="region" tabIndex={0}>
-            <div className={cx('grid gap-2.5', !showTitle && 'border-l border-stone-100 pl-[18px]')}>
+            <div className="grid gap-2.5">
               {activeDateUpdates.map((update) => <a className="flex min-h-14 min-w-0 items-start gap-3 rounded-[11px] border border-stone-100 bg-[#F7F9FC] px-3 py-2.5 hover:border-stone-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600" href={update.url} key={`${update.repositoryName}-${update.sha}`} rel="noreferrer" target="_blank"><span className={cx('shrink-0 rounded-md px-2 py-1 type-micro font-bold', PART_COLORS[update.part])}>{UPDATE_PART_LABELS[update.part]}</span><span className="min-w-0 flex-1"><span className="block type-control text-stone-900">{update.message}</span><span className="mt-1 block type-micro text-stone-400">{update.sha}</span></span></a>)}
             </div>
           </div>
@@ -153,10 +136,6 @@ export function DevelopmentUpdatesPanel({ initialDate, repository, showTitle = t
       </div>
     </section>
   )
-}
-
-function UpdateSummaryCard({ dark = false, detail, label, value }: { dark?: boolean; detail: string; label: string; value: number }) {
-  return <article className={`flex min-h-32 min-w-0 flex-col gap-2.5 rounded-3xl px-5 py-[18px] ${dark ? 'bg-[#1B2436] text-white' : 'border border-stone-200 bg-white text-stone-950'}`}><p className={`type-caption font-medium ${dark ? 'text-[#A9B4C7]' : 'text-stone-500'}`}>{label}</p><strong className="type-metric font-extrabold tracking-normal tabular-nums">{value.toLocaleString('ko-KR')}</strong><p className={`mt-auto type-caption ${dark ? 'text-[#8D99AD]' : 'text-stone-400'}`}>{detail}</p></article>
 }
 
 function PanelState({ children }: { children: ReactNode }) {
@@ -191,16 +170,6 @@ function formatDateKey(date: Date) {
 
 function formatUpdateDate(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number)
-  if (!year || !month || !day) return { label: dateKey, weekday: '' }
-  const date = new Date(year, month - 1, day)
-  return { label: `${month}월 ${day}일`, weekday: WEEKDAYS[date.getDay()] }
-}
-
-function formatCompactDate(dateKey: string) {
-  const [, month, day] = dateKey.split('-')
-  return `${Number(month)}월 ${Number(day)}일`
-}
-
-function formatShare(value: number, total: number) {
-  return total > 0 ? `${Math.round((value / total) * 100)}%` : '-'
+  if (!year || !month || !day) return dateKey
+  return `${month}월 ${day}일`
 }

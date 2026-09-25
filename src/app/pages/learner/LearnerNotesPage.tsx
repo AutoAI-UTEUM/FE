@@ -250,7 +250,6 @@ export function LearnerNotesPage() {
           </div>
         }
         title="내 노트"
-        titleAccessory={<p className="type-caption text-stone-400">{allItems.length}개</p>}
       />
 
       {isLoading ? (
@@ -286,7 +285,7 @@ export function LearnerNotesPage() {
               key={group.id}
             >
               <header className="flex min-h-14 items-center gap-3 border-b border-stone-200 bg-stone-50/70 px-4 py-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-brand-700 shadow-sm ring-1 ring-stone-200">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-brand-700 ring-1 ring-stone-200">
                   <FileText aria-hidden="true" size={15} />
                 </span>
                 <div className="min-w-0 flex-1">

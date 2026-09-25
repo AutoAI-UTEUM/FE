@@ -46,7 +46,7 @@ export function RenameMaterialDialog({
       }}
       role="dialog"
     >
-      <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>
+      <form className="w-full max-w-md rounded-lg bg-white p-5 " onSubmit={submit}>
         <div className="flex items-center justify-between">
           <h2 className="type-dialog-title font-bold text-stone-950">자료 이름 변경</h2>
           <button

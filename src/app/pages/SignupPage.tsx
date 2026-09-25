@@ -277,7 +277,7 @@ export function SignupPage() {
                     'h-10 rounded-md type-body font-semibold transition-colors',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600',
                     isSelected
-                      ? 'bg-white text-brand-700 shadow-sm'
+                      ? 'bg-white text-brand-700 '
                       : 'text-stone-500 hover:text-stone-800',
                   ].join(' ')}
                   key={role}

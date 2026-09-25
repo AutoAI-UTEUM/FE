@@ -10,6 +10,9 @@ import {
   ErrorState,
   PageContainer,
   PageHeader,
+  PageHeaderPathContext,
+  PageToolbar,
+  Select,
   TextInput,
 } from './index'
 import { MarkdownContent } from './MarkdownContent'
@@ -62,11 +65,29 @@ describe('shared ui', () => {
 
     expect(screen.getByTestId('page-container')).toHaveClass(
       'app-page-frame',
-      'space-y-4',
+      'flex',
+      'flex-col',
+      'gap-4',
     )
     expect(screen.getByTestId('page-container')).toHaveAttribute(
       'data-page-container',
       'standard',
+    )
+  })
+
+  it('uses a shared row for page-level filters', () => {
+    render(<PageToolbar data-testid="page-toolbar">필터</PageToolbar>)
+
+    expect(screen.getByTestId('page-toolbar')).toHaveClass(
+      'min-h-11',
+      'shrink-0',
+      'flex-wrap',
+      'items-center',
+      'gap-2',
+    )
+    expect(screen.getByTestId('page-toolbar')).toHaveAttribute(
+      'data-page-toolbar',
+      'filters',
     )
   })
 
@@ -106,6 +127,29 @@ describe('shared ui', () => {
 
     expect(screen.getByRole('heading', { name: '내 강의실' })).toHaveClass('type-page-title')
     expect(screen.getByRole('heading', { name: '내 강의실' }).closest('header')).toHaveClass('sm:items-start')
+  })
+
+  it('uses the calendar dropdown styling for shared selects', () => {
+    render(<Select aria-label="보기"><option>월</option></Select>)
+
+    expect(screen.getByRole('combobox', { name: '보기' })).toHaveClass(
+      'h-11',
+      'rounded-xl',
+      'border-stone-300',
+      'bg-transparent',
+      'px-4',
+    )
+  })
+
+  it('shows the current role and page title when a page path is provided', () => {
+    const { container } = render(
+      <PageHeaderPathContext.Provider value="학습자">
+        <PageHeader title="내 강의실" />
+      </PageHeaderPathContext.Provider>,
+    )
+
+    expect(container.querySelector('[data-page-path="true"]')).toHaveTextContent('학습자/내 강의실')
+    expect(container.querySelector('[data-page-path="true"]')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('previews markdown while preserving the editable source', () => {

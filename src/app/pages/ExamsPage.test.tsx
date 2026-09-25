@@ -55,6 +55,11 @@ describe('ExamsPage creation entry', () => {
     expect(requestedPaths).toContain('/api/classrooms/12/exams')
     expect(requestedPaths).toContain('/api/classrooms/13/exams')
     expect(screen.queryByLabelText('강의실 선택')).not.toBeInTheDocument()
+    expect(screen.queryByText('내 강의실 전체')).not.toBeInTheDocument()
+    const statusSelect = screen.getByRole('combobox', { name: '시험 상태 필터' })
+    expect(statusSelect).toHaveValue('')
+    expect(statusSelect.closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '시험 상태 필터' })).not.toBeInTheDocument()
   })
 
   it('opens the composer with the requested classroom week', async () => {

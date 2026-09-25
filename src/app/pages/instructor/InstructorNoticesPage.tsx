@@ -1,4 +1,4 @@
-import { ChevronDown, Plus, Save, Trash2 } from 'lucide-react'
+import { Plus, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 
@@ -12,7 +12,7 @@ import {
 } from '../../../features/classrooms'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
-import { Button, EmptyState, useToast } from '../../../shared/ui'
+import { Button, EmptyState, Select, useToast } from '../../../shared/ui'
 import { MarkdownEditor } from '../../../shared/ui/MarkdownEditor'
 import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
@@ -133,7 +133,7 @@ export function InstructorNoticesPage() {
                 <h3 className="px-4 py-1.5 type-caption font-bold text-stone-400" id={`notice-group-${group.weekNumber ?? 'other'}`}>{group.label}</h3>
                 <div className="space-y-1 px-2">
                   {group.notices.map((notice) => (
-                    <button aria-pressed={selectedNoticeId === notice.id} className={`w-full rounded-md px-3 py-2.5 text-left ${selectedNoticeId === notice.id ? 'bg-white shadow-sm ring-1 ring-stone-200 dark:bg-stone-100' : 'hover:bg-white/80 dark:hover:bg-stone-100'}`} key={notice.id} onClick={() => setSelectedNoticeId(notice.id)} type="button">
+                    <button aria-pressed={selectedNoticeId === notice.id} className={`w-full rounded-md px-3 py-2.5 text-left ${selectedNoticeId === notice.id ? 'bg-white  ring-1 ring-stone-200 dark:bg-stone-100' : 'hover:bg-white/80 dark:hover:bg-stone-100'}`} key={notice.id} onClick={() => setSelectedNoticeId(notice.id)} type="button">
                       <strong className="block truncate type-control text-stone-900">{notice.title}</strong>
                       <time className="mt-1 block type-caption text-stone-400">{formatNoticeDate(notice.publishedAt)}</time>
                     </button>
@@ -203,9 +203,9 @@ function NoticeEditor({
         <label className="block type-control font-semibold text-stone-700">공지 제목<input autoFocus={!notice} className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 px-3.5 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50" disabled={disabled} maxLength={200} onChange={(event) => setTitle(event.target.value)} placeholder="공지 제목을 입력하세요" value={title} /></label>
         <label className="block type-control font-semibold text-stone-700">
           게시 주차
-          <span className="relative mt-1.5 block">
-            <select
-              className="h-11 w-full appearance-none rounded-lg border border-stone-300 bg-white pr-10 pl-3.5 type-body text-stone-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-stone-50 disabled:text-stone-400"
+          <span className="mt-1.5 block">
+            <Select
+              className="w-full"
               disabled={disabled}
               onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)}
               value={weekNumber ?? ''}
@@ -214,8 +214,7 @@ function NoticeEditor({
               {Array.from({ length: maxWeekNumber }, (_, index) => index + 1).map((value) => (
                 <option key={value} value={value}>{value}주차</option>
               ))}
-            </select>
-            <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-stone-400" size={16} />
+            </Select>
           </span>
         </label>
         <div className="flex min-h-0 flex-1 flex-col type-control font-semibold text-stone-700">

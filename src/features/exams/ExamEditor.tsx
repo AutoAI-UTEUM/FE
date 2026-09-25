@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react'
 
-import { Button } from '../../shared/ui'
+import { Button, Select } from '../../shared/ui'
 import type { CreateExamInput, ExamQuestionInput, ExamQuestionType } from './examsRepository'
 import { createQuestion } from './examEditorModel'
 
@@ -46,9 +46,9 @@ export function ExamEditor({ onChange, value }: ExamEditorProps) {
       <div className="tablet-exam-question-tools flex items-center gap-3">
         <strong className="type-body text-stone-900">{index + 1}번</strong>
         {question.sourceContextNumber ? <span className="rounded-full bg-brand-50 px-2 py-1 type-micro font-semibold text-brand-700">참고 자료 {question.sourceContextNumber}번</span> : null}
-        <select aria-label={`${index + 1}번 문항 유형`} className="h-9 rounded-lg border border-stone-300 bg-white px-2.5 type-control" onChange={(event) => updateQuestion(index, createQuestion(event.target.value as ExamQuestionType, question.questionText, question.points))} value={question.questionType}>
+        <Select aria-label={`${index + 1}번 문항 유형`} onChange={(event) => updateQuestion(index, createQuestion(event.target.value as ExamQuestionType, question.questionText, question.points))} value={question.questionType}>
           {Object.entries(typeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
-        </select>
+        </Select>
         <label className="ml-auto flex items-center gap-2 type-caption text-stone-500">배점
           <input className="h-9 w-20 rounded-lg border border-stone-300 bg-white px-2 type-control" min={0.01} onChange={(event) => updateQuestion(index, { ...question, points: Number(event.target.value) })} step="0.01" type="number" value={question.points} />
         </label>

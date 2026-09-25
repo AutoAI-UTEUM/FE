@@ -536,7 +536,7 @@ function LearningStatusHelp() {
         <Info aria-hidden="true" size={14} />
       </button>
       <span
-        className="pointer-events-none absolute top-[calc(100%+7px)] left-0 z-30 w-72 rounded-md bg-stone-900 px-3 py-2 type-micro leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        className="pointer-events-none absolute top-[calc(100%+7px)] left-0 z-30 w-72 rounded-md bg-stone-900 px-3 py-2 type-micro leading-5 font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         role="tooltip"
       >
         학습자 프로필을 누르면 자료별 학습·페이지별 질문·퀴즈 현황이 펼쳐집니다. 상세 지표는 학습자별 집계를 기준으로 표시됩니다.

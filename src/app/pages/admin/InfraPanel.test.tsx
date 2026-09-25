@@ -293,6 +293,8 @@ describe('InfraPanel', () => {
     renderPanel(repository)
     await screen.findByTitle('42.75$')
 
+    expect(screen.getByLabelText('환경').closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
+    expect(screen.getByLabelText('조회 기간').closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('환경'), { target: { value: 'dev' } })
     fireEvent.change(screen.getByLabelText('조회 기간'), { target: { value: '6h' } })
     await waitFor(() => expect(vi.mocked(repository.getInfraMetrics).mock.calls.at(-1)?.[0]).toEqual({ env: 'dev', range: '6h' }))

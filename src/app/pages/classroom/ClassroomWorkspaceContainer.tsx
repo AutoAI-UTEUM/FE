@@ -25,7 +25,7 @@ export function ClassroomWorkspaceContainer({
   return (
     <PageContainer
       className={cx(
-        'flex flex-col gap-4 space-y-0 lg:min-h-[calc(100dvh-2.5rem)]',
+        'lg:min-h-[calc(100dvh-2.5rem)]',
         className,
       )}
       {...props}

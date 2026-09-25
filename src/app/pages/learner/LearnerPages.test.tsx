@@ -74,6 +74,8 @@ describe('learner collection pages', () => {
     const { container } = renderPage(<LearnerNotesPage />)
 
     const toggle = await screen.findByRole('button', { name: '공식 노트 펼치기' })
+    const pageTitle = screen.getByRole('heading', { name: '내 노트' })
+    expect(within(pageTitle.parentElement as HTMLElement).queryByText(/^\d+개$/)).not.toBeInTheDocument()
     expect(screen.getByText('시험 대비 요약.pdf')).toBeInTheDocument()
     expect(screen.getByText(/1페이지/)).toBeInTheDocument()
     expect(screen.queryByText('AI 답변')).not.toBeInTheDocument()

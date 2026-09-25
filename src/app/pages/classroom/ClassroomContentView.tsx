@@ -3,7 +3,7 @@ import { useState, type DragEvent } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
 import { useResponsiveViewport } from '../../../shared/responsive'
-import { Badge, Button, EmptyState } from '../../../shared/ui'
+import { Badge, Button, EmptyState, Select } from '../../../shared/ui'
 import type { ClassroomContentFilter, ClassroomContentItem } from './classroomContentModel'
 
 type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
@@ -23,8 +23,8 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
         <label className="block type-control font-semibold text-stone-700" htmlFor="mobile-classroom-week">
           주차
         </label>
-        <select
-          className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-stone-900"
+        <Select
+          className="mt-1.5 w-full"
           id="mobile-classroom-week"
           onChange={(event) => onSelect(event.target.value === 'all' ? null : Number(event.target.value))}
           value={selectedWeekNumber ?? 'all'}
@@ -34,7 +34,7 @@ export function ClassroomContentRail({ endDate, onSelect, selectedWeekNumber, st
             const period = formatClassroomWeekPeriod(startDate, endDate, week.weekNumber)
             return <option key={week.id} value={week.weekNumber}>{week.title}{period ? ` · ${period}` : ''}</option>
           })}
-        </select>
+        </Select>
       </section>
     )
   }
@@ -158,7 +158,7 @@ function ContentRow({ canManage, isMenuOpen, item, onItem, onMenuToggle, onRemov
       </span>
     </button>
     {item.kind === 'material' && openingMaterialId === item.source.id ? <span className="type-caption text-brand-700">수업 여는 중</span> : null}
-    {canManage && item.kind === 'material' ? <div className="relative shrink-0"><button aria-expanded={isMenuOpen} aria-label={`${item.title} 작업 메뉴`} className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700 mobile-web:size-11" onClick={onMenuToggle} type="button"><MoreHorizontal size={16} /></button>{isMenuOpen ? <div className="absolute top-11 right-0 z-20 w-32 rounded-lg border border-stone-200 bg-white p-1 shadow-lg" role="menu"><button className="block h-10 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => { onMenuToggle(); onRenameMaterial({ id: item.source.id, title: item.title }) }} role="menuitem" type="button">이름 변경</button><button className="block h-10 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => { onMenuToggle(); void onRemoveMaterial(item.weekNumber, item.source.id, item.title) }} role="menuitem" type="button">주차에서 제거</button></div> : null}</div> : <span className="flex size-8 shrink-0 items-center justify-center mobile-web:size-11"><MoreHorizontal className="text-stone-300" size={16} /></span>}
+    {canManage && item.kind === 'material' ? <div className="relative shrink-0"><button aria-expanded={isMenuOpen} aria-label={`${item.title} 작업 메뉴`} className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700 mobile-web:size-11" onClick={onMenuToggle} type="button"><MoreHorizontal size={16} /></button>{isMenuOpen ? <div className="absolute top-11 right-0 z-20 w-32 rounded-lg border border-stone-200 bg-white p-1 " role="menu"><button className="block h-10 w-full rounded px-2 text-left type-caption font-semibold text-stone-700 hover:bg-stone-50" onClick={() => { onMenuToggle(); onRenameMaterial({ id: item.source.id, title: item.title }) }} role="menuitem" type="button">이름 변경</button><button className="block h-10 w-full rounded px-2 text-left type-caption font-semibold text-rose-700 hover:bg-rose-50" onClick={() => { onMenuToggle(); void onRemoveMaterial(item.weekNumber, item.source.id, item.title) }} role="menuitem" type="button">주차에서 제거</button></div> : null}</div> : <span className="flex size-8 shrink-0 items-center justify-center mobile-web:size-11"><MoreHorizontal className="text-stone-300" size={16} /></span>}
   </div>
 }
 

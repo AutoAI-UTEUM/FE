@@ -287,7 +287,7 @@ export function InstructorClassroomEditPage() {
       </form>
       {isDeleteDialogOpen ? (
         <div aria-labelledby="delete-classroom-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeleteDialog() }} role="dialog">
-          <form className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 shadow-2xl" onSubmit={deleteClassroomPermanently}>
+          <form className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 " onSubmit={deleteClassroomPermanently}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="type-dialog-title font-bold text-stone-950" id="delete-classroom-title">강의실 영구 삭제</h2>
