@@ -2,24 +2,41 @@ import { ArrowLeft, Mail } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
+import { getAuthRepository } from '../../features/auth'
+import { getRequestErrorMessage } from '../../shared/api'
+import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Button } from '../../shared/ui'
+import { Button, ButtonLink, ErrorState } from '../../shared/ui'
 import { routes } from '../routes'
 
 export function ForgotPasswordPage() {
   usePageTitle('비밀번호 찾기')
+  const enabled = isApiCapabilityEnabled('password-reset')
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [isSent, setIsSent] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  if (!enabled) {
+    return <ErrorState action={<ButtonLink to={routes.login}>로그인으로</ButtonLink>} description="비밀번호 재설정 기능을 준비하고 있습니다." title="현재 이용할 수 없습니다" />
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const nextError = validateEmail(email)
     setError(nextError)
     if (nextError) return
 
-    // TODO(BE): 재설정 요청 API가 추가되면 이 로컬 완료 상태를 실제 응답으로 교체한다.
-    setIsSent(true)
+    setIsSubmitting(true)
+    setSuccessMessage(null)
+    try {
+      const message = await getAuthRepository().requestPasswordReset(email)
+      setSuccessMessage(message)
+    } catch (requestError) {
+      setError(getRequestErrorMessage(requestError))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -61,25 +78,25 @@ export function ForgotPasswordPage() {
           onChange={(event) => {
             setEmail(event.target.value)
             setError(null)
-            setIsSent(false)
+            setSuccessMessage(null)
           }}
           placeholder="user@example.com"
           type="email"
           value={email}
         />
 
-        <Button className="mt-6 h-11 w-full" type="submit">
-          재설정 링크 보내기
+        <Button className="mt-6 h-11 w-full" disabled={isSubmitting} type="submit">
+          {isSubmitting ? '전송 중' : '재설정 링크 보내기'}
         </Button>
       </form>
 
-      {isSent ? (
+      {successMessage ? (
         <p
           className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-brand-100 bg-brand-50 px-4 py-2.5 text-center type-control font-medium text-brand-600"
           role="status"
         >
           <Mail aria-hidden="true" className="shrink-0" size={12} />
-          링크를 보냈어요. 메일함을 확인해 주세요 - 10분간 유효합니다.
+          {successMessage}
         </p>
       ) : null}
 

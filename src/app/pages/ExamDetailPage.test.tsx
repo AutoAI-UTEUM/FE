@@ -8,6 +8,7 @@ import { ExamDetailPage } from './ExamDetailPage'
 
 beforeEach(() => {
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')
+  vi.stubEnv('VITE_API_CAPABILITIES', 'exam-attempt-drafts')
 })
 
 afterEach(() => {
@@ -164,6 +165,54 @@ describe('ExamDetailPage learner submission', () => {
     await waitFor(() => {
       expect(JSON.parse(sessionStorage.getItem('exam-draft:10:8') ?? '{}')).toEqual({ q1: '수정한 답안' })
     })
+  })
+
+  it('restores a server draft so the exam can continue on another device', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+      if (method === 'GET' && url.pathname === '/api/exams/10') return success(learnerExamFixture)
+      if (method === 'POST' && url.pathname === '/api/exams/10/attempts/start') return success({ startedAt: '2026-09-09T00:58:50Z' })
+      if (method === 'GET' && url.pathname === '/api/exams/10/attempts/draft') {
+        return success({
+          answers: [{ answer: '다른 기기에서 저장한 답안', questionId: 'q1' }],
+          savedAt: '2026-09-25T00:00:00Z',
+          version: 2,
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderLearnerExam()
+
+    const answer = await screen.findByPlaceholderText('답안을 입력하세요')
+    await waitFor(() => expect(answer).toHaveValue('다른 기기에서 저장한 답안'))
+    expect(screen.getByText('서버에 저장됨')).toBeInTheDocument()
+  })
+
+  it('asks which answer to keep when local and server drafts differ', async () => {
+    sessionStorage.setItem('exam-draft:10:8', JSON.stringify({ q1: '현재 기기 답안' }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+      if (method === 'GET' && url.pathname === '/api/exams/10') return success(learnerExamFixture)
+      if (method === 'POST' && url.pathname === '/api/exams/10/attempts/start') return success({ startedAt: '2026-09-09T00:58:50Z' })
+      if (method === 'GET' && url.pathname === '/api/exams/10/attempts/draft') {
+        return success({
+          answers: [{ answer: '서버 답안', questionId: 'q1' }],
+          savedAt: '2026-09-25T00:00:00Z',
+          version: 3,
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderLearnerExam()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('다른 기기에 저장된 답안과 현재 답안이 다릅니다.')
+    fireEvent.click(screen.getByRole('button', { name: '서버 답안 사용' }))
+    expect(screen.getByPlaceholderText('답안을 입력하세요')).toHaveValue('서버 답안')
+    expect(screen.queryByRole('button', { name: '현재 답안 유지' })).not.toBeInTheDocument()
   })
 
   it('replaces the answer form with an immutable completion state after async submission', async () => {

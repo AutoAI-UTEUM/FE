@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ApiSuccess } from '../../shared/api'
-import type { AuthenticatedRequest } from '../auth'
+import type { AuthenticatedRawRequest, AuthenticatedRequest } from '../auth'
 import { createExamsRepository, type CreateExamInput } from './examsRepository'
 
 const examDto = {
@@ -120,6 +120,50 @@ describe('exams repository', () => {
     expect(request).toHaveBeenNthCalledWith(7, '/api/exams/10/submissions?page=0&size=100', { signal: undefined })
   })
 
+  it('loads, saves, and exposes version conflicts for server-side attempt drafts', async () => {
+    const request = vi.fn()
+    const rawRequest = vi.fn()
+      .mockResolvedValueOnce(rawSuccess({
+        answers: [{ answer: '서버 답안', questionId: 'q1' }],
+        savedAt: '2026-09-25T00:00:00Z',
+        version: 2,
+      }))
+      .mockResolvedValueOnce(rawSuccess({ savedAt: '2026-09-25T00:00:02Z', version: 3 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: 'DRAFT_VERSION_CONFLICT', details: [], message: '충돌' },
+        latestDraft: {
+          answers: [{ answer: '다른 기기 답안', questionId: 'q1' }],
+          savedAt: '2026-09-25T00:00:03Z',
+          version: 4,
+        },
+        success: false,
+      }), { headers: { 'Content-Type': 'application/json' }, status: 409 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    const repository = createExamsRepository(
+      request as AuthenticatedRequest,
+      rawRequest as AuthenticatedRawRequest,
+    )
+
+    await expect(repository.getAttemptDraft('10')).resolves.toMatchObject({
+      answers: { q1: '서버 답안' },
+      version: 2,
+    })
+    await expect(repository.saveAttemptDraft('10', { q1: '수정 답안', q2: '' }, 2)).resolves.toMatchObject({
+      kind: 'saved',
+      version: 3,
+    })
+    await expect(repository.saveAttemptDraft('10', { q1: '로컬 답안' }, 3)).resolves.toMatchObject({
+      kind: 'conflict',
+      latestDraft: { answers: { q1: '다른 기기 답안' }, version: 4 },
+    })
+    await expect(repository.getAttemptDraft('10')).resolves.toBeNull()
+
+    expect(rawRequest).toHaveBeenNthCalledWith(2, '/api/exams/10/attempts/draft', expect.objectContaining({
+      body: JSON.stringify({ answers: [{ answer: '수정 답안', questionId: 'q1' }], version: 2 }),
+      method: 'PUT',
+    }))
+  })
+
   it('generates editable AI question drafts without persisting internal source context fields', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(success({
@@ -164,3 +208,10 @@ describe('exams repository', () => {
 })
 
 function success<T>(data: T): ApiSuccess<T> { return { data, message: '성공', success: true } }
+
+function rawSuccess(data: unknown): Response {
+  return new Response(JSON.stringify({ data, message: '성공', success: true }), {
+    headers: { 'Content-Type': 'application/json' },
+    status: 200,
+  })
+}
