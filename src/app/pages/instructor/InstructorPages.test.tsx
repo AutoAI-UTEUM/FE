@@ -503,7 +503,7 @@ describe('instructor pages', () => {
     const copyButton = screen.getByRole('button', { name: '자료구조 초대 코드 복사' })
     const regenerateButton = screen.getByRole('button', { name: '자료구조 초대 코드 재발급' })
 
-    expect(classroomLink).toHaveClass('text-xl')
+    expect(classroomLink).toHaveClass('type-classroom-title')
     expect(classroomLink).not.toHaveClass('type-card-title')
     expect(screen.getByText('7QK4-MZ2A')).toHaveClass('type-invite-code-compact')
     expect(copyButton).toHaveClass('size-10')

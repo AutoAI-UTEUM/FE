@@ -11,6 +11,18 @@ configure({ asyncUtilTimeout: 5000 })
 // jsdom에는 scrollIntoView가 없다 (채팅 자동 스크롤에서 사용).
 Element.prototype.scrollIntoView ??= () => {}
 
+// jsdom에는 matchMedia가 없어 Mantine 기반 에디터의 색상 모드 감지를 보완한다.
+window.matchMedia ??= (query: string) => ({
+  addEventListener: vi.fn(),
+  addListener: vi.fn(),
+  dispatchEvent: vi.fn(),
+  matches: false,
+  media: query,
+  onchange: null,
+  removeEventListener: vi.fn(),
+  removeListener: vi.fn(),
+})
+
 vi.mock('react-pdf', () => ({
   Document: ({ children }: { children: ReactNode }) =>
     createElement('div', { 'data-testid': 'pdf-document' }, children),

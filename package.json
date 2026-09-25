@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:qa": "cross-env VITE_API_BASE_URL=/api VITE_API_CAPABILITIES=reports,password-reset,oauth,schedule,analytics VITE_DEV_PROXY_TARGET=mock npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
@@ -18,13 +19,16 @@
     "test:e2e:dev": "cross-env QA_ENV=dev playwright test",
     "test:e2e:prod": "cross-env QA_ENV=prod playwright test",
     "test:e2e:visual": "cross-env QA_ENV=mock QA_FULL_MATRIX=1 playwright test --grep @visual",
+    "test:performance:bundle": "node scripts/analyze-fe-performance.mjs",
+    "test:qa:health": "node scripts/qa-health-probe.mjs",
+    "test:qa:commercialization": "node scripts/prepare-commercialization-review.mjs",
     "test:qa:issues": "node scripts/report-qa-issues.mjs",
     "test:overnight": "node scripts/run-overnight-qa.mjs"
   },
   "dependencies": {
-    "@blocknote/core": "^0.54.0",
-    "@blocknote/mantine": "^0.54.0",
-    "@blocknote/react": "^0.54.0",
+    "@blocknote/core": "^0.55.0",
+    "@blocknote/mantine": "^0.55.0",
+    "@blocknote/react": "^0.55.0",
     "@fontsource-variable/noto-sans-kr": "^5.3.0",
     "@fontsource/manrope": "^5.3.0",
     "@mantine/core": "^8.3.11",
@@ -37,7 +41,7 @@
     "react-dom": "19.1.1",
     "react-markdown": "^10.1.0",
     "react-pdf": "^10.4.1",
-    "react-router-dom": "7.18.1",
+    "react-router-dom": "7.18.4",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
@@ -62,6 +66,6 @@
     "typescript": "5.6.3",
     "typescript-eslint": "8.65.0",
     "vite": "7.3.6",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

@@ -17,6 +17,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -30,7 +32,8 @@ import { cx } from '../../shared/lib/cx'
 import { SERVICE_NAME } from '../../shared/config/brand'
 import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime, formatTime } from '../../shared/lib/format'
-import { Button, MarkdownContent } from '../../shared/ui'
+import { Button } from '../../shared/ui'
+import { MarkdownContent } from '../../shared/ui/MarkdownContent'
 import type { AuthenticatedRequest } from '../auth'
 import type { MaterialOverview } from '../materials'
 import { createNotesRepository, type Note } from '../notes'
@@ -114,6 +117,12 @@ export function ChatPanel({
   sessionId,
   textSizeOwnerId,
 }: ChatPanelProps) {
+  const {
+    isTurnPending,
+    markMessageFailed,
+    markMessageRetrying,
+    submitTurn,
+  } = chat
   const [question, setQuestion] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<ChatPanelTab>('chat')
@@ -251,13 +260,13 @@ export function ChatPanel({
     }
   }
 
-  async function retryMessage(message: ChatMessage) {
-    if (!message.requestId || chat.isTurnPending || turnSubmissionLockRef.current) return
+  const retryMessage = useCallback(async (message: ChatMessage) => {
+    if (!message.requestId || isTurnPending || turnSubmissionLockRef.current) return
     turnSubmissionLockRef.current = true
-    chat.markMessageRetrying(message.requestId)
+    markMessageRetrying(message.requestId)
     setError(null)
     try {
-      await chat.submitTurn(
+      await submitTurn(
         {
           eventType: 'USER_QUESTION',
           payload: {
@@ -269,12 +278,18 @@ export function ChatPanel({
         onTurnCompleted,
       )
     } catch (requestError) {
-      chat.markMessageFailed(message.requestId)
+      markMessageFailed(message.requestId)
       setError(getChatErrorMessage(requestError))
     } finally {
       turnSubmissionLockRef.current = false
     }
-  }
+  }, [
+    isTurnPending,
+    markMessageFailed,
+    markMessageRetrying,
+    onTurnCompleted,
+    submitTurn,
+  ])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -340,7 +355,7 @@ export function ChatPanel({
     if (!loaded) olderMessagesScrollSnapshotRef.current = null
   }
 
-  async function saveNote(content: string, pageNumber?: number, sourceMessageId?: string): Promise<boolean> {
+  const saveNote = useCallback(async (content: string, pageNumber?: number, sourceMessageId?: string): Promise<boolean> => {
     if (!notesRepository) {
       setNotes((current) => [...current, { content, id: `local-${Date.now()}`, pageNumber, sourceMessageId }])
       setTab('notes')
@@ -366,7 +381,7 @@ export function ChatPanel({
       setMessageActionStatus('노트를 저장하지 못했습니다.')
       return false
     }
-  }
+  }, [notesRepository, sessionId])
 
   async function saveNoteDraft() {
     if (!chat.noteDraft) return
@@ -380,16 +395,16 @@ export function ChatPanel({
     catch (requestError) { setNotesError(getRequestErrorMessage(requestError)) }
   }
 
-  async function copyMessage(content: string) {
+  const copyMessage = useCallback(async (content: string) => {
     try {
       await navigator.clipboard.writeText(content)
       setMessageActionStatus('메시지를 복사했습니다.')
     } catch {
       setMessageActionStatus('메시지를 복사하지 못했습니다.')
     }
-  }
+  }, [])
 
-  async function shareMessage(content: string) {
+  const shareMessage = useCallback(async (content: string) => {
     try {
       if (navigator.share) {
         await navigator.share({ text: content, title: `${SERVICE_NAME} 학습 대화` })
@@ -402,7 +417,7 @@ export function ChatPanel({
       if (shareError instanceof DOMException && shareError.name === 'AbortError') return
       setMessageActionStatus('메시지를 공유하지 못했습니다.')
     }
-  }
+  }, [])
 
   const visibleMessages = chat.messages.filter(
     (message) => message.content.trim().length > 0,
@@ -554,10 +569,10 @@ export function ChatPanel({
           <MessageBubble
             key={message.id}
             message={message}
-            onCopy={() => void copyMessage(message.content)}
-            onRetry={message.status === 'failed' && message.requestId ? () => void retryMessage(message) : undefined}
-            onSaveNote={() => void saveNote(message.content, message.pageNumber, message.id)}
-            onShare={() => void shareMessage(message.content)}
+            onCopy={copyMessage}
+            onRetry={message.status === 'failed' && message.requestId ? retryMessage : undefined}
+            onSaveNote={saveNote}
+            onShare={shareMessage}
           />
         ))}
 
@@ -1032,7 +1047,7 @@ function PanelEmptyState({
   )
 }
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   message,
   onCopy,
   onRetry,
@@ -1040,10 +1055,10 @@ function MessageBubble({
   onShare,
 }: {
   message: ChatMessage
-  onCopy: () => void
-  onRetry?: () => void
-  onSaveNote: () => void
-  onShare: () => void
+  onCopy: (content: string) => void
+  onRetry?: (message: ChatMessage) => void
+  onSaveNote: (content: string, pageNumber?: number, sourceMessageId?: string) => void
+  onShare: (content: string) => void
 }) {
   const time = message.createdAt ? formatTime(message.createdAt) : ''
 
@@ -1057,9 +1072,9 @@ function MessageBubble({
         </article>
         <div className="flex items-center justify-end gap-1">
           {message.status === 'failed' ? <span className="mr-1 type-caption font-semibold text-rose-700">전송 실패</span> : null}
-          {onRetry ? <button className="mr-1 inline-flex items-center gap-1 type-caption font-semibold text-rose-700 hover:text-rose-800" onClick={onRetry} type="button"><RotateCcw aria-hidden="true" size={12} />다시 시도</button> : null}
+          {onRetry ? <button className="mr-1 inline-flex items-center gap-1 type-caption font-semibold text-rose-700 hover:text-rose-800" onClick={() => onRetry(message)} type="button"><RotateCcw aria-hidden="true" size={12} />다시 시도</button> : null}
           {time ? <span className="type-micro text-stone-400">{time}</span> : null}
-          <MessageActions messageLabel="내 질문" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} />
+          <MessageActions messageLabel="내 질문" onCopy={() => onCopy(message.content)} onSaveNote={() => onSaveNote(message.content, message.pageNumber, message.id)} onShare={() => onShare(message.content)} />
         </div>
       </div>
     )
@@ -1081,11 +1096,11 @@ function MessageBubble({
       </article>
       <div className="flex items-center gap-1">
         {time ? <span className="type-micro text-stone-400">{time}</span> : null}
-        <MessageActions messageLabel="AI 답변" onCopy={onCopy} onSaveNote={onSaveNote} onShare={onShare} />
+        <MessageActions messageLabel="AI 답변" onCopy={() => onCopy(message.content)} onSaveNote={() => onSaveNote(message.content, message.pageNumber, message.id)} onShare={() => onShare(message.content)} />
       </div>
     </div>
   )
-}
+})
 
 function MessageActions({
   messageLabel,

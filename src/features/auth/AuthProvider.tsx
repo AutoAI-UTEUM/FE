@@ -60,6 +60,11 @@ interface PendingGrant {
   revision: number
 }
 
+interface AuthRecoveryState {
+  kind: 'activity' | 'refresh'
+  message: string
+}
+
 const TERMINAL_AUTH_CODES = new Set([
   'AUTH_SESSION_ABSOLUTE_EXPIRED',
   'AUTH_SESSION_IDLE_EXPIRED',
@@ -85,7 +90,9 @@ export function AuthProvider({
   const [isInitializing, setIsInitializing] = useState(!hasExplicitInitialUser)
   const [logoutReason, setLogoutReason] = useState<LogoutReason | null>(null)
   const [isIdleWarningOpen, setIsIdleWarningOpen] = useState(false)
-  const [authRecoveryError, setAuthRecoveryError] = useState<string | null>(null)
+  const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(
+    null,
+  )
   const [pendingGoogleIdToken, setPendingGoogleIdToken] = useState<string | null>(
     null,
   )
@@ -122,7 +129,7 @@ export function AuthProvider({
         revision,
       )
       lastServerActivityAtRef.current = receivedAt
-      setAuthRecoveryError(null)
+      setAuthRecovery(null)
 
       const current = sessionRef.current
       if (!current) {
@@ -148,7 +155,7 @@ export function AuthProvider({
       setSession(null)
       setLogoutReason(reason)
       setIsIdleWarningOpen(false)
-      setAuthRecoveryError(null)
+      setAuthRecovery(null)
 
       if (broadcast) {
         coordinatorRef.current?.publish({
@@ -177,6 +184,7 @@ export function AuthProvider({
         lastServerActivityAtRef.current,
         recordedAt,
       )
+      setAuthRecovery(null)
       if (!current) return
 
       const nextSession = { ...current, session: policy }
@@ -286,9 +294,11 @@ export function AuthProvider({
           return null
         }
 
-        setAuthRecoveryError(
-          '인증 연결이 일시적으로 불안정합니다. 작업 내용은 유지되며 다시 연결할 수 있습니다.',
-        )
+        setAuthRecovery({
+          kind: 'refresh',
+          message:
+            '인증 연결이 일시적으로 불안정합니다. 작업 내용은 유지되며 다시 연결할 수 있습니다.',
+        })
         throw error
       }
     },
@@ -319,7 +329,7 @@ export function AuthProvider({
       sessionRef.current = nextSession
       setLogoutReason(null)
       setIsIdleWarningOpen(false)
-      setAuthRecoveryError(null)
+      setAuthRecovery(null)
       setSession(nextSession)
       coordinatorRef.current?.publish({
         grant: effectiveGrant,
@@ -398,15 +408,15 @@ export function AuthProvider({
           return
         }
 
-        const task = async () => {
+        const task = async (): Promise<'recorded' | 'skipped' | 'token-expired'> => {
           if (
             Date.now() - lastServerActivityAtRef.current <
             AUTH_ACTIVITY_RECORD_INTERVAL_MS
           ) {
-            return
+            return 'skipped'
           }
           const activeSession = sessionRef.current
-          if (!activeSession) return
+          if (!activeSession) return 'skipped'
 
           const controller = new AbortController()
           const timeoutId = window.setTimeout(
@@ -419,6 +429,9 @@ export function AuthProvider({
               activeSession.accessToken,
               controller.signal,
             )
+          } catch (error) {
+            if (isExpiredAccessToken(error)) return 'token-expired'
+            throw error
           } finally {
             window.clearTimeout(timeoutId)
           }
@@ -433,12 +446,17 @@ export function AuthProvider({
             type: 'ACTIVITY',
             userId: activeSession.user.id,
           })
+          return 'recorded'
         }
 
-        if (coordinatorRef.current) {
-          await coordinatorRef.current.runExclusive(task)
-        } else {
-          await task()
+        const result = coordinatorRef.current
+          ? await coordinatorRef.current.runExclusive(task)
+          : await task()
+
+        if (result === 'token-expired') {
+          // refresh itself records server-side session activity, so a second
+          // activity request would only create a redundant write attempt.
+          await renewAccessToken()
         }
       })()
         .catch((error: unknown) => {
@@ -447,9 +465,11 @@ export function AuthProvider({
             clearSession(terminalReason)
             return
           }
-          setAuthRecoveryError(
-            '세션 활동 기록을 잠시 완료하지 못했습니다. 다음 활동에서 다시 시도합니다.',
-          )
+          setAuthRecovery({
+            kind: 'activity',
+            message:
+              '세션 활동 기록을 잠시 완료하지 못했습니다. 다음 활동에서 다시 시도합니다.',
+          })
         })
         .finally(() => {
           activityPromiseRef.current = null
@@ -769,17 +789,22 @@ export function AuthProvider({
   return (
     <AuthContext.Provider value={value}>
       {children}
-      {authRecoveryError && session ? (
+      {authRecovery && session ? (
         <div
           className="fixed right-4 bottom-4 z-[110] flex max-w-sm items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 "
           role="alert"
         >
           <p className="type-caption font-medium text-amber-950">
-            {authRecoveryError}
+            {authRecovery.message}
           </p>
           <button
             className="shrink-0 rounded-md border border-amber-300 bg-white px-3 py-2 type-control font-semibold text-amber-950 hover:bg-amber-100"
-            onClick={() => void renewAccessToken().catch(() => undefined)}
+            onClick={() => {
+              const retry = authRecovery.kind === 'activity'
+                ? recordSessionActivity(Date.now())
+                : renewAccessToken()
+              void retry.catch(() => undefined)
+            }}
             type="button"
           >
             다시 연결
@@ -882,6 +907,14 @@ function isRefreshableUnauthorized(error: unknown): boolean {
     error instanceof ApiClientError &&
     error.status === 401 &&
     !TERMINAL_AUTH_CODES.has(error.code)
+  )
+}
+
+function isExpiredAccessToken(error: unknown): boolean {
+  return (
+    error instanceof ApiClientError &&
+    error.status === 401 &&
+    error.code === 'TOKEN_EXPIRED'
   )
 }
 

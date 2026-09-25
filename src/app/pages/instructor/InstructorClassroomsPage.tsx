@@ -432,7 +432,7 @@ function ClassroomCard({
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <Link
-            className="block truncate text-xl leading-normal font-bold tracking-[-0.01em] text-stone-950 hover:text-brand-700"
+            className="block truncate type-classroom-title font-bold text-stone-950 hover:text-brand-700"
             to={classroomDetailPath(classroom.id)}
           >
             {classroom.name}

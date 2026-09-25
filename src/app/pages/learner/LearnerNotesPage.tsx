@@ -14,11 +14,11 @@ import {
   Button,
   ButtonLink,
   EmptyState,
-  MarkdownContent,
   PageContainer,
   PageHeader,
   useToast,
 } from '../../../shared/ui'
+import { MarkdownContent } from '../../../shared/ui/MarkdownContent'
 import { noteEditPath, routes, sessionDetailPath } from '../../routes'
 
 const NotionBlockEditor = lazy(

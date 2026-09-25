@@ -238,7 +238,7 @@ export function EntranceRequestsPage() {
   return <PageContainer>
     <PageHeader title="입장 요청" />
     <div className="flex flex-wrap items-center justify-between gap-3 mobile-phone:flex-col mobile-phone:items-stretch">
-      <div aria-label="입장 요청 상태" className="inline-flex w-fit rounded-lg border border-stone-200 bg-white p-1 mobile-horizontal-scroll mobile-phone:w-full" role="tablist">
+      <div aria-label="입장 요청 상태" className="inline-flex w-fit rounded-[10px] border border-stone-200 bg-white p-1 mobile-horizontal-scroll mobile-phone:w-full" role="tablist">
         <TabButton active={tab === 'pending'} label={`대기 중${tab === 'pending' ? ` ${requests.length}` : ''}`} onClick={() => selectTab('pending')} />
         <TabButton active={tab === 'students'} label="수강생 관리" onClick={() => selectTab('students')} />
         <TabButton active={tab === 'processed'} label="처리 내역" onClick={() => selectTab('processed')} />
@@ -305,7 +305,7 @@ export function EntranceRequestsPage() {
 }
 
 function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-selected={active} className={cx('h-8 shrink-0 rounded-md px-3 type-caption font-semibold mobile-web:h-11', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
+  return <button aria-selected={active} className={cx('h-8 shrink-0 rounded-[7px] px-3 type-caption font-semibold mobile-web:h-11', active ? 'bg-stone-900 text-white dark:bg-stone-200 dark:text-stone-950' : 'text-stone-500 hover:bg-stone-100')} onClick={onClick} role="tab" type="button">{label}</button>
 }
 
 function SelectionCheckbox({

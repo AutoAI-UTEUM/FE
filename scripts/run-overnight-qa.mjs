@@ -2,9 +2,9 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-const deadline = new Date(process.env.QA_DEADLINE ?? '2026-09-12T10:00:00+09:00')
+const deadline = new Date(process.env.QA_DEADLINE ?? '2026-09-20T10:00:00+09:00')
 const cleanupAt = new Date(deadline.getTime() - 30 * 60 * 1000)
-const intervalMs = Number(process.env.QA_SOAK_INTERVAL_MS ?? 30 * 60 * 1000)
+const retryDelayMs = Number(process.env.QA_RETRY_DELAY_MS ?? 2 * 60 * 1000)
 const results = []
 const configurationWarnings = credentialWarnings()
 const npmCli = process.env.npm_execpath ?? join(
@@ -14,41 +14,44 @@ const npmCli = process.env.npm_execpath ?? join(
 
 if (Number.isNaN(deadline.getTime())) throw new Error('QA_DEADLINE must be an ISO-8601 timestamp')
 
-run('lint', process.execPath, [npmCli, 'run', 'lint'])
-run('typecheck', process.execPath, [npmCli, 'run', 'typecheck'])
-run('unit', process.execPath, [npmCli, 'run', 'test:run'])
-run('build', process.execPath, [npmCli, 'run', 'build'])
-runE2e('mock', true)
-runE2e('dev', false)
-runE2e('prod', false)
-
-while (Date.now() + intervalMs < cleanupAt.getTime()) {
-  await sleep(intervalMs)
-  runE2e('dev', false)
-  runE2e('prod', false)
-}
+await runWithRetry('lint', process.execPath, [npmCli, 'run', 'lint'])
+await runWithRetry('typecheck', process.execPath, [npmCli, 'run', 'typecheck'])
+await runWithRetry('unit', process.execPath, [npmCli, 'run', 'test:run'])
+await runWithRetry('build', process.execPath, [npmCli, 'run', 'build:qa'])
+await runWithRetry('bundle-budget', process.execPath, [npmCli, 'run', 'test:performance:bundle'])
+await runWithRetry('health', process.execPath, [npmCli, 'run', 'test:qa:health'])
+await runE2e('mock', true)
+await runE2e('dev', false)
+await runE2e('prod', false)
 
 runIssuePass('mock')
 runIssuePass('dev')
 runIssuePass('prod')
-writeSummary()
-if (Date.now() < deadline.getTime()) await sleep(deadline.getTime() - Date.now())
+run('commercialization-evidence', process.execPath, ['scripts/prepare-commercialization-review.mjs'])
 writeSummary(true)
 
-function runE2e(environment, fullMatrix) {
-  run(`e2e-${environment}`, process.execPath, ['node_modules/@playwright/test/cli.js', 'test'], {
+async function runE2e(environment, fullMatrix) {
+  return runWithRetry(`e2e-${environment}`, process.execPath, ['node_modules/@playwright/test/cli.js', 'test'], {
     QA_ENV: environment,
     QA_FULL_MATRIX: fullMatrix ? '1' : '0',
   })
-  runIssuePass(environment)
 }
 
 function runIssuePass(environment) {
   run(`issues-${environment}`, process.execPath, ['scripts/report-qa-issues.mjs'], { QA_ENV: environment })
 }
 
+async function runWithRetry(name, command, args, extraEnv = {}) {
+  const first = run(name, command, args, extraEnv)
+  if (first === 0 || Date.now() >= cleanupAt.getTime()) return first
+
+  const availableDelay = Math.max(0, cleanupAt.getTime() - Date.now())
+  await sleep(Math.min(retryDelayMs, availableDelay))
+  return run(`${name}-retry`, command, args, extraEnv)
+}
+
 function run(name, command, args, extraEnv = {}) {
-  if (Date.now() >= cleanupAt.getTime()) return
+  if (Date.now() >= cleanupAt.getTime()) return 1
   const startedAt = new Date().toISOString()
   const result = spawnSync(command, args, {
     encoding: 'utf8',
@@ -64,6 +67,7 @@ function run(name, command, args, extraEnv = {}) {
     startedAt,
   })
   writeSummary()
+  return result.status ?? 1
 }
 
 function writeSummary(completed = false) {
@@ -72,6 +76,7 @@ function writeSummary(completed = false) {
     completed,
     configurationWarnings,
     deadline: deadline.toISOString(),
+    executionPolicy: 'single-pass-with-one-retry-then-commercialization-review',
     results,
   }, null, 2)}\n`)
 }
