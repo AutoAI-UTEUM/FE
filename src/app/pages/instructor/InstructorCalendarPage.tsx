@@ -29,7 +29,7 @@ import {
 import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { cx } from '../../../shared/lib/cx'
-import { Button, PageContainer, PageHeader, useToast } from '../../../shared/ui'
+import { Button, PageContainer, PageHeader, PageToolbar, Select, useToast } from '../../../shared/ui'
 import { useElementWidth, useResponsiveViewport } from '../../../shared/responsive'
 
 type CalendarView = 'list' | 'month' | 'week'
@@ -126,22 +126,21 @@ export function InstructorCalendarPage() {
   }
 
   return (
-    <PageContainer className={cx('lg:flex lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden lg:space-y-0', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
+    <PageContainer className={cx('lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:overflow-hidden', mode === 'tablet-portrait' && '!h-auto !overflow-visible')}>
       <PageHeader title="캘린더" />
 
-      {/* 관리자 인프라 화면과 같은 자리·같은 모양: 제목 아래 좌측 정렬 드롭다운 행. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 mobile-phone:justify-between">
-        <select
+      <PageToolbar>
+        <Select
           aria-label="캘린더 보기"
-          className="h-11 min-w-36 rounded-xl border border-stone-300 bg-transparent px-4 type-control text-stone-700 outline-none focus:border-brand-600"
+          className="min-w-36"
           onChange={(event) => setView(event.target.value as CalendarView)}
           value={view}
         >
           <option value="month">월</option>
           <option value="week">주</option>
           <option value="list">목록</option>
-        </select>
-      </div>
+        </Select>
+      </PageToolbar>
 
       <div ref={measureArea} style={isTablet ? { gridTemplateColumns: mode === 'tablet-landscape' && areaWidth >= 960 ? 'minmax(0,1fr) 24rem' : 'minmax(0,1fr)' } : undefined} className={cx('grid min-h-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_24rem]', isTablet && 'tablet-calendar')}>
         <section
@@ -334,14 +333,14 @@ function MonthYearPicker({
   return (
     <div
       aria-label="연도와 월 선택"
-      className="absolute top-[calc(100%+8px)] left-1/2 z-30 w-64 -translate-x-1/2 rounded-lg border border-stone-200 bg-white p-3 shadow-xl"
+      className="absolute top-[calc(100%+8px)] left-1/2 z-30 w-64 -translate-x-1/2 rounded-lg border border-stone-200 bg-white p-3 "
       role="dialog"
     >
       <label className="flex items-center justify-between gap-3 type-caption font-semibold text-stone-500">
         연도
-        <select
+        <Select
           aria-label="연도 선택"
-          className="h-9 flex-1 rounded-lg border border-stone-200 bg-white px-3 type-body font-bold text-stone-900"
+          className="min-w-0 flex-1 font-bold text-stone-900"
           onChange={(event) => onChangeYear(Number(event.target.value))}
           value={year}
         >
@@ -352,7 +351,7 @@ function MonthYearPicker({
               </option>
             ),
           )}
-        </select>
+        </Select>
       </label>
       <div className="mt-3 grid grid-cols-4 gap-1">
         {Array.from({ length: 12 }, (_, month) => (
@@ -717,7 +716,7 @@ function ScheduleComposer({
       role="dialog"
     >
       <form
-        className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 "
         onSubmit={submit}
       >
         <div className="flex items-center justify-between gap-4">
@@ -797,7 +796,7 @@ function ToggleControl({
         role="switch"
         type="button"
       >
-        <span className={cx('absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform', checked && 'translate-x-4')} />
+        <span className={cx('absolute top-0.5 left-0.5 size-4 rounded-full bg-white  transition-transform', checked && 'translate-x-4')} />
       </button>
       {label}
     </label>
@@ -825,7 +824,7 @@ function ScheduleDetailDialog({
       }}
       role="dialog"
     >
-      <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 shadow-2xl">
+      <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 ">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="type-caption font-semibold text-stone-400">

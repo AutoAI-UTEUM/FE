@@ -10,7 +10,7 @@ import { createQuestion, isExamDraftValid } from '../../features/exams/examEdito
 import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime } from '../../shared/lib/format'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Badge, Button, EmptyState, PageHeader, useToast } from '../../shared/ui'
+import { Badge, Button, EmptyState, PageHeader, PageToolbar, Select, useToast } from '../../shared/ui'
 import { classroomExamsPath, examDetailPath } from '../routes'
 import { ClassroomWorkspaceContainer } from './classroom/ClassroomWorkspaceContainer'
 import { ClassroomWorkspaceHeader } from './classroom/ClassroomWorkspaceHeader'
@@ -78,8 +78,31 @@ export function ExamsPage() {
   }, [classroomId, classrooms, classroomsLoaded, examsRepository, isGlobalRoute, status])
 
   return <ClassroomWorkspaceContainer>
-    {selectedClassroom && !isGlobalRoute ? <ClassroomWorkspaceHeader actions={isInstructor ? <Button disabled={!classroomId} onClick={() => { setComposerWeekNumber(undefined); setIsComposerOpen(true) }}><Plus size={15} />시험 만들기</Button> : undefined} activeTab="course" classroom={selectedClassroom} titleAccessory={<ClassroomSelect classrooms={classrooms} onChange={(nextClassroomId) => navigate(classroomExamsPath(nextClassroomId), { replace: true })} value={classroomId} />} /> : <PageHeader title="시험" titleAccessory={<p className="type-caption text-stone-400">내 강의실 전체</p>} />}
-    <div className="flex gap-2" role="group" aria-label="시험 상태 필터">{([['', '전체'], ['DRAFT', '초안'], ['PUBLISHED', '공개'], ['CLOSED', '종료']] as const).filter(([value]) => isInstructor || value !== 'DRAFT').map(([value, label]) => <button aria-pressed={status === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${status === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600'}`} key={value} onClick={() => { setIsLoading(true); setStatus(value) }} type="button">{label}</button>)}</div>
+    {selectedClassroom && !isGlobalRoute ? <ClassroomWorkspaceHeader actions={isInstructor ? <Button disabled={!classroomId} onClick={() => { setComposerWeekNumber(undefined); setIsComposerOpen(true) }}><Plus size={15} />시험 만들기</Button> : undefined} activeTab="course" classroom={selectedClassroom} /> : <PageHeader title="시험" />}
+    <PageToolbar>
+      {selectedClassroom && !isGlobalRoute ? <ClassroomSelect classrooms={classrooms} onChange={(nextClassroomId) => navigate(classroomExamsPath(nextClassroomId), { replace: true })} value={classroomId} /> : null}
+      {isInstructor ? (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="시험 상태 필터">
+          {([['', '전체'], ['DRAFT', '초안'], ['PUBLISHED', '공개'], ['CLOSED', '종료']] as const).map(([value, label]) => <button aria-pressed={status === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${status === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600'}`} key={value} onClick={() => { setIsLoading(true); setStatus(value) }} type="button">{label}</button>)}
+        </div>
+      ) : (
+        <label className="block w-full min-[520px]:w-auto">
+          <span className="sr-only">시험 상태 필터</span>
+          <Select
+            className="w-full min-w-36 font-semibold min-[520px]:w-auto"
+            onChange={(event) => {
+              setIsLoading(true)
+              setStatus(event.target.value as ExamStatus | '')
+            }}
+            value={status}
+          >
+            <option value="">전체</option>
+            <option value="PUBLISHED">공개</option>
+            <option value="CLOSED">종료</option>
+          </Select>
+        </label>
+      )}
+    </PageToolbar>
     {isLoading ? <p className="py-16 text-center type-body text-stone-500" role="status">시험을 불러오는 중입니다.</p> : null}
     {error ? <EmptyState description={error} title="시험을 불러오지 못했습니다" /> : null}
     {!isLoading && !error && exams.length === 0 ? <EmptyState description={isInstructor ? '시험 초안을 만들고 문항을 구성해 보세요.' : '강의자가 시험을 공개하면 여기에 표시됩니다.'} title="등록된 시험이 없습니다" /> : null}
@@ -89,13 +112,13 @@ export function ExamsPage() {
 }
 
 function ClassroomSelect({ classrooms, onChange, value }: { classrooms: Classroom[]; onChange: (classroomId: string) => void; value: string }) {
-  return <label><span className="sr-only">강의실 선택</span><select className="h-9 min-w-40 rounded-lg border border-stone-200 bg-white px-3 type-caption font-semibold text-stone-600" onChange={(event) => onChange(event.target.value)} value={value}>{classrooms.length === 0 ? <option value="">강의실 없음</option> : classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
+  return <label className="w-full min-[520px]:w-auto"><span className="sr-only">강의실 선택</span><Select className="w-full min-w-40 font-semibold min-[520px]:w-auto" onChange={(event) => onChange(event.target.value)} value={value}>{classrooms.length === 0 ? <option value="">강의실 없음</option> : classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</Select></label>
 }
 
 function ExamComposer({ classroomId, initialWeekNumber, onClose, onCreated, repository }: { classroomId: string; initialWeekNumber?: number; onClose: () => void; onCreated: (exam: Exam) => void; repository: ReturnType<typeof createExamsRepository> }) {
   const { show } = useToast(); const [draft, setDraft] = useState<CreateExamInput>({ ...initialDraft, weekNumber: initialWeekNumber }); const [isSubmitting, setIsSubmitting] = useState(false)
   async function submit(event: FormEvent) { event.preventDefault(); if (!isExamDraftValid(draft) || isSubmitting) return; setIsSubmitting(true); try { onCreated(await repository.create(classroomId, { ...draft, title: draft.title.trim() })); show('시험 초안을 만들었습니다.', 'success') } catch (error) { show(getRequestErrorMessage(error), 'danger') } finally { setIsSubmitting(false) } }
-  return <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 py-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSubmitting) onClose() }} role="dialog"><form className="max-h-[calc(100dvh-3rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-xl bg-white p-6 shadow-2xl [scrollbar-gutter:stable]" onSubmit={submit}><div className="mb-5 flex items-center justify-between"><h2 className="type-dialog-title font-bold">시험 만들기</h2><button aria-label="닫기" className="p-2 text-stone-400" onClick={onClose} type="button"><X size={17} /></button></div><ExamEditor onChange={setDraft} value={draft} /><div className="mt-6 flex justify-end gap-2"><Button onClick={onClose} variant="ghost">취소</Button><Button disabled={!isExamDraftValid(draft) || isSubmitting} type="submit">{isSubmitting ? '저장 중' : '초안 저장'}</Button></div></form></div>
+  return <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 py-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSubmitting) onClose() }} role="dialog"><form className="max-h-[calc(100dvh-3rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-xl bg-white p-6 [scrollbar-gutter:stable]" onSubmit={submit}><div className="mb-5 flex items-center justify-between"><h2 className="type-dialog-title font-bold">시험 만들기</h2><button aria-label="닫기" className="p-2 text-stone-400" onClick={onClose} type="button"><X size={17} /></button></div><ExamEditor onChange={setDraft} value={draft} /><div className="mt-6 flex justify-end gap-2"><Button onClick={onClose} variant="ghost">취소</Button><Button disabled={!isExamDraftValid(draft) || isSubmitting} type="submit">{isSubmitting ? '저장 중' : '초안 저장'}</Button></div></form></div>
 }
 
 export function ExamStatusBadge({ status }: { status: ExamStatus }) { const values = { DRAFT: ['초안', 'neutral'], PUBLISHED: ['공개', 'success'], CLOSED: ['종료', 'warning'] } as const; return <Badge tone={values[status][1]}>{values[status][0]}</Badge> }

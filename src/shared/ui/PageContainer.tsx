@@ -10,7 +10,7 @@ export function PageContainer({
 }: PageContainerProps) {
   return (
     <div
-      className={cx('app-page-frame space-y-4', className)}
+      className={cx('app-page-frame flex flex-col gap-4', className)}
       {...props}
       data-page-container="standard"
     />

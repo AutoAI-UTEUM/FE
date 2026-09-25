@@ -1,6 +1,4 @@
 import {
-  ArrowDownUp,
-  Check,
   DoorOpen,
   Plus,
   Search,
@@ -19,7 +17,7 @@ import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, type Classroom } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Button, EmptyState, PageContainer, PageHeader, useToast } from '../../shared/ui'
+import { Button, EmptyState, PageContainer, PageHeader, PageToolbar, Select, useToast } from '../../shared/ui'
 import { classroomDetailPath } from '../routes'
 import { InstructorClassroomsPage } from './instructor/InstructorClassroomsPage'
 
@@ -51,7 +49,6 @@ function LearnerClassroomsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isJoining, setIsJoining] = useState(false)
   const [sort, setSort] = useState<ClassroomSort>('recent')
-  const [isSortOpen, setIsSortOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isJoinOpen, setIsJoinOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -87,7 +84,6 @@ function LearnerClassroomsPage() {
       if (event.key === 'Escape') {
         setIsSearchOpen(false)
         setIsJoinOpen(false)
-        setIsSortOpen(false)
       }
     }
 
@@ -124,9 +120,6 @@ function LearnerClassroomsPage() {
     }
   }
 
-  const selectedSortLabel =
-    sortOptions.find((option) => option.value === sort)?.label ??
-    '최근 학습순'
   const sortedClassrooms = useMemo(() => {
     return [...classrooms].sort((left, right) => {
       if (sort === 'name') return left.name.localeCompare(right.name, 'ko-KR')
@@ -154,47 +147,6 @@ function LearnerClassroomsPage() {
             </kbd>
           </button>
 
-          <div className="relative min-w-0 flex-1 min-[520px]:flex-none">
-            <button
-              aria-expanded={isSortOpen}
-              aria-haspopup="menu"
-              className="flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-stone-200 bg-white px-3 type-body font-medium text-stone-700 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              onClick={() => setIsSortOpen((open) => !open)}
-              type="button"
-            >
-              <ArrowDownUp aria-hidden="true" size={14} />
-              {selectedSortLabel}
-            </button>
-            {isSortOpen ? (
-              <div
-                className="absolute top-[calc(100%+6px)] right-0 z-20 w-40 rounded-lg border border-stone-200 bg-white p-1.5 shadow-lg"
-                role="menu"
-              >
-                {sortOptions.map((option) => (
-                  <button
-                    className="flex h-9 w-full items-center rounded-md px-2.5 text-left type-control text-stone-700 hover:bg-stone-100"
-                    key={option.value}
-                    onClick={() => {
-                      setSort(option.value)
-                      setIsSortOpen(false)
-                    }}
-                    role="menuitem"
-                    type="button"
-                  >
-                    {option.label}
-                    {sort === option.value ? (
-                      <Check
-                        aria-hidden="true"
-                        className="ml-auto text-brand-700"
-                        size={14}
-                      />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
           <Button className="h-10 min-w-0 flex-1 whitespace-nowrap min-[520px]:flex-none" onClick={() => setIsJoinOpen(true)}>
             <Plus aria-hidden="true" size={15} />
             강의실 참여
@@ -202,11 +154,26 @@ function LearnerClassroomsPage() {
         </>}
       />
 
+      <PageToolbar>
+        <label className="w-full min-[520px]:w-auto">
+          <span className="sr-only">강의실 정렬</span>
+          <Select
+            aria-label="강의실 정렬"
+            className="w-full min-w-36 min-[520px]:w-auto"
+            onChange={(event) => setSort(event.target.value as ClassroomSort)}
+            value={sort}
+          >
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </Select>
+        </label>
+      </PageToolbar>
+
       {error ? <EmptyState action={<Button onClick={() => void loadClassrooms()} variant="secondary">다시 시도</Button>} description={error} title="강의실을 불러오지 못했습니다" /> : null}
       {!error && isLoading ? <p className="py-16 text-center type-body text-stone-500" role="status">강의실을 불러오는 중입니다.</p> : null}
       {!error && !isLoading ? <section
         aria-labelledby="classroom-list-heading"
-        className="border-t border-stone-100 pt-5"
       >
         <h2 className="sr-only" id="classroom-list-heading">
           참여 중인 강의실
@@ -258,7 +225,7 @@ function LearnerClassroomsPage() {
           }}
           role="dialog"
         >
-          <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
+          <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white ">
             <div className="flex h-14 items-center gap-3 border-b border-stone-100 px-4">
               <Search aria-hidden="true" className="text-stone-400" size={16} />
               <input
@@ -296,7 +263,7 @@ function LearnerClassroomsPage() {
           }}
           role="dialog"
         >
-          <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-2xl">
+          <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 ">
             <div className="flex items-start gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
                 <DoorOpen aria-hidden="true" size={18} />

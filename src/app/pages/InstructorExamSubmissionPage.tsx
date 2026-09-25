@@ -98,7 +98,7 @@ export function InstructorExamSubmissionPage() {
   const correctCount = data.submission.items.filter((item) => item.verdict === 'CORRECT').length
 
   return (
-    <PageContainer className="print:space-y-3">
+    <PageContainer className="print:gap-3">
       <header className="flex flex-wrap items-center gap-3 print:hidden">
         <ButtonLink to={classroomExamDetailPath(classroomId, examId)} variant="secondary">
           <ArrowLeft aria-hidden="true" size={15} />

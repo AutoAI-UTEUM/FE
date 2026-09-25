@@ -21,7 +21,9 @@ describe('ClassroomStudentsPage', () => {
     expect(screen.queryByRole('link', { name: '리포트' })).not.toBeInTheDocument()
     expect(screen.getByText('김학습')).toBeInTheDocument()
     expect(screen.getByText('박미활동')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('RECENT_ACTIVITY')
+    const sortSelect = screen.getByRole('combobox', { name: '수강생 정렬' })
+    expect(sortSelect).toHaveValue('RECENT_ACTIVITY')
+    expect(sortSelect.closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('combobox', { name: '수강생 정렬' }), { target: { value: 'NAME' } })
     expect(screen.getByRole('combobox', { name: '수강생 정렬' })).toHaveValue('NAME')
 

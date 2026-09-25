@@ -126,7 +126,7 @@ describe('InstructorClassroomEditPage', () => {
     ).toHaveClass(
       'flex',
       'lg:min-h-[calc(100dvh-2.5rem)]',
-      'space-y-0',
+      'gap-4',
       'xl:h-[calc(100dvh-2.5rem)]',
       'xl:overflow-hidden',
     )
