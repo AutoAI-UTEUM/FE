@@ -16,7 +16,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import type { ClassroomWeek } from '../../../features/classrooms'
-import { Badge, Button } from '../../../shared/ui'
+import { Badge, Button, Select } from '../../../shared/ui'
 import type { ClassroomResourcePreviewValue } from './classroomContentModel'
 
 export type { ClassroomResourcePreviewValue } from './classroomContentModel'
@@ -104,7 +104,7 @@ export function ClassroomResourceUploadDialog({
       }}
       role="dialog"
     >
-      <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>
+      <form className="w-full max-w-md rounded-lg bg-white p-5 " onSubmit={submit}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="type-dialog-title font-bold text-stone-950">자료 업로드</h2>
           <button
@@ -140,8 +140,8 @@ export function ClassroomResourceUploadDialog({
 
         <label className="mt-4 block type-control font-semibold text-stone-800">
           주차 선택
-          <select
-            className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body"
+          <Select
+            className="mt-1 w-full"
             onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)}
             value={weekNumber ?? ''}
           >
@@ -151,7 +151,7 @@ export function ClassroomResourceUploadDialog({
                 {week.weekNumber}주차 · {week.title}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         {mode === 'file' ? (
@@ -344,17 +344,17 @@ export function ClassroomResourceEditDialog({
       onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) onClose() }}
       role="dialog"
     >
-      <form className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onSubmit={submit}>
+      <form className="w-full max-w-md rounded-lg bg-white p-5 " onSubmit={submit}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="type-dialog-title font-bold text-stone-950">일반 자료 수정</h2>
           <button aria-label="일반 자료 수정 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isSaving} onClick={onClose} type="button"><X size={17} /></button>
         </div>
         <label className="mt-5 block type-control font-semibold text-stone-800">
           주차 선택
-          <select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body" onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)} value={weekNumber ?? ''}>
+          <Select className="mt-1 w-full" onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)} value={weekNumber ?? ''}>
             <option value="">전체 항목</option>
             {orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}
-          </select>
+          </Select>
         </label>
         <label className="mt-4 block type-control font-semibold text-stone-800">
           자료 제목
@@ -374,7 +374,7 @@ function ResourceViewer({ resource }: { resource: ClassroomResourcePreviewValue 
     return (
       <section aria-label="웹 링크 뷰어" className="flex mobile-web:min-h-[50dvh] min-h-[360px] items-center justify-center bg-stone-50 p-6 text-center">
         <div className="max-w-md">
-          <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-white text-brand-700 shadow-sm ring-1 ring-stone-200">
+          <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-white text-brand-700 ring-1 ring-stone-200">
             <LinkIcon aria-hidden="true" size={22} />
           </span>
           <p className="mt-4 break-all type-body text-stone-600">{resource.source.url}</p>
@@ -412,7 +412,7 @@ function ResourceViewer({ resource }: { resource: ClassroomResourcePreviewValue 
   return (
     <section aria-label="문서 자료 뷰어" className="flex mobile-web:min-h-[50dvh] min-h-[360px] items-center justify-center bg-stone-50 p-6 text-center">
       <div className="max-w-md">
-        <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-white text-stone-600 shadow-sm ring-1 ring-stone-200">
+        <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-white text-stone-600 ring-1 ring-stone-200">
           <Icon aria-hidden="true" size={22} />
         </span>
         <p className="mt-4 break-all type-body font-semibold text-stone-800">{resource.source.fileName}</p>
@@ -447,5 +447,5 @@ function formatFileSize(bytes: number): string {
 }
 
 function modeButtonClass(active: boolean): string {
-  return `flex h-9 items-center justify-center gap-2 rounded-md type-control font-semibold ${active ? 'bg-white text-brand-700 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`
+  return `flex h-9 items-center justify-center gap-2 rounded-md type-control font-semibold ${active ? 'bg-white text-brand-700 ' : 'text-stone-500 hover:text-stone-800'}`
 }

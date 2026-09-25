@@ -771,7 +771,7 @@ export function AuthProvider({
       {children}
       {authRecoveryError && session ? (
         <div
-          className="fixed right-4 bottom-4 z-[110] flex max-w-sm items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-lg"
+          className="fixed right-4 bottom-4 z-[110] flex max-w-sm items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 "
           role="alert"
         >
           <p className="type-caption font-medium text-amber-950">
@@ -796,7 +796,7 @@ export function AuthProvider({
           }}
           role="dialog"
         >
-          <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-6 ">
             <h2
               className="type-dialog-title font-bold text-stone-950"
               id="exam-idle-warning-title"

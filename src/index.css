@@ -240,6 +240,13 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
   letter-spacing: 0.02em;
 }
 
+@utility type-invite-code-compact {
+  font-family: "Uteum Invite Code", "Noto Sans KR Variable", sans-serif;
+  font-size: 1rem;
+  line-height: normal;
+  letter-spacing: 0.02em;
+}
+
 @utility type-graph-label {
   line-height: 1.2;
 }
@@ -733,14 +740,6 @@ html.dark body {
 
 html.dark .bg-white {
   background-color: #1b1c20;
-}
-
-html.dark .shadow-sm {
-  box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
-}
-
-html.dark .shadow-lg {
-  box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
 }
 
 /* 인증 화면은 제공된 로그인·회원가입 정본처럼 항상 밝은 테마로 표시한다. */

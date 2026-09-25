@@ -13,6 +13,7 @@ import type {
   InfraRange,
   AdminXaiOverview,
 } from '../../../features/admin'
+import { PageToolbar, Select } from '../../../shared/ui'
 import {
   AdminErrorMessage,
   AdminMetricStrip,
@@ -119,29 +120,29 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto">
       <AdminPanelHeading aside={[metrics.error, app.error, xai.error].filter((error): error is AdminErrorInfo => error !== null).map((error, index) => <div className="overflow-hidden rounded-xl border border-rose-100" key={index}><AdminErrorMessage error={error} /></div>)} title="인프라" />
-      <div className="flex shrink-0 flex-wrap items-center gap-2 mobile-phone:justify-between">
-          <select aria-label="환경" className="h-11 min-w-36 rounded-xl border border-stone-300 bg-transparent px-4 type-control text-stone-700 outline-none focus:border-brand-600" onChange={(event) => {
-            setMetrics((current) => ({ ...current, error: null, loading: true }))
-            setEnv(event.target.value as InfraEnv)
-          }} value={env}><option value="prod">운영</option><option value="dev">개발</option></select>
-          <label className="flex items-center gap-2 type-caption font-medium text-stone-500">
-            <span className="sr-only">기간</span>
-            <select
-              aria-label="조회 기간"
-              className="h-11 min-w-36 rounded-xl border border-stone-300 bg-transparent px-4 type-control text-stone-700 outline-none focus:border-brand-600"
-              onChange={(event) => {
-                setMetrics((current) => ({ ...current, error: null, loading: true }))
-                setRange(event.target.value as InfraRange)
-              }}
-              value={range}
-            >
-              <option value="1h">최근 1시간</option>
-              <option value="6h">최근 6시간</option>
-              <option value="24h">최근 24시간</option>
-              <option value="7d">최근 7일</option>
-            </select>
-          </label>
-      </div>
+      <PageToolbar>
+        <Select aria-label="환경" className="min-w-36" onChange={(event) => {
+          setMetrics((current) => ({ ...current, error: null, loading: true }))
+          setEnv(event.target.value as InfraEnv)
+        }} value={env}><option value="prod">운영</option><option value="dev">개발</option></Select>
+        <label className="flex items-center gap-2 type-caption font-medium text-stone-500">
+          <span className="sr-only">기간</span>
+          <Select
+            aria-label="조회 기간"
+            className="min-w-36"
+            onChange={(event) => {
+              setMetrics((current) => ({ ...current, error: null, loading: true }))
+              setRange(event.target.value as InfraRange)
+            }}
+            value={range}
+          >
+            <option value="1h">최근 1시간</option>
+            <option value="6h">최근 6시간</option>
+            <option value="24h">최근 24시간</option>
+            <option value="7d">최근 7일</option>
+          </Select>
+        </label>
+      </PageToolbar>
 
       <InfraSummary cost={cost} metrics={metrics} range={range} xai={xai} xaiUsage={xaiUsage} />
       <div className="grid min-h-[650px] gap-4 xl:flex-1 xl:grid-cols-2">
@@ -305,7 +306,7 @@ function InfraDetailsDrawer({ cost, onClose, repository, type, xai }: { cost: Lo
     ? `${formatMonthDay(shiftIsoDate(today, -6))} – ${formatMonthDay(today)}`
     : daily.length ? `${formatMonthDay(daily[0].date)} – ${formatMonthDay(daily[daily.length - 1].date)}` : '최근 7일'
   return <div aria-labelledby="infra-drawer-title" aria-modal="true" className="fixed inset-0 z-[90] flex justify-end bg-[#172033]/35" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog">
-    <div className="flex h-full w-full max-w-[640px] flex-col bg-white shadow-2xl">
+    <div className="flex h-full w-full max-w-[640px] flex-col bg-white ">
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-100 px-7 py-6">
         <div><h2 className="type-section-title font-bold text-stone-950" id="infra-drawer-title">{type === 'aws' ? 'AWS 사용량 · 비용' : 'xAI 사용량 · 호출'}</h2><p className="mt-1 type-caption text-stone-400">{period} 주간 기준</p></div>
         <button aria-label="상세 패널 닫기" autoFocus className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={onClose} type="button"><X aria-hidden="true" size={18} /></button>

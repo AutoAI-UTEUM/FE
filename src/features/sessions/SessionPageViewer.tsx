@@ -327,7 +327,7 @@ export function SessionPageViewer({
           </button>
         </div>
         {isMobileWeb && isMoreOpen ? (
-          <div ref={moreRef} role="dialog" aria-label="PDF 도구" className="absolute top-[calc(100%+0.25rem)] right-2 z-50 grid max-h-[60dvh] min-w-48 gap-1 overflow-y-auto rounded-lg border border-stone-200 bg-white p-2 shadow-xl">
+          <div ref={moreRef} role="dialog" aria-label="PDF 도구" className="absolute top-[calc(100%+0.25rem)] right-2 z-50 grid max-h-[60dvh] min-w-48 gap-1 overflow-y-auto rounded-lg border border-stone-200 bg-white p-2 ">
             <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => setZoom((value) => clampZoom(value - 10))} type="button">축소 · {zoom}%</button>
             <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => setZoom((value) => clampZoom(value + 10))} type="button">확대 · {zoom}%</button>
             <button className="min-h-11 rounded-md px-3 text-left type-control hover:bg-stone-50" onClick={() => { applyPageFit('height'); setIsMoreOpen(false) }} type="button">높이 맞춤</button>
@@ -378,7 +378,7 @@ export function SessionPageViewer({
             >
               <div className="flex h-max min-h-full w-max min-w-full items-center justify-center">
               <Page
-                className="overflow-hidden rounded-sm bg-white shadow-[0_2px_14px_rgba(0,0,0,0.08)]"
+                className="overflow-hidden rounded-sm bg-white "
                 pageNumber={currentPage}
                 renderAnnotationLayer
                 renderTextLayer
@@ -441,7 +441,7 @@ function PageNavigation({
   totalPages: number
 }) {
   return (
-    <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1 rounded-lg border border-stone-200 bg-white/95 p-1 shadow-lg backdrop-blur-sm dark:bg-stone-100/95 mobile-web:right-3 mobile-web:bottom-3">
+    <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1 rounded-lg border border-stone-200 bg-white/95 p-1 backdrop-blur-sm dark:bg-stone-100/95 mobile-web:right-3 mobile-web:bottom-3">
       <ToolbarButton
         disabled={isPending || currentPage <= 1}
         icon={ChevronLeft}
@@ -495,7 +495,7 @@ function PageOutline({
             onClick={() => onMovePage(pageNumber)}
             type="button"
           >
-            <span className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-sm">
+            <span className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-sm bg-white ">
               {renderThumbnails ? (
                 <Page
                   devicePixelRatio={1}
@@ -540,7 +540,7 @@ function ViewerState({
   return (
     <div
       className={cx(
-        'flex h-full max-h-[36rem] min-h-64 w-full max-w-md items-center justify-center rounded-sm border bg-white px-6 text-center type-body shadow-sm',
+        'flex h-full max-h-[36rem] min-h-64 w-full max-w-md items-center justify-center rounded-sm border bg-white px-6 text-center type-body ',
         isError
           ? 'border-rose-200 text-rose-700'
           : 'border-stone-200 text-stone-500',

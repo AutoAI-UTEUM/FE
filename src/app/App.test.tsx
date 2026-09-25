@@ -226,7 +226,7 @@ describe('AppRoutes', () => {
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
     fireEvent.click(profileTrigger)
     const [profileMenu] = screen.getAllByRole('menu')
-    expect(within(profileMenu).getByRole('menuitem', { name: '업데이트' })).toHaveAttribute('href', '/updates')
+    expect(within(profileMenu).getByRole('menuitem', { name: '업데이트' })).toHaveAttribute('href', '/admin?tab=updates')
     expect(within(profileMenu).getByRole('menuitem', { name: '피드백' })).toHaveAttribute('href', '/feedback')
   })
 
@@ -317,12 +317,13 @@ describe('AppRoutes', () => {
   it.each([
     ['학습자', { email: 'learner@example.com', name: '학습자', role: 'LEARNER' as const }],
     ['강의자', { email: 'instructor@example.com', name: '강의자', role: 'INSTRUCTOR' as const }],
-  ])('%s에게 동일한 일반 페이지 규격을 적용한다', async (_roleLabel, user) => {
+  ])('%s에게 동일한 일반 페이지 규격을 적용한다', async (roleLabel, user) => {
     const { container } = renderRoute('/classrooms', user)
 
-    expect(
-      await screen.findByRole('heading', { name: '내 강의실' }),
-    ).toBeInTheDocument()
+    const pageTitle = await screen.findByRole('heading', { name: '내 강의실' })
+    expect(pageTitle).toBeInTheDocument()
+    expect(pageTitle.closest('header')?.querySelector('[data-page-path="true"]'))
+      .toHaveTextContent(`${roleLabel}/내 강의실`)
     expect(screen.getByRole('complementary')).toHaveClass('lg:w-[232px]')
     expect(screen.getByRole('main')).toHaveClass(
       'px-4',
@@ -370,7 +371,7 @@ describe('AppRoutes', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('opens the settings dialog from the profile menu', async () => {
+  it('opens the settings page from the profile menu', async () => {
     renderRoute('/')
 
     const [profileTrigger] = screen.getAllByRole('button', { name: '프로필 메뉴' })
@@ -381,26 +382,21 @@ describe('AppRoutes', () => {
     expect(within(profileMenu).getByRole('menuitem', { name: '업데이트' })).toHaveAttribute('href', '/updates')
     expect(within(profileMenu).getByRole('menuitem', { name: '피드백' })).toHaveAttribute('href', '/feedback')
     const [settingsMenuItem] = screen.getAllByRole('menuitem', { name: '설정' })
+    expect(settingsMenuItem).toHaveAttribute('href', '/settings')
     fireEvent.click(settingsMenuItem)
 
-    const settingsDialog = await screen.findByRole('dialog', { name: '설정' })
-    expect(settingsDialog).toBeInTheDocument()
-    expect(settingsDialog.firstElementChild).toHaveClass(
-      'h-[min(520px,calc(100dvh-3rem))]',
-      'max-w-[560px]',
-    )
-    expect(settingsDialog.firstElementChild).not.toHaveClass('h-[66dvh]', 'max-h-[66dvh]', 'overflow-y-auto')
-    expect(within(settingsDialog).queryByRole('button', { name: '피드백' })).not.toBeInTheDocument()
-    fireEvent.click(within(settingsDialog).getByRole('button', { name: '화면 모드' }))
-    expect(within(settingsDialog).getByRole('button', { name: '라이트 모드' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '설정' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '설정 메뉴' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '피드백' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '화면 모드' }))
+    expect(screen.getByRole('button', { name: '라이트 모드' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '회원 탈퇴' }))
     expect(
       screen.getByRole('button', { name: '회원 탈퇴 실행' }),
     ).toBeInTheDocument()
 
-    fireEvent.click(settingsDialog)
-    expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
   })
 
   it('opens the updates page from the profile menu', async () => {
@@ -410,7 +406,11 @@ describe('AppRoutes', () => {
     fireEvent.click(profileTrigger)
     const [profileMenu] = screen.getAllByRole('menu')
     fireEvent.click(within(profileMenu).getByRole('menuitem', { name: '업데이트' }))
-    expect(await screen.findByRole('heading', { name: '업데이트' })).toBeInTheDocument()
+    const heading = await screen.findByRole('heading', { name: '업데이트' })
+    expect(heading).toBeInTheDocument()
+    expect(heading.parentElement).toHaveTextContent('학습자 / 업데이트')
+    expect(screen.getByRole('combobox', { name: '개발 파트' })).toBeInTheDocument()
+    expect(screen.queryByText(/월 배포$/)).not.toBeInTheDocument()
   })
 
   it('applies saved profile changes to the shared sidebar profile', async () => {
@@ -421,14 +421,14 @@ describe('AppRoutes', () => {
     const [settingsMenuItem] = screen.getAllByRole('menuitem', { name: '설정' })
     fireEvent.click(settingsMenuItem)
 
-    const settingsDialog = await screen.findByRole('dialog', { name: '설정' })
-    fireEvent.change(within(settingsDialog).getByLabelText('이름'), {
+    expect(await screen.findByRole('heading', { name: '설정' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('이름'), {
       target: { value: '김학습' },
     })
-    fireEvent.change(within(settingsDialog).getByLabelText('소속'), {
+    fireEvent.change(screen.getByLabelText('소속'), {
       target: { value: '서울대학교' },
     })
-    fireEvent.click(within(settingsDialog).getByRole('button', { name: '저장' }))
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
 
     expect(await screen.findByText('설정을 저장했습니다.')).toBeInTheDocument()
     await waitFor(() => {
@@ -438,7 +438,7 @@ describe('AppRoutes', () => {
           .some((button) => button.textContent?.includes('김학습')),
       ).toBe(true)
     })
-    expect(within(settingsDialog).getByDisplayValue('서울대학교')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('서울대학교')).toBeInTheDocument()
   })
 
   it('shows learner study menus and keeps instructor management menus out', () => {

@@ -24,7 +24,7 @@ import { DevelopmentUpdatesPanel } from '../../../features/updates'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { formatDetailedRelativeActivityDate } from '../../../shared/lib/format'
 import { useResponsiveViewport, TabletMasterDetail } from '../../../shared/responsive'
-import { Button } from '../../../shared/ui'
+import { Button, Select } from '../../../shared/ui'
 import {
   AdminErrorMessage,
   AdminMetricStrip,
@@ -377,7 +377,7 @@ function UserRows({ currentUserId, detail, expanded, onResetPassword, onToggle, 
 }
 
 function PasswordResetDialog({ onClose, result }: { onClose: () => void; result: { message: string; name: string; temporaryPassword: string } }) {
-  return <div aria-labelledby="password-reset-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 px-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog"><section className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-2xl"><div className="flex items-center justify-between gap-3"><h2 className="type-dialog-title font-bold text-stone-950" id="password-reset-title">임시 비밀번호 발급 완료</h2><button aria-label="닫기" className="flex size-9 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div><p className="mt-2 type-body text-stone-600">{result.name} 회원에게 아래 비밀번호를 전달하세요. 이 값은 닫은 뒤 다시 확인할 수 없습니다.</p><div className="mt-5 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3"><code className="min-w-0 flex-1 break-all type-body font-bold text-stone-950">{result.temporaryPassword}</code><Button aria-label="임시 비밀번호 복사" onClick={() => void navigator.clipboard.writeText(result.temporaryPassword)} size="sm" title="복사" variant="secondary"><Copy aria-hidden="true" size={15} /></Button></div>{result.message ? <p className="mt-3 type-caption text-stone-500">{result.message}</p> : null}<div className="mt-5 flex justify-end"><Button onClick={onClose}>확인</Button></div></section></div>
+  return <div aria-labelledby="password-reset-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 px-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog"><section className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 "><div className="flex items-center justify-between gap-3"><h2 className="type-dialog-title font-bold text-stone-950" id="password-reset-title">임시 비밀번호 발급 완료</h2><button aria-label="닫기" className="flex size-9 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div><p className="mt-2 type-body text-stone-600">{result.name} 회원에게 아래 비밀번호를 전달하세요. 이 값은 닫은 뒤 다시 확인할 수 없습니다.</p><div className="mt-5 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3"><code className="min-w-0 flex-1 break-all type-body font-bold text-stone-950">{result.temporaryPassword}</code><Button aria-label="임시 비밀번호 복사" onClick={() => void navigator.clipboard.writeText(result.temporaryPassword)} size="sm" title="복사" variant="secondary"><Copy aria-hidden="true" size={15} /></Button></div>{result.message ? <p className="mt-3 type-caption text-stone-500">{result.message}</p> : null}<div className="mt-5 flex justify-end"><Button onClick={onClose}>확인</Button></div></section></div>
 }
 
 function ClassroomsPanel({ repository }: { repository: Repository }) {
@@ -663,7 +663,7 @@ function FeatureUsageChart({ summary }: { summary: AiUsageSummary | null }) {
   </section>
 }
 
-function FilterSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: Array<[string, string]>; value: string }) { return <label><span className="sr-only">{label}</span><select className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-control text-stone-700 outline-none focus:border-brand-600" onChange={(event) => onChange(event.target.value)} value={value}>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label> }
+function FilterSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: Array<[string, string]>; value: string }) { return <label><span className="sr-only">{label}</span><Select onChange={(event) => onChange(event.target.value)} value={value}>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</Select></label> }
 
 function SortButton({ active, direction, label, onClick }: { active: boolean; direction: 'asc' | 'desc'; label: string; onClick: () => void }) {
   const nextDirection = active

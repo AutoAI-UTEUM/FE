@@ -583,6 +583,15 @@ export async function handleApiFixtureRequest(
  * dev 전용 확장 — 테스트 픽스처가 커버하지 않아 브라우저 워크스루가 끊기는 구간을 메운다.
  * (세션 101·102 상세, 자료 11~13 상세, 비어 있지 않은 채팅 이력, refresh 성공)
  */
+interface DevAuthUser {
+  email: string
+  id: number
+  name: string
+  role: 'ADMIN' | 'INSTRUCTOR' | 'LEARNER'
+}
+
+let devAuthUser: DevAuthUser | null = null
+
 async function handleDevRoute(
   request: Request,
   url: URL,
@@ -590,13 +599,80 @@ async function handleDevRoute(
   const { method } = request
   const { pathname } = url
 
+  if (method === 'POST' && pathname === '/api/auth/login') {
+    const body = await readJson<{ email: string }>(request)
+    if (body.email === 'locked@example.com') {
+      return apiFailure('INVALID_CREDENTIALS', '이메일 또는 비밀번호를 확인하세요.', 401)
+    }
+    const role = body.email.startsWith('admin')
+      ? 'ADMIN'
+      : body.email.startsWith('instructor') ? 'INSTRUCTOR' : 'LEARNER'
+    devAuthUser = {
+      email: body.email,
+      id: role === 'ADMIN' ? 1 : role === 'INSTRUCTOR' ? 2 : 3,
+      name: role === 'ADMIN' ? '관리자' : role === 'INSTRUCTOR' ? '강의자' : '학습자',
+      role,
+    }
+    return apiSuccess({
+      accessToken: `dev-${role.toLowerCase()}-access-token`,
+      expiresIn: 3600,
+      tokenType: 'Bearer',
+      user: devAuthUser,
+    })
+  }
+
+  if (method === 'POST' && pathname === '/api/auth/logout') {
+    devAuthUser = null
+    return apiSuccess(null)
+  }
+
   // 새로고침만으로 로그인 상태가 복원되도록 (DEC-004 경로 그대로 검증)
   if (method === 'POST' && pathname === '/api/auth/refresh') {
+    if (!devAuthUser) {
+      return apiFailure('TOKEN_INVALID', '유효하지 않은 인증 토큰입니다.', 401)
+    }
     return apiSuccess({
-      accessToken: 'dev-access-token',
+      accessToken: `dev-${devAuthUser.role.toLowerCase()}-access-token`,
       expiresIn: 3600,
       tokenType: 'Bearer',
     })
+  }
+
+  if (method === 'GET' && pathname === '/api/users/me') {
+    return devAuthUser
+      ? apiSuccess(devAuthUser)
+      : apiFailure('TOKEN_INVALID', '유효하지 않은 인증 토큰입니다.', 401)
+  }
+
+  if (method === 'GET' && pathname === '/api/classrooms') {
+    const classrooms = [
+      { averageProgressRate: 64, classroomId: 12, color: 'BLUE', endDate: '2026-12-13', instructorName: '강의자', learnerCount: 12, materialCount: 8, name: 'aws', pendingRequestCount: 0, startDate: '2026-09-01', status: 'ACTIVE', weekCount: 15 },
+      { averageProgressRate: 38, classroomId: 13, color: 'GREEN', endDate: '2026-12-13', instructorName: '강의자', learnerCount: 9, materialCount: 7, name: 'test', pendingRequestCount: 0, startDate: '2026-09-01', status: 'ACTIVE', weekCount: 15 },
+      { averageProgressRate: 81, classroomId: 14, color: 'PURPLE', endDate: '2026-12-13', instructorName: '강의자', learnerCount: 24, materialCount: 15, name: 'CER 논변 학습', pendingRequestCount: 0, startDate: '2026-09-01', status: 'ACTIVE', weekCount: 15 },
+    ]
+    const query = (url.searchParams.get('q') ?? '').toLocaleLowerCase('ko-KR')
+    const items = query
+      ? classrooms.filter((classroom) => classroom.name.toLocaleLowerCase('ko-KR').includes(query))
+      : classrooms
+    return apiSuccess({ items, page: 0, size: 100, totalElements: items.length, totalPages: 1 })
+  }
+
+  const inviteCode = /^\/api\/classrooms\/(12|13|14)\/invite-code$/.exec(pathname)
+  if (method === 'GET' && inviteCode) {
+    const codes: Record<string, string> = { 12: 'AKC2-6KZX', 13: 'CSNT-8NTX', 14: 'MRT9-2QLD' }
+    return apiSuccess({ inviteCode: codes[inviteCode[1]] })
+  }
+
+  const classroomWeeks = /^\/api\/classrooms\/(12|13|14)\/weeks$/.exec(pathname)
+  if (method === 'GET' && classroomWeeks) {
+    const materialCounts: Record<string, number> = { 12: 8, 13: 7, 14: 15 }
+    const materials = Array.from({ length: materialCounts[classroomWeeks[1]] }, (_, index) => ({
+      materialId: Number(`${classroomWeeks[1]}${index + 1}`),
+      processingStatus: 'READY',
+      title: `${index + 1}주차 학습 자료.pdf`,
+      uploadedAt: '2026-09-01T00:00:00Z',
+    }))
+    return apiSuccess({ items: [{ displayOrder: 1, materials, status: 'PUBLISHED', title: '학습 자료', weekId: Number(classroomWeeks[1]), weekNumber: 1 }] })
   }
 
   if (method === 'GET' && pathname === '/api/admin/users') {

@@ -10,6 +10,7 @@ import {
   Card,
   PageContainer,
   PageHeader,
+  Select,
   TextInput,
   useToast,
 } from '../../shared/ui'
@@ -53,15 +54,12 @@ export function SettingsPage() {
     <PageContainer>
       {/* 모바일은 제목과 저장 작업이 한 행이라 SettingsContent가 헤더까지 그린다. */}
       {isMobileWeb ? null : <PageHeader title="설정" />}
-      <SettingsContent variant="page" />
+      <SettingsContent />
     </PageContainer>
   )
 }
 
-export function SettingsContent({ className, variant = 'dialog' }: {
-  className?: string
-  variant?: 'dialog' | 'page'
-} = {}) {
+function SettingsContent() {
   const { apiRequest, logout, rawApiRequest, updateUser, user, withdraw } = useAuth()
   const { mode, setMode } = useTheme()
   const { isMobileWeb } = useResponsiveViewport()
@@ -208,7 +206,7 @@ export function SettingsContent({ className, variant = 'dialog' }: {
   return (
     <>
       {/* 태블릿 가로는 데스크톱과 같은 좌측 카테고리 + 본문 2열, 세로는 스택. */}
-      {isMobileWeb && variant === 'page' ? (
+      {isMobileWeb ? (
         <div className="mb-4 flex items-center gap-3">
           <h1 className="min-w-0 flex-1 truncate type-page-title font-bold text-stone-950">설정</h1>
           {section === 'profile' ? (
@@ -235,7 +233,7 @@ export function SettingsContent({ className, variant = 'dialog' }: {
         </div>
       ) : null}
 
-      <div className={cx('flex flex-col gap-5 lg:flex-row lg:gap-0 tablet-landscape:flex-row tablet-landscape:gap-0', className)}>
+      <div className="flex flex-col gap-5 lg:flex-row lg:gap-0 tablet-landscape:flex-row tablet-landscape:gap-0">
         <nav aria-label="설정 메뉴" className="mobile-horizontal-scroll flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1 lg:w-36 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0 lg:pr-4 tablet-landscape:w-40 tablet-landscape:shrink-0 tablet-landscape:flex-col tablet-landscape:gap-0.5 tablet-landscape:overflow-visible tablet-landscape:pb-0 tablet-landscape:pr-4">
           {SECTIONS.map((item) => (
             <button
@@ -376,8 +374,7 @@ export function SettingsContent({ className, variant = 'dialog' }: {
                   </div>
                   <label className="ml-auto shrink-0">
                     <span className="sr-only">AI 답변 스타일</span>
-                    <select
-                      className="h-9 rounded-lg border border-stone-200 bg-white px-3 type-caption font-medium text-stone-700 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                    <Select
                       disabled={isLoadingPreferences || isSavingPreferences}
                       onChange={(event) => void savePreferences({ aiAnswerStyle: event.target.value as AiAnswerStyle })}
                       value={answerStyle}
@@ -387,14 +384,14 @@ export function SettingsContent({ className, variant = 'dialog' }: {
                           {style.label}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 </div>
               ) : null}
             </Card>
           ) : null}
 
-          {section === 'profile' && !(isMobileWeb && variant === 'page') ? (
+          {section === 'profile' && !isMobileWeb ? (
             <div className="flex items-center justify-end gap-3">
               <Button
                 onClick={() => {

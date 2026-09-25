@@ -1,8 +1,10 @@
 import {
   BookOpen,
+  Copy,
   FileText,
   Minus,
   Plus,
+  RotateCw,
   Search,
   X,
 } from 'lucide-react'
@@ -20,7 +22,6 @@ import { useAuth } from '../../../features/auth'
 import {
   createClassroomsRepository,
   type Classroom,
-  type ClassroomColor,
   type ClassroomMaterial,
   type CreateClassroomInput,
 } from '../../../features/classrooms'
@@ -35,8 +36,6 @@ import {
 } from '../../../shared/ui'
 import {
   classroomDetailPath,
-  classroomEditPath,
-  learningStatusPath,
   materialViewerPath,
 } from '../../routes'
 
@@ -278,7 +277,7 @@ export function InstructorClassroomsPage() {
       {!error && classrooms.length > 0 ? (
         <section
           aria-label="운영 강의실"
-          className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 tablet-landscape:grid-cols-3"
+          className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 tablet-landscape:grid-cols-3"
         >
           {classrooms.map((classroom) => (
             <ClassroomCard
@@ -380,7 +379,7 @@ function InviteCodeRegenerationDialog({
       }}
       role="dialog"
     >
-      <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="type-caption font-semibold text-amber-700">초대 코드 변경</p>
@@ -425,26 +424,20 @@ function ClassroomCard({
 }) {
   const isActive = classroom.status === 'ACTIVE'
   const progress = Math.min(100, Math.max(0, classroom.progressRate))
-  const tone = getClassroomTone(classroom.color)
 
   return (
     <article
-      className={`flex min-h-[252px] flex-col rounded-3xl border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 hover:bg-stone-50 ${isActive ? '' : 'opacity-60'}`}
+      className={`flex min-h-[216px] flex-col rounded-3xl border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300 ${isActive ? '' : 'opacity-60'}`}
     >
       <div className="flex items-start gap-4">
-        <span
-          className={`flex size-11 shrink-0 items-center justify-center rounded-lg type-body font-bold ${tone}`}
-        >
-          {classroom.name.slice(0, 1)}
-        </span>
         <div className="min-w-0 flex-1">
           <Link
-            className="block truncate type-card-title font-bold text-stone-950 hover:text-brand-700"
+            className="block truncate text-xl leading-normal font-bold tracking-[-0.01em] text-stone-950 hover:text-brand-700"
             to={classroomDetailPath(classroom.id)}
           >
             {classroom.name}
           </Link>
-          <p className="mt-0.5 truncate type-micro text-stone-400">
+          <p className="mt-2 truncate type-caption text-stone-400">
             학습자 {classroom.learnerCount}명 · 자료{' '}
             {classroom.materialCount ?? 0}개
           </p>
@@ -452,17 +445,17 @@ function ClassroomCard({
         <span
           className={
             isActive
-              ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 type-micro font-semibold text-emerald-800'
-              : 'rounded-full bg-stone-100 px-2 py-1 type-micro font-semibold text-stone-500'
+              ? 'rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 type-caption font-semibold text-emerald-700'
+              : 'rounded-full bg-stone-100 px-3 py-1.5 type-caption font-semibold text-stone-500'
           }
         >
           {isActive ? '운영 중' : '종료'}
         </span>
       </div>
-      <div className="mt-4 flex min-h-14 items-center gap-3 rounded-lg bg-stone-50 px-4 py-2.5">
+      <div className="mt-4 flex min-h-16 items-center gap-2 rounded-2xl border border-stone-100 bg-stone-50 px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="type-micro text-stone-400">초대코드</p>
-          <strong className="block truncate type-invite-code text-stone-900">
+          <p className="type-caption text-stone-400">초대코드</p>
+          <strong className="mt-1 block truncate type-invite-code-compact text-stone-900">
             {isActive
               ? (classroom.inviteCode ?? '코드 확인')
               : '비활성화됨'}
@@ -472,57 +465,45 @@ function ClassroomCard({
           <>
             <button
               aria-label={`${classroom.name} 초대 코드 복사`}
-              className="inline-flex h-9 items-center rounded-md border border-stone-200 bg-white px-3 type-compact-action font-semibold text-brand-700 hover:bg-brand-50"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 text-stone-600 hover:border-stone-300 hover:bg-stone-100 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               onClick={onCopy}
               title="초대 코드 복사"
               type="button"
             >
-              복사
+              <Copy aria-hidden="true" size={17} strokeWidth={1.8} />
             </button>
             <button
               aria-label={`${classroom.name} 초대 코드 재발급`}
-              className="inline-flex h-9 items-center rounded-md border border-stone-200 bg-white px-3 type-compact-action font-semibold text-stone-600 hover:bg-stone-100"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 text-stone-600 hover:border-stone-300 hover:bg-stone-100 hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
               onClick={onRegenerate}
               title="초대 코드 재발급"
               type="button"
             >
-              재발급
+              <RotateCw aria-hidden="true" size={17} strokeWidth={1.8} />
             </button>
           </>
         ) : null}
       </div>
-      <div className="mt-4">
-        <div className="flex items-center justify-between type-micro">
-          <span className="text-stone-400">평균 진도</span>
-          <strong className={isActive ? 'text-brand-700' : 'text-stone-400'}>
+      <div className="mt-auto pt-4">
+        <div className="flex items-center justify-between type-caption">
+          <span className="font-medium text-stone-500">평균 진도</span>
+          <strong className={isActive ? 'text-stone-900' : 'text-stone-400'}>
             {progress}%
           </strong>
         </div>
-        <div className="mt-2 h-1.5 rounded-full bg-stone-100">
+        <div
+          aria-label={`${classroom.name} 평균 진도 ${progress}%`}
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={progress}
+          className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-stone-100"
+          role="progressbar"
+        >
           <div
             className={`h-full rounded-full ${isActive ? 'bg-brand-600' : 'bg-stone-400'}`}
             style={{ width: `${progress}%` }}
           />
         </div>
-      </div>
-      <div className={`mt-auto grid gap-2 pt-4 ${isActive ? 'grid-cols-[1fr_1fr_auto]' : 'grid-cols-[1fr_auto]'}`}>
-        <Link className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50" to={classroomDetailPath(classroom.id)}>
-          {isActive ? '자료 관리' : '보관된 자료 보기'}
-        </Link>
-        {isActive ? (
-          <Link
-            className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50"
-            to={learningStatusPath(classroom.id)}
-          >
-            학습현황
-          </Link>
-        ) : null}
-        <Link
-          className="inline-flex h-9 items-center justify-center rounded-md border border-stone-200 px-3 type-micro font-semibold text-stone-700 hover:bg-stone-50"
-          to={classroomEditPath(classroom.id)}
-        >
-          설정
-        </Link>
       </div>
     </article>
   )
@@ -562,7 +543,7 @@ function SearchDialog({
       }}
       role="dialog"
     >
-      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white shadow-2xl">
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-stone-200 bg-white">
         <div className="flex h-14 items-center gap-3 border-b border-stone-100 px-4">
           <Search aria-hidden="true" className="text-stone-400" size={16} />
           <input
@@ -739,11 +720,6 @@ async function loadCardDetails(
   )
 }
 
-function getClassroomTone(_color: ClassroomColor): string {
-  void _color
-  return 'bg-brand-50 text-brand-700'
-}
-
 function CreateClassroomDialog({
   onClose,
   onSubmit,
@@ -792,7 +768,7 @@ function CreateClassroomDialog({
       role="dialog"
     >
       <form
-        className="w-full max-w-lg rounded-xl border border-stone-200 bg-white p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-stone-200 bg-white p-6"
         onSubmit={submit}
       >
         <div className="flex items-center justify-between">

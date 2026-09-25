@@ -22,7 +22,7 @@ export function MobileWorkspaceTabs<T extends string>({
             className={cx(
               'min-h-11 rounded-md px-3 type-control font-semibold transition-colors',
               active === item.value
-                ? 'bg-white text-stone-950 shadow-sm'
+                ? 'bg-white text-stone-950 '
                 : 'text-stone-500',
             )}
             key={item.value}

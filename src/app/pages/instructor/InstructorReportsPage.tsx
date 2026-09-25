@@ -40,7 +40,7 @@ import { isApiCapabilityEnabled } from '../../../shared/config/capabilities'
 import { formatDateTime } from '../../../shared/lib/format'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { useAsyncJobPolling } from '../../../shared/state'
-import { Badge, Button, ButtonLink, EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, useToast } from '../../../shared/ui'
+import { Badge, Button, ButtonLink, EmptyState, ErrorState, LoadingState, PageContainer, PageHeader, Select, useToast } from '../../../shared/ui'
 import {
   classroomReportCriteriaPath,
   classroomReportDetailPath,
@@ -259,7 +259,7 @@ export function InstructorStudentReportsPage() {
       <section className="rounded-lg border border-stone-200 bg-white p-5" aria-labelledby="report-scope-title">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="type-section-title font-bold text-stone-950" id="report-scope-title">분석 범위</h2><p className="mt-1 type-caption text-stone-500">전체 학습 기간 또는 한 주차를 선택합니다.</p></div><Button aria-busy={isReportGenerating} disabled={isReportGenerating || (scopeType === 'WEEK' && selectedWeek === null)} onClick={startNewGeneration}>{isReportGenerating ? <LoaderCircle aria-hidden="true" className="animate-spin" size={15} /> : <BarChart3 aria-hidden="true" size={15} />}{isReportGenerating ? '리포트 생성 중' : '새 리포트 생성'}</Button></div>
         <div className="mt-4 inline-flex rounded-lg border border-stone-200 bg-stone-50 p-1" role="radiogroup" aria-label="분석 범위"><ScopeButton active={scopeType === 'FULL'} label="전체 기간" onClick={() => setScopeType('FULL')} /><ScopeButton active={scopeType === 'WEEK'} label="주차 선택" onClick={() => setScopeType('WEEK')} /></div>
-        {scopeType === 'WEEK' ? <label className="mt-4 block max-w-sm type-control font-semibold text-stone-700" htmlFor="report-week-select">분석 주차<select className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body font-normal text-stone-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400" disabled={weeks.length === 0} id="report-week-select" onChange={(event) => setSelectedWeek(event.target.value ? Number(event.target.value) : null)} value={selectedWeek ?? ''}><option value="">{weeks.length === 0 ? '선택 가능한 주차가 없습니다' : '주차를 선택하세요'}</option>{weeks.map((week) => <option key={week.weekNumber} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</select></label> : null}
+        {scopeType === 'WEEK' ? <label className="mt-4 block max-w-sm type-control font-semibold text-stone-700" htmlFor="report-week-select">분석 주차<Select className="mt-1 w-full font-normal" disabled={weeks.length === 0} id="report-week-select" onChange={(event) => setSelectedWeek(event.target.value ? Number(event.target.value) : null)} value={selectedWeek ?? ''}><option value="">{weeks.length === 0 ? '선택 가능한 주차가 없습니다' : '주차를 선택하세요'}</option>{weeks.map((week) => <option key={week.weekNumber} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</Select></label> : null}
       </section>
       {activeReport?.status === 'FAILED' ? <ErrorState action={<Button onClick={startNewGeneration}>다시 생성</Button>} description={activeReport.failureMessage ?? '리포트 생성에 실패했습니다.'} title="리포트를 생성하지 못했습니다" /> : null}
       {isDelayed ? <ErrorState action={<Button onClick={() => { setIsDelayed(false); setIsCreating(true); setActiveReport((current) => current ? { ...current, status: 'PROCESSING' } : current) }} variant="secondary">상태 다시 확인</Button>} description="서버 작업은 계속될 수 있습니다. 새 작업을 만들지 않고 현재 작업 상태를 다시 확인합니다." title="리포트 생성이 지연되고 있습니다" /> : null}
@@ -629,7 +629,7 @@ function ReportsUnavailableState() {
 }
 
 function ScopeButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return <button aria-checked={active} className={`h-8 rounded-md px-3 type-control font-semibold ${active ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500'}`} onClick={onClick} role="radio" type="button">{label}</button>
+  return <button aria-checked={active} className={`h-8 rounded-md px-3 type-control font-semibold ${active ? 'bg-white text-stone-950 ' : 'text-stone-500'}`} onClick={onClick} role="radio" type="button">{label}</button>
 }
 
 function ReportStatusBadge({ status }: { status: ReportGenerationStatus }) {

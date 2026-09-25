@@ -18,7 +18,6 @@ import {
   Settings,
   Trash2,
   UserPlus,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -44,6 +43,7 @@ import { cx } from '../../shared/lib/cx'
 import { useResponsiveViewport, useFocusScope } from '../../shared/responsive'
 import { SERVICE_NAME } from '../../shared/config/brand'
 import { formatDateTime } from '../../shared/lib/format'
+import { PageHeaderPathContext } from '../../shared/ui'
 import {
   classroomAnnouncementsPath,
   classroomDetailPath,
@@ -51,7 +51,6 @@ import {
   materialViewerPath,
   routes,
 } from '../routes'
-import { SettingsContent } from '../pages/SettingsPage'
 
 /*
  * `inBottomNav`는 모바일 하단 바에 우선 노출할 메뉴를 고른다.
@@ -107,7 +106,6 @@ export function AppLayout() {
   const primaryNavigationRef = useRef<HTMLElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [notificationsError, setNotificationsError] = useState<string | null>(null)
@@ -120,6 +118,7 @@ export function AppLayout() {
   const roleLabel = getRoleLabel(user?.role)
   const isAdmin = isAdminRole(user?.role)
   const isInstructor = isInstructorRole(user?.role)
+  const profileUpdatesRoute = isAdmin ? `${routes.admin}?tab=updates` : routes.updates
   const isAdminFixedHeightWorkspace = isAdmin && location.pathname === routes.admin
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
@@ -343,16 +342,6 @@ export function AppLayout() {
     navigate(routes.login, { replace: true })
   }
 
-  function openSettings() {
-    setIsMenuOpen(false)
-    setIsNotificationsOpen(false)
-    if (isTabletPortrait) {
-      navigate(routes.settings)
-      return
-    }
-    setIsSettingsOpen(true)
-  }
-
   /* 시안대로 알림은 태블릿에서 내비 항목 자리에 선다. 세로는 아이콘만, 가로는 라벨까지. */
   const notificationsTrigger = (
     <div className={cx('relative', isTablet && !isTabletRail && 'w-full')} ref={notificationsRef}>
@@ -412,7 +401,7 @@ export function AppLayout() {
 
   const profileMenu = (
     <div
-      className="w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg dark:bg-stone-50"
+      className="w-full rounded-xl border border-stone-200 bg-white p-1.5 dark:bg-stone-50"
       role="menu"
     >
       {hasBottomNav ? (
@@ -488,7 +477,7 @@ export function AppLayout() {
           setIsNotificationsOpen(false)
         }}
         role="menuitem"
-        to={routes.updates}
+        to={profileUpdatesRoute}
       >
         <CalendarDays aria-hidden="true" size={15} />
         업데이트
@@ -505,15 +494,18 @@ export function AppLayout() {
         <MessageSquareText aria-hidden="true" size={15} />
         피드백
       </Link>
-      <button
+      <Link
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-        onClick={openSettings}
+        onClick={() => {
+          setIsMenuOpen(false)
+          setIsNotificationsOpen(false)
+        }}
         role="menuitem"
-        type="button"
+        to={routes.settings}
       >
         <Settings aria-hidden="true" size={15} />
         설정
-      </button>
+      </Link>
       <div className="mx-2 my-1 h-px bg-stone-100" />
       <button
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
@@ -573,9 +565,9 @@ export function AppLayout() {
             ? cx(
                 'sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-[#E6EAF0] bg-white py-4 dark:bg-[#222327] mobile-safe-top',
                 isTabletRail ? 'w-[68px] px-2' : 'w-[232px] px-2.5',
-                tabletUsesRail && tabletMenuOpen && '!fixed inset-y-0 left-0 !z-50 shadow-xl',
+                tabletUsesRail && tabletMenuOpen && '!fixed inset-y-0 left-0 !z-50 ',
               )
-            : 'relative z-40 flex border-b border-[#E6EAF0] bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-none lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:shadow-sm',
+            : 'relative z-40 flex border-b border-[#E6EAF0] bg-white px-4 py-3 dark:bg-[#222327] lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:flex-none lg:flex-col lg:border-r lg:border-b-0 lg:py-4 mobile-phone:sticky mobile-phone:top-0 mobile-phone:!h-auto mobile-phone:!w-full mobile-phone:!flex-row mobile-phone:!border-r-0 mobile-phone:!border-b mobile-phone:!py-3 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top ',
           isTabletPortrait && 'hidden',
           !isTablet && (isCollapsed ? 'lg:w-14 lg:px-2 mobile-phone:!px-4' : 'lg:w-[232px] lg:px-2.5 mobile-phone:!px-4'),
           isAdminFixedHeightWorkspace && 'shrink-0',
@@ -825,7 +817,9 @@ export function AppLayout() {
                 : 'app-page-frame'
           }
         >
-          <Outlet />
+          <PageHeaderPathContext.Provider value={isAdmin ? null : roleLabel}>
+            <Outlet />
+          </PageHeaderPathContext.Provider>
         </div>
       </main>
 
@@ -834,7 +828,7 @@ export function AppLayout() {
         <nav
           aria-label="하단 주요 메뉴"
           className={cx(
-            'fixed inset-x-0 bottom-0 z-40 flex shrink-0 border-t border-stone-200 bg-white shadow-[0_-4px_16px_rgba(15,23,42,0.06)] dark:bg-[#222327]',
+            'fixed inset-x-0 bottom-0 z-40 flex shrink-0 border-t border-stone-200 bg-white  dark:bg-[#222327]',
             isTabletPortrait
               ? 'min-h-[calc(4.25rem+env(safe-area-inset-bottom))] items-center pb-[env(safe-area-inset-bottom)]'
               : 'mobile-safe-bottom',
@@ -917,7 +911,6 @@ export function AppLayout() {
           ) : null}
         </nav>
       ) : null}
-      {isSettingsOpen ? <SettingsDialog onClose={() => setIsSettingsOpen(false)} /> : null}
     </div>
   )
 }
@@ -944,37 +937,6 @@ function ProfileAvatar({
         name?.slice(0, 1) ?? '?'
       )}
     </span>
-  )
-}
-
-function SettingsDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <div
-      aria-labelledby="settings-dialog-title"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 mobile-phone:p-0"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
-      role="dialog"
-    >
-      <section className="flex h-[min(520px,calc(100dvh-3rem))] min-h-0 w-full max-w-[560px] flex-col rounded-xl border border-stone-200 bg-white p-5 shadow-2xl sm:p-6 mobile-phone:h-[100dvh] mobile-phone:max-w-none mobile-phone:rounded-none mobile-phone:border-0 mobile-phone:mobile-safe-x mobile-phone:mobile-safe-top mobile-phone:mobile-safe-bottom">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <h2 className="type-dialog-title font-bold text-stone-950" id="settings-dialog-title">
-            설정
-          </h2>
-          <button
-            aria-label="설정 닫기"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" size={16} />
-          </button>
-        </div>
-        <SettingsContent className="min-h-0 flex-1" />
-      </section>
-    </div>
   )
 }
 
@@ -1007,7 +969,7 @@ function NotificationPanel({
     <div
       aria-label="알림"
       className={cx(
-        'isolate absolute z-[60] w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xl ring-1 ring-stone-950/5 dark:bg-[#26272c]',
+        'isolate absolute z-[60] w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-stone-200 bg-white  ring-1 ring-stone-950/5 dark:bg-[#26272c]',
         placement === 'footer'
           ? 'right-0 bottom-[calc(100%+8px)]'
           : 'top-[calc(100%+8px)] right-0',

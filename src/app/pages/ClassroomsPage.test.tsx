@@ -104,10 +104,11 @@ describe('ClassroomsPage', () => {
   it('changes the classroom sort order', () => {
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: '최근 학습순' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '이름순' }))
+    const sortSelect = screen.getByRole('combobox', { name: '강의실 정렬' })
+    expect(sortSelect.closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
+    fireEvent.change(sortSelect, { target: { value: 'name' } })
 
-    expect(screen.getByRole('button', { name: '이름순' })).toBeInTheDocument()
+    expect(sortSelect).toHaveValue('name')
   })
 
   it('requires an invite code before requesting classroom access', () => {

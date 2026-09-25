@@ -4,7 +4,7 @@ import { useAuth } from '../../features/auth'
 import { createFeedbackRepository, type FeedbackCategory } from '../../features/feedback'
 import { getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Button, PageContainer, PageHeader, useToast } from '../../shared/ui'
+import { Button, PageContainer, PageHeader, Select, useToast } from '../../shared/ui'
 
 export function FeedbackPage() {
   usePageTitle('피드백')
@@ -44,15 +44,15 @@ export function FeedbackPage() {
         </p>
         <label className="mt-5 block type-control font-semibold text-stone-800">
           분류
-          <select
-            className="mt-1.5 h-11 w-full rounded-lg border border-stone-300 bg-white px-3 type-body text-stone-800 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          <Select
+            className="mt-1.5 w-full"
             onChange={(event) => setCategory(event.target.value as FeedbackCategory)}
             value={category}
           >
             <option value="GENERAL">일반 문의</option>
             <option value="BUG">오류 신고</option>
             <option value="FEATURE_REQUEST">기능 제안</option>
-          </select>
+          </Select>
         </label>
         <label className="mt-4 block type-control font-semibold text-stone-800">
           내용
