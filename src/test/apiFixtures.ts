@@ -95,6 +95,18 @@ export async function handleApiFixtureRequest(
     if (devResponse) return devResponse
   }
 
+  if (request.method === 'POST' && path === '/api/auth/password-reset/request') {
+    return apiSuccess({ message: '등록된 이메일이면 재설정 안내를 발송했습니다.' }, 202)
+  }
+
+  if (request.method === 'POST' && path === '/api/auth/password-reset/confirm') {
+    const body = await readJson<{ newPassword?: string; token?: string }>(request)
+    if (body.token === 'expired-token') {
+      return apiFailure('RESET_TOKEN_INVALID', '재설정 링크가 만료되었거나 유효하지 않습니다.', 400)
+    }
+    return apiSuccess({ message: '비밀번호가 변경되었습니다. 다시 로그인해주세요.' })
+  }
+
   if (request.method === 'POST' && path === '/api/auth/login') {
     const body = await readJson<{ email: string }>(request)
     if (body.email === 'locked@example.com') {

@@ -1,6 +1,7 @@
 export type ApiCapability =
   | 'analytics'
   | 'oauth'
+  | 'exam-attempt-drafts'
   | 'password-reset'
   | 'reports'
   | 'schedule'

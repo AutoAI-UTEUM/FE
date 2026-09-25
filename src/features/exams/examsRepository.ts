@@ -1,5 +1,5 @@
-import type { PagedResponse } from '../../shared/api'
-import type { AuthenticatedRequest } from '../auth'
+import { ApiClientError, type PagedResponse } from '../../shared/api'
+import type { AuthenticatedRawRequest, AuthenticatedRequest } from '../auth'
 
 export type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED'
 export type ExamQuestionType = 'MCQ' | 'OX' | 'SHORT' | 'ESSAY'
@@ -82,6 +82,16 @@ export interface ExamDraftResult {
   truncated: boolean
 }
 
+export interface ExamAttemptDraft {
+  answers: Record<string, string>
+  savedAt: string
+  version: number
+}
+
+export type ExamAttemptDraftSaveResult =
+  | { kind: 'saved'; savedAt: string; version: number }
+  | { kind: 'conflict'; latestDraft: ExamAttemptDraft | null }
+
 export interface ExamSubmission {
   attemptNo: number
   durationSeconds?: number
@@ -127,6 +137,7 @@ export interface ExamsRepository {
   create: (classroomId: string, input: CreateExamInput, signal?: AbortSignal) => Promise<Exam>
   delete: (examId: string, signal?: AbortSignal) => Promise<void>
   get: (examId: string, signal?: AbortSignal) => Promise<Exam>
+  getAttemptDraft: (examId: string, signal?: AbortSignal) => Promise<ExamAttemptDraft | null>
   getMySubmission: (examId: string, attemptNo?: number, signal?: AbortSignal) => Promise<ExamSubmission>
   getSubmission: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
   adjustScore: (examId: string, submissionId: string, questionId: string, score: number, signal?: AbortSignal) => Promise<ExamSubmission>
@@ -135,6 +146,7 @@ export interface ExamsRepository {
   listSubmissions: (examId: string, signal?: AbortSignal) => Promise<InstructorSubmissionSummary[]>
   publish: (examId: string, signal?: AbortSignal) => Promise<Exam>
   regrade: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
+  saveAttemptDraft: (examId: string, answers: Record<string, string>, version: number | null, signal?: AbortSignal) => Promise<ExamAttemptDraftSaveResult>
   startAttempt: (examId: string, signal?: AbortSignal) => Promise<void>
   submit: (examId: string, answers: Record<string, string>, requestId: string, signal?: AbortSignal) => Promise<ExamSubmission>
   update: (examId: string, input: Partial<CreateExamInput>, signal?: AbortSignal) => Promise<Exam>
@@ -217,6 +229,15 @@ interface ExamSubmissionDto {
   submissionId: number | string
   submittedAt: string
 }
+interface ExamAttemptDraftDto {
+  answers?: Array<{ answer?: string | null; questionId: string }>
+  savedAt: string
+  version: number
+}
+interface ExamAttemptDraftSaveDto {
+  savedAt: string
+  version: number
+}
 interface SubmissionSummaryDto {
   attemptCount: number
   attemptNo: number
@@ -231,7 +252,10 @@ interface SubmissionSummaryDto {
   userName: string
 }
 
-export function createExamsRepository(request: AuthenticatedRequest): ExamsRepository {
+export function createExamsRepository(
+  request: AuthenticatedRequest,
+  rawRequest?: AuthenticatedRawRequest,
+): ExamsRepository {
   return {
     async adjustScore(examId, submissionId, questionId, score, signal) {
       const { data } = await request<ExamSubmissionDto>(`/api/exams/${encodeURIComponent(examId)}/submissions/${encodeURIComponent(submissionId)}/answers/${encodeURIComponent(questionId)}/score`, {
@@ -257,6 +281,15 @@ export function createExamsRepository(request: AuthenticatedRequest): ExamsRepos
     async get(examId, signal) {
       const { data } = await request<ExamDto>(`/api/exams/${encodeURIComponent(examId)}`, { signal })
       return mapExam(data)
+    },
+    async getAttemptDraft(examId, signal) {
+      const response = await requireRawRequest(rawRequest)(
+        `/api/exams/${encodeURIComponent(examId)}/attempts/draft`,
+        { acceptStatuses: [204], signal },
+      )
+      if (response.status === 204) return null
+      const data = await readRawSuccess<ExamAttemptDraftDto>(response)
+      return mapAttemptDraft(data)
     },
     async generateDraftQuestions(classroomId, examId, input, signal) {
       const { data } = await request<ExamDraftResponseDto>(`/api/classrooms/${encodeURIComponent(classroomId)}/exams/${encodeURIComponent(examId)}/draft-questions`, {
@@ -303,6 +336,32 @@ export function createExamsRepository(request: AuthenticatedRequest): ExamsRepos
         signal,
       })
       return mapSubmission(data)
+    },
+    async saveAttemptDraft(examId, answers, version, signal) {
+      const response = await requireRawRequest(rawRequest)(
+        `/api/exams/${encodeURIComponent(examId)}/attempts/draft`,
+        {
+          acceptStatuses: [409],
+          body: JSON.stringify({
+            answers: Object.entries(answers)
+              .filter(([, answer]) => answer.trim().length > 0)
+              .map(([questionId, answer]) => ({ answer, questionId })),
+            version: version ?? 0,
+          }),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'PUT',
+          signal,
+        },
+      )
+      if (response.status === 409) {
+        const payload = await response.json() as { latestDraft?: ExamAttemptDraftDto | null }
+        return {
+          kind: 'conflict',
+          latestDraft: payload.latestDraft ? mapAttemptDraft(payload.latestDraft) : null,
+        }
+      }
+      const data = await readRawSuccess<ExamAttemptDraftSaveDto>(response)
+      return { kind: 'saved', savedAt: data.savedAt, version: data.version }
     },
     async startAttempt(examId, signal) {
       await request(`/api/exams/${encodeURIComponent(examId)}/attempts/start`, {
@@ -368,6 +427,43 @@ function mapDraftQuestion(question: ExamDraftQuestionDto): ExamQuestionInput {
     rubric: question.rubric,
     sourceContextNumber: question.sourcePageNumber,
   }
+}
+
+function mapAttemptDraft(value: ExamAttemptDraftDto): ExamAttemptDraft {
+  return {
+    answers: Object.fromEntries(
+      (value.answers ?? []).flatMap(({ answer, questionId }) =>
+        typeof answer === 'string' ? [[String(questionId), answer]] : [],
+      ),
+    ),
+    savedAt: value.savedAt,
+    version: value.version,
+  }
+}
+
+function requireRawRequest(
+  rawRequest?: AuthenticatedRawRequest,
+): AuthenticatedRawRequest {
+  if (rawRequest) return rawRequest
+  throw new ApiClientError({
+    code: 'RAW_API_REQUIRED',
+    message: '시험 임시저장 연결을 초기화하지 못했습니다.',
+  })
+}
+
+async function readRawSuccess<T>(response: Response): Promise<T> {
+  const payload = await response.json() as {
+    data?: T
+    success?: boolean
+  }
+  if (payload.success !== true || !('data' in payload)) {
+    throw new ApiClientError({
+      code: 'INVALID_RESPONSE',
+      message: '서버 응답이 공통 API 계약과 일치하지 않습니다.',
+      status: response.status,
+    })
+  }
+  return payload.data as T
 }
 
 function toApiId(value: string): string | number {
