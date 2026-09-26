@@ -3,7 +3,13 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
-import { createNotesRepository, type Note } from '../../../features/notes'
+import {
+  createManualNotesStore,
+  createNotesRepository,
+  getNotePreview,
+  type ManualNote,
+  type Note,
+} from '../../../features/notes'
 import {
   createSessionsRepository,
   type LearningSession,
@@ -31,14 +37,6 @@ interface SessionNoteItem {
   session: LearningSession
 }
 
-interface ManualNote {
-  content: string
-  createdAt: string
-  document?: string
-  id: string
-  updatedAt: string
-}
-
 type LearnerNoteItem = ManualNoteItem | SessionNoteItem
 
 interface ManualNoteItem {
@@ -46,38 +44,11 @@ interface ManualNoteItem {
   note: ManualNote
 }
 
-interface NotePreview {
-  body: string
-  title: string
-}
-
 interface LearnerNoteGroup {
   id: string
   items: LearnerNoteItem[]
   label: string
   session?: LearningSession
-}
-
-function getNotePreview(content: string): NotePreview {
-  const lines = content.split(/\r?\n/)
-  const titleLineIndex = lines.findIndex((line) => line.trim())
-  if (titleLineIndex < 0) return { body: '', title: '제목 없는 노트' }
-
-  const titleLine = lines[titleLineIndex].trim()
-  const title = titleLine
-    .replace(/^#{1,6}\s+/, '')
-    .replace(/\s+#+$/, '')
-    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
-    .replace(/^:::\s*toggle\s+/, '')
-    .replace(/[*_~`]/g, '')
-    .trim()
-
-  return {
-    body: [...lines.slice(0, titleLineIndex), ...lines.slice(titleLineIndex + 1)]
-      .join('\n')
-      .trim(),
-    title: title || '제목 없는 노트',
-  }
 }
 
 export function LearnerNotesPage() {
@@ -93,9 +64,9 @@ export function LearnerNotesPage() {
     () => createNotesRepository(apiRequest),
     [apiRequest],
   )
-  const manualNotesStorageKey = useMemo(
-    () => getManualNotesStorageKey(user?.id ?? user?.email ?? 'anonymous'),
-    [user?.email, user?.id],
+  const manualNotesStore = useMemo(
+    () => createManualNotesStore(apiRequest, user?.id ?? user?.email ?? 'anonymous'),
+    [apiRequest, user?.email, user?.id],
   )
   const unavailableSessionsStorageKey = useMemo(
     () => getUnavailableNoteSessionsStorageKey(user?.id ?? user?.email ?? 'anonymous'),
@@ -103,8 +74,12 @@ export function LearnerNotesPage() {
   )
   const [sessionItems, setSessionItems] = useState<SessionNoteItem[]>([])
   const [manualNotes, setManualNotes] = useState<ManualNote[]>(() =>
-    readManualNotes(manualNotesStorageKey),
+    manualNotesStore.readLocal(),
   )
+  const [importFailures, setImportFailures] = useState<
+    Array<{ clientId: string; reason: string }>
+  >([])
+  const [importError, setImportError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [expandedNoteKeys, setExpandedNoteKeys] = useState<Set<string>>(
     () => new Set(),
@@ -127,6 +102,28 @@ export function LearnerNotesPage() {
       setError(getRequestErrorMessage(requestError))
     } finally {
       setIsLoading(false)
+    }
+    await syncManualNotes()
+  }
+
+  /**
+   * 이관을 먼저 끝내고 서버 목록을 읽는다.
+   * 이관 호출 자체가 실패하면 아직 로컬에만 있는 노트를 서버 목록으로 덮지 않는다.
+   */
+  async function syncManualNotes() {
+    setImportError(null)
+    try {
+      const result = await manualNotesStore.migrate()
+      setImportFailures(result?.failed ?? [])
+    } catch (requestError) {
+      setManualNotes(manualNotesStore.readLocal())
+      setImportError(getRequestErrorMessage(requestError))
+      return
+    }
+    try {
+      setManualNotes(await manualNotesStore.list())
+    } catch {
+      setManualNotes(manualNotesStore.readLocal())
     }
   }
 
@@ -156,6 +153,31 @@ export function LearnerNotesPage() {
     }
   }, [notesRepository, sessionsRepository, unavailableSessionsStorageKey])
 
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const result = await manualNotesStore.migrate()
+        if (cancelled) return
+        setImportFailures(result?.failed ?? [])
+      } catch (requestError) {
+        if (cancelled) return
+        setManualNotes(manualNotesStore.readLocal())
+        setImportError(getRequestErrorMessage(requestError))
+        return
+      }
+      try {
+        const notes = await manualNotesStore.list()
+        if (!cancelled) setManualNotes(notes)
+      } catch {
+        if (!cancelled) setManualNotes(manualNotesStore.readLocal())
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [manualNotesStore])
+
   const allItems = useMemo<LearnerNoteItem[]>(
     () => [
       ...manualNotes.map((note): ManualNoteItem => ({ kind: 'manual', note })),
@@ -178,19 +200,12 @@ export function LearnerNotesPage() {
     [filteredItems],
   )
 
-  function persistManualNotes(updater: (current: ManualNote[]) => ManualNote[]) {
-    setManualNotes((current) => {
-      const next = updater(current)
-      window.localStorage.setItem(manualNotesStorageKey, JSON.stringify(next))
-      return next
-    })
-  }
-
   async function deleteNote(item: LearnerNoteItem) {
     if (!window.confirm('이 노트를 삭제할까요?')) return
     try {
       if (item.kind === 'manual') {
-        persistManualNotes((current) =>
+        await manualNotesStore.remove(item.note.id)
+        setManualNotes((current) =>
           current.filter((note) => note.id !== item.note.id),
         )
       } else {
@@ -251,6 +266,23 @@ export function LearnerNotesPage() {
         }
         title="내 노트"
       />
+
+      {/* 이관 실패는 화면을 막지 않는다. 노트는 로컬에 남아 있고 다시 시도할 수 있다. */}
+      {importError || importFailures.length > 0 ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 type-body text-amber-900"
+          role="alert"
+        >
+          <span>
+            {importError
+              ? `노트를 서버로 옮기지 못했습니다. ${importError}`
+              : `노트 ${importFailures.length}개를 서버로 옮기지 못했습니다. (${[...new Set(importFailures.map((failure) => failure.reason))].join(', ')})`}
+          </span>
+          <Button onClick={() => void syncManualNotes()} size="sm" variant="secondary">
+            다시 시도
+          </Button>
+        </div>
+      ) : null}
 
       {isLoading ? (
         <p className="py-16 text-center type-body text-stone-500" role="status">
@@ -388,32 +420,29 @@ export function LearnerNoteCreatePage() {
   usePageTitle('새 노트 작성')
   const location = useLocation()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
-  const storageKey = useMemo(
-    () => getManualNotesStorageKey(user?.id ?? user?.email ?? 'anonymous'),
-    [user?.email, user?.id],
+  const manualNotesStore = useMemo(
+    () => createManualNotesStore(apiRequest, user?.id ?? user?.email ?? 'anonymous'),
+    [apiRequest, user?.email, user?.id],
   )
   const initialContent = getInitialNoteContent(location.state)
   const [content, setContent] = useState(initialContent)
   const [document, setDocument] = useState<string | undefined>()
+  const [isSaving, setIsSaving] = useState(false)
 
-  function saveNote() {
-    if (!content.trim()) return
-    const now = new Date().toISOString()
-    const note: ManualNote = {
-      content: content.trim(),
-      createdAt: now,
-      document,
-      id: createClientId(),
-      updatedAt: now,
+  async function saveNote() {
+    if (!content.trim() || isSaving) return
+    setIsSaving(true)
+    try {
+      await manualNotesStore.create({ content, document })
+      showToast('노트를 추가했습니다.', 'success')
+      navigate(routes.notes)
+    } catch (requestError) {
+      showToast(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      setIsSaving(false)
     }
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify([note, ...readManualNotes(storageKey)]),
-    )
-    showToast('노트를 추가했습니다.', 'success')
-    navigate(routes.notes)
   }
 
   return (
@@ -425,8 +454,8 @@ export function LearnerNoteCreatePage() {
               <ArrowLeft aria-hidden="true" size={15} />
               목록으로
             </ButtonLink>
-            <Button disabled={!content.trim()} onClick={saveNote}>
-              저장
+            <Button disabled={!content.trim() || isSaving} onClick={() => void saveNote()}>
+              {isSaving ? '저장 중' : '저장'}
             </Button>
           </div>
         }
@@ -480,9 +509,9 @@ export function LearnerNoteEditPage() {
     () => createSessionsRepository(apiRequest),
     [apiRequest],
   )
-  const storageKey = useMemo(
-    () => getManualNotesStorageKey(user?.id ?? user?.email ?? 'anonymous'),
-    [user?.email, user?.id],
+  const manualNotesStore = useMemo(
+    () => createManualNotesStore(apiRequest, user?.id ?? user?.email ?? 'anonymous'),
+    [apiRequest, user?.email, user?.id],
   )
   const unavailableSessionsStorageKey = useMemo(
     () => getUnavailableNoteSessionsStorageKey(user?.id ?? user?.email ?? 'anonymous'),
@@ -503,7 +532,7 @@ export function LearnerNoteEditPage() {
       setError(null)
       try {
         if (noteKind === 'manual') {
-          const note = readManualNotes(storageKey).find((item) => item.id === noteId)
+          const note = await manualNotesStore.get(noteId)
           if (!note) throw new Error('수정할 노트를 찾을 수 없습니다.')
           if (!cancelled) {
             setContent(note.content)
@@ -539,24 +568,14 @@ export function LearnerNoteEditPage() {
     return () => {
       cancelled = true
     }
-  }, [noteId, noteKind, notesRepository, sessionsRepository, sourceSessionId, storageKey, unavailableSessionsStorageKey])
+  }, [manualNotesStore, noteId, noteKind, notesRepository, sessionsRepository, sourceSessionId, unavailableSessionsStorageKey])
 
   async function saveNote() {
     if (!content.trim() || isSaving) return
     setIsSaving(true)
     try {
       if (noteKind === 'manual') {
-        const notes = readManualNotes(storageKey)
-        if (!notes.some((note) => note.id === noteId)) {
-          throw new Error('수정할 노트를 찾을 수 없습니다.')
-        }
-        const updatedAt = new Date().toISOString()
-        window.localStorage.setItem(
-          storageKey,
-          JSON.stringify(notes.map((note) => note.id === noteId
-            ? { ...note, content: content.trim(), document, updatedAt }
-            : note)),
-        )
+        await manualNotesStore.update(noteId, { content, document })
       } else if (noteKind === 'session') {
         await notesRepository.update(noteId, content.trim())
       } else {
@@ -663,10 +682,6 @@ function groupNoteItems(items: LearnerNoteItem[]): LearnerNoteGroup[] {
   return [...groups.values()]
 }
 
-function getManualNotesStorageKey(userId: string | number): string {
-  return `edupilot:manual-notes:${String(userId)}`
-}
-
 type NotesRepository = ReturnType<typeof createNotesRepository>
 type SessionsRepository = ReturnType<typeof createSessionsRepository>
 
@@ -760,27 +775,3 @@ function persistUnavailableSessionIds(storageKey: string, sessionIds: Set<string
   }
 }
 
-function readManualNotes(storageKey: string): ManualNote[] {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]') as unknown
-    if (!Array.isArray(value)) return []
-    return value.filter(isManualNote)
-  } catch {
-    return []
-  }
-}
-
-function isManualNote(value: unknown): value is ManualNote {
-  if (typeof value !== 'object' || value === null) return false
-  const note = value as Partial<ManualNote>
-  return typeof note.id === 'string'
-    && typeof note.content === 'string'
-    && typeof note.createdAt === 'string'
-    && typeof note.updatedAt === 'string'
-}
-
-function createClientId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
