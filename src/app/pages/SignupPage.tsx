@@ -17,15 +17,19 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 
 import {
+  getCurrentPolicies,
   hasFormErrors,
   mapAuthErrorToFormErrors,
+  toRef,
   useAuth,
   validateSignupForm,
+  type PolicyRef,
   type SignupFormErrors,
   type SignupFormValues,
   type SignupRole,
 } from '../../features/auth'
 import { ApiClientError } from '../../shared/api'
+import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { Button } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
@@ -101,10 +105,21 @@ export function SignupPage() {
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
+  // 서버가 가입 시점의 현재 버전을 정확히 요구하므로(POLICY_CONSENT_REQUIRED) 버전을 박아두지 않고 받아온다.
+  const [currentPolicies, setCurrentPolicies] = useState<PolicyRef[] | null>(null)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
   )
+
+  useEffect(() => {
+    if (!isApiCapabilityEnabled('policy-consent')) return
+    const controller = new AbortController()
+    void getCurrentPolicies(controller.signal)
+      .then((policies) => setCurrentPolicies(policies.map(toRef)))
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     if (
@@ -181,7 +196,7 @@ export function SignupPage() {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await signup(values)
+      await signup({ ...values, consents: currentPolicies ?? undefined })
       navigate(routes.classrooms, { replace: true })
     } catch (error) {
       const formErrors = mapAuthErrorToFormErrors(error)
@@ -204,6 +219,7 @@ export function SignupPage() {
     setGoogleError(null)
     try {
       await loginWithGoogle({
+        consents: currentPolicies ?? undefined,
         idToken: pendingGoogleIdToken,
         privacyVersion: GOOGLE_PRIVACY_VERSION,
         role: googleRole,

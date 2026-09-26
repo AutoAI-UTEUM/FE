@@ -3,8 +3,10 @@ export type ApiCapability =
   | 'oauth'
   | 'exam-attempt-drafts'
   | 'password-reset'
+  | 'policy-consent'
   | 'reports'
   | 'schedule'
+  | 'user-notes'
 
 export function isApiCapabilityEnabled(capability: ApiCapability): boolean {
   return getApiCapabilities().has(capability)

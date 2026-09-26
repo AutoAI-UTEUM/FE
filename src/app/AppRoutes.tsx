@@ -13,6 +13,7 @@ import { routes } from './routes'
 
 const AuthCallbackPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.AuthCallbackPage })))
 const ResetPasswordPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.ResetPasswordPage })))
+const PolicyConsentPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.PolicyConsentPage })))
 const ClassroomsPage = lazy(() => import('./pages/ClassroomsPage').then((module) => ({ default: module.ClassroomsPage })))
 const ClassroomDetailPage = lazy(() => import('./pages/ClassroomDetailPage').then((module) => ({ default: module.ClassroomDetailPage })))
 const DiagnosisPage = lazy(() => import('./pages/DiagnosisPage').then((module) => ({ default: module.DiagnosisPage })))
@@ -64,6 +65,10 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<RequireAuth />}>
+        {/* 동의 전에는 앱 내비게이션을 보여주지 않는다. RequireAuth가 이 경로만 통과시킨다. */}
+        <Route element={<AuthLayout />}>
+          <Route path={routes.consents} element={<PolicyConsentPage />} />
+        </Route>
         <Route element={<AppLayout />}>
           <Route element={<RequireAdmin />}>
             <Route path={routes.admin} element={<AdminPage />} />

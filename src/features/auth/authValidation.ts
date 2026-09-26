@@ -1,3 +1,5 @@
+import type { PolicyRef } from './policiesRepository'
+
 export interface LoginFormValues {
   email: string
   password: string
@@ -7,6 +9,8 @@ export type SignupRole = 'INSTRUCTOR' | 'LEARNER'
 
 export interface GoogleAuthValues {
   affiliation?: string
+  /** 신규 가입일 때만 필요하다. 기존 계정 연동에는 보내지 않아도 된다. */
+  consents?: PolicyRef[]
   idToken: string
   learningEmailOptIn?: boolean
   privacyVersion?: string
@@ -16,6 +20,8 @@ export interface GoogleAuthValues {
 
 export interface SignupFormValues extends LoginFormValues {
   affiliation: string
+  /** GET /api/policies/current이 준 TERMS·PRIVACY 현재 버전. 누락은 서버가 POLICY_CONSENT_REQUIRED로 거부한다. */
+  consents?: PolicyRef[]
   learningEmailOptIn?: boolean
   name: string
   role: SignupRole
