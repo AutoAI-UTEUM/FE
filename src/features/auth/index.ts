@@ -29,6 +29,7 @@ export type {
 } from './authContext'
 export {
   AuthValidationError,
+  getLoginErrorMessage,
   mapAuthErrorToFormErrors,
 } from './authErrors'
 export {
