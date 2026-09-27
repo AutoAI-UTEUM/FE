@@ -2,7 +2,7 @@ import { apiRequest, ApiClientError } from '../../shared/api'
 import type { AuthUser } from './authContext'
 import { AuthValidationError } from './authErrors'
 import {
-  getCompletePolicyRefs,
+  normalizePolicyRefs,
   type PolicyRef,
 } from './policiesRepository'
 import type {
@@ -231,11 +231,11 @@ function prepareOptionalSignupConsents(
 ): PolicyRef[] | undefined {
   if (!consents?.length) return undefined
 
-  const completeRefs = getCompletePolicyRefs(consents)
-  if (!completeRefs) {
-    throw new Error('가입 동의에는 현재 TERMS·PRIVACY 버전이 모두 필요합니다.')
+  const normalizedRefs = normalizePolicyRefs(consents)
+  if (!normalizedRefs) {
+    throw new Error('가입 동의 정보가 올바르지 않습니다.')
   }
-  return completeRefs
+  return normalizedRefs
 }
 
 function mapAccessGrant(data: AccessGrantDto): AccessGrant {

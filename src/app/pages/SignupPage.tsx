@@ -18,7 +18,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 
 import {
-  getCompletePolicyRefs,
+  getRequiredPolicyRefs,
   getCurrentPolicies,
   getPolicyDocument,
   hasFormErrors,
@@ -26,13 +26,13 @@ import {
   useAuth,
   validateSignupForm,
   type PolicyRef,
+  type PolicySummary,
   type SignupFormErrors,
   type SignupFormValues,
   type SignupRole,
 } from '../../features/auth'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
-import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
-import { Button } from '../../shared/ui'
+import { Button, MarkdownContent } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
@@ -97,29 +97,28 @@ export function SignupPage() {
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     useState(false)
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false)
+  const [hasConfirmedAge, setHasConfirmedAge] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
   const [googleRole, setGoogleRole] = useState<SignupRole>('LEARNER')
   const [hasAcceptedGoogleTerms, setHasAcceptedGoogleTerms] = useState(false)
+  const [hasConfirmedGoogleAge, setHasConfirmedGoogleAge] = useState(false)
   const [googleTermsError, setGoogleTermsError] = useState<string | null>(null)
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
-  const policyConsentEnabled = isApiCapabilityEnabled('policy-consent')
-  // 동의한 경우에만 현재 TERMS·PRIVACY 한 쌍을 보내며, 미동의 가입은 consents를 생략한다.
-  const [currentPolicies, setCurrentPolicies] = useState<PolicyRef[] | null>(null)
+  const [currentPolicies, setCurrentPolicies] = useState<PolicySummary[] | null>(null)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
   )
 
   useEffect(() => {
-    if (!policyConsentEnabled) return
     const controller = new AbortController()
     void getCurrentPolicies(controller.signal)
-      .then((policies) => setCurrentPolicies(getCompletePolicyRefs(policies)))
+      .then(setCurrentPolicies)
       .catch(() => undefined)
     return () => controller.abort()
-  }, [policyConsentEnabled])
+  }, [])
 
   useEffect(() => {
     if (
@@ -181,16 +180,23 @@ export function SignupPage() {
     }
     setErrors(nextErrors)
     setConfirmPasswordError(nextConfirmPasswordError)
-    const consents = hasAcceptedTerms
-      ? currentPolicies ?? undefined
+    const requiredConsents = getRequiredPolicyRefs(currentPolicies)
+    const needsConsent = Boolean(requiredConsents?.length)
+    const consents = needsConsent && hasAcceptedTerms
+      ? requiredConsents ?? undefined
       : undefined
-    if (hasAcceptedTerms && !consents) {
-      setTermsError('약관 정보를 불러온 뒤 다시 시도해 주세요.')
-    }
+    const legalError = !hasConfirmedAge
+      ? '가입하려면 만 14세 이상임을 확인해 주세요.'
+      : requiredConsents === null
+        ? '약관 정보를 불러온 뒤 다시 시도해 주세요.'
+        : needsConsent && !hasAcceptedTerms
+          ? '필수 이용약관에 동의해 주세요.'
+          : null
+    setTermsError(legalError)
     if (
       hasFormErrors(nextErrors) ||
       nextConfirmPasswordError ||
-      (hasAcceptedTerms && !consents) ||
+      legalError ||
       emailAvailability === 'taken'
     ) {
       return
@@ -220,11 +226,20 @@ export function SignupPage() {
   async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!pendingGoogleIdToken) return
-    const consents = hasAcceptedGoogleTerms
-      ? currentPolicies ?? undefined
+    const requiredConsents = getRequiredPolicyRefs(currentPolicies)
+    const needsConsent = Boolean(requiredConsents?.length)
+    const consents = needsConsent && hasAcceptedGoogleTerms
+      ? requiredConsents ?? undefined
       : undefined
-    if (hasAcceptedGoogleTerms && !consents) {
-      setGoogleTermsError('약관 정보를 불러온 뒤 다시 시도해 주세요.')
+    const legalError = !hasConfirmedGoogleAge
+      ? '가입하려면 만 14세 이상임을 확인해 주세요.'
+      : requiredConsents === null
+        ? '약관 정보를 불러온 뒤 다시 시도해 주세요.'
+        : needsConsent && !hasAcceptedGoogleTerms
+          ? '필수 이용약관에 동의해 주세요.'
+          : null
+    if (legalError) {
+      setGoogleTermsError(legalError)
       return
     }
 
@@ -325,18 +340,21 @@ export function SignupPage() {
             })}
           </div>
 
-          {policyConsentEnabled ? (
-            <SignupPolicyConsent
-              checked={hasAcceptedGoogleTerms}
-              className="mt-5"
-              error={googleTermsError}
-              onChange={(checked) => {
-                setHasAcceptedGoogleTerms(checked)
-                setGoogleTermsError(null)
-              }}
-              policies={currentPolicies}
-            />
-          ) : null}
+          <SignupPolicyConsent
+            ageChecked={hasConfirmedGoogleAge}
+            checked={hasAcceptedGoogleTerms}
+            className="mt-5"
+            error={googleTermsError}
+            onAgeChange={(checked) => {
+              setHasConfirmedGoogleAge(checked)
+              setGoogleTermsError(null)
+            }}
+            onChange={(checked) => {
+              setHasAcceptedGoogleTerms(checked)
+              setGoogleTermsError(null)
+            }}
+            policies={currentPolicies}
+          />
 
           {googleError ? (
             <p className="mt-3 type-body font-medium text-rose-700" role="alert">
@@ -709,18 +727,21 @@ export function SignupPage() {
           </div>
         </div>
 
-        {policyConsentEnabled ? (
-          <SignupPolicyConsent
-            checked={hasAcceptedTerms}
-            className="pt-1"
-            error={termsError}
-            onChange={(checked) => {
-              setHasAcceptedTerms(checked)
-              setTermsError(null)
-            }}
-            policies={currentPolicies}
-          />
-        ) : null}
+        <SignupPolicyConsent
+          ageChecked={hasConfirmedAge}
+          checked={hasAcceptedTerms}
+          className="pt-1"
+          error={termsError}
+          onAgeChange={(checked) => {
+            setHasConfirmedAge(checked)
+            setTermsError(null)
+          }}
+          onChange={(checked) => {
+            setHasAcceptedTerms(checked)
+            setTermsError(null)
+          }}
+          policies={currentPolicies}
+        />
 
         <div className="flex gap-3 pt-2">
           <Button
@@ -760,19 +781,24 @@ export function SignupPage() {
 }
 
 function SignupPolicyConsent({
+  ageChecked,
   checked,
   className = '',
   error,
+  onAgeChange,
   onChange,
   policies,
 }: {
+  ageChecked: boolean
   checked: boolean
   className?: string
   error: string | null
+  onAgeChange: (checked: boolean) => void
   onChange: (checked: boolean) => void
-  policies: PolicyRef[] | null
+  policies: PolicySummary[] | null
 }) {
   const [openPolicy, setOpenPolicy] = useState<PolicyRef | null>(null)
+  const requiredPolicies = policies?.filter((policy) => policy.requiresConsent) ?? null
 
   function findPolicy(type: PolicyRef['type']) {
     return policies?.find((policy) => policy.type === type) ?? null
@@ -780,20 +806,35 @@ function SignupPolicyConsent({
 
   return (
     <div className={`grid gap-2 ${className}`}>
+      <label className="flex min-h-11 cursor-pointer items-center gap-2.5 type-control leading-5 text-stone-700">
+        <input
+          checked={ageChecked}
+          className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"
+          onChange={(event) => onAgeChange(event.target.checked)}
+          type="checkbox"
+        />
+        <span><span className="font-semibold text-stone-900">[필수]</span> 만 14세 이상입니다</span>
+      </label>
+
+      {requiredPolicies && requiredPolicies.length > 0 ? (
       <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
         <input
           checked={checked}
           className="size-4 shrink-0 rounded border-stone-300 accent-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!policies}
+          disabled={!requiredPolicies}
           onChange={(event) => onChange(event.target.checked)}
           type="checkbox"
         />
         <span>
-          이용약관 및 개인정보 처리방침에 동의합니다{' '}
-          <span className="font-medium text-stone-400">(선택)</span>
+          <span className="font-semibold text-stone-900">[필수]</span>{' '}
+          {requiredPolicies.length === 1 && requiredPolicies[0]?.type === 'TERMS'
+            ? '이용약관에 동의합니다'
+            : '필수 정책에 모두 동의합니다'}
         </span>
       </label>
+      ) : null}
 
+      {policies && policies.length > 0 ? (
       <div className="ml-6.5 flex flex-wrap items-center gap-x-3 gap-y-1 type-caption">
         {(['TERMS', 'PRIVACY'] as const).map((type) => {
           const policy = findPolicy(type)
@@ -811,6 +852,7 @@ function SignupPolicyConsent({
           )
         })}
       </div>
+      ) : null}
 
       {error ? (
         <p className="type-caption font-medium text-rose-700" role="alert">
@@ -897,11 +939,11 @@ function SignupPolicyDialog({
             <X aria-hidden="true" size={18} />
           </button>
         </div>
-        <div className="min-h-48 flex-1 overflow-y-auto px-5 py-4 type-body leading-7 whitespace-pre-wrap text-stone-700">
+        <div className="min-h-48 flex-1 overflow-y-auto px-5 py-4 type-body leading-7 text-stone-700">
           {error ? (
             <p className="text-rose-700" role="alert">{error}</p>
           ) : content ? (
-            content
+            <MarkdownContent content={content} />
           ) : (
             <p className="text-stone-500" role="status">약관을 불러오는 중입니다.</p>
           )}

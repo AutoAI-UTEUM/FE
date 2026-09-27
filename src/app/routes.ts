@@ -5,6 +5,8 @@ export const routes = {
   resetPassword: '/reset-password',
   authCallback: '/auth/callback',
   signup: '/signup',
+  terms: '/terms',
+  privacy: '/privacy',
   consents: '/consents',
   admin: '/admin',
   classrooms: '/classrooms',

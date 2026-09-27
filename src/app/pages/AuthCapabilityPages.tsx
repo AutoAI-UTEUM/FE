@@ -13,7 +13,7 @@ import {
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
-import { Button, ButtonLink, ErrorState, TextInput } from '../../shared/ui'
+import { Button, ButtonLink, ErrorState, MarkdownContent, TextInput } from '../../shared/ui'
 import { routes } from '../routes'
 
 export function ResetPasswordPage() {
@@ -236,8 +236,14 @@ function PolicyBody({ policy }: { policy: PolicyRef }) {
       }}
     >
       <summary className="cursor-pointer type-caption text-stone-500">전문 보기</summary>
-      <div className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-stone-50 p-3 type-caption whitespace-pre-wrap text-stone-700">
-        {error ?? content ?? '불러오는 중입니다.'}
+      <div className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-stone-50 p-3 type-caption text-stone-700">
+        {error ? (
+          <p className="text-rose-700" role="alert">{error}</p>
+        ) : content ? (
+          <MarkdownContent content={content} />
+        ) : (
+          <p role="status">불러오는 중입니다.</p>
+        )}
       </div>
     </details>
   )

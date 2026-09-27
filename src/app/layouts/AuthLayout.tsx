@@ -11,6 +11,7 @@ import { routes } from '../routes'
 export function AuthLayout() {
   const location = useLocation()
   const isLoginPage = location.pathname === routes.login
+  const isPolicyPage = [routes.terms, routes.privacy].includes(location.pathname as '/terms' | '/privacy')
   const showsServiceStatus =
     !isLoginPage &&
     location.pathname !== routes.forgotPassword &&
@@ -60,8 +61,8 @@ export function AuthLayout() {
         </p>
       </aside>
 
-      <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8 mobile-web:min-h-[100dvh] mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:mobile-safe-bottom">
-        <div className={isLoginPage ? 'w-full max-w-[400px]' : 'w-full max-w-[440px]'}>
+      <section className={`flex min-h-screen justify-center px-4 py-8 sm:px-8 mobile-web:min-h-[100dvh] mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:mobile-safe-bottom ${isPolicyPage ? 'items-start' : 'items-center'}`}>
+        <div className={isPolicyPage ? 'w-full max-w-3xl' : isLoginPage ? 'w-full max-w-[400px]' : 'w-full max-w-[440px]'}>
           <Link
             to={routes.classrooms}
             className="mb-8 flex items-center gap-2.5 rounded-lg lg:hidden"
@@ -78,6 +79,11 @@ export function AuthLayout() {
           </Link>
 
           <Outlet />
+
+          <nav aria-label="법적 고지" className="mt-8 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-stone-100 pt-4 type-caption text-stone-500">
+            <Link className="min-h-8 py-1 font-medium hover:text-stone-900" to={routes.terms}>이용약관</Link>
+            <Link className="min-h-8 py-1 font-medium hover:text-stone-900" to={routes.privacy}>개인정보 처리방침</Link>
+          </nav>
 
           {showsServiceStatus ? (
             <footer
