@@ -110,11 +110,13 @@ export async function handleApiFixtureRequest(
   if (request.method === 'GET' && path === '/api/policies/current') {
     return apiSuccess([
       {
+        requiresConsent: false,
         title: '개인정보 처리방침',
         type: 'PRIVACY',
         version: '0.9',
       },
       {
+        requiresConsent: true,
         title: '이용약관',
         type: 'TERMS',
         version: '0.9',
@@ -132,6 +134,7 @@ export async function handleApiFixtureRequest(
         type === 'TERMS'
           ? '제1조 목적\n본 약관은 으뜸 서비스 이용 조건을 정합니다.'
           : '제1조 개인정보의 처리\n서비스 제공에 필요한 개인정보를 처리합니다.',
+      requiresConsent: type === 'TERMS',
       title: type === 'TERMS' ? '이용약관' : '개인정보 처리방침',
       type,
       version,

@@ -11,6 +11,7 @@ export interface PolicyRef {
 
 export interface PolicySummary extends PolicyRef {
   effectiveAt?: string
+  requiresConsent: boolean
   summary?: string
   title: string
 }
@@ -26,28 +27,37 @@ export interface ConsentState {
   pending: Array<PolicyRef & { title?: string }>
 }
 
-const SIGNUP_POLICY_TYPES = ['TERMS', 'PRIVACY'] as const
-
-/** 가입 시 전송할 수 있는 현재 TERMS·PRIVACY 한 쌍인지 확인하고 요청 형태로 정규화한다. */
-export function getCompletePolicyRefs(
-  policies: PolicyRef[] | null | undefined,
+/** 현재 공개 문서 중 서버가 명시적으로 동의를 요구한 버전만 가입 요청으로 정규화한다. */
+export function getRequiredPolicyRefs(
+  policies: PolicySummary[] | null | undefined,
 ): PolicyRef[] | null {
-  if (policies?.length !== SIGNUP_POLICY_TYPES.length) return null
+  if (!policies) return null
 
   const refs = new Map<PolicyType, PolicyRef>()
-  for (const policy of policies) {
-    if (
-      !SIGNUP_POLICY_TYPES.includes(policy.type) ||
-      !policy.version.trim() ||
-      refs.has(policy.type)
-    ) {
-      return null
-    }
+  for (const policy of policies.filter((item) => item.requiresConsent)) {
+    if (!policy.version.trim() || refs.has(policy.type)) return null
     refs.set(policy.type, { type: policy.type, version: policy.version.trim() })
   }
 
-  if (!SIGNUP_POLICY_TYPES.every((type) => refs.has(type))) return null
-  return SIGNUP_POLICY_TYPES.map((type) => refs.get(type)!)
+  return (['TERMS', 'PRIVACY'] as const)
+    .map((type) => refs.get(type))
+    .filter((policy): policy is PolicyRef => Boolean(policy))
+}
+
+/** 전송 직전 최소 식별자만 남기고 중복·빈 버전을 거부한다. */
+export function normalizePolicyRefs(
+  policies: PolicyRef[] | null | undefined,
+): PolicyRef[] | null {
+  if (!policies?.length) return null
+
+  const refs = new Map<PolicyType, PolicyRef>()
+  for (const policy of policies) {
+    if (!policy.version.trim() || refs.has(policy.type)) return null
+    refs.set(policy.type, toRef({ ...policy, version: policy.version.trim() }))
+  }
+  return (['TERMS', 'PRIVACY'] as const)
+    .map((type) => refs.get(type))
+    .filter((policy): policy is PolicyRef => Boolean(policy))
 }
 
 /** 가입 화면은 로그인 전이라 인증 없는 공개 API를 쓴다. */

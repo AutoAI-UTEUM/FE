@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -127,7 +127,6 @@ describe('LoginPage', () => {
   })
 
   it('moves SIGNUP_REQUIRED users to the signup page', async () => {
-    vi.stubEnv('VITE_API_CAPABILITIES', 'policy-consent')
     googleCredential = 'new-google-id-token'
     renderLogin()
 
@@ -141,11 +140,9 @@ describe('LoginPage', () => {
       }),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: '강의자' }))
-    const consent = screen.getByRole('checkbox', {
-      name: /이용약관 및 개인정보 처리방침에 동의합니다/,
-    })
-    await waitFor(() => expect(consent).toBeEnabled())
-    fireEvent.click(consent)
+    expect(screen.queryByText(/만 14세 이상/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/이용약관/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/개인정보 처리방침/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '가입하기' }))
 
     expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
@@ -153,10 +150,6 @@ describe('LoginPage', () => {
       .mocked(globalThis.fetch)
       .mock.calls.filter(([input]) => String(input).endsWith('/api/auth/google'))
     expect(JSON.parse(String(googleCalls[1]?.[1]?.body))).toEqual({
-      consents: [
-        { type: 'TERMS', version: '0.9' },
-        { type: 'PRIVACY', version: '0.9' },
-      ],
       idToken: 'new-google-id-token',
       role: 'INSTRUCTOR',
     })

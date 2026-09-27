@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -29,6 +29,9 @@ describe('AuthLayout', () => {
     )
 
     expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
+    const sidebar = screen.getByRole('complementary')
+    expect(within(sidebar).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
   })
 
   it('hides the service status and divider on the forgot-password page', () => {
