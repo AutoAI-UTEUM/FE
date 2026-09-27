@@ -75,7 +75,7 @@ export function createUserNotesRepository(request: AuthenticatedRequest) {
 
     async create(input: UserNoteInput): Promise<UserNote> {
       const { data } = await request<UserNoteDto>('/api/user-notes', {
-        body: input,
+        body: { ...input },
         method: 'POST',
       })
       return mapUserNote(data)
@@ -140,7 +140,7 @@ export function createUserNotesRepository(request: AuthenticatedRequest) {
     async importLocal(body: NoteImportRequest): Promise<NoteImportResult> {
       const { data } = await request<NoteImportResult>(
         '/api/user-notes/import',
-        { body, method: 'POST' },
+        { body: { ...body }, method: 'POST' },
       )
       return { failed: data.failed ?? [], imported: data.imported, skipped: data.skipped }
     },

@@ -83,9 +83,7 @@ describe('remote auth repository', () => {
       learningEmailOptIn: false,
       name: '학습자',
       password: 'password123',
-      privacyVersion: '2026-07-01',
       role: 'INSTRUCTOR',
-      termsVersion: '2026-07-01',
     })
     expectJsonRequest(fetchMock, 1, '/api/auth/login', {
       email: 'learner@example.com',
@@ -134,9 +132,7 @@ describe('remote auth repository', () => {
       learningEmailOptIn: false,
       name: '학습자',
       password: 'password123',
-      privacyVersion: '2026-07-01',
       role: 'LEARNER',
-      termsVersion: '2026-07-01',
     })
 
     const result = await repository.login(values)
@@ -232,18 +228,38 @@ describe('remote auth repository', () => {
     )
 
     await getAuthRepository().loginWithGoogle({
+      consents: [
+        { type: 'PRIVACY', version: '0.9' },
+        { type: 'TERMS', version: '0.9' },
+      ],
       idToken: 'google-id-token',
-      privacyVersion: '2026-07-01',
       role: 'INSTRUCTOR',
-      termsVersion: '2026-07-01',
     })
 
     expectJsonRequest(fetchMock, 0, '/api/auth/google', {
+      consents: [
+        { type: 'TERMS', version: '0.9' },
+        { type: 'PRIVACY', version: '0.9' },
+      ],
       idToken: 'google-id-token',
-      privacyVersion: '2026-07-01',
       role: 'INSTRUCTOR',
-      termsVersion: '2026-07-01',
     })
+  })
+
+  it('rejects a partial consent array before sending a signup request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+    await expect(
+      getAuthRepository().signup({
+        affiliation: '울산대학교',
+        consents: [{ type: 'TERMS', version: '0.9' }],
+        email: 'learner@example.com',
+        name: '학습자',
+        password: 'password123',
+        role: 'LEARNER',
+      }),
+    ).rejects.toThrow('현재 TERMS·PRIVACY 버전이 모두 필요합니다.')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('validates a restored token using the bearer header', async () => {

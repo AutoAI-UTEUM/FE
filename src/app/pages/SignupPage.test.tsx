@@ -1,13 +1,23 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthProvider } from '../../features/auth'
-import { installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiFailure, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { SignupPage } from './SignupPage'
 
+let apiOverride: ((request: Request) => Response | undefined) | undefined
+
 beforeEach(() => {
-  installApiFixtureServer()
+  apiOverride = undefined
+  installApiFixtureServer((request) => apiOverride?.(request))
 })
 
 afterEach(() => {
@@ -73,7 +83,7 @@ describe('SignupPage', () => {
     expect(
       screen.getByText('비밀번호를 한 번 더 입력하세요.'),
     ).toBeInTheDocument()
-    expect(screen.getByText('필수 약관에 동의해 주세요.')).toBeInTheDocument()
+    expect(screen.queryByText('필수 약관에 동의해 주세요.')).not.toBeInTheDocument()
   })
 
   it('shows password strength with the required affiliation field', () => {
@@ -110,7 +120,7 @@ describe('SignupPage', () => {
     expect(screen.queryByRole('checkbox', { name: /학습 소식 이메일 수신/ })).not.toBeInTheDocument()
   })
 
-  it('signs up, auto-logs-in, and redirects to classrooms', async () => {
+  it('signs up without sending consents when the user did not agree', async () => {
     renderSignup()
 
     fireEvent.click(screen.getByRole('radio', { name: /^강의자/ }))
@@ -130,11 +140,6 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('비밀번호 확인'), {
       target: { value: 'password-123' },
     })
-    fireEvent.click(
-      screen.getByRole('checkbox', {
-        name: /이용약관 및 개인정보 처리방침 동의/,
-      }),
-    )
     fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
 
     expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
@@ -152,6 +157,117 @@ describe('SignupPage', () => {
       role: 'INSTRUCTOR',
     })
     expect(signupBody).not.toHaveProperty('confirmPassword')
+    expect(signupBody).not.toHaveProperty('consents')
+  })
+
+  it('sends exactly the current TERMS and PRIVACY versions after consent', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'policy-consent')
+    renderSignup()
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    fireEvent.change(screen.getByLabelText('이름'), {
+      target: { value: '학습자' },
+    })
+    fireEvent.change(screen.getByLabelText('소속'), {
+      target: { value: '울산대학교' },
+    })
+    fireEvent.change(screen.getByLabelText('이메일'), {
+      target: { value: 'new@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'password-123' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호 확인'), {
+      target: { value: 'password-123' },
+    })
+
+    const consent = screen.getByRole('checkbox', {
+      name: /이용약관 및 개인정보 처리방침에 동의합니다/,
+    })
+    await waitFor(() => expect(consent).toBeEnabled())
+    fireEvent.click(consent)
+    fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
+
+    expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
+    const signupCall = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find(([input]) => String(input).endsWith('/api/auth/signup'))
+    expect(JSON.parse(String(signupCall?.[1]?.body)).consents).toEqual([
+      { type: 'TERMS', version: '0.9' },
+      { type: 'PRIVACY', version: '0.9' },
+    ])
+  })
+
+  it('opens the current terms and privacy documents from the consent field', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'policy-consent')
+    renderSignup()
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    const termsButton = screen.getByRole('button', { name: '이용약관 보기' })
+    const privacyButton = screen.getByRole('button', {
+      name: '개인정보 처리방침 보기',
+    })
+    await waitFor(() => {
+      expect(termsButton).toBeEnabled()
+      expect(privacyButton).toBeEnabled()
+    })
+
+    fireEvent.click(termsButton)
+    const termsDialog = await screen.findByRole('dialog', { name: '이용약관' })
+    expect(
+      await within(termsDialog).findByText(/본 약관은 으뜸 서비스 이용 조건을 정합니다/),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(termsDialog).getByRole('button', { name: '이용약관 닫기' }),
+    )
+
+    fireEvent.click(privacyButton)
+    const privacyDialog = await screen.findByRole('dialog', {
+      name: '개인정보 처리방침',
+    })
+    expect(
+      await within(privacyDialog).findByText(/서비스 제공에 필요한 개인정보를 처리합니다/),
+    ).toBeInTheDocument()
+    fireEvent.mouseDown(privacyDialog)
+    expect(
+      screen.queryByRole('dialog', { name: '개인정보 처리방침' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the consent requirement when the server enables mandatory consent', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'policy-consent')
+    apiOverride = (request) =>
+      request.method === 'POST' && new URL(request.url).pathname === '/api/auth/signup'
+        ? apiFailure(
+            'POLICY_CONSENT_REQUIRED',
+            '현재 정책 동의가 필요합니다.',
+            400,
+          )
+        : undefined
+    renderSignup()
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    fireEvent.change(screen.getByLabelText('이름'), {
+      target: { value: '학습자' },
+    })
+    fireEvent.change(screen.getByLabelText('소속'), {
+      target: { value: '울산대학교' },
+    })
+    fireEvent.change(screen.getByLabelText('이메일'), {
+      target: { value: 'new@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'password-123' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호 확인'), {
+      target: { value: 'password-123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
+
+    expect(
+      await screen.findByText('가입을 계속하려면 현재 약관에 동의해 주세요.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('내 강의실 화면')).not.toBeInTheDocument()
   })
 
   it('blocks signup when the passwords do not match', () => {

@@ -33,6 +33,7 @@ import type {
   LoginFormValues,
   SignupFormValues,
 } from './authValidation'
+import type { PolicyRef } from './policiesRepository'
 
 interface AuthProviderProps {
   initialUser?: AuthUser | null

@@ -34,6 +34,7 @@ export {
 } from './authErrors'
 export {
   createConsentsRepository,
+  getCompletePolicyRefs,
   getCurrentPolicies,
   getPolicyDocument,
   toRef,

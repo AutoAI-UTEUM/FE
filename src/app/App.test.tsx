@@ -1035,6 +1035,6 @@ describe('AppRoutes', () => {
     expect(screen.getByText('이름을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('이메일을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('비밀번호를 입력하세요.')).toBeInTheDocument()
-    expect(screen.getByText('필수 약관에 동의해 주세요.')).toBeInTheDocument()
+    expect(screen.queryByText('필수 약관에 동의해 주세요.')).not.toBeInTheDocument()
   })
 })

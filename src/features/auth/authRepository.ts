@@ -1,7 +1,10 @@
 import { apiRequest, ApiClientError } from '../../shared/api'
 import type { AuthUser } from './authContext'
 import { AuthValidationError } from './authErrors'
-import { toRef, type PolicyRef } from './policiesRepository'
+import {
+  getCompletePolicyRefs,
+  type PolicyRef,
+} from './policiesRepository'
 import type {
   GoogleAuthValues,
   LoginFormValues,
@@ -139,12 +142,10 @@ const repository: AuthRepository = {
     const { data } = await apiRequest<LoginResponseDto>('/api/auth/google', {
       body: {
         affiliation: values.affiliation?.trim() || undefined,
-        consents: values.consents?.map(toRef),
+        consents: prepareOptionalSignupConsents(values.consents),
         idToken: values.idToken,
         learningEmailOptIn: values.learningEmailOptIn,
-        privacyVersion: values.privacyVersion,
         role: values.role,
-        termsVersion: values.termsVersion,
       },
       method: 'POST',
     })
@@ -210,14 +211,12 @@ const repository: AuthRepository = {
       await apiRequest<UserResponseDto>('/api/auth/signup', {
         body: {
           affiliation: values.affiliation?.trim() || undefined,
-          consents: values.consents?.map(toRef),
+          consents: prepareOptionalSignupConsents(values.consents),
           email: values.email.trim().toLowerCase(),
           learningEmailOptIn: values.learningEmailOptIn ?? false,
           name: values.name.trim(),
           password: values.password,
-          privacyVersion: '2026-07-01',
           role: values.role,
-          termsVersion: '2026-07-01',
         },
         method: 'POST',
       })
@@ -225,6 +224,18 @@ const repository: AuthRepository = {
       throw mapRemoteAuthError(error, 'signup')
     }
   },
+}
+
+function prepareOptionalSignupConsents(
+  consents: PolicyRef[] | undefined,
+): PolicyRef[] | undefined {
+  if (!consents?.length) return undefined
+
+  const completeRefs = getCompletePolicyRefs(consents)
+  if (!completeRefs) {
+    throw new Error('가입 동의에는 현재 TERMS·PRIVACY 버전이 모두 필요합니다.')
+  }
+  return completeRefs
 }
 
 function mapAccessGrant(data: AccessGrantDto): AccessGrant {

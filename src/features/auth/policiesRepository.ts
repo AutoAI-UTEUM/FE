@@ -26,6 +26,30 @@ export interface ConsentState {
   pending: Array<PolicyRef & { title?: string }>
 }
 
+const SIGNUP_POLICY_TYPES = ['TERMS', 'PRIVACY'] as const
+
+/** 가입 시 전송할 수 있는 현재 TERMS·PRIVACY 한 쌍인지 확인하고 요청 형태로 정규화한다. */
+export function getCompletePolicyRefs(
+  policies: PolicyRef[] | null | undefined,
+): PolicyRef[] | null {
+  if (policies?.length !== SIGNUP_POLICY_TYPES.length) return null
+
+  const refs = new Map<PolicyType, PolicyRef>()
+  for (const policy of policies) {
+    if (
+      !SIGNUP_POLICY_TYPES.includes(policy.type) ||
+      !policy.version.trim() ||
+      refs.has(policy.type)
+    ) {
+      return null
+    }
+    refs.set(policy.type, { type: policy.type, version: policy.version.trim() })
+  }
+
+  if (!SIGNUP_POLICY_TYPES.every((type) => refs.has(type))) return null
+  return SIGNUP_POLICY_TYPES.map((type) => refs.get(type)!)
+}
+
 /** 가입 화면은 로그인 전이라 인증 없는 공개 API를 쓴다. */
 export async function getCurrentPolicies(
   signal?: AbortSignal,
