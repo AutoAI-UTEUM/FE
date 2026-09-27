@@ -11,6 +11,7 @@ import { routes } from '../routes'
 export function AuthLayout() {
   const location = useLocation()
   const isLoginPage = location.pathname === routes.login
+  const usesFocusedAuthPanel = isLoginPage || location.pathname === routes.signup
   const isPolicyPage = [routes.terms, routes.privacy].includes(location.pathname as '/terms' | '/privacy')
   const showsServiceStatus =
     !isLoginPage &&
@@ -19,8 +20,8 @@ export function AuthLayout() {
 
   return (
     <main className="auth-light grid min-h-screen bg-white text-stone-900 lg:grid-cols-[minmax(520px,46.5vw)_minmax(0,1fr)] mobile-web:min-h-[100dvh]">
-      <aside className={`hidden bg-[#131C2B] px-12 py-10 text-white xl:px-14 ${isLoginPage ? 'lg:flex lg:flex-col' : 'lg:flex lg:flex-col lg:justify-between'}`}>
-        {!isLoginPage ? (
+      <aside className={`hidden bg-[#131C2B] px-12 py-10 text-white xl:px-14 ${usesFocusedAuthPanel ? 'lg:flex lg:flex-col' : 'lg:flex lg:flex-col lg:justify-between'}`}>
+        {!usesFocusedAuthPanel ? (
           <Link
             to={routes.classrooms}
             className="flex items-center gap-2.5 self-start rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#A6ACBB]"
@@ -37,7 +38,7 @@ export function AuthLayout() {
           </Link>
         ) : null}
 
-        <div className={isLoginPage ? 'flex flex-1 flex-col justify-center gap-5' : 'flex flex-col gap-4'}>
+        <div className={usesFocusedAuthPanel ? 'flex flex-1 flex-col justify-center gap-5' : 'flex flex-col gap-4'}>
           <p className="max-w-sm type-auth-intro font-bold text-white">
             같은 강의,
             <br />
@@ -53,7 +54,7 @@ export function AuthLayout() {
         </div>
 
         <p className="flex items-center gap-1.5 type-micro text-[#8A90A0]">
-          {isLoginPage ? (
+          {usesFocusedAuthPanel ? (
             <>Powered by <X aria-hidden="true" size={10} /> Grok</>
           ) : (
             <>© 2026 {SERVICE_NAME} ({SERVICE_NAME_ENGLISH})</>
