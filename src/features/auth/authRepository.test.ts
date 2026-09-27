@@ -246,20 +246,33 @@ describe('remote auth repository', () => {
     })
   })
 
-  it('rejects a partial consent array before sending a signup request', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-
-    await expect(
-      getAuthRepository().signup({
-        affiliation: '울산대학교',
-        consents: [{ type: 'TERMS', version: '0.9' }],
-        email: 'learner@example.com',
-        name: '학습자',
-        password: 'password123',
-        role: 'LEARNER',
+  it('sends only the policy versions the current document metadata requires', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({
+        data: { email: 'learner@example.com', name: '학습자', role: 'LEARNER' },
+        message: '회원가입 완료',
+        success: true,
       }),
-    ).rejects.toThrow('현재 TERMS·PRIVACY 버전이 모두 필요합니다.')
-    expect(fetchMock).not.toHaveBeenCalled()
+    )
+
+    await getAuthRepository().signup({
+      affiliation: '울산대학교',
+      consents: [{ type: 'TERMS', version: '1.0' }],
+      email: 'learner@example.com',
+      name: '학습자',
+      password: 'password123',
+      role: 'LEARNER',
+    })
+
+    expectJsonRequest(fetchMock, 0, '/api/auth/signup', {
+      affiliation: '울산대학교',
+      consents: [{ type: 'TERMS', version: '1.0' }],
+      email: 'learner@example.com',
+      learningEmailOptIn: false,
+      name: '학습자',
+      password: 'password123',
+      role: 'LEARNER',
+    })
   })
 
   it('validates a restored token using the bearer header', async () => {

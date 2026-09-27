@@ -10,7 +10,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthProvider } from '../../features/auth'
-import { apiFailure, installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { SignupPage } from './SignupPage'
 
 let apiOverride: ((request: Request) => Response | undefined) | undefined
@@ -121,6 +121,13 @@ describe('SignupPage', () => {
   })
 
   it('signs up without sending consents when the user did not agree', async () => {
+    apiOverride = (request) =>
+      request.method === 'GET' && new URL(request.url).pathname === '/api/policies/current'
+        ? apiSuccess([
+            { requiresConsent: false, title: '이용약관', type: 'TERMS', version: '0.9' },
+            { requiresConsent: false, title: '개인정보 처리방침', type: 'PRIVACY', version: '0.9' },
+          ])
+        : undefined
     renderSignup()
 
     fireEvent.click(screen.getByRole('radio', { name: /^강의자/ }))
@@ -140,6 +147,8 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('비밀번호 확인'), {
       target: { value: 'password-123' },
     })
+    await screen.findByRole('button', { name: '이용약관 보기' })
+    fireEvent.click(screen.getByRole('checkbox', { name: /만 14세 이상입니다/ }))
     fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
 
     expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
@@ -160,7 +169,7 @@ describe('SignupPage', () => {
     expect(signupBody).not.toHaveProperty('consents')
   })
 
-  it('sends exactly the current TERMS and PRIVACY versions after consent', async () => {
+  it('sends only the current policy explicitly marked as requiring consent', async () => {
     vi.stubEnv('VITE_API_CAPABILITIES', 'policy-consent')
     renderSignup()
 
@@ -181,10 +190,8 @@ describe('SignupPage', () => {
       target: { value: 'password-123' },
     })
 
-    const consent = screen.getByRole('checkbox', {
-      name: /이용약관 및 개인정보 처리방침에 동의합니다/,
-    })
-    await waitFor(() => expect(consent).toBeEnabled())
+    fireEvent.click(screen.getByRole('checkbox', { name: /만 14세 이상입니다/ }))
+    const consent = await screen.findByRole('checkbox', { name: /이용약관에 동의합니다/ })
     fireEvent.click(consent)
     fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
 
@@ -194,7 +201,6 @@ describe('SignupPage', () => {
       .mock.calls.find(([input]) => String(input).endsWith('/api/auth/signup'))
     expect(JSON.parse(String(signupCall?.[1]?.body)).consents).toEqual([
       { type: 'TERMS', version: '0.9' },
-      { type: 'PRIVACY', version: '0.9' },
     ])
   })
 
@@ -203,7 +209,7 @@ describe('SignupPage', () => {
     renderSignup()
 
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
-    const termsButton = screen.getByRole('button', { name: '이용약관 보기' })
+    const termsButton = await screen.findByRole('button', { name: '이용약관 보기' })
     const privacyButton = screen.getByRole('button', {
       name: '개인정보 처리방침 보기',
     })
@@ -262,6 +268,8 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('비밀번호 확인'), {
       target: { value: 'password-123' },
     })
+    fireEvent.click(screen.getByRole('checkbox', { name: /만 14세 이상입니다/ }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: /이용약관에 동의합니다/ }))
     fireEvent.click(screen.getByRole('button', { name: '가입 완료' }))
 
     expect(

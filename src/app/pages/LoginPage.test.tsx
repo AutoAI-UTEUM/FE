@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -141,10 +141,8 @@ describe('LoginPage', () => {
       }),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: '강의자' }))
-    const consent = screen.getByRole('checkbox', {
-      name: /이용약관 및 개인정보 처리방침에 동의합니다/,
-    })
-    await waitFor(() => expect(consent).toBeEnabled())
+    fireEvent.click(screen.getByRole('checkbox', { name: /만 14세 이상입니다/ }))
+    const consent = screen.getByRole('checkbox', { name: /이용약관에 동의합니다/ })
     fireEvent.click(consent)
     fireEvent.click(screen.getByRole('button', { name: '가입하기' }))
 
@@ -155,7 +153,6 @@ describe('LoginPage', () => {
     expect(JSON.parse(String(googleCalls[1]?.[1]?.body))).toEqual({
       consents: [
         { type: 'TERMS', version: '0.9' },
-        { type: 'PRIVACY', version: '0.9' },
       ],
       idToken: 'new-google-id-token',
       role: 'INSTRUCTOR',
