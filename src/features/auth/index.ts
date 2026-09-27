@@ -29,8 +29,23 @@ export type {
 } from './authContext'
 export {
   AuthValidationError,
+  getLoginErrorMessage,
   mapAuthErrorToFormErrors,
 } from './authErrors'
+export {
+  createConsentsRepository,
+  getCompletePolicyRefs,
+  getCurrentPolicies,
+  getPolicyDocument,
+  toRef,
+} from './policiesRepository'
+export type {
+  ConsentState,
+  PolicyDocument,
+  PolicyRef,
+  PolicySummary,
+  PolicyType,
+} from './policiesRepository'
 export {
   hasFormErrors,
   validateLoginForm,

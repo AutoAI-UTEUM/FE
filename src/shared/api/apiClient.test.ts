@@ -125,6 +125,48 @@ describe('apiRequest', () => {
     })
   })
 
+  it('carries Retry-After seconds so callers can show a wait time', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse(
+        {
+          error: { code: 'LOGIN_RATE_LIMITED', details: [], message: '로그인 시도가 많습니다.' },
+          success: false,
+        },
+        429,
+        { 'Retry-After': '180' },
+      ),
+    )
+
+    await expect(apiRequest('/api/auth/login', { method: 'POST' })).rejects.toMatchObject({
+      code: 'LOGIN_RATE_LIMITED',
+      retryAfterSeconds: 180,
+    })
+  })
+
+  it('converts an HTTP-date Retry-After into seconds', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-26T00:00:00Z'))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('nope', {
+        headers: { 'Retry-After': 'Sat, 26 Sep 2026 00:02:00 GMT' },
+        status: 429,
+      }),
+    )
+
+    await expect(apiRequest('/api/example')).rejects.toMatchObject({
+      retryAfterSeconds: 120,
+    })
+    vi.useRealTimers()
+  })
+
+  it('leaves retryAfterSeconds null when the header is absent', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 429 }))
+
+    await expect(apiRequest('/api/example')).rejects.toMatchObject({
+      retryAfterSeconds: null,
+    })
+  })
+
   it('preserves the AI daily quota error contract', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       jsonResponse(
@@ -159,10 +201,14 @@ describe('apiRequest', () => {
   )
 })
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   })
 }
 

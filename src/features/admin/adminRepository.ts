@@ -1,7 +1,7 @@
 import type { AuthenticatedRequest } from '../auth'
 
 export type AdminUserRole = 'ADMIN' | 'INSTRUCTOR' | 'LEARNER'
-export type AdminUserStatus = 'ACTIVE' | 'DELETED'
+export type AdminUserStatus = 'ACTIVE' | 'SUSPENDED' | 'DELETED'
 export type AdminSort = 'RECENT' | 'NAME'
 export type AdminUserSort = AdminSort | 'RECENT_ACTIVITY_ASC' | 'RECENT_ACTIVITY_DESC'
 
@@ -19,6 +19,9 @@ export interface AdminUserSummary {
 export interface AdminUserDetail extends AdminUserSummary {
   affiliation?: string | null
   consentedAt?: string | null
+  /** 상세 응답에만 있고, status가 SUSPENDED일 때만 채워진다. */
+  suspendedAt?: string | null
+  suspendedReason?: string | null
 }
 
 export interface AdminClassroomSummary {

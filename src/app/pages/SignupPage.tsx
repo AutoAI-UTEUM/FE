@@ -6,6 +6,7 @@ import {
   EyeOff,
   GraduationCap,
   Presentation,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -17,15 +18,20 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 
 import {
+  getCompletePolicyRefs,
+  getCurrentPolicies,
+  getPolicyDocument,
   hasFormErrors,
   mapAuthErrorToFormErrors,
   useAuth,
   validateSignupForm,
+  type PolicyRef,
   type SignupFormErrors,
   type SignupFormValues,
   type SignupRole,
 } from '../../features/auth'
-import { ApiClientError } from '../../shared/api'
+import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
+import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { Button } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
@@ -37,9 +43,6 @@ const initialValues: SignupFormValues = {
   password: '',
   role: 'LEARNER',
 }
-
-const GOOGLE_TERMS_VERSION = '2026-07-01'
-const GOOGLE_PRIVACY_VERSION = '2026-07-01'
 
 type SignupStep = 'account' | 'role'
 type EmailAvailabilityStatus =
@@ -101,10 +104,22 @@ export function SignupPage() {
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
+  const policyConsentEnabled = isApiCapabilityEnabled('policy-consent')
+  // 동의한 경우에만 현재 TERMS·PRIVACY 한 쌍을 보내며, 미동의 가입은 consents를 생략한다.
+  const [currentPolicies, setCurrentPolicies] = useState<PolicyRef[] | null>(null)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
   )
+
+  useEffect(() => {
+    if (!policyConsentEnabled) return
+    const controller = new AbortController()
+    void getCurrentPolicies(controller.signal)
+      .then((policies) => setCurrentPolicies(getCompletePolicyRefs(policies)))
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [policyConsentEnabled])
 
   useEffect(() => {
     if (
@@ -166,13 +181,16 @@ export function SignupPage() {
     }
     setErrors(nextErrors)
     setConfirmPasswordError(nextConfirmPasswordError)
-    if (!hasAcceptedTerms) {
-      setTermsError('필수 약관에 동의해 주세요.')
+    const consents = hasAcceptedTerms
+      ? currentPolicies ?? undefined
+      : undefined
+    if (hasAcceptedTerms && !consents) {
+      setTermsError('약관 정보를 불러온 뒤 다시 시도해 주세요.')
     }
     if (
       hasFormErrors(nextErrors) ||
       nextConfirmPasswordError ||
-      !hasAcceptedTerms ||
+      (hasAcceptedTerms && !consents) ||
       emailAvailability === 'taken'
     ) {
       return
@@ -181,12 +199,19 @@ export function SignupPage() {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await signup(values)
+      await signup({ ...values, consents })
       navigate(routes.classrooms, { replace: true })
     } catch (error) {
-      const formErrors = mapAuthErrorToFormErrors(error)
-      if (formErrors) setErrors(formErrors as SignupFormErrors)
-      else setServerError('회원가입 요청을 처리하지 못했습니다.')
+      if (
+        error instanceof ApiClientError &&
+        error.code === 'POLICY_CONSENT_REQUIRED'
+      ) {
+        setTermsError('가입을 계속하려면 현재 약관에 동의해 주세요.')
+      } else {
+        const formErrors = mapAuthErrorToFormErrors(error)
+        if (formErrors) setErrors(formErrors as SignupFormErrors)
+        else setServerError('회원가입 요청을 처리하지 못했습니다.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -195,8 +220,11 @@ export function SignupPage() {
   async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!pendingGoogleIdToken) return
-    if (!hasAcceptedGoogleTerms) {
-      setGoogleTermsError('필수 약관에 동의해 주세요.')
+    const consents = hasAcceptedGoogleTerms
+      ? currentPolicies ?? undefined
+      : undefined
+    if (hasAcceptedGoogleTerms && !consents) {
+      setGoogleTermsError('약관 정보를 불러온 뒤 다시 시도해 주세요.')
       return
     }
 
@@ -204,14 +232,20 @@ export function SignupPage() {
     setGoogleError(null)
     try {
       await loginWithGoogle({
+        consents,
         idToken: pendingGoogleIdToken,
-        privacyVersion: GOOGLE_PRIVACY_VERSION,
         role: googleRole,
-        termsVersion: GOOGLE_TERMS_VERSION,
       })
       navigate(routes.classrooms, { replace: true })
-    } catch {
-      setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.code === 'POLICY_CONSENT_REQUIRED'
+      ) {
+        setGoogleTermsError('가입을 계속하려면 현재 약관에 동의해 주세요.')
+      } else {
+        setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
+      }
     } finally {
       setIsGoogleSubmitting(false)
     }
@@ -291,25 +325,17 @@ export function SignupPage() {
             })}
           </div>
 
-          <label className="mt-5 flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
-            <input
+          {policyConsentEnabled ? (
+            <SignupPolicyConsent
               checked={hasAcceptedGoogleTerms}
-              className="mt-0.5 size-4 shrink-0 rounded border-stone-300 accent-brand-600"
-              onChange={(event) => {
-                setHasAcceptedGoogleTerms(event.target.checked)
+              className="mt-5"
+              error={googleTermsError}
+              onChange={(checked) => {
+                setHasAcceptedGoogleTerms(checked)
                 setGoogleTermsError(null)
               }}
-              type="checkbox"
+              policies={currentPolicies}
             />
-            <span>
-              이용약관 및 개인정보 처리방침에 동의합니다{' '}
-              <span className="font-semibold text-rose-600">*</span>
-            </span>
-          </label>
-          {googleTermsError ? (
-            <p className="mt-1 type-caption font-medium text-rose-700" role="alert">
-              {googleTermsError}
-            </p>
           ) : null}
 
           {googleError ? (
@@ -324,7 +350,7 @@ export function SignupPage() {
               disabled={isGoogleSubmitting}
               type="submit"
             >
-              {isGoogleSubmitting ? '가입 중' : '동의하고 가입하기'}
+              {isGoogleSubmitting ? '가입 중' : '가입하기'}
             </Button>
             <Button
               className="h-11"
@@ -683,28 +709,18 @@ export function SignupPage() {
           </div>
         </div>
 
-        <div className="grid gap-2 pt-1">
-          <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
-            <input
-              checked={hasAcceptedTerms}
-              className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"
-              onChange={(event) => {
-                setHasAcceptedTerms(event.target.checked)
-                setTermsError(null)
-              }}
-              type="checkbox"
-            />
-            <span>
-              이용약관 및 개인정보 처리방침 동의{' '}
-              <span className="font-semibold text-rose-600">*</span>
-            </span>
-          </label>
-          {termsError ? (
-            <p className="type-caption font-medium text-rose-700" role="alert">
-              {termsError}
-            </p>
-          ) : null}
-        </div>
+        {policyConsentEnabled ? (
+          <SignupPolicyConsent
+            checked={hasAcceptedTerms}
+            className="pt-1"
+            error={termsError}
+            onChange={(checked) => {
+              setHasAcceptedTerms(checked)
+              setTermsError(null)
+            }}
+            policies={currentPolicies}
+          />
+        ) : null}
 
         <div className="flex gap-3 pt-2">
           <Button
@@ -739,6 +755,163 @@ export function SignupPage() {
         </p>
       ) : null}
 
+    </div>
+  )
+}
+
+function SignupPolicyConsent({
+  checked,
+  className = '',
+  error,
+  onChange,
+  policies,
+}: {
+  checked: boolean
+  className?: string
+  error: string | null
+  onChange: (checked: boolean) => void
+  policies: PolicyRef[] | null
+}) {
+  const [openPolicy, setOpenPolicy] = useState<PolicyRef | null>(null)
+
+  function findPolicy(type: PolicyRef['type']) {
+    return policies?.find((policy) => policy.type === type) ?? null
+  }
+
+  return (
+    <div className={`grid gap-2 ${className}`}>
+      <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
+        <input
+          checked={checked}
+          className="size-4 shrink-0 rounded border-stone-300 accent-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!policies}
+          onChange={(event) => onChange(event.target.checked)}
+          type="checkbox"
+        />
+        <span>
+          이용약관 및 개인정보 처리방침에 동의합니다{' '}
+          <span className="font-medium text-stone-400">(선택)</span>
+        </span>
+      </label>
+
+      <div className="ml-6.5 flex flex-wrap items-center gap-x-3 gap-y-1 type-caption">
+        {(['TERMS', 'PRIVACY'] as const).map((type) => {
+          const policy = findPolicy(type)
+          const label = type === 'TERMS' ? '이용약관 보기' : '개인정보 처리방침 보기'
+          return (
+            <button
+              className="min-h-8 font-semibold text-brand-700 underline decoration-stone-300 underline-offset-4 hover:decoration-brand-700 disabled:cursor-not-allowed disabled:text-stone-400"
+              disabled={!policy}
+              key={type}
+              onClick={() => policy && setOpenPolicy(policy)}
+              type="button"
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      {error ? (
+        <p className="type-caption font-medium text-rose-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {openPolicy ? (
+        <SignupPolicyDialog
+          onClose={() => setOpenPolicy(null)}
+          policy={openPolicy}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function SignupPolicyDialog({
+  onClose,
+  policy,
+}: {
+  onClose: () => void
+  policy: PolicyRef
+}) {
+  const [content, setContent] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const title = policy.type === 'TERMS' ? '이용약관' : '개인정보 처리방침'
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void getPolicyDocument(policy.type, policy.version, controller.signal)
+      .then((document) => setContent(document.content))
+      .catch((requestError) => {
+        if (
+          requestError instanceof ApiClientError &&
+          requestError.code === 'REQUEST_ABORTED'
+        ) {
+          return
+        }
+        setError(getRequestErrorMessage(requestError))
+      })
+    return () => controller.abort()
+  }, [policy.type, policy.version])
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null
+    closeButtonRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus()
+    }
+  }, [onClose])
+
+  return (
+    <div
+      aria-labelledby="signup-policy-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      role="dialog"
+    >
+      <div className="flex max-h-[min(720px,calc(100dvh-48px))] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xl">
+        <div className="flex min-h-14 items-center justify-between gap-4 border-b border-stone-200 px-5 py-3">
+          <div className="min-w-0">
+            <h2 className="type-dialog-title font-bold text-stone-900" id="signup-policy-title">
+              {title}
+            </h2>
+            <p className="mt-0.5 type-caption text-stone-500">버전 {policy.version}</p>
+          </div>
+          <button
+            aria-label={`${title} 닫기`}
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
+            <X aria-hidden="true" size={18} />
+          </button>
+        </div>
+        <div className="min-h-48 flex-1 overflow-y-auto px-5 py-4 type-body leading-7 whitespace-pre-wrap text-stone-700">
+          {error ? (
+            <p className="text-rose-700" role="alert">{error}</p>
+          ) : content ? (
+            content
+          ) : (
+            <p className="text-stone-500" role="status">약관을 불러오는 중입니다.</p>
+          )}
+        </div>
+        <div className="flex justify-end border-t border-stone-200 px-5 py-3">
+          <Button onClick={onClose} type="button" variant="secondary">
+            닫기
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

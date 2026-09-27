@@ -107,6 +107,37 @@ export async function handleApiFixtureRequest(
     return apiSuccess({ message: '비밀번호가 변경되었습니다. 다시 로그인해주세요.' })
   }
 
+  if (request.method === 'GET' && path === '/api/policies/current') {
+    return apiSuccess([
+      {
+        title: '개인정보 처리방침',
+        type: 'PRIVACY',
+        version: '0.9',
+      },
+      {
+        title: '이용약관',
+        type: 'TERMS',
+        version: '0.9',
+      },
+    ])
+  }
+
+  if (
+    request.method === 'GET' &&
+    /^\/api\/policies\/(TERMS|PRIVACY)\/[^/]+$/.test(path)
+  ) {
+    const [, type = 'TERMS', version = '0.9'] = path.split('/').slice(-3)
+    return apiSuccess({
+      content:
+        type === 'TERMS'
+          ? '제1조 목적\n본 약관은 으뜸 서비스 이용 조건을 정합니다.'
+          : '제1조 개인정보의 처리\n서비스 제공에 필요한 개인정보를 처리합니다.',
+      title: type === 'TERMS' ? '이용약관' : '개인정보 처리방침',
+      type,
+      version,
+    })
+  }
+
   if (request.method === 'POST' && path === '/api/auth/login') {
     const body = await readJson<{ email: string }>(request)
     if (body.email === 'locked@example.com') {

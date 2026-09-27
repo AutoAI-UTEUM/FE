@@ -62,6 +62,8 @@ describe('remote auth repository', () => {
     await expect(repository.login(values)).resolves.toEqual({
       accessToken: 'access-token',
       expiresIn: 3600,
+      // 응답에 pendingConsents가 없는 구버전 서버는 빈 배열로 읽어 게이팅하지 않는다.
+      pendingConsents: [],
       session: {
         absoluteExpiresAt: '2026-10-04T04:00:00Z',
         idleExpiresAt: '2026-09-20T06:00:00Z',
@@ -81,14 +83,60 @@ describe('remote auth repository', () => {
       learningEmailOptIn: false,
       name: '학습자',
       password: 'password123',
-      privacyVersion: '2026-07-01',
       role: 'INSTRUCTOR',
-      termsVersion: '2026-07-01',
     })
     expectJsonRequest(fetchMock, 1, '/api/auth/login', {
       email: 'learner@example.com',
       password: 'password123',
     })
+  })
+
+  it('sends the current policy versions on signup and surfaces pendingConsents on login', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ data: {}, message: '가입 완료', success: true }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            accessToken: 'access-token',
+            expiresIn: 3600,
+            pendingConsents: [{ type: 'TERMS', version: '1.0' }],
+            tokenType: 'Bearer',
+            user: { email: 'learner@example.com', id: 1, name: '학습자', role: 'LEARNER' },
+          },
+          message: '로그인 완료',
+          success: true,
+        }),
+      )
+    const repository = getAuthRepository()
+    const values = {
+      affiliation: '',
+      consents: [
+        // title 같은 여분 필드가 섞여 와도 {type, version}만 나가야 한다.
+        { title: '이용약관', type: 'TERMS' as const, version: '0.9' },
+        { type: 'PRIVACY' as const, version: '0.9' },
+      ],
+      email: 'learner@example.com',
+      name: '학습자',
+      password: 'password123',
+      role: 'LEARNER' as const,
+    }
+
+    await repository.signup(values)
+    expectJsonRequest(fetchMock, 0, '/api/auth/signup', {
+      consents: [
+        { type: 'TERMS', version: '0.9' },
+        { type: 'PRIVACY', version: '0.9' },
+      ],
+      email: 'learner@example.com',
+      learningEmailOptIn: false,
+      name: '학습자',
+      password: 'password123',
+      role: 'LEARNER',
+    })
+
+    const result = await repository.login(values)
+    expect(result.pendingConsents).toEqual([{ type: 'TERMS', version: '1.0' }])
   })
 
   it('maps VALIDATION_FAILED details onto the matching form fields', async () => {
@@ -180,18 +228,38 @@ describe('remote auth repository', () => {
     )
 
     await getAuthRepository().loginWithGoogle({
+      consents: [
+        { type: 'PRIVACY', version: '0.9' },
+        { type: 'TERMS', version: '0.9' },
+      ],
       idToken: 'google-id-token',
-      privacyVersion: '2026-07-01',
       role: 'INSTRUCTOR',
-      termsVersion: '2026-07-01',
     })
 
     expectJsonRequest(fetchMock, 0, '/api/auth/google', {
+      consents: [
+        { type: 'TERMS', version: '0.9' },
+        { type: 'PRIVACY', version: '0.9' },
+      ],
       idToken: 'google-id-token',
-      privacyVersion: '2026-07-01',
       role: 'INSTRUCTOR',
-      termsVersion: '2026-07-01',
     })
+  })
+
+  it('rejects a partial consent array before sending a signup request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+    await expect(
+      getAuthRepository().signup({
+        affiliation: '울산대학교',
+        consents: [{ type: 'TERMS', version: '0.9' }],
+        email: 'learner@example.com',
+        name: '학습자',
+        password: 'password123',
+        role: 'LEARNER',
+      }),
+    ).rejects.toThrow('현재 TERMS·PRIVACY 버전이 모두 필요합니다.')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('validates a restored token using the bearer header', async () => {
