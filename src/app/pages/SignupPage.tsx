@@ -6,7 +6,6 @@ import {
   EyeOff,
   GraduationCap,
   Presentation,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -18,21 +17,16 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 
 import {
-  getRequiredPolicyRefs,
-  getCurrentPolicies,
-  getPolicyDocument,
   hasFormErrors,
   mapAuthErrorToFormErrors,
   useAuth,
   validateSignupForm,
-  type PolicyRef,
-  type PolicySummary,
   type SignupFormErrors,
   type SignupFormValues,
   type SignupRole,
 } from '../../features/auth'
-import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
-import { Button, MarkdownContent } from '../../shared/ui'
+import { ApiClientError } from '../../shared/api'
+import { Button } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
@@ -96,29 +90,14 @@ export function SignupPage() {
   >(null)
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     useState(false)
-  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false)
-  const [hasConfirmedAge, setHasConfirmedAge] = useState(false)
-  const [termsError, setTermsError] = useState<string | null>(null)
   const [googleRole, setGoogleRole] = useState<SignupRole>('LEARNER')
-  const [hasAcceptedGoogleTerms, setHasAcceptedGoogleTerms] = useState(false)
-  const [hasConfirmedGoogleAge, setHasConfirmedGoogleAge] = useState(false)
-  const [googleTermsError, setGoogleTermsError] = useState<string | null>(null)
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
-  const [currentPolicies, setCurrentPolicies] = useState<PolicySummary[] | null>(null)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
   )
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void getCurrentPolicies(controller.signal)
-      .then(setCurrentPolicies)
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [])
 
   useEffect(() => {
     if (
@@ -180,23 +159,9 @@ export function SignupPage() {
     }
     setErrors(nextErrors)
     setConfirmPasswordError(nextConfirmPasswordError)
-    const requiredConsents = getRequiredPolicyRefs(currentPolicies)
-    const needsConsent = Boolean(requiredConsents?.length)
-    const consents = needsConsent && hasAcceptedTerms
-      ? requiredConsents ?? undefined
-      : undefined
-    const legalError = !hasConfirmedAge
-      ? '가입하려면 만 14세 이상임을 확인해 주세요.'
-      : requiredConsents === null
-        ? '약관 정보를 불러온 뒤 다시 시도해 주세요.'
-        : needsConsent && !hasAcceptedTerms
-          ? '필수 이용약관에 동의해 주세요.'
-          : null
-    setTermsError(legalError)
     if (
       hasFormErrors(nextErrors) ||
       nextConfirmPasswordError ||
-      legalError ||
       emailAvailability === 'taken'
     ) {
       return
@@ -205,19 +170,12 @@ export function SignupPage() {
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await signup({ ...values, consents })
+      await signup(values)
       navigate(routes.classrooms, { replace: true })
     } catch (error) {
-      if (
-        error instanceof ApiClientError &&
-        error.code === 'POLICY_CONSENT_REQUIRED'
-      ) {
-        setTermsError('가입을 계속하려면 현재 약관에 동의해 주세요.')
-      } else {
-        const formErrors = mapAuthErrorToFormErrors(error)
-        if (formErrors) setErrors(formErrors as SignupFormErrors)
-        else setServerError('회원가입 요청을 처리하지 못했습니다.')
-      }
+      const formErrors = mapAuthErrorToFormErrors(error)
+      if (formErrors) setErrors(formErrors as SignupFormErrors)
+      else setServerError('회원가입 요청을 처리하지 못했습니다.')
     } finally {
       setIsSubmitting(false)
     }
@@ -226,41 +184,17 @@ export function SignupPage() {
   async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!pendingGoogleIdToken) return
-    const requiredConsents = getRequiredPolicyRefs(currentPolicies)
-    const needsConsent = Boolean(requiredConsents?.length)
-    const consents = needsConsent && hasAcceptedGoogleTerms
-      ? requiredConsents ?? undefined
-      : undefined
-    const legalError = !hasConfirmedGoogleAge
-      ? '가입하려면 만 14세 이상임을 확인해 주세요.'
-      : requiredConsents === null
-        ? '약관 정보를 불러온 뒤 다시 시도해 주세요.'
-        : needsConsent && !hasAcceptedGoogleTerms
-          ? '필수 이용약관에 동의해 주세요.'
-          : null
-    if (legalError) {
-      setGoogleTermsError(legalError)
-      return
-    }
 
     setIsGoogleSubmitting(true)
     setGoogleError(null)
     try {
       await loginWithGoogle({
-        consents,
         idToken: pendingGoogleIdToken,
         role: googleRole,
       })
       navigate(routes.classrooms, { replace: true })
-    } catch (error) {
-      if (
-        error instanceof ApiClientError &&
-        error.code === 'POLICY_CONSENT_REQUIRED'
-      ) {
-        setGoogleTermsError('가입을 계속하려면 현재 약관에 동의해 주세요.')
-      } else {
-        setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
-      }
+    } catch {
+      setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
     } finally {
       setIsGoogleSubmitting(false)
     }
@@ -339,22 +273,6 @@ export function SignupPage() {
               )
             })}
           </div>
-
-          <SignupPolicyConsent
-            ageChecked={hasConfirmedGoogleAge}
-            checked={hasAcceptedGoogleTerms}
-            className="mt-5"
-            error={googleTermsError}
-            onAgeChange={(checked) => {
-              setHasConfirmedGoogleAge(checked)
-              setGoogleTermsError(null)
-            }}
-            onChange={(checked) => {
-              setHasAcceptedGoogleTerms(checked)
-              setGoogleTermsError(null)
-            }}
-            policies={currentPolicies}
-          />
 
           {googleError ? (
             <p className="mt-3 type-body font-medium text-rose-700" role="alert">
@@ -727,22 +645,6 @@ export function SignupPage() {
           </div>
         </div>
 
-        <SignupPolicyConsent
-          ageChecked={hasConfirmedAge}
-          checked={hasAcceptedTerms}
-          className="pt-1"
-          error={termsError}
-          onAgeChange={(checked) => {
-            setHasConfirmedAge(checked)
-            setTermsError(null)
-          }}
-          onChange={(checked) => {
-            setHasAcceptedTerms(checked)
-            setTermsError(null)
-          }}
-          policies={currentPolicies}
-        />
-
         <div className="flex gap-3 pt-2">
           <Button
             className="h-11 shrink-0 px-5"
@@ -776,184 +678,6 @@ export function SignupPage() {
         </p>
       ) : null}
 
-    </div>
-  )
-}
-
-function SignupPolicyConsent({
-  ageChecked,
-  checked,
-  className = '',
-  error,
-  onAgeChange,
-  onChange,
-  policies,
-}: {
-  ageChecked: boolean
-  checked: boolean
-  className?: string
-  error: string | null
-  onAgeChange: (checked: boolean) => void
-  onChange: (checked: boolean) => void
-  policies: PolicySummary[] | null
-}) {
-  const [openPolicy, setOpenPolicy] = useState<PolicyRef | null>(null)
-  const requiredPolicies = policies?.filter((policy) => policy.requiresConsent) ?? null
-
-  function findPolicy(type: PolicyRef['type']) {
-    return policies?.find((policy) => policy.type === type) ?? null
-  }
-
-  return (
-    <div className={`grid gap-2 ${className}`}>
-      <label className="flex min-h-11 cursor-pointer items-center gap-2.5 type-control leading-5 text-stone-700">
-        <input
-          checked={ageChecked}
-          className="size-4 shrink-0 rounded border-stone-300 accent-brand-600"
-          onChange={(event) => onAgeChange(event.target.checked)}
-          type="checkbox"
-        />
-        <span><span className="font-semibold text-stone-900">[필수]</span> 만 14세 이상입니다</span>
-      </label>
-
-      {requiredPolicies && requiredPolicies.length > 0 ? (
-      <label className="flex cursor-pointer items-start gap-2.5 type-control leading-5 text-stone-600 mobile-web:min-h-11 mobile-web:items-center">
-        <input
-          checked={checked}
-          className="size-4 shrink-0 rounded border-stone-300 accent-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!requiredPolicies}
-          onChange={(event) => onChange(event.target.checked)}
-          type="checkbox"
-        />
-        <span>
-          <span className="font-semibold text-stone-900">[필수]</span>{' '}
-          {requiredPolicies.length === 1 && requiredPolicies[0]?.type === 'TERMS'
-            ? '이용약관에 동의합니다'
-            : '필수 정책에 모두 동의합니다'}
-        </span>
-      </label>
-      ) : null}
-
-      {policies && policies.length > 0 ? (
-      <div className="ml-6.5 flex flex-wrap items-center gap-x-3 gap-y-1 type-caption">
-        {(['TERMS', 'PRIVACY'] as const).map((type) => {
-          const policy = findPolicy(type)
-          const label = type === 'TERMS' ? '이용약관 보기' : '개인정보 처리방침 보기'
-          return (
-            <button
-              className="min-h-8 font-semibold text-brand-700 underline decoration-stone-300 underline-offset-4 hover:decoration-brand-700 disabled:cursor-not-allowed disabled:text-stone-400"
-              disabled={!policy}
-              key={type}
-              onClick={() => policy && setOpenPolicy(policy)}
-              type="button"
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
-      ) : null}
-
-      {error ? (
-        <p className="type-caption font-medium text-rose-700" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {openPolicy ? (
-        <SignupPolicyDialog
-          onClose={() => setOpenPolicy(null)}
-          policy={openPolicy}
-        />
-      ) : null}
-    </div>
-  )
-}
-
-function SignupPolicyDialog({
-  onClose,
-  policy,
-}: {
-  onClose: () => void
-  policy: PolicyRef
-}) {
-  const [content, setContent] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const title = policy.type === 'TERMS' ? '이용약관' : '개인정보 처리방침'
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void getPolicyDocument(policy.type, policy.version, controller.signal)
-      .then((document) => setContent(document.content))
-      .catch((requestError) => {
-        if (
-          requestError instanceof ApiClientError &&
-          requestError.code === 'REQUEST_ABORTED'
-        ) {
-          return
-        }
-        setError(getRequestErrorMessage(requestError))
-      })
-    return () => controller.abort()
-  }, [policy.type, policy.version])
-
-  useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null
-    closeButtonRef.current?.focus()
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      previousFocus?.focus()
-    }
-  }, [onClose])
-
-  return (
-    <div
-      aria-labelledby="signup-policy-title"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-6"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
-      role="dialog"
-    >
-      <div className="flex max-h-[min(720px,calc(100dvh-48px))] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-stone-200 bg-white shadow-xl">
-        <div className="flex min-h-14 items-center justify-between gap-4 border-b border-stone-200 px-5 py-3">
-          <div className="min-w-0">
-            <h2 className="type-dialog-title font-bold text-stone-900" id="signup-policy-title">
-              {title}
-            </h2>
-            <p className="mt-0.5 type-caption text-stone-500">버전 {policy.version}</p>
-          </div>
-          <button
-            aria-label={`${title} 닫기`}
-            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-            onClick={onClose}
-            ref={closeButtonRef}
-            type="button"
-          >
-            <X aria-hidden="true" size={18} />
-          </button>
-        </div>
-        <div className="min-h-48 flex-1 overflow-y-auto px-5 py-4 type-body leading-7 text-stone-700">
-          {error ? (
-            <p className="text-rose-700" role="alert">{error}</p>
-          ) : content ? (
-            <MarkdownContent content={content} />
-          ) : (
-            <p className="text-stone-500" role="status">약관을 불러오는 중입니다.</p>
-          )}
-        </div>
-        <div className="flex justify-end border-t border-stone-200 px-5 py-3">
-          <Button onClick={onClose} type="button" variant="secondary">
-            닫기
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }
