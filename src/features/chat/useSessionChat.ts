@@ -43,6 +43,16 @@ export interface SessionChat {
 const TURN_IN_PROGRESS_NOTICE = 'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.'
 const TURN_RECOVERY_POLL_INTERVAL_MS = 1_500
 const STREAM_RENDER_INTERVAL_MS = 50
+const STREAM_READY_TIMEOUT_MS = 10_000
+
+interface ActiveTurnAttempt {
+  cancellationRequested: boolean
+  id: number
+  pollController: AbortController | null
+  requestId: string
+  streamController: AbortController
+  turnController: AbortController | null
+}
 
 export function useSessionChat(
   repository: SessionsRepository,
@@ -62,10 +72,8 @@ export function useSessionChat(
   const streamingMessageIdRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   const isTurnPendingRef = useRef(false)
-  const cancellationRequestedRef = useRef(false)
-  const activePollControllerRef = useRef<AbortController | null>(null)
-  const activeStreamControllerRef = useRef<AbortController | null>(null)
-  const activeTurnControllerRef = useRef<AbortController | null>(null)
+  const attemptSequenceRef = useRef(0)
+  const activeAttemptRef = useRef<ActiveTurnAttempt | null>(null)
 
   const updateMessages = useCallback((updater: (current: ChatMessage[]) => ChatMessage[]) => {
     setMessages((current) => {
@@ -74,6 +82,19 @@ export function useSessionChat(
       return next
     })
   }, [])
+
+  useEffect(() => () => {
+    const attempt = activeAttemptRef.current
+    activeAttemptRef.current = null
+    attemptSequenceRef.current += 1
+    if (attempt && !attempt.streamController.signal.aborted) {
+      logSessionStreamEvent('stream_abort', attempt, sessionId, 'session_change_or_unmount')
+    }
+    attempt?.pollController?.abort()
+    attempt?.streamController.abort()
+    attempt?.turnController?.abort()
+    isTurnPendingRef.current = false
+  }, [sessionId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -181,14 +202,19 @@ export function useSessionChat(
         })
       }
       isTurnPendingRef.current = true
-      cancellationRequestedRef.current = false
       setIsTurnPending(true)
       setStreamNotice('실시간 응답을 연결하는 중입니다.')
       setStreamUiActions([])
-      const streamController = new AbortController()
-      const turnController = new AbortController()
-      activeStreamControllerRef.current = streamController
-      activeTurnControllerRef.current = turnController
+      const attempt: ActiveTurnAttempt = {
+        cancellationRequested: false,
+        id: ++attemptSequenceRef.current,
+        pollController: null,
+        requestId: turn.requestId,
+        streamController: new AbortController(),
+        turnController: null,
+      }
+      activeAttemptRef.current = attempt
+      const isCurrentAttempt = () => activeAttemptRef.current === attempt
       const streamMessageId = `stream-${turn.requestId}`
       const knownMessageIds = new Set(messagesRef.current
         .filter((message) => message.role === 'assistant' && message.status === 'sent')
@@ -200,13 +226,50 @@ export function useSessionChat(
       let pendingStreamContent = ''
       let streamRenderTimer: ReturnType<typeof setTimeout> | null = null
       let acceptsStreamContent = true
+      let streamEnded = false
+      let terminalReceived = false
+      let turnPostStarted = false
+      let readySettled = false
+      let resolveReady: (() => void) | undefined
+      let rejectReady: ((error: unknown) => void) | undefined
       const streamCompleted = new Promise<void>((resolve) => {
         resolveStreamCompleted = resolve
       })
+      const streamReady = new Promise<void>((resolve, reject) => {
+        resolveReady = resolve
+        rejectReady = reject
+      })
+      const readyTimeoutId = window.setTimeout(() => {
+        if (readySettled || !isCurrentAttempt()) return
+        readySettled = true
+        logSessionStreamEvent('stream_abort', attempt, sessionId, 'ready_timeout')
+        rejectReady?.(new ApiClientError({
+          code: 'STREAM_READY_TIMEOUT',
+          message: '실시간 응답 연결을 준비하지 못했습니다. 다시 시도해 주세요.',
+        }))
+        attempt.streamController.abort()
+      }, STREAM_READY_TIMEOUT_MS)
+      const settleReady = (error?: unknown) => {
+        if (readySettled) return
+        readySettled = true
+        window.clearTimeout(readyTimeoutId)
+        if (error) rejectReady?.(error)
+        else resolveReady?.()
+      }
+      attempt.streamController.signal.addEventListener('abort', () => {
+        settleReady(new ApiClientError({
+          code: 'REQUEST_ABORTED',
+          message: '실시간 응답 연결이 취소되었습니다.',
+        }))
+      }, { once: true })
       const flushStreamContent = () => {
         if (streamRenderTimer !== null) clearTimeout(streamRenderTimer)
         streamRenderTimer = null
-        if (!acceptsStreamContent || pendingStreamContent.length === 0) return
+        if (
+          !acceptsStreamContent ||
+          !isCurrentAttempt() ||
+          pendingStreamContent.length === 0
+        ) return
         const content = pendingStreamContent
         pendingStreamContent = ''
         updateMessages((current) => {
@@ -231,7 +294,7 @@ export function useSessionChat(
         })
       }
       const queueStreamContent = (text: string) => {
-        if (!acceptsStreamContent) return
+        if (!acceptsStreamContent || !isCurrentAttempt()) return
         pendingStreamContent += text
         if (streamRenderTimer === null) {
           streamRenderTimer = setTimeout(flushStreamContent, STREAM_RENDER_INTERVAL_MS)
@@ -244,46 +307,115 @@ export function useSessionChat(
         streamRenderTimer = null
       }
       streamingMessageIdRef.current = streamMessageId
+      logSessionStreamEvent('stream_open_start', attempt, sessionId)
       const streamPromise = repository
         .stream(
           sessionId,
           {
             onCompleted: (draft, result) => {
+              if (!isCurrentAttempt()) return
+              terminalReceived = true
               flushStreamContent()
               completedNoteDraft = draft
               completedStreamResult = result
+              logSessionStreamEvent('terminal', attempt, sessionId, 'completed')
               setStreamNotice(null)
               if (draft) setNoteDraft(draft)
               resolveStreamCompleted?.()
             },
             onContentDelta: (text) => {
+              if (!isCurrentAttempt()) return
               setStreamNotice('답변을 실시간으로 받고 있습니다.')
               queueStreamContent(text)
             },
-            onError: (message) => setStreamNotice(message),
-            onStatus: (stage) =>
-              setStreamNotice(getStreamStageLabel(stage)),
+            onError: (message) => {
+              if (!isCurrentAttempt()) return
+              if (!readySettled) {
+                logSessionStreamEvent('terminal', attempt, sessionId, 'error_before_ready')
+                settleReady(new ApiClientError({
+                  code: 'STREAM_ERROR_BEFORE_READY',
+                  message,
+                }))
+                attempt.streamController.abort()
+                return
+              }
+              setStreamNotice(message)
+            },
+            onReady: () => {
+              if (!isCurrentAttempt() || readySettled) return
+              logSessionStreamEvent('ready_received', attempt, sessionId)
+              settleReady()
+            },
+            onStatus: (stage) => {
+              if (isCurrentAttempt()) setStreamNotice(getStreamStageLabel(stage))
+            },
             onUiAction: (action) => {
+              if (!isCurrentAttempt()) return
               recoveredUiActions.push(action)
               setStreamUiActions((current) => [...current, action])
             },
           },
-          streamController.signal,
+          attempt.streamController.signal,
         )
+        .then(() => {
+          streamEnded = true
+          if (!readySettled) {
+            logSessionStreamEvent('terminal', attempt, sessionId, 'eof_before_ready')
+            settleReady(new ApiClientError({
+              code: 'STREAM_CLOSED_BEFORE_READY',
+              message: '실시간 응답 연결이 준비되기 전에 종료되었습니다. 다시 시도해 주세요.',
+            }))
+          } else if (
+            isCurrentAttempt() &&
+            turnPostStarted &&
+            !terminalReceived &&
+            !attempt.streamController.signal.aborted
+          ) {
+            logSessionStreamEvent('terminal', attempt, sessionId, 'eof_before_completed')
+            setStreamNotice('실시간 연결이 중단되어 처리 결과를 확인하고 있습니다.')
+          }
+        })
         .catch((error: unknown) => {
+          streamEnded = true
+          if (!readySettled) settleReady(toStreamReadyError(error))
           if (
-            !streamController.signal.aborted &&
+            isCurrentAttempt() &&
+            !attempt.streamController.signal.aborted &&
             !(
               error instanceof ApiClientError &&
               error.code === 'REQUEST_ABORTED'
             )
           ) {
-            setStreamNotice('실시간 연결 없이 일반 응답으로 계속합니다.')
+            logSessionStreamEvent('terminal', attempt, sessionId, 'stream_error')
+            setStreamNotice('실시간 연결이 중단되어 처리 결과를 확인하고 있습니다.')
           }
         })
 
       try {
-        const result = await repository.submitTurn(sessionId, turn, turnController.signal)
+        await streamReady
+        await Promise.resolve()
+        if (!isCurrentAttempt()) {
+          throw new ApiClientError({
+            code: 'REQUEST_ABORTED',
+            message: '이전 실시간 연결 시도가 종료되었습니다.',
+          })
+        }
+        if (streamEnded && !terminalReceived) {
+          throw new ApiClientError({
+            code: 'STREAM_CLOSED_BEFORE_TURN',
+            message: '실시간 응답 연결이 종료되었습니다. 다시 시도해 주세요.',
+          })
+        }
+
+        attempt.turnController = new AbortController()
+        turnPostStarted = true
+        logSessionStreamEvent('turn_post_start', attempt, sessionId)
+        const result = await repository.submitTurn(
+          sessionId,
+          turn,
+          attempt.turnController.signal,
+        )
+        if (!isCurrentAttempt()) return result
         stopStreamContentUpdates()
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
@@ -293,20 +425,23 @@ export function useSessionChat(
         return result
       } catch (error) {
         if (
-          cancellationRequestedRef.current
+          attempt.cancellationRequested
           && error instanceof ApiClientError
           && error.code === 'REQUEST_ABORTED'
         ) {
-          updateMessages((current) => current.filter(
-            (message) => message.id !== streamMessageId,
-          ))
-          setStreamNotice(null)
+          if (isCurrentAttempt()) {
+            updateMessages((current) => current.filter(
+              (message) => message.id !== streamMessageId,
+            ))
+            setStreamNotice(null)
+          }
           return {
             messages: [],
             uiActions: [],
           }
         }
         if (isTurnInProgressError(error)) {
+          if (!isCurrentAttempt()) throw error
           // 거부된 중복 질문은 실패/재시도 대상으로 남기지 않는다.
           updateMessages((current) => current.filter(
             (message) => message.requestId !== turn.requestId,
@@ -314,7 +449,7 @@ export function useSessionChat(
           setStreamNotice(TURN_IN_PROGRESS_NOTICE)
 
           const pollController = new AbortController()
-          activePollControllerRef.current = pollController
+          attempt.pollController = pollController
           const recoveredHistoryPromise = pollForCompletedTurn(
             repository,
             sessionId,
@@ -351,25 +486,49 @@ export function useSessionChat(
           return result
         }
 
-        // 완료된 턴의 중복 requestId는 최신 메시지 복원으로 수렴한다.
         if (
-          error instanceof ApiClientError &&
-          error.code === 'TURN_ALREADY_PROCESSED'
+          turnPostStarted &&
+          (isTurnAlreadyProcessedError(error) || shouldRecoverTurnFailure(error))
         ) {
-          reloadHistory()
+          const recovered = await recoverCompletedTurnAfterFailure(
+            repository,
+            sessionId,
+            knownMessageIds,
+          )
+          if (recovered && isCurrentAttempt()) {
+            appendMessages(recovered.messages)
+            setStreamUiActions(recovered.uiActions)
+            if (recovered.noteDraft) setNoteDraft(recovered.noteDraft)
+            onResult?.(recovered)
+            setStreamNotice(null)
+            return recovered
+          }
+          if (isTurnAlreadyProcessedError(error) && isCurrentAttempt()) {
+            reloadHistory()
+          }
         }
         throw error
       } finally {
+        window.clearTimeout(readyTimeoutId)
         stopStreamContentUpdates()
-        streamController.abort()
+        attempt.pollController?.abort()
+        attempt.turnController?.abort()
+        if (!attempt.streamController.signal.aborted) {
+          logSessionStreamEvent(
+            'stream_abort',
+            attempt,
+            sessionId,
+            terminalReceived ? 'terminal_cleanup' : 'turn_settled_cleanup',
+          )
+          attempt.streamController.abort()
+        }
         await streamPromise
-        if (activePollControllerRef.current) activePollControllerRef.current.abort()
-        activePollControllerRef.current = null
-        activeStreamControllerRef.current = null
-        activeTurnControllerRef.current = null
-        cancellationRequestedRef.current = false
-        isTurnPendingRef.current = false
-        setIsTurnPending(false)
+        if (isCurrentAttempt()) {
+          activeAttemptRef.current = null
+          streamingMessageIdRef.current = null
+          isTurnPendingRef.current = false
+          setIsTurnPending(false)
+        }
       }
     },
     [appendMessages, reloadHistory, repository, sessionId, updateMessages],
@@ -377,17 +536,29 @@ export function useSessionChat(
 
   const cancelTurn = useCallback(async () => {
     if (!isTurnPendingRef.current) return false
+    const attempt = activeAttemptRef.current
+    if (!attempt) return false
     setStreamNotice('답변 생성을 중단하는 중입니다.')
     try {
+      if (!attempt.turnController) {
+        attempt.cancellationRequested = true
+        logSessionStreamEvent('stream_abort', attempt, sessionId, 'user_cancel_before_post')
+        attempt.streamController.abort()
+        return true
+      }
       const cancelled = await repository.cancelTurn(sessionId)
       if (!cancelled) {
-        setStreamNotice('서버에서 이미 답변을 마무리하고 있습니다.')
+        if (activeAttemptRef.current === attempt) {
+          setStreamNotice('서버에서 이미 답변을 마무리하고 있습니다.')
+        }
         return false
       }
-      cancellationRequestedRef.current = true
-      activePollControllerRef.current?.abort()
-      activeStreamControllerRef.current?.abort()
-      activeTurnControllerRef.current?.abort()
+      if (activeAttemptRef.current !== attempt) return false
+      attempt.cancellationRequested = true
+      logSessionStreamEvent('stream_abort', attempt, sessionId, 'user_cancel')
+      attempt.pollController?.abort()
+      attempt.streamController.abort()
+      attempt.turnController.abort()
       const streamingMessageId = streamingMessageIdRef.current
       if (streamingMessageId) {
         updateMessages((current) => current.filter((message) => message.id !== streamingMessageId))
@@ -395,7 +566,9 @@ export function useSessionChat(
       streamingMessageIdRef.current = null
       return true
     } catch (error) {
-      setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+      if (activeAttemptRef.current === attempt) {
+        setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+      }
       throw error
     }
   }, [repository, sessionId, updateMessages])
@@ -421,36 +594,53 @@ export function useSessionChat(
   ) => {
     if (isTurnPendingRef.current) return undefined
     isTurnPendingRef.current = true
-    cancellationRequestedRef.current = false
     setIsTurnPending(true)
     setStreamNotice(TURN_IN_PROGRESS_NOTICE)
 
     const knownMessageIds = new Set(messagesRef.current
       .filter((message) => message.role === 'assistant' && message.status === 'sent')
       .map((message) => message.id))
-    const streamController = new AbortController()
-    const pollController = new AbortController()
-    activeStreamControllerRef.current = streamController
-    activePollControllerRef.current = pollController
+    const attempt: ActiveTurnAttempt = {
+      cancellationRequested: false,
+      id: ++attemptSequenceRef.current,
+      pollController: new AbortController(),
+      requestId: 'turn-recovery',
+      streamController: new AbortController(),
+      turnController: null,
+    }
+    activeAttemptRef.current = attempt
+    const isCurrentAttempt = () => activeAttemptRef.current === attempt
     let resolveStreamCompleted: (() => void) | undefined
     let completedStreamResult: SessionTurnResult | undefined
     const streamCompleted = new Promise<void>((resolve) => {
       resolveStreamCompleted = resolve
     })
+    logSessionStreamEvent('stream_open_start', attempt, sessionId, 'turn_recovery')
     const streamPromise = repository.stream(sessionId, {
       onCompleted: (draft, result) => {
+        if (!isCurrentAttempt()) return
         if (draft) setNoteDraft(draft)
         completedStreamResult = result
+        logSessionStreamEvent('terminal', attempt, sessionId, 'completed')
         resolveStreamCompleted?.()
       },
-      onError: () => setStreamNotice(TURN_IN_PROGRESS_NOTICE),
-      onStatus: () => setStreamNotice(TURN_IN_PROGRESS_NOTICE),
-    }, streamController.signal).catch(() => undefined)
+      onError: () => {
+        if (isCurrentAttempt()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+      },
+      onReady: () => {
+        if (isCurrentAttempt()) {
+          logSessionStreamEvent('ready_received', attempt, sessionId, 'turn_recovery')
+        }
+      },
+      onStatus: () => {
+        if (isCurrentAttempt()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+      },
+    }, attempt.streamController.signal).catch(() => undefined)
     const recoveredHistoryPromise = pollForCompletedTurn(
       repository,
       sessionId,
       knownMessageIds,
-      pollController.signal,
+      attempt.pollController!.signal,
     )
 
     try {
@@ -458,7 +648,7 @@ export function useSessionChat(
         streamCompleted.then(() => 'stream' as const),
         recoveredHistoryPromise.then(() => 'poll' as const),
       ])
-      pollController.abort()
+      attempt.pollController?.abort()
       const result = recoverySource === 'stream' && completedStreamResult
         ? completedStreamResult
         : await recoverTurnResult(
@@ -468,20 +658,25 @@ export function useSessionChat(
               ? recoveredHistoryPromise
               : repository.listMessages(sessionId),
           )
-      appendMessages(result.messages)
-      setStreamUiActions(result.uiActions)
-      onResult?.(result)
+      if (isCurrentAttempt()) {
+        appendMessages(result.messages)
+        setStreamUiActions(result.uiActions)
+        onResult?.(result)
+      }
       return result
     } finally {
-      pollController.abort()
-      streamController.abort()
+      attempt.pollController?.abort()
+      if (!attempt.streamController.signal.aborted) {
+        logSessionStreamEvent('stream_abort', attempt, sessionId, 'turn_recovery_settled')
+        attempt.streamController.abort()
+      }
       await streamPromise
-      setStreamNotice(null)
-      activePollControllerRef.current = null
-      activeStreamControllerRef.current = null
-      cancellationRequestedRef.current = false
-      isTurnPendingRef.current = false
-      setIsTurnPending(false)
+      if (isCurrentAttempt()) {
+        activeAttemptRef.current = null
+        setStreamNotice(null)
+        isTurnPendingRef.current = false
+        setIsTurnPending(false)
+      }
     }
   }, [appendMessages, repository, sessionId])
 
@@ -555,6 +750,66 @@ function isTurnInProgressError(error: unknown): error is ApiClientError {
   return error instanceof ApiClientError
     && error.status === 409
     && error.code === 'TURN_IN_PROGRESS'
+}
+
+function isTurnAlreadyProcessedError(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError
+    && error.code === 'TURN_ALREADY_PROCESSED'
+}
+
+function shouldRecoverTurnFailure(error: unknown): boolean {
+  if (!(error instanceof ApiClientError)) return false
+  return error.code === 'AI_STREAM_INTERRUPTED'
+    || error.code === 'NETWORK_ERROR'
+    || (typeof error.status === 'number' && error.status >= 500)
+}
+
+async function recoverCompletedTurnAfterFailure(
+  repository: SessionsRepository,
+  sessionId: string,
+  knownMessageIds: ReadonlySet<string>,
+): Promise<SessionTurnResult | undefined> {
+  try {
+    const history = await repository.listMessages(sessionId)
+    const hasNewCompletedAnswer = history.some((message) =>
+      message.senderType === 'AI'
+      && message.status !== 'FAILED'
+      && message.status !== 'PENDING'
+      && !knownMessageIds.has(message.id))
+    if (!hasNewCompletedAnswer) return undefined
+    return recoverTurnResult(
+      repository,
+      sessionId,
+      Promise.resolve(history),
+    )
+  } catch {
+    return undefined
+  }
+}
+
+function toStreamReadyError(error: unknown): ApiClientError {
+  if (error instanceof ApiClientError) return error
+  return new ApiClientError({
+    cause: error,
+    code: 'STREAM_READY_FAILED',
+    message: '실시간 응답 연결을 준비하지 못했습니다. 다시 시도해 주세요.',
+  })
+}
+
+function logSessionStreamEvent(
+  event: 'ready_received' | 'stream_abort' | 'stream_open_start' | 'terminal' | 'turn_post_start',
+  attempt: ActiveTurnAttempt,
+  sessionId: string,
+  reason?: string,
+): void {
+  console.info('[session-stream]', {
+    attemptId: attempt.id,
+    event,
+    reason,
+    requestId: attempt.requestId,
+    sessionId,
+    timestamp: new Date().toISOString(),
+  })
 }
 
 async function pollForCompletedTurn(

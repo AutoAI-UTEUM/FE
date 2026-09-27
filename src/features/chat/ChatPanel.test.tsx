@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedRequest } from '../auth'
 import type { MaterialOverview } from '../materials'
-import type { SessionsRepository, SessionTurnResult } from '../sessions'
+import type {
+  SessionStreamHandlers,
+  SessionsRepository,
+  SessionTurnResult,
+} from '../sessions'
 import { ApiClientError } from '../../shared/api'
 import { ChatPanel } from './ChatPanel'
 import { useSessionChat } from './useSessionChat'
@@ -220,6 +224,32 @@ describe('ChatPanel', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(repository.submitTurn).not.toHaveBeenCalled()
+  })
+
+  it('keeps a failed question available for retry when ready is not reached', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    const submitTurn = vi.fn()
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        return new Promise<void>((resolve) => {
+          if (signal?.aborted) resolve()
+          else signal?.addEventListener('abort', () => resolve(), { once: true })
+        })
+      }),
+      submitTurn,
+    })
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
+
+    fireEvent.change(input, { target: { value: '복구 후 질문입니다.' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    act(() => handlers?.onError?.('실시간 응답 연결에 실패했습니다.'))
+
+    expect(await screen.findByText('전송 실패')).toBeInTheDocument()
+    expect(screen.getByText('복구 후 질문입니다.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument()
+    expect(submitTurn).not.toHaveBeenCalled()
   })
 
   it('loads server history and renders the completed turn response', async () => {
@@ -494,6 +524,7 @@ describe('ChatPanel', () => {
       listMessages,
       stream: vi.fn().mockImplementation((_sessionId, handlers) =>
         new Promise<void>((resolve) => {
+          handlers.onReady?.({ sessionId: '100' })
           completeStream = () => {
             hasCompleted = true
             handlers.onCompleted?.()
@@ -532,6 +563,7 @@ describe('ChatPanel', () => {
       getById,
       listMessages,
       stream: vi.fn().mockImplementation((_sessionId, handlers) => new Promise<void>((resolve) => {
+        handlers.onReady?.({ sessionId: '100' })
         completeStream = () => {
           handlers.onCompleted?.(undefined, {
             currentPage: 3,
@@ -587,7 +619,12 @@ describe('ChatPanel', () => {
     const repository = createRepository({
       getById: vi.fn().mockResolvedValue(null),
       listMessages,
-      stream: vi.fn().mockRejectedValue(new Error('실시간 연결 실패')),
+      stream: vi.fn().mockImplementation((_sessionId, handlers) => {
+        handlers.onReady?.({ sessionId: '100' })
+        return new Promise<void>((_resolve, reject) => {
+          window.setTimeout(() => reject(new Error('실시간 연결 실패')), 0)
+        })
+      }),
       submitTurn,
     })
     render(<ChatHarness repository={repository} />)
@@ -1024,7 +1061,13 @@ function createRepository(
       startedAt: '2026-08-03T00:00:00Z',
     }),
     movePage: vi.fn(),
-    stream: vi.fn().mockResolvedValue(undefined),
+    stream: vi.fn().mockImplementation((sessionId, handlers, signal) => {
+      handlers.onReady?.({ sessionId })
+      return new Promise<void>((resolve) => {
+        if (signal?.aborted) resolve()
+        else signal?.addEventListener('abort', () => resolve(), { once: true })
+      })
+    }),
     submitTurn: vi.fn().mockResolvedValue({
       messages: [
         {

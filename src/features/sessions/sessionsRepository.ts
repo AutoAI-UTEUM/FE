@@ -123,8 +123,14 @@ export interface SessionStreamHandlers {
   onCompleted?: (noteDraft?: NoteDraft, result?: SessionTurnResult) => void
   onContentDelta?: (text: string) => void
   onError?: (message: string) => void
+  onReady?: (ready: SessionStreamReady) => void
   onStatus?: (message: string) => void
   onUiAction?: (action: UiAction) => void
+}
+
+export interface SessionStreamReady {
+  connectedAt?: string
+  sessionId: string
 }
 
 export interface SessionsRepository {
@@ -345,7 +351,7 @@ export function createSessionsRepository(
       }
 
       await consumeSseStream(response.body, (message) =>
-        handleStreamMessage(message, handlers),
+        handleStreamMessage(message, handlers, sessionId),
       )
     },
     async submitTurn(sessionId, turn, signal) {
@@ -369,12 +375,33 @@ export function createSessionsRepository(
 function handleStreamMessage(
   message: SseMessage,
   handlers: SessionStreamHandlers,
+  expectedSessionId: string,
 ): void {
   const payload = parseStreamPayload(message.data)
   const eventType =
     message.event === 'message' && typeof payload.type === 'string'
       ? payload.type
       : message.event
+
+  if (eventType === 'ready') {
+    const readySessionId = typeof payload.sessionId === 'string'
+      || typeof payload.sessionId === 'number'
+      ? String(payload.sessionId)
+      : undefined
+    if (!readySessionId || readySessionId !== expectedSessionId) {
+      throw new ApiClientError({
+        code: 'STREAM_SESSION_MISMATCH',
+        message: '실시간 응답 연결의 학습 세션이 일치하지 않습니다.',
+      })
+    }
+    handlers.onReady?.({
+      connectedAt: typeof payload.connectedAt === 'string'
+        ? payload.connectedAt
+        : undefined,
+      sessionId: readySessionId,
+    })
+    return
+  }
 
   if (eventType === 'content_delta' && typeof payload.text === 'string') {
     handlers.onContentDelta?.(payload.text)

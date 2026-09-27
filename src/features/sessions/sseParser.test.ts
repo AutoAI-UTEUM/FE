@@ -27,4 +27,26 @@ describe('consumeSseStream', () => {
       id: '12',
     })
   })
+
+  it('waits for a complete ready event split across network chunks', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: rea'))
+        controller.enqueue(encoder.encode('dy\ndata: {"session'))
+        controller.enqueue(encoder.encode('Id":573}\n\n'))
+        controller.close()
+      },
+    })
+    const onMessage = vi.fn()
+
+    await consumeSseStream(stream, onMessage)
+
+    expect(onMessage).toHaveBeenCalledOnce()
+    expect(onMessage).toHaveBeenCalledWith({
+      data: '{"sessionId":573}',
+      event: 'ready',
+      id: undefined,
+    })
+  })
 })

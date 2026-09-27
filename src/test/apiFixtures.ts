@@ -72,6 +72,9 @@ export async function handleApiFixtureRequest(
   ) {
     return new Response(
       [
+        'event: ready',
+        `data: {"sessionId":${path.split('/')[3]},"connectedAt":"2026-09-28T00:00:00Z"}`,
+        '',
         'event: status',
         'data: {"stage":"GENERATING"}',
         '',

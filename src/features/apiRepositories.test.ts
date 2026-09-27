@@ -177,7 +177,7 @@ describe('remote feature repositories', () => {
     const rawRequest = vi.fn().mockResolvedValue(
       new Response(
         encoder.encode(
-          'event: status\ndata: {"stage":"GENERATING"}\n\nevent: content_delta\ndata: {"text":"실시간 답변"}\n\nevent: ui_action\ndata: {"action":{"type":"MOVE_NEXT_PAGE","content":"다음 쪽으로 이동"}}\n\nevent: completed\ndata: {"noteDraft":{"title":"핵심 정리","content":"## 개념\\n\\n- 적용 사례"}}\n\n',
+          'event: ready\ndata: {"sessionId":100,"connectedAt":"2026-09-28T00:00:00Z"}\n\nevent: status\ndata: {"stage":"GENERATING"}\n\nevent: content_delta\ndata: {"text":"실시간 답변"}\n\nevent: ui_action\ndata: {"action":{"type":"MOVE_NEXT_PAGE","content":"다음 쪽으로 이동"}}\n\nevent: completed\ndata: {"noteDraft":{"title":"핵심 정리","content":"## 개념\\n\\n- 적용 사례"}}\n\n',
         ),
         { headers: { 'Content-Type': 'text/event-stream' } },
       ),
@@ -189,12 +189,17 @@ describe('remote feature repositories', () => {
     const handlers = {
       onCompleted: vi.fn(),
       onContentDelta: vi.fn(),
+      onReady: vi.fn(),
       onStatus: vi.fn(),
       onUiAction: vi.fn(),
     }
 
     await repository.stream('100', handlers)
 
+    expect(handlers.onReady).toHaveBeenCalledWith({
+      connectedAt: '2026-09-28T00:00:00Z',
+      sessionId: '100',
+    })
     expect(handlers.onStatus).toHaveBeenCalledWith('GENERATING')
     expect(handlers.onContentDelta).toHaveBeenCalledWith('실시간 답변')
     expect(handlers.onUiAction).toHaveBeenCalledWith(
@@ -227,6 +232,23 @@ describe('remote feature repositories', () => {
       messages: [expect.objectContaining({ content: '완료 답변', id: '901' })],
       uiActions: [],
     }))
+  })
+
+  it('rejects a ready event for a different session', async () => {
+    const encoder = new TextEncoder()
+    const rawRequest = vi.fn().mockResolvedValue(new Response(encoder.encode(
+      'event: ready\ndata: {"sessionId":999}\n\n',
+    )))
+    const repository = createSessionsRepository(
+      vi.fn() as AuthenticatedRequest,
+      rawRequest as AuthenticatedRawRequest,
+    )
+    const onReady = vi.fn()
+
+    await expect(repository.stream('573', { onReady })).rejects.toMatchObject({
+      code: 'STREAM_SESSION_MISMATCH',
+    })
+    expect(onReady).not.toHaveBeenCalled()
   })
 
   it('loads older session messages with the opaque server cursor', async () => {
