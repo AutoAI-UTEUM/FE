@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   GoogleSignInButton,
+  getLoginErrorMessage,
   hasFormErrors,
   mapAuthErrorToFormErrors,
   useAuth,
@@ -62,7 +63,10 @@ export function LoginPage() {
     } catch (error) {
       const formErrors = mapAuthErrorToFormErrors(error)
       if (formErrors) setErrors(formErrors as LoginFormErrors)
-      else setServerError('로그인 요청을 처리하지 못했습니다.')
+      else
+        setServerError(
+          getLoginErrorMessage(error) ?? '로그인 요청을 처리하지 못했습니다.',
+        )
     } finally {
       setIsSubmitting(false)
     }
@@ -91,7 +95,10 @@ export function LoginPage() {
         navigate(routes.signup)
         return
       }
-      setGoogleError('Google 로그인 요청을 처리하지 못했습니다.')
+      setGoogleError(
+        getLoginErrorMessage(error) ??
+          'Google 로그인 요청을 처리하지 못했습니다.',
+      )
     } finally {
       setIsGoogleSubmitting(false)
     }

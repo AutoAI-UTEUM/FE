@@ -172,6 +172,31 @@ describe('AdminPage', () => {
     expect(await screen.findByText('Temporary1234')).toBeInTheDocument()
   })
 
+  it('marks a suspended member and shows why, without offering a password reset', async () => {
+    const suspended = { authProvider: 'LOCAL', createdAt: '2026-09-01T00:00:00Z', email: 'member@example.com', id: 7, lastActiveAt: new Date().toISOString(), name: '회원', role: 'LEARNER', status: 'SUSPENDED', suspendedAt: '2026-09-20T05:00:00Z', suspendedReason: '이용약관 위반 신고 누적' }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/admin/users/7') return success({ ...suspended, affiliation: '테스트 학교', consentedAt: null })
+      if (url.pathname === '/api/admin/users') return success({ items: [suspended], page: 0, size: 17, totalElements: 1, totalPages: 1 })
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <ResponsiveViewportProvider>
+        <TestAuthProvider>
+          <MemoryRouter><AdminPage /></MemoryRouter>
+        </TestAuthProvider>
+      </ResponsiveViewportProvider>,
+    )
+
+    expect(await screen.findByText('정지')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '회원 상세 정보' }))
+    expect(await screen.findByText('이용약관 위반 신고 누적')).toBeInTheDocument()
+    expect(screen.getByText(/정지 일시/)).toBeInTheDocument()
+    // 정지 계정에 임시 비밀번호를 내주면 정지가 무의미해진다.
+    expect(screen.queryByRole('button', { name: '임시 비밀번호 발급' })).not.toBeInTheDocument()
+  })
+
   it('shows xAI credits, risk and performs a manual sync', async () => {
     const requested: Array<{ method: string; path: string }> = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {

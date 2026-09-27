@@ -1,8 +1,15 @@
 import { CheckCircle2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { getAuthRepository, validatePassword } from '../../features/auth'
+import {
+  createConsentsRepository,
+  getAuthRepository,
+  getPolicyDocument,
+  useAuth,
+  validatePassword,
+  type PolicyRef,
+} from '../../features/auth'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
@@ -109,6 +116,139 @@ export function ResetPasswordPage() {
       <ButtonLink className="mt-4 w-full" to={routes.login} variant="ghost">로그인으로 돌아가기</ButtonLink>
     </div>
   )
+}
+
+export function PolicyConsentPage() {
+  usePageTitle('약관 동의')
+  const enabled = isApiCapabilityEnabled('policy-consent')
+  const { apiRequest, clearPendingConsents } = useAuth()
+  const consents = useMemo(() => createConsentsRepository(apiRequest), [apiRequest])
+  const navigate = useNavigate()
+  const [pending, setPending] = useState<Array<PolicyRef & { title?: string }>>([])
+  const [accepted, setAccepted] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // 로그인 응답의 스냅샷을 믿지 않고 다시 묻는다. 새로고침 뒤에도 같은 화면이 동작해야 한다.
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    consents
+      .list()
+      .then((state) => {
+        if (cancelled) return
+        if (state.pending.length === 0) {
+          clearPendingConsents()
+          navigate(routes.classrooms, { replace: true })
+          return
+        }
+        setPending(state.pending)
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(getRequestErrorMessage(requestError))
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [clearPendingConsents, consents, enabled, navigate])
+
+  if (!enabled) {
+    return <ErrorState action={<ButtonLink to={routes.login}>로그인으로</ButtonLink>} description="약관 동의 화면을 준비하고 있습니다." title="현재 이용할 수 없습니다" />
+  }
+
+  async function submit() {
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      await consents.accept(pending)
+      clearPendingConsents()
+      navigate(routes.classrooms, { replace: true })
+    } catch (requestError) {
+      setError(getRequestErrorMessage(requestError))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const hasAcceptedAll = pending.length > 0 && pending.every((policy) => accepted.has(policyKey(policy)))
+
+  return (
+    <div>
+      <h1 className="type-page-title font-bold text-stone-900">약관 동의</h1>
+      <p className="mt-3 type-body text-stone-600">계속 이용하려면 아래 약관에 동의해 주세요.</p>
+
+      {isLoading ? <p className="mt-6 type-body text-stone-500" role="status">약관을 불러오는 중입니다.</p> : null}
+
+      <ul className="mt-6 flex flex-col gap-3">
+        {pending.map((policy) => (
+          <li className="rounded-xl border border-stone-200 p-4" key={policyKey(policy)}>
+            <label className="flex items-start gap-3 type-body text-stone-800">
+              <input
+                checked={accepted.has(policyKey(policy))}
+                className="mt-0.5 size-4 shrink-0"
+                onChange={(event) => {
+                  setAccepted((current) => {
+                    const next = new Set(current)
+                    if (event.target.checked) next.add(policyKey(policy))
+                    else next.delete(policyKey(policy))
+                    return next
+                  })
+                  setError(null)
+                }}
+                type="checkbox"
+              />
+              <span>
+                {policy.title ?? policyTypeLabel(policy.type)}에 동의합니다
+                <span className="ml-1 type-caption text-stone-400">v{policy.version}</span>
+              </span>
+            </label>
+            <PolicyBody policy={policy} />
+          </li>
+        ))}
+      </ul>
+
+      {error ? <p className="mt-4 type-control text-rose-700" role="alert">{error}</p> : null}
+
+      <Button className="mt-6 h-11 w-full" disabled={!hasAcceptedAll || isSubmitting} onClick={() => void submit()} type="button">
+        {isSubmitting ? '동의 중' : '동의하고 계속'}
+      </Button>
+    </div>
+  )
+}
+
+/** 본문은 목록 응답에 없어서 펼칠 때만 따로 받아온다. */
+function PolicyBody({ policy }: { policy: PolicyRef }) {
+  const [content, setContent] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <details
+      className="mt-3"
+      onToggle={(event) => {
+        if (!event.currentTarget.open || content !== null || error !== null) return
+        getPolicyDocument(policy.type, policy.version)
+          .then((document) => setContent(document.content))
+          .catch((requestError) => setError(getRequestErrorMessage(requestError)))
+      }}
+    >
+      <summary className="cursor-pointer type-caption text-stone-500">전문 보기</summary>
+      <div className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-stone-50 p-3 type-caption whitespace-pre-wrap text-stone-700">
+        {error ?? content ?? '불러오는 중입니다.'}
+      </div>
+    </details>
+  )
+}
+
+function policyKey(policy: PolicyRef): string {
+  return `${policy.type}:${policy.version}`
+}
+
+function policyTypeLabel(type: PolicyRef['type']): string {
+  return type === 'TERMS' ? '이용약관' : '개인정보 처리방침'
 }
 
 export function AuthCallbackPage() {

@@ -264,11 +264,12 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
 }
 
 /*
- * 노트북 작업 뷰포트에서 읽기 편하도록 글자만 기본보다 약 2px 키운다.
- * Retina 캡처 3578×2048은 기본 배율에서 CSS 뷰포트 약 1789×1024이다.
- * 도메인별 브라우저 축소 배율이 적용된 경우까지 같은 크기를 유지한다.
+ * 데스크톱에서 읽기 편하도록 글자만 기본보다 약 2px 키운다.
+ * 예전에는 max-width 2048px·max-height 1200px 상한이 있었는데, 그러면
+ * 27인치(2560×1440)처럼 더 큰 화면이 규칙에서 빠져 노트북보다 글자가
+ * 작아졌다. 화면이 커질수록 시청 거리도 멀어지므로 상한을 두지 않는다.
  */
-@media (min-width: 1280px) and (max-width: 2048px) and (max-height: 1200px) {
+@media (min-width: 1280px) {
   .type-display {
     font-size: 1.875rem;
     line-height: normal;
