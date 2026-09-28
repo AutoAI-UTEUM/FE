@@ -15,6 +15,7 @@ describe('useSessionChat streaming performance', () => {
     const deltas = Array.from({ length: 100 }, (_, index) => `${index},`)
     const repository = createRepository({
       stream: vi.fn().mockImplementation((_sessionId, handlers, signal) => {
+        handlers.onReady?.({ sessionId: 'long-session' })
         deltas.forEach((delta) => handlers.onContentDelta?.(delta))
         return new Promise<void>((resolve) => {
           if (signal?.aborted) resolve()
@@ -53,6 +54,7 @@ describe('useSessionChat streaming performance', () => {
     expect(messageChangeCount).toBe(initialMessageChangeCount)
 
     act(() => vi.advanceTimersByTime(50))
+    await act(async () => Promise.resolve())
 
     expect(messageChangeCount).toBe(initialMessageChangeCount + 1)
     expect(result.current.messages).toEqual([
@@ -97,7 +99,13 @@ function createRepository(
     listQuizzes: vi.fn(),
     movePage: vi.fn(),
     startNewConversation: vi.fn(),
-    stream: vi.fn().mockResolvedValue(undefined),
+    stream: vi.fn().mockImplementation((sessionId, handlers, signal) => {
+      handlers.onReady?.({ sessionId })
+      return new Promise<void>((resolve) => {
+        if (signal?.aborted) resolve()
+        else signal?.addEventListener('abort', () => resolve(), { once: true })
+      })
+    }),
     submitTurn: vi.fn(),
     ...overrides,
   }
