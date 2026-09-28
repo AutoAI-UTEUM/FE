@@ -5,7 +5,7 @@ import { LockKeyhole } from 'lucide-react'
 import { useAuth } from '../../features/auth'
 import { getRememberedClassroomId } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
-import { ChatPanel, useSessionChat } from '../../features/chat'
+import { ChatPanel, isSupersededTurnError, useSessionChat } from '../../features/chat'
 import { DocumentChatPanel } from '../../features/documentChat'
 import { createMaterialsRepository, type MaterialOverview } from '../../features/materials'
 import type { QuizKind } from '../../features/quiz'
@@ -429,7 +429,13 @@ export function SessionDetailPage() {
     } catch (requestError) {
       if (isTurnInProgressError(requestError)) {
         setError(null)
-        await chat.waitForTurnCompletion((result) => applyTurnResult(result))
+        try {
+          await chat.waitForTurnCompletion((result) => applyTurnResult(result))
+        } catch (recoveryError) {
+          if (!isSupersededTurnError(recoveryError)) {
+            setError(getRequestErrorMessage(recoveryError))
+          }
+        }
       } else {
         setError(getRequestErrorMessage(requestError))
         currentPageRef.current = activeSession.currentPage
@@ -533,6 +539,7 @@ export function SessionDetailPage() {
       )
       return result
     } catch (requestError) {
+      if (isSupersededTurnError(requestError)) return undefined
       if (
         requestError instanceof ApiClientError &&
         requestError.code === 'TURN_ALREADY_PROCESSED'
