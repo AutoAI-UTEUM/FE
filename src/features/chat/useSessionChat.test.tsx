@@ -224,6 +224,134 @@ describe('useSessionChat stream readiness', () => {
     ])
   })
 
+  it('does not apply a late TURN_IN_PROGRESS recovery after the session changes', async () => {
+    const storedAnswer = {
+      content: 'A 세션의 늦은 답변',
+      createdAt: '2026-09-28T00:00:00Z',
+      id: 'answer-a',
+      senderType: 'AI' as const,
+      status: 'COMPLETED' as const,
+    }
+    let resolveSessionA: ((value: ReturnType<typeof session>) => void) | undefined
+    let sessionAMessageCalls = 0
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn().mockImplementation((sessionId) => {
+        if (sessionId !== 'A') return Promise.resolve(null)
+        return new Promise((resolve) => { resolveSessionA = resolve })
+      }),
+      listMessages: vi.fn().mockImplementation((sessionId) => {
+        if (sessionId !== 'A') return Promise.resolve([])
+        sessionAMessageCalls += 1
+        return Promise.resolve(sessionAMessageCalls === 1 ? [] : [storedAnswer])
+      }),
+      stream: readyStream(),
+      submitTurn: vi.fn().mockRejectedValue(new ApiClientError({
+        code: 'TURN_IN_PROGRESS',
+        message: '진행 중인 턴이 있습니다.',
+        status: 409,
+      })),
+    })
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useSessionChat(repository, sessionId),
+      { initialProps: { sessionId: 'A' } },
+    )
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('session-a'), onResult) })
+    const supersededExpectation = expect(turnPromise).rejects.toMatchObject({
+      code: 'TURN_ATTEMPT_SUPERSEDED',
+    })
+    await waitFor(() => expect(resolveSessionA).toBeTypeOf('function'))
+
+    rerender({ sessionId: 'B' })
+    await waitFor(() => expect(result.current.isTurnPending).toBe(false))
+    act(() => resolveSessionA?.(session('A')))
+    await act(async () => { await supersededExpectation })
+
+    expect(onResult).not.toHaveBeenCalled()
+    expect(result.current.messages).toEqual([])
+    expect(result.current.streamUiActions).toEqual([])
+  })
+
+  it('recovers a stored quiz without a new AI message after NETWORK_ERROR', async () => {
+    const submitTurn = vi.fn().mockRejectedValue(new ApiClientError({
+      code: 'NETWORK_ERROR',
+      message: '응답을 확인하지 못했습니다.',
+    }))
+    const repository = createRepository({
+      getById: vi.fn()
+        .mockResolvedValueOnce(session('573'))
+        .mockResolvedValueOnce(session('573', 'quiz-99')),
+      listQuizzes: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([quiz('quiz-99')]),
+      stream: readyStream(),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let recovered: SessionTurnResult | undefined
+    await act(async () => {
+      recovered = await result.current.submitTurn(quizTurn('quiz-network-error'))
+    })
+
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(recovered).toMatchObject({ activeQuizId: 'quiz-99', messages: [] })
+    expect(repository.getById).toHaveBeenCalledTimes(2)
+    expect(repository.listQuizzes).toHaveBeenCalledTimes(2)
+  })
+
+  it('ends TURN_IN_PROGRESS polling when a new quiz is stored without an AI message', async () => {
+    const submitTurn = vi.fn().mockRejectedValue(new ApiClientError({
+      code: 'TURN_IN_PROGRESS',
+      message: '진행 중인 턴이 있습니다.',
+      status: 409,
+    }))
+    const repository = createRepository({
+      getById: vi.fn()
+        .mockResolvedValueOnce(session('573'))
+        .mockResolvedValueOnce(session('573', 'quiz-100')),
+      listQuizzes: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([quiz('quiz-100')]),
+      stream: readyStream(),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let recovered: SessionTurnResult | undefined
+    await act(async () => {
+      recovered = await result.current.submitTurn(quizTurn('quiz-in-progress'))
+    })
+
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(recovered).toMatchObject({ activeQuizId: 'quiz-100', messages: [] })
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('does not treat a pre-existing active quiz as the current turn result', async () => {
+    const networkError = new ApiClientError({
+      code: 'NETWORK_ERROR',
+      message: '응답을 확인하지 못했습니다.',
+    })
+    const repository = createRepository({
+      getById: vi.fn().mockResolvedValue(session('573', 'quiz-existing')),
+      listQuizzes: vi.fn().mockResolvedValue([quiz('quiz-existing')]),
+      stream: readyStream(),
+      submitTurn: vi.fn().mockRejectedValue(networkError),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    await act(async () => {
+      await expect(result.current.submitTurn(quizTurn('quiz-existing'))).rejects.toBe(networkError)
+    })
+  })
+
   it('keeps one final answer when completed is followed by stream EOF', async () => {
     let handlers: SessionStreamHandlers | undefined
     let closeStream: (() => void) | undefined
@@ -329,7 +457,7 @@ function createRepository(
     getById: vi.fn().mockResolvedValue(null),
     list: vi.fn(),
     listMessages: vi.fn().mockResolvedValue([]),
-    listQuizzes: vi.fn(),
+    listQuizzes: vi.fn().mockResolvedValue([]),
     movePage: vi.fn(),
     startNewConversation: vi.fn(),
     stream: readyStream(),
@@ -357,6 +485,35 @@ function turn(requestId: string) {
     eventType: 'USER_QUESTION' as const,
     payload: { message: '후속 질문' },
     requestId,
+  }
+}
+
+function quizTurn(requestId: string) {
+  return {
+    eventType: 'QUIZ_TYPE_SELECTED' as const,
+    payload: { quizType: 'OX' },
+    requestId,
+  }
+}
+
+function quiz(quizId: string) {
+  return {
+    quizId,
+    quizType: 'OX',
+    title: 'OX 복습 퀴즈',
+  }
+}
+
+function session(id: string, activeQuizId?: string) {
+  return {
+    activeQuizId,
+    currentPage: 1,
+    id,
+    lastActivityAt: '2026-09-28T00:00:00Z',
+    materialTitle: '테스트 자료',
+    pageStatus: activeQuizId ? 'QUIZ_READY' : 'EXPLAINED',
+    status: 'ACTIVE' as const,
+    uiActions: [],
   }
 }
 

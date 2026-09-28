@@ -39,7 +39,11 @@ import type { MaterialOverview } from '../materials'
 import { createNotesRepository, type Note } from '../notes'
 import type { SessionQuizSummary, SessionTurnResult } from '../sessions'
 import type { ChatMessage } from './chatTypes'
-import { getChatErrorMessage, type SessionChat } from './useSessionChat'
+import {
+  getChatErrorMessage,
+  isSupersededTurnError,
+  type SessionChat,
+} from './useSessionChat'
 import {
   getAdjacentLearningTextSize,
   LEARNING_TEXT_SIZE_LABELS,
@@ -253,6 +257,7 @@ export function ChatPanel({
         onTurnCompleted,
       )
     } catch (requestError) {
+      if (isSupersededTurnError(requestError)) return
       if (!isLocalActionCommand) chat.markMessageFailed(requestId)
       setError(getChatErrorMessage(requestError))
     } finally {
@@ -278,6 +283,7 @@ export function ChatPanel({
         onTurnCompleted,
       )
     } catch (requestError) {
+      if (isSupersededTurnError(requestError)) return
       markMessageFailed(message.requestId)
       setError(getChatErrorMessage(requestError))
     } finally {

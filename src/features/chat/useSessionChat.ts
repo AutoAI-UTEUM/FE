@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { ApiClientError } from '../../shared/api'
 import type {
@@ -51,7 +51,18 @@ interface ActiveTurnAttempt {
   pollController: AbortController | null
   requestId: string
   streamController: AbortController
+  superseded: boolean
   turnController: AbortController | null
+}
+
+interface QuizRecoveryBaseline {
+  activeQuizId?: string
+  quizIds: ReadonlySet<string>
+}
+
+interface TurnRecoveryBaseline {
+  knownMessageIds: ReadonlySet<string>
+  quiz?: QuizRecoveryBaseline
 }
 
 export function useSessionChat(
@@ -74,6 +85,11 @@ export function useSessionChat(
   const isTurnPendingRef = useRef(false)
   const attemptSequenceRef = useRef(0)
   const activeAttemptRef = useRef<ActiveTurnAttempt | null>(null)
+  const currentSessionIdRef = useRef(sessionId)
+
+  useLayoutEffect(() => {
+    currentSessionIdRef.current = sessionId
+  }, [sessionId])
 
   const updateMessages = useCallback((updater: (current: ChatMessage[]) => ChatMessage[]) => {
     setMessages((current) => {
@@ -85,6 +101,7 @@ export function useSessionChat(
 
   useEffect(() => () => {
     const attempt = activeAttemptRef.current
+    if (attempt) attempt.superseded = currentSessionIdRef.current !== sessionId
     activeAttemptRef.current = null
     attemptSequenceRef.current += 1
     if (attempt && !attempt.streamController.signal.aborted) {
@@ -94,6 +111,8 @@ export function useSessionChat(
     attempt?.streamController.abort()
     attempt?.turnController?.abort()
     isTurnPendingRef.current = false
+    setIsTurnPending(false)
+    setStreamNotice(null)
   }, [sessionId])
 
   useEffect(() => {
@@ -211,6 +230,7 @@ export function useSessionChat(
         pollController: null,
         requestId: turn.requestId,
         streamController: new AbortController(),
+        superseded: false,
         turnController: null,
       }
       activeAttemptRef.current = attempt
@@ -219,6 +239,13 @@ export function useSessionChat(
       const knownMessageIds = new Set(messagesRef.current
         .filter((message) => message.role === 'assistant' && message.status === 'sent')
         .map((message) => message.id))
+      const recoveryBaselinePromise = captureTurnRecoveryBaseline(
+        repository,
+        sessionId,
+        turn,
+        knownMessageIds,
+        attempt.streamController.signal,
+      )
       const recoveredUiActions: UiAction[] = []
       let completedNoteDraft: NoteDraft | undefined
       let completedStreamResult: SessionTurnResult | undefined
@@ -229,6 +256,7 @@ export function useSessionChat(
       let streamEnded = false
       let terminalReceived = false
       let turnPostStarted = false
+      let recoveryBaseline: TurnRecoveryBaseline = { knownMessageIds }
       let readySettled = false
       let resolveReady: (() => void) | undefined
       let rejectReady: ((error: unknown) => void) | undefined
@@ -392,13 +420,14 @@ export function useSessionChat(
         })
 
       try {
-        await streamReady
+        const [, capturedRecoveryBaseline] = await Promise.all([
+          streamReady,
+          recoveryBaselinePromise,
+        ])
+        recoveryBaseline = capturedRecoveryBaseline
         await Promise.resolve()
         if (!isCurrentAttempt()) {
-          throw new ApiClientError({
-            code: 'REQUEST_ABORTED',
-            message: '이전 실시간 연결 시도가 종료되었습니다.',
-          })
+          throw createInactiveTurnError(attempt)
         }
         if (streamEnded && !terminalReceived) {
           throw new ApiClientError({
@@ -415,7 +444,7 @@ export function useSessionChat(
           turn,
           attempt.turnController.signal,
         )
-        if (!isCurrentAttempt()) return result
+        if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
         stopStreamContentUpdates()
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
@@ -424,6 +453,7 @@ export function useSessionChat(
         setStreamNotice(null)
         return result
       } catch (error) {
+        if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
         if (
           attempt.cancellationRequested
           && error instanceof ApiClientError
@@ -441,7 +471,7 @@ export function useSessionChat(
           }
         }
         if (isTurnInProgressError(error)) {
-          if (!isCurrentAttempt()) throw error
+          if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
           // 거부된 중복 질문은 실패/재시도 대상으로 남기지 않는다.
           updateMessages((current) => current.filter(
             (message) => message.requestId !== turn.requestId,
@@ -450,35 +480,57 @@ export function useSessionChat(
 
           const pollController = new AbortController()
           attempt.pollController = pollController
-          const recoveredHistoryPromise = pollForCompletedTurn(
+          const recoveredTurnPromise = pollForCompletedTurn(
             repository,
             sessionId,
-            knownMessageIds,
+            recoveryBaseline,
             pollController.signal,
           )
-          const recoverySource = await Promise.race([
-            streamCompleted.then(() => 'stream' as const),
-            recoveredHistoryPromise.then(() => 'poll' as const),
-          ])
-          pollController.abort()
+          let recoverySource: 'poll' | 'stream'
+          try {
+            recoverySource = await Promise.race([
+              streamCompleted.then(() => 'stream' as const),
+              recoveredTurnPromise.then(() => 'poll' as const),
+            ])
+          } catch (recoveryError) {
+            if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+            if (attempt.cancellationRequested && isRequestAbortedError(recoveryError)) {
+              return emptyTurnResult()
+            }
+            throw recoveryError
+          }
+          if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
 
-          const result = recoverySource === 'stream' && completedStreamResult
-            ? {
-                ...completedStreamResult,
-                noteDraft: completedNoteDraft ?? completedStreamResult.noteDraft,
-                uiActions: completedStreamResult.uiActions.length > 0
-                  ? completedStreamResult.uiActions
+          let result: SessionTurnResult
+          try {
+            if (recoverySource === 'stream') {
+              const recovered = completedStreamResult
+                ?? await queryRecoveredTurnResult(
+                  repository,
+                  sessionId,
+                  recoveryBaseline,
+                  pollController.signal,
+                )
+              if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+              result = {
+                ...(recovered ?? emptyTurnResult()),
+                noteDraft: completedNoteDraft ?? recovered?.noteDraft,
+                uiActions: recovered?.uiActions.length
+                  ? recovered.uiActions
                   : recoveredUiActions,
               }
-            : await recoverTurnResult(
-                repository,
-                sessionId,
-                recoverySource === 'poll'
-                  ? recoveredHistoryPromise
-                  : repository.listMessages(sessionId),
-                completedNoteDraft,
-                recoveredUiActions,
-              )
+            } else {
+              result = await recoveredTurnPromise
+            }
+          } catch (recoveryError) {
+            if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+            if (attempt.cancellationRequested && isRequestAbortedError(recoveryError)) {
+              return emptyTurnResult()
+            }
+            throw recoveryError
+          }
+          pollController.abort()
+          if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
           appendMessages(result.messages)
           setStreamUiActions(result.uiActions)
           onResult?.(result)
@@ -490,12 +542,25 @@ export function useSessionChat(
           turnPostStarted &&
           (isTurnAlreadyProcessedError(error) || shouldRecoverTurnFailure(error))
         ) {
-          const recovered = await recoverCompletedTurnAfterFailure(
-            repository,
-            sessionId,
-            knownMessageIds,
-          )
-          if (recovered && isCurrentAttempt()) {
+          const recoveryController = new AbortController()
+          attempt.pollController = recoveryController
+          let recovered: SessionTurnResult | undefined
+          try {
+            recovered = await recoverCompletedTurnAfterFailure(
+              repository,
+              sessionId,
+              recoveryBaseline,
+              recoveryController.signal,
+            )
+          } catch (recoveryError) {
+            if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+            if (attempt.cancellationRequested && isRequestAbortedError(recoveryError)) {
+              return emptyTurnResult()
+            }
+            throw recoveryError
+          }
+          if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+          if (recovered) {
             appendMessages(recovered.messages)
             setStreamUiActions(recovered.uiActions)
             if (recovered.noteDraft) setNoteDraft(recovered.noteDraft)
@@ -503,7 +568,7 @@ export function useSessionChat(
             setStreamNotice(null)
             return recovered
           }
-          if (isTurnAlreadyProcessedError(error) && isCurrentAttempt()) {
+          if (isTurnAlreadyProcessedError(error)) {
             reloadHistory()
           }
         }
@@ -543,6 +608,7 @@ export function useSessionChat(
       if (!attempt.turnController) {
         attempt.cancellationRequested = true
         logSessionStreamEvent('stream_abort', attempt, sessionId, 'user_cancel_before_post')
+        attempt.pollController?.abort()
         attempt.streamController.abort()
         return true
       }
@@ -606,6 +672,7 @@ export function useSessionChat(
       pollController: new AbortController(),
       requestId: 'turn-recovery',
       streamController: new AbortController(),
+      superseded: false,
       turnController: null,
     }
     activeAttemptRef.current = attempt
@@ -636,34 +703,44 @@ export function useSessionChat(
         if (isCurrentAttempt()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
       },
     }, attempt.streamController.signal).catch(() => undefined)
-    const recoveredHistoryPromise = pollForCompletedTurn(
+    const recoveredTurnPromise = pollForCompletedTurn(
       repository,
       sessionId,
-      knownMessageIds,
+      { knownMessageIds },
       attempt.pollController!.signal,
     )
 
     try {
       const recoverySource = await Promise.race([
         streamCompleted.then(() => 'stream' as const),
-        recoveredHistoryPromise.then(() => 'poll' as const),
+        recoveredTurnPromise.then(() => 'poll' as const),
       ])
-      attempt.pollController?.abort()
-      const result = recoverySource === 'stream' && completedStreamResult
-        ? completedStreamResult
-        : await recoverTurnResult(
+      if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+      let result: SessionTurnResult
+      if (recoverySource === 'stream') {
+        result = completedStreamResult
+          ?? await queryRecoveredTurnResult(
             repository,
             sessionId,
-            recoverySource === 'poll'
-              ? recoveredHistoryPromise
-              : repository.listMessages(sessionId),
+            { knownMessageIds },
+            attempt.pollController!.signal,
           )
-      if (isCurrentAttempt()) {
-        appendMessages(result.messages)
-        setStreamUiActions(result.uiActions)
-        onResult?.(result)
+          ?? emptyTurnResult()
+      } else {
+        result = await recoveredTurnPromise
       }
+      attempt.pollController?.abort()
+      if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+      appendMessages(result.messages)
+      setStreamUiActions(result.uiActions)
+      onResult?.(result)
       return result
+    } catch (error) {
+      if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+      if (attempt.cancellationRequested && isRequestAbortedError(error)) {
+        return emptyTurnResult()
+      }
+      throw error
     } finally {
       attempt.pollController?.abort()
       if (!attempt.streamController.signal.aborted) {
@@ -705,28 +782,85 @@ export function useSessionChat(
   }
 }
 
-async function recoverTurnResult(
+async function captureTurnRecoveryBaseline(
   repository: SessionsRepository,
   sessionId: string,
-  messagesPromise: Promise<SessionMessage[]>,
-  noteDraft?: NoteDraft,
-  fallbackUiActions: UiAction[] = [],
-): Promise<SessionTurnResult> {
-  const [historyResult, sessionResult] = await Promise.allSettled([
-    messagesPromise,
-    repository.getById(sessionId),
+  turn: SessionTurnRequest,
+  knownMessageIds: ReadonlySet<string>,
+  signal: AbortSignal,
+): Promise<TurnRecoveryBaseline> {
+  const baseline: TurnRecoveryBaseline = { knownMessageIds }
+  if (turn.eventType !== 'QUIZ_TYPE_SELECTED') return baseline
+
+  const [sessionResult, quizzesResult] = await Promise.allSettled([
+    repository.getById(sessionId, signal),
+    repository.listQuizzes(sessionId, signal),
   ])
+  throwIfRequestAborted(signal)
+  if (sessionResult.status !== 'fulfilled' || quizzesResult.status !== 'fulfilled') {
+    return baseline
+  }
+
+  return {
+    ...baseline,
+    quiz: {
+      activeQuizId: sessionResult.value?.activeQuizId,
+      quizIds: new Set(quizzesResult.value.map((quiz) => quiz.quizId)),
+    },
+  }
+}
+
+async function queryRecoveredTurnResult(
+  repository: SessionsRepository,
+  sessionId: string,
+  baseline: TurnRecoveryBaseline,
+  signal: AbortSignal,
+): Promise<SessionTurnResult | undefined> {
+  const [historyResult] = await Promise.allSettled([
+    repository.listMessages(sessionId, signal),
+  ])
+  throwIfRequestAborted(signal)
+
+  const history = historyResult.status === 'fulfilled' ? historyResult.value : []
+  const hasNewCompletedAnswer = history.some((message) =>
+    message.senderType === 'AI'
+    && message.status !== 'FAILED'
+    && message.status !== 'PENDING'
+    && !baseline.knownMessageIds.has(message.id))
+
+  if (!baseline.quiz && !hasNewCompletedAnswer) return undefined
+
+  const [sessionResult, quizzesResult] = await Promise.allSettled([
+    repository.getById(sessionId, signal),
+    baseline.quiz
+      ? repository.listQuizzes(sessionId, signal)
+      : Promise.resolve(undefined),
+  ])
+  throwIfRequestAborted(signal)
+
   const recoveredSession = sessionResult.status === 'fulfilled'
     ? sessionResult.value
     : null
+  const recoveredQuizId = recoveredSession?.activeQuizId
+  const quizzes = quizzesResult.status === 'fulfilled'
+    ? quizzesResult.value
+    : undefined
+  const hasNewActiveQuiz = Boolean(
+    baseline.quiz
+    && recoveredQuizId
+    && recoveredQuizId !== baseline.quiz.activeQuizId
+    && !baseline.quiz.quizIds.has(recoveredQuizId)
+    && quizzes?.some((quiz) => quiz.quizId === recoveredQuizId),
+  )
+
+  if (!hasNewCompletedAnswer && !hasNewActiveQuiz) return undefined
   return {
     activeQuizId: recoveredSession?.activeQuizId,
     currentPage: recoveredSession?.currentPage,
-    messages: historyResult.status === 'fulfilled' ? historyResult.value : [],
-    noteDraft,
+    messages: history,
     pageStatus: recoveredSession?.pageStatus,
     pendingDiagnosis: recoveredSession?.pendingDiagnosis,
-    uiActions: recoveredSession?.uiActions ?? fallbackUiActions,
+    uiActions: recoveredSession?.uiActions ?? [],
   }
 }
 
@@ -767,24 +901,55 @@ function shouldRecoverTurnFailure(error: unknown): boolean {
 async function recoverCompletedTurnAfterFailure(
   repository: SessionsRepository,
   sessionId: string,
-  knownMessageIds: ReadonlySet<string>,
+  baseline: TurnRecoveryBaseline,
+  signal: AbortSignal,
 ): Promise<SessionTurnResult | undefined> {
   try {
-    const history = await repository.listMessages(sessionId)
-    const hasNewCompletedAnswer = history.some((message) =>
-      message.senderType === 'AI'
-      && message.status !== 'FAILED'
-      && message.status !== 'PENDING'
-      && !knownMessageIds.has(message.id))
-    if (!hasNewCompletedAnswer) return undefined
-    return recoverTurnResult(
+    return await queryRecoveredTurnResult(
       repository,
       sessionId,
-      Promise.resolve(history),
+      baseline,
+      signal,
     )
-  } catch {
+  } catch (error) {
+    if (signal.aborted) throw error
     return undefined
   }
+}
+
+function createSupersededTurnError(): ApiClientError {
+  return new ApiClientError({
+    code: 'TURN_ATTEMPT_SUPERSEDED',
+    message: '세션이 변경되어 이전 요청 처리를 종료했습니다.',
+  })
+}
+
+function createInactiveTurnError(attempt: ActiveTurnAttempt): ApiClientError {
+  if (attempt.superseded) return createSupersededTurnError()
+  return new ApiClientError({
+    code: 'REQUEST_ABORTED',
+    message: '요청이 취소되었습니다.',
+  })
+}
+
+function emptyTurnResult(): SessionTurnResult {
+  return { messages: [], uiActions: [] }
+}
+
+function isRequestAbortedError(error: unknown): boolean {
+  return error instanceof ApiClientError && error.code === 'REQUEST_ABORTED'
+}
+
+export function isSupersededTurnError(error: unknown): boolean {
+  return error instanceof ApiClientError && error.code === 'TURN_ATTEMPT_SUPERSEDED'
+}
+
+function throwIfRequestAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return
+  throw new ApiClientError({
+    code: 'REQUEST_ABORTED',
+    message: '요청이 취소되었습니다.',
+  })
 }
 
 function toStreamReadyError(error: unknown): ApiClientError {
@@ -815,25 +980,28 @@ function logSessionStreamEvent(
 async function pollForCompletedTurn(
   repository: SessionsRepository,
   sessionId: string,
-  knownMessageIds: ReadonlySet<string>,
+  baseline: TurnRecoveryBaseline,
   signal: AbortSignal,
-): Promise<SessionMessage[]> {
+): Promise<SessionTurnResult> {
   while (!signal.aborted) {
     try {
-      const history = await repository.listMessages(sessionId, signal)
-      const hasNewCompletedAnswer = history.some((message) =>
-        message.senderType === 'AI'
-        && message.status !== 'FAILED'
-        && message.status !== 'PENDING'
-        && !knownMessageIds.has(message.id))
-      if (hasNewCompletedAnswer) return history
+      const recovered = await queryRecoveredTurnResult(
+        repository,
+        sessionId,
+        baseline,
+        signal,
+      )
+      if (recovered) return recovered
     } catch (error) {
-      if (signal.aborted) return []
-      if (error instanceof ApiClientError && error.code === 'REQUEST_ABORTED') return []
+      if (signal.aborted || isRequestAbortedError(error)) throw error
     }
     await waitForRecoveryPoll(signal)
   }
-  return []
+  throwIfRequestAborted(signal)
+  throw new ApiClientError({
+    code: 'TURN_RECOVERY_STOPPED',
+    message: '진행 중인 응답 확인이 종료되었습니다.',
+  })
 }
 
 function waitForRecoveryPoll(signal: AbortSignal): Promise<void> {
