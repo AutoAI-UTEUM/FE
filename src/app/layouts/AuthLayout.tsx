@@ -5,18 +5,12 @@ import {
   SERVICE_NAME,
   SERVICE_NAME_ENGLISH,
 } from '../../shared/config/brand'
-import { ServiceStatusIndicator } from '../../features/health'
 import { routes } from '../routes'
 
 export function AuthLayout() {
   const location = useLocation()
   const isLoginPage = location.pathname === routes.login
   const usesFocusedAuthPanel = isLoginPage || location.pathname === routes.signup
-  const isPolicyPage = [routes.terms, routes.privacy].includes(location.pathname as '/terms' | '/privacy')
-  const showsServiceStatus =
-    !isLoginPage &&
-    location.pathname !== routes.forgotPassword &&
-    location.pathname !== routes.signup
 
   return (
     <main className="auth-light grid min-h-screen bg-white text-stone-900 lg:grid-cols-[minmax(520px,46.5vw)_minmax(0,1fr)] mobile-web:min-h-[100dvh]">
@@ -62,8 +56,8 @@ export function AuthLayout() {
         </p>
       </aside>
 
-      <section className={`flex min-h-screen justify-center px-4 py-8 sm:px-8 mobile-web:min-h-[100dvh] mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:mobile-safe-bottom ${isPolicyPage ? 'items-start' : 'items-center'}`}>
-        <div className={isPolicyPage ? 'w-full max-w-3xl' : isLoginPage ? 'w-full max-w-[400px]' : 'w-full max-w-[440px]'}>
+      <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8 mobile-web:min-h-[100dvh] mobile-web:mobile-safe-x mobile-web:mobile-safe-top mobile-web:mobile-safe-bottom">
+        <div className={isLoginPage ? 'w-full max-w-[400px]' : 'w-full max-w-[440px]'}>
           <Link
             to={routes.classrooms}
             className="mb-8 flex items-center gap-2.5 rounded-lg lg:hidden"
@@ -80,20 +74,6 @@ export function AuthLayout() {
           </Link>
 
           <Outlet />
-
-          <nav aria-label="법적 고지" className="mt-8 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-stone-100 pt-4 type-caption text-stone-500">
-            <Link className="min-h-8 py-1 font-medium hover:text-stone-900" to={routes.terms}>이용약관</Link>
-            <Link className="min-h-8 py-1 font-medium hover:text-stone-900" to={routes.privacy}>개인정보 처리방침</Link>
-          </nav>
-
-          {showsServiceStatus ? (
-            <footer
-              aria-label="서비스 연결 상태"
-              className="mt-8 flex justify-center border-t border-stone-100 pt-4"
-            >
-              <ServiceStatusIndicator />
-            </footer>
-          ) : null}
         </div>
       </section>
     </main>

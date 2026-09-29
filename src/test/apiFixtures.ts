@@ -21,20 +21,6 @@ export async function handleApiFixtureRequest(
   const url = new URL(request.url)
   const path = `${url.pathname}${url.search}`
 
-  if (request.method === 'GET' && path === '/api/health') {
-    return apiSuccess({ status: 'UP' })
-  }
-
-  if (request.method === 'GET' && path === '/api/health/ready') {
-    return jsonResponse(
-      {
-        checks: { aiService: 'UP', db: 'UP' },
-        status: 'UP',
-      },
-      200,
-    )
-  }
-
   if (
     request.method === 'GET' &&
     /^\/api\/materials\/\d+\/file$/.test(path)
@@ -108,40 +94,6 @@ export async function handleApiFixtureRequest(
       return apiFailure('RESET_TOKEN_INVALID', '재설정 링크가 만료되었거나 유효하지 않습니다.', 400)
     }
     return apiSuccess({ message: '비밀번호가 변경되었습니다. 다시 로그인해주세요.' })
-  }
-
-  if (request.method === 'GET' && path === '/api/policies/current') {
-    return apiSuccess([
-      {
-        requiresConsent: false,
-        title: '개인정보 처리방침',
-        type: 'PRIVACY',
-        version: '0.9',
-      },
-      {
-        requiresConsent: true,
-        title: '이용약관',
-        type: 'TERMS',
-        version: '0.9',
-      },
-    ])
-  }
-
-  if (
-    request.method === 'GET' &&
-    /^\/api\/policies\/(TERMS|PRIVACY)\/[^/]+$/.test(path)
-  ) {
-    const [, type = 'TERMS', version = '0.9'] = path.split('/').slice(-3)
-    return apiSuccess({
-      content:
-        type === 'TERMS'
-          ? '제1조 목적\n본 약관은 으뜸 서비스 이용 조건을 정합니다.'
-          : '제1조 개인정보의 처리\n서비스 제공에 필요한 개인정보를 처리합니다.',
-      requiresConsent: type === 'TERMS',
-      title: type === 'TERMS' ? '이용약관' : '개인정보 처리방침',
-      type,
-      version,
-    })
   }
 
   if (request.method === 'POST' && path === '/api/auth/login') {

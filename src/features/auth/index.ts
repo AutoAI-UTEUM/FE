@@ -33,21 +33,6 @@ export {
   mapAuthErrorToFormErrors,
 } from './authErrors'
 export {
-  createConsentsRepository,
-  getRequiredPolicyRefs,
-  normalizePolicyRefs,
-  getCurrentPolicies,
-  getPolicyDocument,
-  toRef,
-} from './policiesRepository'
-export type {
-  ConsentState,
-  PolicyDocument,
-  PolicyRef,
-  PolicySummary,
-  PolicyType,
-} from './policiesRepository'
-export {
   hasFormErrors,
   validateLoginForm,
   validatePassword,

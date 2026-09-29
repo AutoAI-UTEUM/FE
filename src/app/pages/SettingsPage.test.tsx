@@ -68,6 +68,9 @@ describe('SettingsPage', () => {
 
     expect(screen.queryByRole('button', { name: '피드백' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '업데이트' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '약관 및 개인정보' })).not.toBeInTheDocument()
+    expect(screen.queryByText('이용약관')).not.toBeInTheDocument()
+    expect(screen.queryByText('개인정보 처리방침')).not.toBeInTheDocument()
   })
 
   it('saves notification and AI preferences immediately', async () => {

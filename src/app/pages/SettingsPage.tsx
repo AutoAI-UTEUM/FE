@@ -1,6 +1,6 @@
 import { Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { createUserSettingsRepository, getRoleLabel, useAuth, type AiAnswerStyle, type UserPreferences } from '../../features/auth'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
@@ -19,7 +19,7 @@ import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { useTheme, type ThemeMode } from '../../shared/theme'
 import { useResponsiveViewport } from '../../shared/responsive'
 
-type SettingsSection = 'account' | 'appearance' | 'assistant' | 'legal' | 'notification' | 'password' | 'profile'
+type SettingsSection = 'account' | 'appearance' | 'assistant' | 'notification' | 'password' | 'profile'
 
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: '프로필' },
@@ -27,7 +27,6 @@ const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'notification', label: '알림' },
   { id: 'assistant', label: 'AI 학습 도우미' },
   { id: 'password', label: '비밀번호 변경' },
-  { id: 'legal', label: '약관 및 개인정보' },
   { id: 'account', label: '회원 탈퇴' },
 ]
 
@@ -342,17 +341,6 @@ function SettingsContent() {
             <AppearanceSection mode={mode} onChange={setMode} />
           ) : null}
 
-          {section === 'legal' ? (
-            <section>
-              <h2 className="type-section-title font-bold text-stone-950">약관 및 개인정보</h2>
-              <p className="mt-1 type-body text-stone-500">현재 시행 중인 문서를 확인할 수 있습니다.</p>
-              <div className="mt-5 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                <LegalDocumentLink label="이용약관" to={routes.terms} />
-                <LegalDocumentLink label="개인정보 처리방침" to={routes.privacy} />
-              </div>
-            </section>
-          ) : null}
-
           {section === 'notification' || section === 'assistant' ? (
             <Card as="section" className="border-0 px-0">
               {section !== 'assistant' ? (
@@ -428,18 +416,6 @@ function SettingsContent() {
       </div>
       <input aria-label="프로필 이미지 선택" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); event.target.value = '' }} ref={avatarInputRef} type="file" />
     </>
-  )
-}
-
-function LegalDocumentLink({ label, to }: { label: string; to: string }) {
-  return (
-    <Link
-      className="flex min-h-14 items-center justify-between border-b border-stone-100 px-4 type-body font-semibold text-stone-800 last:border-b-0 hover:bg-stone-50"
-      to={to}
-    >
-      {label}
-      <span aria-hidden="true" className="text-stone-400">›</span>
-    </Link>
   )
 }
 
