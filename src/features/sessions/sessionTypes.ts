@@ -77,6 +77,22 @@ export interface SessionTurnResult {
   uiActions: UiAction[]
 }
 
+export interface StreamQuizQuestionChoice {
+  id: string
+  label: string
+}
+
+export interface StreamQuizQuestion {
+  choices?: StreamQuizQuestionChoice[]
+  generationId?: string
+  id: string
+  kind: 'MCQ' | 'OX' | 'SHORT' | 'ESSAY'
+  prompt: string
+  requestId?: string
+  sequence?: number
+  totalQuestions?: number
+}
+
 export interface SessionQuizSummary {
   createdAt?: string
   maxScore?: number

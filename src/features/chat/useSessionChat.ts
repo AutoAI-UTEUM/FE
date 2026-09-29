@@ -5,6 +5,7 @@ import type {
   SessionMessage,
   NoteDraft,
   SessionsRepository,
+  StreamQuizQuestion,
   SessionTurnRequest,
   SessionTurnResult,
   UiAction,
@@ -16,6 +17,7 @@ export interface SessionChat {
   appendMessages: (messages: SessionMessage[]) => void
   cancelTurn: () => Promise<boolean>
   clearNoteDraft: () => void
+  clearQuizQuestionPreview: () => void
   clearUiActions: () => void
   historyError: string | null
   hasOlderMessages: boolean
@@ -25,11 +27,13 @@ export interface SessionChat {
   isTurnPending: boolean
   messages: ChatMessage[]
   noteDraft: NoteDraft | null
+  quizQuestionPreview: StreamQuizQuestion[]
   markMessageFailed: (requestId: string) => void
   markMessageRetrying: (requestId: string) => void
   reloadHistory: () => void
   startNewConversation: () => Promise<void>
   streamNotice: string | null
+  streamUiActionSource?: SessionTurnRequest['eventType']
   streamUiActions: UiAction[]
   submitTurn: (
     turn: SessionTurnRequest,
@@ -44,6 +48,20 @@ const TURN_IN_PROGRESS_NOTICE = 'AI가 답변 중이에요. 기존 답변이 끝
 const TURN_RECOVERY_POLL_INTERVAL_MS = 1_500
 const STREAM_RENDER_INTERVAL_MS = 50
 const STREAM_READY_TIMEOUT_MS = 10_000
+
+function upsertQuizQuestion(
+  questions: StreamQuizQuestion[],
+  incoming: StreamQuizQuestion,
+): StreamQuizQuestion[] {
+  const existingIndex = questions.findIndex((question) => question.id === incoming.id)
+  const next = existingIndex < 0
+    ? [...questions, incoming]
+    : questions.map((question, index) => index === existingIndex ? incoming : question)
+  return next.sort((left, right) => (
+    (left.sequence ?? Number.MAX_SAFE_INTEGER)
+    - (right.sequence ?? Number.MAX_SAFE_INTEGER)
+  ))
+}
 
 interface ActiveTurnAttempt {
   cancellationRequested: boolean
@@ -79,7 +97,9 @@ export function useSessionChat(
   const [historyReloadKey, setHistoryReloadKey] = useState(0)
   const [streamNotice, setStreamNotice] = useState<string | null>(null)
   const [streamUiActions, setStreamUiActions] = useState<UiAction[]>([])
+  const [streamUiActionSource, setStreamUiActionSource] = useState<SessionTurnRequest['eventType']>()
   const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null)
+  const [quizQuestionPreview, setQuizQuestionPreview] = useState<StreamQuizQuestion[]>([])
   const streamingMessageIdRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
   const isTurnPendingRef = useRef(false)
@@ -113,6 +133,7 @@ export function useSessionChat(
     isTurnPendingRef.current = false
     setIsTurnPending(false)
     setStreamNotice(null)
+    setQuizQuestionPreview([])
   }, [sessionId])
 
   useEffect(() => {
@@ -184,9 +205,13 @@ export function useSessionChat(
 
   const clearUiActions = useCallback(() => {
     setStreamUiActions([])
+    setStreamUiActionSource(undefined)
   }, [])
 
   const clearNoteDraft = useCallback(() => setNoteDraft(null), [])
+  const clearQuizQuestionPreview = useCallback(() => {
+    setQuizQuestionPreview([])
+  }, [])
 
   const reloadHistory = useCallback(() => {
     setHistoryError(null)
@@ -224,6 +249,8 @@ export function useSessionChat(
       setIsTurnPending(true)
       setStreamNotice('실시간 응답을 연결하는 중입니다.')
       setStreamUiActions([])
+      setStreamUiActionSource(undefined)
+      setQuizQuestionPreview([])
       const attempt: ActiveTurnAttempt = {
         cancellationRequested: false,
         id: ++attemptSequenceRef.current,
@@ -256,6 +283,7 @@ export function useSessionChat(
       let streamEnded = false
       let terminalReceived = false
       let turnPostStarted = false
+      let quizPreviewGenerationId: string | undefined
       let recoveryBaseline: TurnRecoveryBaseline = { knownMessageIds }
       let readySettled = false
       let resolveReady: (() => void) | undefined
@@ -358,6 +386,7 @@ export function useSessionChat(
             },
             onError: (message) => {
               if (!isCurrentAttempt()) return
+              setQuizQuestionPreview([])
               if (!readySettled) {
                 logSessionStreamEvent('terminal', attempt, sessionId, 'error_before_ready')
                 settleReady(new ApiClientError({
@@ -374,6 +403,22 @@ export function useSessionChat(
               logSessionStreamEvent('ready_received', attempt, sessionId)
               settleReady()
             },
+            onQuizQuestion: (question) => {
+              if (
+                !isCurrentAttempt()
+                || !turnPostStarted
+                || turn.eventType !== 'QUIZ_TYPE_SELECTED'
+                || (question.requestId && question.requestId !== turn.requestId)
+                || (
+                  question.generationId
+                  && quizPreviewGenerationId
+                  && question.generationId !== quizPreviewGenerationId
+                )
+              ) return
+              quizPreviewGenerationId ??= question.generationId
+              setQuizQuestionPreview((current) => upsertQuizQuestion(current, question))
+              setStreamNotice('완성된 문항을 미리 보여드리고 있습니다.')
+            },
             onStatus: (stage) => {
               if (isCurrentAttempt()) setStreamNotice(getStreamStageLabel(stage))
             },
@@ -381,6 +426,7 @@ export function useSessionChat(
               if (!isCurrentAttempt()) return
               recoveredUiActions.push(action)
               setStreamUiActions((current) => [...current, action])
+              setStreamUiActionSource(turn.eventType)
             },
           },
           attempt.streamController.signal,
@@ -400,6 +446,7 @@ export function useSessionChat(
             !attempt.streamController.signal.aborted
           ) {
             logSessionStreamEvent('terminal', attempt, sessionId, 'eof_before_completed')
+            setQuizQuestionPreview([])
             setStreamNotice('실시간 연결이 중단되어 처리 결과를 확인하고 있습니다.')
           }
         })
@@ -415,6 +462,7 @@ export function useSessionChat(
             )
           ) {
             logSessionStreamEvent('terminal', attempt, sessionId, 'stream_error')
+            setQuizQuestionPreview([])
             setStreamNotice('실시간 연결이 중단되어 처리 결과를 확인하고 있습니다.')
           }
         })
@@ -448,12 +496,14 @@ export function useSessionChat(
         stopStreamContentUpdates()
         appendMessages(result.messages)
         setStreamUiActions(result.uiActions)
+        setStreamUiActionSource(result.uiActions.length > 0 ? turn.eventType : undefined)
         if (result.noteDraft) setNoteDraft(result.noteDraft)
         onResult?.(result)
         setStreamNotice(null)
         return result
       } catch (error) {
         if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+        setQuizQuestionPreview([])
         if (
           attempt.cancellationRequested
           && error instanceof ApiClientError
@@ -533,6 +583,7 @@ export function useSessionChat(
           if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
           appendMessages(result.messages)
           setStreamUiActions(result.uiActions)
+          setStreamUiActionSource(result.uiActions.length > 0 ? turn.eventType : undefined)
           onResult?.(result)
           setStreamNotice(null)
           return result
@@ -563,6 +614,9 @@ export function useSessionChat(
           if (recovered) {
             appendMessages(recovered.messages)
             setStreamUiActions(recovered.uiActions)
+            setStreamUiActionSource(
+              recovered.uiActions.length > 0 ? turn.eventType : undefined,
+            )
             if (recovered.noteDraft) setNoteDraft(recovered.noteDraft)
             onResult?.(recovered)
             setStreamNotice(null)
@@ -593,6 +647,7 @@ export function useSessionChat(
           streamingMessageIdRef.current = null
           isTurnPendingRef.current = false
           setIsTurnPending(false)
+          setQuizQuestionPreview([])
         }
       }
     },
@@ -604,6 +659,7 @@ export function useSessionChat(
     const attempt = activeAttemptRef.current
     if (!attempt) return false
     setStreamNotice('답변 생성을 중단하는 중입니다.')
+    setQuizQuestionPreview([])
     try {
       if (!attempt.turnController) {
         attempt.cancellationRequested = true
@@ -648,7 +704,9 @@ export function useSessionChat(
       setHistoryError(null)
       setStreamNotice(null)
       setStreamUiActions([])
+      setStreamUiActionSource(undefined)
       setNoteDraft(null)
+      setQuizQuestionPreview([])
       streamingMessageIdRef.current = null
     } finally {
       setIsTurnPending(false)
@@ -733,6 +791,7 @@ export function useSessionChat(
       if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
       appendMessages(result.messages)
       setStreamUiActions(result.uiActions)
+      setStreamUiActionSource(undefined)
       onResult?.(result)
       return result
     } catch (error) {
@@ -762,6 +821,7 @@ export function useSessionChat(
     appendMessages,
     cancelTurn,
     clearNoteDraft,
+    clearQuizQuestionPreview,
     clearUiActions,
     historyError,
     hasOlderMessages,
@@ -773,9 +833,11 @@ export function useSessionChat(
     markMessageRetrying,
     messages,
     noteDraft,
+    quizQuestionPreview,
     reloadHistory,
     startNewConversation,
     streamNotice,
+    streamUiActionSource,
     streamUiActions,
     submitTurn,
     waitForTurnCompletion,

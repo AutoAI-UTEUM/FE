@@ -357,6 +357,65 @@ describe('SessionDetailPage', () => {
     expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
   })
 
+  it('shows streamed questions as a non-submittable preview until the quiz is stored', async () => {
+    const encoder = new TextEncoder()
+    let streamCalls = 0
+    let quizStreamController: ReadableStreamDefaultController<Uint8Array> | undefined
+    let resolveQuizTurn: ((response: Response) => void) | undefined
+    installApiFixtureServer(async (request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/stream') {
+        streamCalls += 1
+        if (streamCalls !== 2) return undefined
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            quizStreamController = controller
+            controller.enqueue(encoder.encode(
+              'event: ready\ndata: {"sessionId":100}\n\n',
+            ))
+          },
+        }), { headers: { 'Content-Type': 'text/event-stream' } })
+      }
+      if (request.method === 'POST' && url.pathname === '/api/sessions/100/turns') {
+        const body = await request.clone().json() as { eventType?: string }
+        if (body.eventType !== 'QUIZ_TYPE_SELECTED') return undefined
+        quizStreamController?.enqueue(encoder.encode([
+          'event: quiz_question',
+          'data: {"generationId":"generation-1","quizType":"MCQ","questionIndex":1,"questionCount":5,"question":{"questionId":"preview-1","questionText":"미리 완성된 문항은 무엇인가요?","choices":[{"choiceId":"a","text":"첫 번째 보기"},{"choiceId":"b","text":"두 번째 보기"}]}}',
+          '',
+          'event: completed',
+          'data: {"result":{}}',
+          '',
+          '',
+        ].join('\n')))
+        quizStreamController?.close()
+        return new Promise<Response>((resolve) => { resolveQuizTurn = resolve })
+      }
+      return undefined
+    })
+    renderSessionDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: '네' }))
+    await screen.findByText('퀴즈를 진행할까요?')
+    fireEvent.click(screen.getByRole('button', { name: '네' }))
+    fireEvent.click(await screen.findByRole('button', { name: '객관식' }))
+
+    const preview = await screen.findByRole('region', { name: '퀴즈 생성 중 미리보기' })
+    expect(within(preview).getByText('미리 완성된 문항은 무엇인가요?')).toBeInTheDocument()
+    expect(within(preview).getByText('첫 번째 보기')).toBeInTheDocument()
+    expect(within(preview).queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
+    expect(screen.queryByText('문항 1 / 2')).not.toBeInTheDocument()
+
+    resolveQuizTurn?.(apiSuccess({
+      messages: [],
+      state: { activeQuizId: 50 },
+      uiActions: [],
+    }))
+
+    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '퀴즈 생성 중 미리보기' })).not.toBeInTheDocument()
+  })
+
   it('opens quiz review chat immediately after the active quiz is submitted', async () => {
     renderSessionDetail()
 
@@ -440,6 +499,60 @@ describe('SessionDetailPage', () => {
     expect(await screen.findByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
     expect(await screen.findByText('현재 페이지를 설명할까요?')).toBeInTheDocument()
     expect(screen.getAllByText('이 페이지는 핵심 개념의 정의를 다룹니다.')).toHaveLength(explanationCount)
+    expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
+  })
+
+  it('does not repeat a declined quiz proposal on the same page', async () => {
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method !== 'POST' || url.pathname !== '/api/sessions/100/quiz-decline') {
+        return undefined
+      }
+      return apiSuccess({
+        uiActions: [{
+          content: '퀴즈를 진행할까요?',
+          noEvent: 'WAIT',
+          type: 'BINARY_DECISION',
+          yesEvent: 'SHOW_QUIZ_TYPE_SELECT',
+        }],
+      })
+    })
+    renderSessionDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: '네' }))
+    await screen.findByText('퀴즈를 진행할까요?')
+    fireEvent.click(screen.getByRole('button', { name: '아니요' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
+    })
+  })
+
+  it('suppresses a quiz proposal while a diagnosis is pending', async () => {
+    installApiFixtureServer(async (request) => {
+      const url = new URL(request.url)
+      if (request.method !== 'POST' || url.pathname !== '/api/sessions/100/turns') {
+        return undefined
+      }
+      const body = await request.json() as { eventType?: string }
+      if (body.eventType !== 'USER_QUESTION') return undefined
+      return apiSuccess({
+        messages: [],
+        state: {},
+        uiActions: [{
+          content: '퀴즈를 진행할까요?',
+          noEvent: 'WAIT',
+          type: 'BINARY_DECISION',
+          yesEvent: 'SHOW_QUIZ_TYPE_SELECT',
+        }],
+      })
+    })
+    renderSessionDetail()
+
+    const input = await screen.findByLabelText('질문')
+    fireEvent.change(input, { target: { value: '이 개념을 다시 설명해 주세요.' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(input).toBeEnabled())
     expect(screen.queryByText('퀴즈를 진행할까요?')).not.toBeInTheDocument()
   })
 

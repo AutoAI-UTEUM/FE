@@ -4,6 +4,8 @@ export type ApiCapability =
   | 'exam-attempt-drafts'
   | 'password-reset'
   | 'policy-consent'
+  | 'qa-quiz-proposal'
+  | 'quiz-question-stream'
   | 'reports'
   | 'schedule'
   | 'user-notes'
