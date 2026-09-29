@@ -3,7 +3,6 @@ export type ApiCapability =
   | 'oauth'
   | 'exam-attempt-drafts'
   | 'password-reset'
-  | 'policy-consent'
   | 'qa-quiz-proposal'
   | 'quiz-question-stream'
   | 'reports'

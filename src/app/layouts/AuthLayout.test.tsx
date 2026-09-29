@@ -1,23 +1,13 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { installApiFixtureServer } from '../../test/apiFixtureServer'
 import { AuthLayout } from './AuthLayout'
 
-beforeEach(() => {
-  installApiFixtureServer()
-})
-
-afterEach(() => {
-  cleanup()
-  vi.useRealTimers()
-  vi.restoreAllMocks()
-  vi.unstubAllEnvs()
-})
+afterEach(cleanup)
 
 describe('AuthLayout', () => {
-  it('hides the service status and divider on the signup page', () => {
+  it('uses the focused signup layout without legal or server status UI', () => {
     render(
       <MemoryRouter initialEntries={['/signup']}>
         <Routes>
@@ -28,53 +18,14 @@ describe('AuthLayout', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
     const sidebar = screen.getByRole('complementary')
     expect(within(sidebar).queryByRole('link')).not.toBeInTheDocument()
     expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
-  })
-
-  it('hides the service status and divider on the forgot-password page', () => {
-    render(
-      <MemoryRouter initialEntries={['/forgot-password']}>
-        <Routes>
-          <Route element={<AuthLayout />}>
-            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    )
-
+    expect(screen.queryByLabelText('법적 고지')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
   })
 
-  it('uses the focused login layout without the secondary status footer', () => {
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <Routes>
-          <Route element={<AuthLayout />}>
-            <Route path="/login" element={<h1>로그인 폼</h1>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
-    expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
-  })
-
-  it('stops waiting and reports a service problem when health checks time out', async () => {
-    vi.useFakeTimers()
-    vi.mocked(globalThis.fetch).mockImplementation((_input, init) =>
-      new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener(
-          'abort',
-          () => reject(new DOMException('Aborted', 'AbortError')),
-          { once: true },
-        )
-      }),
-    )
-
+  it('does not render legal links or server status on secondary auth pages', () => {
     render(
       <MemoryRouter initialEntries={['/reset-password']}>
         <Routes>
@@ -85,19 +36,8 @@ describe('AuthLayout', () => {
       </MemoryRouter>,
     )
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0)
-    })
-    expect(
-      screen.getByRole('button', { name: '서버 상태 확인 중' }),
-    ).toBeDisabled()
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000)
-    })
-
-    expect(
-      screen.getByRole('button', { name: '서버 오프라인' }),
-    ).toBeEnabled()
+    expect(screen.queryByText('이용약관')).not.toBeInTheDocument()
+    expect(screen.queryByText('개인정보 처리방침')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
   })
 })

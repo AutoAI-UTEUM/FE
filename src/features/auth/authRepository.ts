@@ -1,10 +1,6 @@
 import { apiRequest, ApiClientError } from '../../shared/api'
 import type { AuthUser } from './authContext'
 import { AuthValidationError } from './authErrors'
-import {
-  normalizePolicyRefs,
-  type PolicyRef,
-} from './policiesRepository'
 import type {
   GoogleAuthValues,
   LoginFormValues,
@@ -15,8 +11,6 @@ import type {
 export interface AuthSessionResult {
   accessToken: string
   expiresIn: number
-  /** 현재 유효 정책 중 미동의 목록. 로그인 자체는 성공하므로 게이팅은 FE가 한다. */
-  pendingConsents: PolicyRef[]
   session: AuthSessionPolicy
   user: AuthUser
 }
@@ -59,7 +53,6 @@ export interface AuthRepository {
 interface LoginResponseDto {
   accessToken: string
   expiresIn: number
-  pendingConsents?: PolicyRef[]
   session?: AuthSessionPolicy
   tokenType: string
   user: {
@@ -130,7 +123,6 @@ const repository: AuthRepository = {
 
       return {
         ...mapAccessGrant(data),
-        pendingConsents: data.pendingConsents ?? [],
         user: mapUser(data.user),
       }
     } catch (error) {
@@ -142,7 +134,6 @@ const repository: AuthRepository = {
     const { data } = await apiRequest<LoginResponseDto>('/api/auth/google', {
       body: {
         affiliation: values.affiliation?.trim() || undefined,
-        consents: prepareOptionalSignupConsents(values.consents),
         idToken: values.idToken,
         learningEmailOptIn: values.learningEmailOptIn,
         role: values.role,
@@ -152,7 +143,6 @@ const repository: AuthRepository = {
 
     return {
       ...mapAccessGrant(data),
-      pendingConsents: data.pendingConsents ?? [],
       user: mapUser(data.user),
     }
   },
@@ -211,7 +201,6 @@ const repository: AuthRepository = {
       await apiRequest<UserResponseDto>('/api/auth/signup', {
         body: {
           affiliation: values.affiliation?.trim() || undefined,
-          consents: prepareOptionalSignupConsents(values.consents),
           email: values.email.trim().toLowerCase(),
           learningEmailOptIn: values.learningEmailOptIn ?? false,
           name: values.name.trim(),
@@ -224,18 +213,6 @@ const repository: AuthRepository = {
       throw mapRemoteAuthError(error, 'signup')
     }
   },
-}
-
-function prepareOptionalSignupConsents(
-  consents: PolicyRef[] | undefined,
-): PolicyRef[] | undefined {
-  if (!consents?.length) return undefined
-
-  const normalizedRefs = normalizePolicyRefs(consents)
-  if (!normalizedRefs) {
-    throw new Error('가입 동의 정보가 올바르지 않습니다.')
-  }
-  return normalizedRefs
 }
 
 function mapAccessGrant(data: AccessGrantDto): AccessGrant {

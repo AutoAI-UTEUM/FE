@@ -10,7 +10,6 @@ import type {
   LoginFormValues,
   SignupFormValues,
 } from './authValidation'
-import type { PolicyRef } from './policiesRepository'
 
 export interface AuthUser {
   affiliation?: string
@@ -47,15 +46,12 @@ export interface AuthContextValue {
     signal?: AbortSignal,
   ) => Promise<boolean>
   clearGoogleSignup: () => void
-  clearPendingConsents: () => void
   isAuthenticated: boolean
   isInitializing: boolean
   login: (values: LoginFormValues) => Promise<AuthUser>
   loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthUser>
   logoutReason: LogoutReason | null
   logout: () => Promise<void>
-  /** 로그인 응답의 미동의 정책. 비어 있지 않으면 RequireAuth가 동의 화면으로 보낸다. */
-  pendingConsents: PolicyRef[]
   pendingGoogleIdToken: string | null
   prepareGoogleSignup: (idToken: string) => void
   setExamInProgress: (isInProgress: boolean) => void
