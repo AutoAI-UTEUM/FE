@@ -13,6 +13,7 @@ import { createSessionsRepository } from './sessions'
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
 })
 
 describe('remote feature repositories', () => {
@@ -211,6 +212,93 @@ describe('remote feature repositories', () => {
     expect(handlers.onCompleted).toHaveBeenCalledWith({
       content: '## 개념\n\n- 적용 사례',
       title: '핵심 정리',
+    })
+  })
+
+  it('maps only public quiz question fields from session SSE events', async () => {
+    const encoder = new TextEncoder()
+    const rawRequest = vi.fn().mockResolvedValue(new Response(encoder.encode(
+      'event: quiz_question\ndata: {"generationId":"generation-301","requestId":"quiz-turn-301","quizType":"MCQ","questionIndex":1,"questionCount":5,"question":{"questionId":301,"questionText":"공개 문항","choices":[{"choiceId":"a","text":"첫 번째","isCorrect":true},{"choiceId":"b","text":"두 번째"}],"correctAnswer":"a","rubric":"내부 채점 기준","explanation":"내부 해설"}}\n\n',
+    )))
+    const repository = createSessionsRepository(
+      vi.fn() as AuthenticatedRequest,
+      rawRequest as AuthenticatedRawRequest,
+    )
+    const onQuizQuestion = vi.fn()
+
+    await repository.stream('100', { onQuizQuestion })
+
+    expect(onQuizQuestion).toHaveBeenCalledWith({
+      choices: [
+        { id: 'a', label: '첫 번째' },
+        { id: 'b', label: '두 번째' },
+      ],
+      generationId: 'generation-301',
+      id: '301',
+      kind: 'MCQ',
+      prompt: '공개 문항',
+      requestId: 'quiz-turn-301',
+      sequence: 1,
+      totalQuestions: 5,
+    })
+    expect(onQuizQuestion.mock.calls[0]?.[0]).not.toHaveProperty('correctAnswer')
+    expect(onQuizQuestion.mock.calls[0]?.[0]).not.toHaveProperty('rubric')
+    expect(onQuizQuestion.mock.calls[0]?.[0]).not.toHaveProperty('explanation')
+    expect(onQuizQuestion.mock.calls[0]?.[0].choices[0]).not.toHaveProperty('isCorrect')
+  })
+
+  it('sends quiz capabilities only for supported turn types when explicitly enabled', async () => {
+    vi.stubEnv(
+      'VITE_API_CAPABILITIES',
+      'qa-quiz-proposal,quiz-question-stream',
+    )
+    const request = vi.fn().mockResolvedValue(success({ messages: [], uiActions: [] }))
+    const repository = createSessionsRepository(request as AuthenticatedRequest)
+
+    await repository.submitTurn('100', {
+      eventType: 'USER_QUESTION',
+      payload: { message: '질문' },
+      requestId: 'question-1',
+    })
+    await repository.submitTurn('100', {
+      eventType: 'QUIZ_TYPE_SELECTED',
+      payload: { quizType: 'MCQ' },
+      requestId: 'quiz-1',
+    })
+    await repository.submitTurn('100', {
+      eventType: 'EXPLAIN_CURRENT_PAGE',
+      payload: {},
+      requestId: 'explain-1',
+    })
+
+    expect(request).toHaveBeenNthCalledWith(1, '/api/sessions/100/turns', {
+      body: {
+        capabilities: { qaQuizProposal: true },
+        eventType: 'USER_QUESTION',
+        payload: { message: '질문' },
+        requestId: 'question-1',
+      },
+      method: 'POST',
+      signal: undefined,
+    })
+    expect(request).toHaveBeenNthCalledWith(2, '/api/sessions/100/turns', {
+      body: {
+        capabilities: { quizQuestionStream: true },
+        eventType: 'QUIZ_TYPE_SELECTED',
+        payload: { quizType: 'MCQ' },
+        requestId: 'quiz-1',
+      },
+      method: 'POST',
+      signal: undefined,
+    })
+    expect(request).toHaveBeenNthCalledWith(3, '/api/sessions/100/turns', {
+      body: {
+        eventType: 'EXPLAIN_CURRENT_PAGE',
+        payload: {},
+        requestId: 'explain-1',
+      },
+      method: 'POST',
+      signal: undefined,
     })
   })
 

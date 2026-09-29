@@ -11,6 +11,8 @@ export type {
   PendingDiagnosisReference,
   SessionMessage,
   SessionQuizSummary,
+  StreamQuizQuestion,
+  StreamQuizQuestionChoice,
   SessionTurnResult,
 } from './sessionTypes'
 export {

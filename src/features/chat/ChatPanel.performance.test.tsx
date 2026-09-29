@@ -61,6 +61,7 @@ const stableChatActions = {
   appendMessages: vi.fn(),
   cancelTurn: vi.fn().mockResolvedValue(true),
   clearNoteDraft: vi.fn(),
+  clearQuizQuestionPreview: vi.fn(),
   clearUiActions: vi.fn(),
   loadOlderMessages: vi.fn().mockResolvedValue(false),
   markMessageFailed: vi.fn(),
@@ -81,6 +82,7 @@ function createChat(messages: ChatMessage[]): SessionChat {
     isTurnPending: false,
     messages,
     noteDraft: null,
+    quizQuestionPreview: [],
     streamNotice: null,
     streamUiActions: [],
   }

@@ -1,4 +1,5 @@
 import { ApiClientError, type PagedResponse } from '../../shared/api'
+import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import type {
   AuthenticatedRawRequest,
   AuthenticatedRequest,
@@ -12,6 +13,7 @@ import type {
   SessionMessage,
   SessionQuizSummary,
   SessionTurnResult,
+  StreamQuizQuestion,
   UiAction,
   UiActionEvent,
 } from './sessionTypes'
@@ -109,6 +111,10 @@ interface SessionQuizListDto {
 }
 
 export interface SessionTurnRequest {
+  capabilities?: {
+    qaQuizProposal?: true
+    quizQuestionStream?: true
+  }
   eventType:
     | 'DIAGNOSIS_ANSWER_SUBMITTED'
     | 'EXPLAIN_CURRENT_PAGE'
@@ -124,6 +130,7 @@ export interface SessionStreamHandlers {
   onContentDelta?: (text: string) => void
   onError?: (message: string) => void
   onReady?: (ready: SessionStreamReady) => void
+  onQuizQuestion?: (question: StreamQuizQuestion) => void
   onStatus?: (message: string) => void
   onUiAction?: (action: UiAction) => void
 }
@@ -355,10 +362,12 @@ export function createSessionsRepository(
       )
     },
     async submitTurn(sessionId, turn, signal) {
+      const capabilities = getTurnCapabilities(turn)
       const { data } = await request<SessionTurnDto>(
         `/api/sessions/${encodeURIComponent(sessionId)}/turns`,
         {
           body: {
+            ...(capabilities ? { capabilities } : {}),
             eventType: turn.eventType,
             payload: turn.payload,
             requestId: turn.requestId,
@@ -421,6 +430,12 @@ function handleStreamMessage(
     return
   }
 
+  if (eventType === 'quiz_question') {
+    const question = mapStreamQuizQuestion(payload)
+    if (question) handlers.onQuizQuestion?.(question)
+    return
+  }
+
   if (eventType === 'completed') {
     const result = mapCompletedTurnResult(payload)
     if (result) {
@@ -448,6 +463,130 @@ function handleStreamMessage(
         : '실시간 응답이 중단되었습니다.',
     )
   }
+}
+
+function getTurnCapabilities(
+  turn: SessionTurnRequest,
+): SessionTurnRequest['capabilities'] | undefined {
+  const capabilities: NonNullable<SessionTurnRequest['capabilities']> = {
+    ...turn.capabilities,
+  }
+  if (
+    turn.eventType === 'USER_QUESTION'
+    && isApiCapabilityEnabled('qa-quiz-proposal')
+  ) {
+    capabilities.qaQuizProposal = true
+  }
+  if (
+    turn.eventType === 'QUIZ_TYPE_SELECTED'
+    && isApiCapabilityEnabled('quiz-question-stream')
+  ) {
+    capabilities.quizQuestionStream = true
+  }
+  return Object.keys(capabilities).length > 0 ? capabilities : undefined
+}
+
+function mapStreamQuizQuestion(
+  payload: Record<string, unknown>,
+): StreamQuizQuestion | undefined {
+  const nestedQuestion = payload.question
+  const question = typeof nestedQuestion === 'object' && nestedQuestion !== null
+    ? nestedQuestion as Record<string, unknown>
+    : payload
+  const id = firstString(question.questionId, question.id)
+  const prompt = firstString(
+    question.questionText,
+    question.prompt,
+    question.content,
+  )
+  const kind = normalizeStreamQuizKind(
+    firstString(
+      question.questionType,
+      question.quizType,
+      question.kind,
+      payload.quizType,
+    ),
+  )
+  if (!id || !prompt || !kind) return undefined
+
+  const rawChoices = Array.isArray(question.choices)
+    ? question.choices
+    : Array.isArray(question.options)
+      ? question.options
+      : undefined
+  const choices = rawChoices?.flatMap((rawChoice, index) => {
+    if (typeof rawChoice === 'string') {
+      const label = rawChoice.trim()
+      return label ? [{ id: String(index + 1), label }] : []
+    }
+    if (typeof rawChoice !== 'object' || rawChoice === null) return []
+    const choice = rawChoice as Record<string, unknown>
+    const label = firstString(choice.text, choice.label, choice.content)
+    if (!label) return []
+    return [{
+      id: firstString(choice.choiceId, choice.optionId, choice.id, choice.key)
+        ?? String(index + 1),
+      label,
+    }]
+  })
+  const sequence = firstPositiveInteger(
+    question.sequence,
+    question.index,
+    question.questionIndex,
+    payload.sequence,
+    payload.index,
+    payload.questionIndex,
+  )
+  const totalQuestions = firstPositiveInteger(
+    question.totalQuestions,
+    payload.totalQuestions,
+    payload.questionCount,
+  )
+  const generationId = firstString(payload.generationId, question.generationId)
+  const requestId = firstString(payload.requestId, payload.turnId)
+
+  return {
+    ...(choices && choices.length > 0 ? { choices } : {}),
+    ...(generationId ? { generationId } : {}),
+    id,
+    kind,
+    prompt,
+    ...(requestId ? { requestId } : {}),
+    ...(sequence ? { sequence } : {}),
+    ...(totalQuestions ? { totalQuestions } : {}),
+  }
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string' && typeof value !== 'number') continue
+    const normalized = String(value).trim()
+    if (normalized) return normalized
+  }
+  return undefined
+}
+
+function firstPositiveInteger(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const normalized = typeof value === 'number' ? value : Number(value)
+    if (Number.isSafeInteger(normalized) && normalized > 0) return normalized
+  }
+  return undefined
+}
+
+function normalizeStreamQuizKind(
+  value: string | undefined,
+): StreamQuizQuestion['kind'] | undefined {
+  const normalized = value?.trim().toUpperCase()
+  if (
+    normalized === 'MCQ'
+    || normalized === 'OX'
+    || normalized === 'SHORT'
+    || normalized === 'ESSAY'
+  ) {
+    return normalized
+  }
+  return undefined
 }
 
 function parseStreamPayload(data: string): Record<string, unknown> {
