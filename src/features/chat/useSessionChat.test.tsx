@@ -102,6 +102,91 @@ describe('useSessionChat stream readiness', () => {
     }
   })
 
+  it('shows streamed quiz questions only until the persisted quiz result is ready', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        nextHandlers.onReady?.({ sessionId })
+        return resolveWhenAborted(signal)
+      }),
+      submitTurn: vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+        resolveTurn = resolve
+      })),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(quizTurn('quiz-preview')) })
+    await waitFor(() => expect(repository.submitTurn).toHaveBeenCalledOnce())
+    act(() => handlers?.onQuizQuestion?.({
+      generationId: 'generation-other',
+      id: 'question-other-turn',
+      kind: 'OX',
+      prompt: '다른 턴의 늦은 문항',
+      requestId: 'older-request',
+    }))
+    expect(result.current.quizQuestionPreview).toEqual([])
+    act(() => handlers?.onQuizQuestion?.({
+      choices: [{ id: 'a', label: '정답 후보' }],
+      generationId: 'generation-current',
+      id: 'question-1',
+      kind: 'MCQ',
+      prompt: '먼저 완성된 문항',
+      requestId: 'quiz-preview',
+      sequence: 1,
+      totalQuestions: 3,
+    }))
+
+    expect(result.current.quizQuestionPreview).toEqual([
+      expect.objectContaining({ id: 'question-1', prompt: '먼저 완성된 문항' }),
+    ])
+
+    act(() => resolveTurn?.({
+      activeQuizId: 'quiz-200',
+      messages: [],
+      uiActions: [],
+    }))
+    await act(async () => { await turnPromise })
+
+    expect(result.current.quizQuestionPreview).toEqual([])
+  })
+
+  it('clears temporary quiz questions when the stream reports an error', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        nextHandlers.onReady?.({ sessionId })
+        return resolveWhenAborted(signal)
+      }),
+      submitTurn: vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+        resolveTurn = resolve
+      })),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(quizTurn('quiz-stream-error')) })
+    await waitFor(() => expect(repository.submitTurn).toHaveBeenCalledOnce())
+    act(() => handlers?.onQuizQuestion?.({
+      id: 'temporary-question',
+      kind: 'OX',
+      prompt: '임시 문항',
+    }))
+    expect(result.current.quizQuestionPreview).toHaveLength(1)
+
+    act(() => handlers?.onError?.('연결이 끊겼습니다.'))
+    expect(result.current.quizQuestionPreview).toEqual([])
+
+    act(() => resolveTurn?.(emptyTurnResult()))
+    await act(async () => { await turnPromise })
+  })
+
   it('does not post when the stream errors before ready and releases pending state', async () => {
     let handlers: SessionStreamHandlers | undefined
     const submitTurn = vi.fn()

@@ -15,6 +15,7 @@ import {
   UiActionsRenderer,
   type LearningSession,
   type SessionQuizSummary,
+  type StreamQuizQuestion,
   type SessionTurnResult,
   type UiAction,
   type UiActionEvent,
@@ -85,6 +86,10 @@ export function SessionDetailPage() {
   const [embeddedQuizId, setEmbeddedQuizId] = useState<string | null>(null)
   const [embeddedQuizReviewSummary, setEmbeddedQuizReviewSummary] = useState<SessionQuizSummary>()
   const [lockedQuizId, setLockedQuizId] = useState<string | null>(null)
+  const [declinedQuizProposals, setDeclinedQuizProposals] = useState<{
+    pages: ReadonlySet<number>
+    sessionId?: string
+  }>(() => ({ pages: new Set(), sessionId }))
   const [sessionQuizzes, setSessionQuizzes] = useState<SessionQuizSummary[]>([])
   const [sessionQuizzesError, setSessionQuizzesError] = useState<string | null>(null)
   const [isLoadingSessionQuizzes, setIsLoadingSessionQuizzes] = useState(false)
@@ -366,7 +371,6 @@ export function SessionDetailPage() {
   const totalPages = activeSession.totalPages ?? Math.max(activeSession.currentPage, 1)
 
   function applyTurnResult(result: SessionTurnResult, preservePage = false) {
-    chat.clearUiActions()
     const nextPage = preservePage || result.currentPage === undefined
       ? undefined
       : movePage(result.currentPage, totalPages)
@@ -510,6 +514,13 @@ export function SessionDetailPage() {
     setError(null)
     try {
       const result = await sessionsRepository.declineQuiz(activeSession.id)
+      setDeclinedQuizProposals((current) => ({
+        pages: new Set(
+          current.sessionId === activeSession.id ? current.pages : [],
+        ).add(currentPageRef.current),
+        sessionId: activeSession.id,
+      }))
+      chat.clearUiActions()
       applyTurnResult(result, true)
     } catch (requestError) {
       setError(getRequestErrorMessage(requestError))
@@ -601,18 +612,26 @@ export function SessionDetailPage() {
 
   async function handleQuizTypeSelected(kind: QuizKind) {
     const result = await runTurn('QUIZ_TYPE_SELECTED', { quizType: kind })
-    if (!result) return
-    setIsSelectingQuizType(false)
+    chat.clearQuizQuestionPreview()
+    if (!result) {
+      const recoveredSession = await refreshLearningProgress()
+      if (recoveredSession?.activeQuizId) setIsSelectingQuizType(false)
+      return
+    }
     if (result.activeQuizId) {
+      setIsSelectingQuizType(false)
       autoOpenedQuizIdRef.current = result.activeQuizId
       setEmbeddedQuizReviewSummary(undefined)
       setLockedQuizId(result.activeQuizId)
       setEmbeddedQuizId(result.activeQuizId)
       setQuizReloadKey((key) => key + 1)
+      return
     }
+    const recoveredSession = await refreshLearningProgress()
+    if (recoveredSession?.activeQuizId) setIsSelectingQuizType(false)
   }
 
-  async function refreshLearningProgress() {
+  async function refreshLearningProgress(): Promise<LearningSession | null | undefined> {
     try {
       const nextSession = await sessionsRepository.getById(activeSession.id)
       if (nextSession) {
@@ -625,8 +644,10 @@ export function SessionDetailPage() {
       }
       setQuizReloadKey((key) => key + 1)
       setError(null)
+      return nextSession
     } catch (requestError) {
       setError(getRequestErrorMessage(requestError))
+      return undefined
     }
   }
 
@@ -637,9 +658,21 @@ export function SessionDetailPage() {
     setEmbeddedQuizId(quizId)
   }
 
-  const availableUiActions = chat.streamUiActions.length > 0
+  const rawUiActions = chat.streamUiActions.length > 0
     ? chat.streamUiActions
     : (activeSession.uiActions ?? [])
+  const canShowQuizProposal = !activeSession.activeQuizId
+    && !(chat.streamUiActionSource === 'USER_QUESTION' && activeSession.pendingDiagnosis)
+    && !isSelectingQuizType
+    && !lockedQuizId
+    && !(
+      declinedQuizProposals.sessionId === activeSession.id
+      && declinedQuizProposals.pages.has(currentPage)
+    )
+  const availableUiActions = rawUiActions.filter((action) => (
+    !isQuizProposal(action) || canShowQuizProposal
+  ))
+  const hasQuizQuestionPreview = chat.quizQuestionPreview.length > 0
   const hasConversationAction = isSelectingQuizType
     || availableUiActions.length > 0
     || Boolean(activeSession.activeQuizId && !embeddedQuizId)
@@ -696,11 +729,11 @@ export function SessionDetailPage() {
         {isPhone ? (
           <MobileWorkspaceTabs
             active={mobilePane}
-            items={[{ label: embeddedQuizId ? '퀴즈' : '자료', value: 'content' }, { label: '학습', value: 'learning' }]}
+            items={[{ label: embeddedQuizId || hasQuizQuestionPreview ? '퀴즈' : '자료', value: 'content' }, { label: '학습', value: 'learning' }]}
             onChange={setMobilePane}
           />
         ) : null}
-        {isTablet ? <TabletWorkspaceControls canSplit={canSplit} contentLabel={embeddedQuizId ? '퀴즈' : '자료'} onChange={setTabletPane} value={activeTabletPane} /> : null}
+        {isTablet ? <TabletWorkspaceControls canSplit={canSplit} contentLabel={embeddedQuizId || hasQuizQuestionPreview ? '퀴즈' : '자료'} onChange={setTabletPane} value={activeTabletPane} /> : null}
 
         <div
           className="study-session-content h-full min-h-0 min-w-0 flex-1"
@@ -747,6 +780,8 @@ export function SessionDetailPage() {
                 reviewSummary={embeddedQuizReviewSummary}
                 showReviewChat={false}
               />
+            ) : hasQuizQuestionPreview ? (
+              <QuizGenerationPreview questions={chat.quizQuestionPreview} />
             ) : (
               <SessionPageViewer
                 backTo={weekPagePath}
@@ -880,6 +915,89 @@ export function SessionDetailPage() {
       </section>
     </div>
   )
+}
+
+function QuizGenerationPreview({
+  questions,
+}: {
+  questions: StreamQuizQuestion[]
+}) {
+  const totalQuestions = questions.reduce<number | undefined>(
+    (total, question) => question.totalQuestions ?? total,
+    undefined,
+  )
+
+  return (
+    <section
+      aria-label="퀴즈 생성 중 미리보기"
+      aria-live="polite"
+      className="h-full min-h-0 overflow-y-auto border-r border-stone-200 bg-stone-50 px-5 py-6 sm:px-8"
+    >
+      <div className="mx-auto max-w-3xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="size-2 animate-pulse rounded-full bg-brand-600" />
+              <p className="type-caption font-semibold text-brand-700">생성 중 미리보기</p>
+            </div>
+            <h2 className="mt-2 type-page-title font-bold text-stone-950">
+              완성된 문항부터 보여드리고 있어요
+            </h2>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1.5 type-caption font-semibold text-stone-600 ring-1 ring-stone-200">
+            {questions.length}{totalQuestions ? ` / ${totalQuestions}` : ''}문항
+          </span>
+        </div>
+
+        <p className="mt-3 type-body text-stone-500">
+          최종 검증과 저장이 끝날 때까지 답안을 선택하거나 제출할 수 없습니다.
+        </p>
+
+        <ol className="mt-6 grid gap-4">
+          {questions.map((question, index) => (
+            <li className="rounded-2xl border border-stone-200 bg-white p-5" key={question.id}>
+              <div className="flex items-center gap-2 type-caption font-semibold text-stone-500">
+                <span>문항 {question.sequence ?? index + 1}</span>
+                <span aria-hidden="true">·</span>
+                <span>{getQuizKindLabel(question.kind)}</span>
+              </div>
+              <p className="mt-3 type-section-title font-semibold leading-7 text-stone-950">
+                {question.prompt}
+              </p>
+              {question.choices?.length ? (
+                <ul aria-label={`문항 ${question.sequence ?? index + 1} 보기`} className="mt-4 grid gap-2">
+                  {question.choices.map((choice, choiceIndex) => (
+                    <li
+                      className="flex items-start gap-3 rounded-xl bg-stone-50 px-4 py-3 type-body text-stone-600"
+                      key={choice.id}
+                    >
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-stone-300 bg-white type-caption font-semibold text-stone-500">
+                        {choiceIndex + 1}
+                      </span>
+                      <span>{choice.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  )
+}
+
+function getQuizKindLabel(kind: StreamQuizQuestion['kind']): string {
+  switch (kind) {
+    case 'MCQ':
+      return '객관식'
+    case 'OX':
+      return 'OX'
+    case 'SHORT':
+      return '단답형'
+    case 'ESSAY':
+      return '서술형'
+  }
 }
 
 function QuizChatLockPanel({
