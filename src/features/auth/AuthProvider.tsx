@@ -33,7 +33,6 @@ import type {
   LoginFormValues,
   SignupFormValues,
 } from './authValidation'
-import type { PolicyRef } from './policiesRepository'
 
 interface AuthProviderProps {
   initialUser?: AuthUser | null
@@ -97,8 +96,6 @@ export function AuthProvider({
   const [pendingGoogleIdToken, setPendingGoogleIdToken] = useState<string | null>(
     null,
   )
-  // 로그인 응답으로만 알 수 있어서 세션과 따로 둔다. 새로고침 뒤에는 동의 화면이 직접 조회한다.
-  const [pendingConsents, setPendingConsents] = useState<PolicyRef[]>([])
   const sessionRef = useRef(session)
   const sessionRevisionRef = useRef(0)
   const lastActivityAtRef = useRef(initialUser ? initialReceivedAt : 0)
@@ -159,7 +156,6 @@ export function AuthProvider({
       setLogoutReason(reason)
       setIsIdleWarningOpen(false)
       setAuthRecovery(null)
-      setPendingConsents([])
 
       if (broadcast) {
         coordinatorRef.current?.publish({
@@ -601,7 +597,6 @@ export function AuthProvider({
     async (values: LoginFormValues) => {
       const result = await repository.login(values)
       beginSession(result, result.user)
-      setPendingConsents(result.pendingConsents)
       return result.user
     },
     [beginSession, repository],
@@ -612,7 +607,6 @@ export function AuthProvider({
       const result = await repository.loginWithGoogle(values)
       setPendingGoogleIdToken(null)
       beginSession(result, result.user)
-      setPendingConsents(result.pendingConsents)
       return result.user
     },
     [beginSession, repository],
@@ -637,14 +631,9 @@ export function AuthProvider({
       await repository.signup(values)
       const result = await repository.login(values)
       beginSession(result, result.user)
-      setPendingConsents(result.pendingConsents)
     },
     [beginSession, repository],
   )
-
-  const clearPendingConsents = useCallback(() => {
-    setPendingConsents([])
-  }, [])
 
   const logout = useCallback(async () => {
     const task = () => repository.logout().catch(() => undefined)
@@ -763,14 +752,12 @@ export function AuthProvider({
       rawApiRequest: authenticatedRawRequest,
       checkEmailAvailability,
       clearGoogleSignup,
-      clearPendingConsents,
       isAuthenticated: session !== null,
       isInitializing,
       login,
       loginWithGoogle,
       logoutReason,
       logout,
-      pendingConsents,
       pendingGoogleIdToken,
       prepareGoogleSignup,
       setExamInProgress,
@@ -784,13 +771,11 @@ export function AuthProvider({
       authenticatedRawRequest,
       checkEmailAvailability,
       clearGoogleSignup,
-      clearPendingConsents,
       isInitializing,
       login,
       loginWithGoogle,
       logout,
       logoutReason,
-      pendingConsents,
       pendingGoogleIdToken,
       prepareGoogleSignup,
       setExamInProgress,

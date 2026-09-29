@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:qa": "cross-env VITE_API_BASE_URL=/api VITE_API_CAPABILITIES=reports,password-reset,oauth,schedule,analytics,policy-consent VITE_DEV_PROXY_TARGET=mock npm run build",
+    "build:qa": "cross-env VITE_API_BASE_URL=/api VITE_API_CAPABILITIES=reports,password-reset,oauth,schedule,analytics VITE_DEV_PROXY_TARGET=mock npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

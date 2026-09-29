@@ -13,7 +13,6 @@ import { routes } from './routes'
 
 const AuthCallbackPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.AuthCallbackPage })))
 const ResetPasswordPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.ResetPasswordPage })))
-const PolicyConsentPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.PolicyConsentPage })))
 const ClassroomsPage = lazy(() => import('./pages/ClassroomsPage').then((module) => ({ default: module.ClassroomsPage })))
 const ClassroomDetailPage = lazy(() => import('./pages/ClassroomDetailPage').then((module) => ({ default: module.ClassroomDetailPage })))
 const DiagnosisPage = lazy(() => import('./pages/DiagnosisPage').then((module) => ({ default: module.DiagnosisPage })))
@@ -41,8 +40,6 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => 
 const QuizPage = lazy(() => import('./pages/QuizPage').then((module) => ({ default: module.QuizPage })))
 const SessionDetailPage = lazy(() => import('./pages/SessionDetailPage').then((module) => ({ default: module.SessionDetailPage })))
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
-const TermsPage = lazy(() => import('./pages/PolicyPage').then((module) => ({ default: module.TermsPage })))
-const PrivacyPage = lazy(() => import('./pages/PolicyPage').then((module) => ({ default: module.PrivacyPage })))
 const UpdatesPage = lazy(() => import('./pages/UpdatesPage').then((module) => ({ default: module.UpdatesPage })))
 const AdminPage = lazy(() => import('./pages/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
 
@@ -62,17 +59,11 @@ export function AppRoutes() {
           element={<ForgotPasswordPage />}
         />
         <Route path={routes.signup} element={<SignupPage />} />
-        <Route path={routes.terms} element={<TermsPage />} />
-        <Route path={routes.privacy} element={<PrivacyPage />} />
         <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
         <Route path={routes.authCallback} element={<AuthCallbackPage />} />
       </Route>
 
       <Route element={<RequireAuth />}>
-        {/* 동의 전에는 앱 내비게이션을 보여주지 않는다. RequireAuth가 이 경로만 통과시킨다. */}
-        <Route element={<AuthLayout />}>
-          <Route path={routes.consents} element={<PolicyConsentPage />} />
-        </Route>
         <Route element={<AppLayout />}>
           <Route element={<RequireAdmin />}>
             <Route path={routes.admin} element={<AdminPage />} />
