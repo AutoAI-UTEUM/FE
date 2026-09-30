@@ -139,6 +139,7 @@ export function ChatPanel({
   const [learningTextSize, setLearningTextSize] = useState<LearningTextSize>(
     () => readLearningTextSize(textSizeOwnerId),
   )
+  const hasConversationAction = Boolean(conversationAction)
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const turnSubmissionLockRef = useRef(false)
@@ -175,7 +176,7 @@ export function ChatPanel({
       return
     }
     log.scrollTop = log.scrollHeight
-  }, [chat.messages.length, chat.isTurnPending, conversationAction])
+  }, [chat.messages.length, chat.isTurnPending, hasConversationAction])
 
   useLayoutEffect(() => {
     if (tab !== 'chat') return
