@@ -358,10 +358,32 @@ describe('SessionDetailPage', () => {
   })
 
   it('shows streamed questions as a non-submittable preview until the quiz is stored', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(640)
     const encoder = new TextEncoder()
     let streamCalls = 0
     let quizStreamController: ReadableStreamDefaultController<Uint8Array> | undefined
     let resolveQuizTurn: ((response: Response) => void) | undefined
+    const enqueueQuizQuestion = (questionIndex: number) => {
+      quizStreamController?.enqueue(encoder.encode([
+        'event: quiz_question',
+        `data: ${JSON.stringify({
+          generationId: 'generation-1',
+          questionCount: 5,
+          questionIndex,
+          quizType: 'MCQ',
+          question: {
+            choices: [
+              { choiceId: `${questionIndex}-a`, text: `${questionIndex}번 첫 번째 보기` },
+              { choiceId: `${questionIndex}-b`, text: `${questionIndex}번 두 번째 보기` },
+            ],
+            questionId: `preview-${questionIndex}`,
+            questionText: `${questionIndex}번째 미리보기 문항`,
+          },
+        })}`,
+        '',
+        '',
+      ].join('\n')))
+    }
     installApiFixtureServer(async (request) => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/sessions/100/stream') {
@@ -379,16 +401,7 @@ describe('SessionDetailPage', () => {
       if (request.method === 'POST' && url.pathname === '/api/sessions/100/turns') {
         const body = await request.clone().json() as { eventType?: string }
         if (body.eventType !== 'QUIZ_TYPE_SELECTED') return undefined
-        quizStreamController?.enqueue(encoder.encode([
-          'event: quiz_question',
-          'data: {"generationId":"generation-1","quizType":"MCQ","questionIndex":1,"questionCount":5,"question":{"questionId":"preview-1","questionText":"미리 완성된 문항은 무엇인가요?","choices":[{"choiceId":"a","text":"첫 번째 보기"},{"choiceId":"b","text":"두 번째 보기"}]}}',
-          '',
-          'event: completed',
-          'data: {"result":{}}',
-          '',
-          '',
-        ].join('\n')))
-        quizStreamController?.close()
+        enqueueQuizQuestion(1)
         return new Promise<Response>((resolve) => { resolveQuizTurn = resolve })
       }
       return undefined
@@ -401,10 +414,30 @@ describe('SessionDetailPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '객관식' }))
 
     const preview = await screen.findByRole('region', { name: '퀴즈 생성 중 미리보기' })
-    expect(within(preview).getByText('미리 완성된 문항은 무엇인가요?')).toBeInTheDocument()
-    expect(within(preview).getByText('첫 번째 보기')).toBeInTheDocument()
+    const chatLog = screen.getByRole('log')
+    preview.scrollTop = 80
+    chatLog.scrollTop = 120
+    expect(within(preview).getByText('1번째 미리보기 문항')).toBeInTheDocument()
+    expect(within(preview).getByText('1번 첫 번째 보기')).toBeInTheDocument()
     expect(within(preview).queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
     expect(screen.queryByText('문항 1 / 2')).not.toBeInTheDocument()
+
+    for (let questionIndex = 2; questionIndex <= 5; questionIndex += 1) {
+      enqueueQuizQuestion(questionIndex)
+      expect(await within(preview).findByText(`${questionIndex} / 5문항`)).toBeInTheDocument()
+      expect(within(preview).getByText(`${questionIndex}번째 미리보기 문항`)).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: '퀴즈 생성 중 미리보기' })).toBe(preview)
+      expect(preview).toHaveProperty('scrollTop', 80)
+      expect(chatLog).toHaveProperty('scrollTop', 120)
+    }
+
+    quizStreamController?.enqueue(encoder.encode([
+      'event: completed',
+      'data: {"result":{}}',
+      '',
+      '',
+    ].join('\n')))
+    quizStreamController?.close()
 
     resolveQuizTurn?.(apiSuccess({
       messages: [],
