@@ -782,6 +782,29 @@ describe('ChatPanel', () => {
     expect(screen.getByRole('log')).toHaveProperty('scrollTop', 640)
   })
 
+  it('keeps the chat scroll position when a visible conversation action rerenders', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(640)
+    const repository = createRepository()
+    const { rerender } = render(
+      <ChatHarness
+        conversationAction={<p>1 / 5문항 생성</p>}
+        repository={repository}
+      />,
+    )
+    const log = await screen.findByRole('log')
+    log.scrollTop = 120
+
+    for (const progress of ['3 / 5문항 생성', '2 / 5문항 생성', '2 / 5문항 생성']) {
+      rerender(
+        <ChatHarness
+          conversationAction={<p>{progress}</p>}
+          repository={repository}
+        />,
+      )
+      expect(log).toHaveProperty('scrollTop', 120)
+    }
+  })
+
   it('renders assistant messages as markdown but keeps user text literal', async () => {
     const repository = createRepository({
       listMessages: vi.fn().mockResolvedValue([
