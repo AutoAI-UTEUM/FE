@@ -357,28 +357,38 @@ describe('SessionDetailPage', () => {
     expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
   })
 
-  it('shows streamed questions as a non-submittable preview until the quiz is stored', async () => {
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(640)
+  it('lets the learner answer streamed questions in the quiz workspace while later questions are generated', async () => {
     const encoder = new TextEncoder()
     let streamCalls = 0
     let quizStreamController: ReadableStreamDefaultController<Uint8Array> | undefined
     let resolveQuizTurn: ((response: Response) => void) | undefined
+    const streamedQuestions = [
+      {
+        choices: [
+          { choiceId: 'mcq-a', text: '개념의 정의를 먼저 확인한다.' },
+          { choiceId: 'mcq-b', text: '본문 전체를 암기한다.' },
+        ],
+        questionId: 'question-mcq',
+        questionText: '새 개념을 학습할 때 가장 먼저 확인할 정보는 무엇인가요?',
+      },
+      {
+        choices: [
+          { choiceId: 'review-a', text: '이해가 낮은 페이지를 다시 읽는다.' },
+          { choiceId: 'review-b', text: '아무 답이나 선택한다.' },
+        ],
+        questionId: 'question-review',
+        questionText: '학습 중 이해가 낮은 부분이 생기면 어떻게 해야 하나요?',
+      },
+    ]
     const enqueueQuizQuestion = (questionIndex: number) => {
       quizStreamController?.enqueue(encoder.encode([
         'event: quiz_question',
         `data: ${JSON.stringify({
           generationId: 'generation-1',
-          questionCount: 5,
+          questionCount: streamedQuestions.length,
           questionIndex,
           quizType: 'MCQ',
-          question: {
-            choices: [
-              { choiceId: `${questionIndex}-a`, text: `${questionIndex}번 첫 번째 보기` },
-              { choiceId: `${questionIndex}-b`, text: `${questionIndex}번 두 번째 보기` },
-            ],
-            questionId: `preview-${questionIndex}`,
-            questionText: `${questionIndex}번째 미리보기 문항`,
-          },
+          question: streamedQuestions[questionIndex - 1],
         })}`,
         '',
         '',
@@ -413,23 +423,22 @@ describe('SessionDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '네' }))
     fireEvent.click(await screen.findByRole('button', { name: '객관식' }))
 
-    const preview = await screen.findByRole('region', { name: '퀴즈 생성 중 미리보기' })
-    const chatLog = screen.getByRole('log')
-    preview.scrollTop = 80
-    chatLog.scrollTop = 120
-    expect(within(preview).getByText('1번째 미리보기 문항')).toBeInTheDocument()
-    expect(within(preview).getByText('1번 첫 번째 보기')).toBeInTheDocument()
-    expect(within(preview).queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
-    expect(screen.queryByText('문항 1 / 2')).not.toBeInTheDocument()
+    const quizWorkspace = await screen.findByRole('region', { name: '퀴즈 문항' })
+    const firstAnswer = within(quizWorkspace).getByLabelText('개념의 정의를 먼저 확인한다.')
+    expect(within(quizWorkspace).getByText('문항 1 / 2')).toBeInTheDocument()
+    expect(within(quizWorkspace).getByRole('status')).toHaveTextContent('나머지 1개 문항을 생성하고 있습니다.')
+    expect(screen.getByRole('region', { name: '퀴즈 응시 중 채팅 잠금' })).toBeInTheDocument()
+    expect(within(quizWorkspace).queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
 
-    for (let questionIndex = 2; questionIndex <= 5; questionIndex += 1) {
-      enqueueQuizQuestion(questionIndex)
-      expect(await within(preview).findByText(`${questionIndex} / 5문항`)).toBeInTheDocument()
-      expect(within(preview).getByText(`${questionIndex}번째 미리보기 문항`)).toBeInTheDocument()
-      expect(screen.getByRole('region', { name: '퀴즈 생성 중 미리보기' })).toBe(preview)
-      expect(preview).toHaveProperty('scrollTop', 80)
-      expect(chatLog).toHaveProperty('scrollTop', 120)
-    }
+    fireEvent.click(firstAnswer)
+    expect(firstAnswer).toBeChecked()
+
+    enqueueQuizQuestion(2)
+    expect(await within(quizWorkspace).findByText('문항을 저장하고 있습니다.')).toBeInTheDocument()
+    expect(firstAnswer).toBeChecked()
+    fireEvent.click(within(quizWorkspace).getByRole('button', { name: '다음 문항' }))
+    expect(within(quizWorkspace).getByText('문항 2 / 2')).toBeInTheDocument()
+    expect(within(quizWorkspace).queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
 
     quizStreamController?.enqueue(encoder.encode([
       'event: completed',
@@ -445,8 +454,10 @@ describe('SessionDetailPage', () => {
       uiActions: [],
     }))
 
-    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '퀴즈 생성 중 미리보기' })).not.toBeInTheDocument()
+    expect(await within(quizWorkspace).findByRole('button', { name: '제출' })).toBeInTheDocument()
+    fireEvent.click(within(quizWorkspace).getByRole('button', { name: '이전 문항' }))
+    expect(within(quizWorkspace).getByText('문항 1 / 2')).toBeInTheDocument()
+    expect(within(quizWorkspace).getByLabelText('개념의 정의를 먼저 확인한다.')).toBeChecked()
   })
 
   it('opens quiz review chat immediately after the active quiz is submitted', async () => {
