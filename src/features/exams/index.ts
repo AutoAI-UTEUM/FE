@@ -1,4 +1,4 @@
-export { createExamsRepository } from './examsRepository'
+export { buildExamSubmissionAnswers, createExamsRepository, isBlankExamAnswer } from './examsRepository'
 export type {
   CreateExamInput,
   Exam,

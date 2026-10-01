@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -124,6 +124,69 @@ describe('QuizPage', () => {
     expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '제출 완료' })).not.toBeInTheDocument()
     expect(screen.getByText('문항 1 / 2')).toBeInTheDocument()
+  })
+
+  it('clears quiz state and actions when submission access is revoked', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'POST' && new URL(request.url).pathname === '/api/quizzes/50/submit') {
+        return apiFailure('MATERIAL_NOT_FOUND', 404)
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderQuizPage()
+
+    await answerAllQuestions()
+    fireEvent.click(screen.getByRole('button', { name: '제출' }))
+
+    expect(await screen.findByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).toBeInTheDocument()
+    expect(screen.getByText('이 자료에 접근할 수 없어 퀴즈 결과를 표시할 수 없습니다.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '접근 가능한 강의실로 돌아가기' })).toHaveAttribute('href', '/classrooms')
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/[점수].*48/)).not.toBeInTheDocument()
+  })
+
+  it('keeps a late quiz response from restoring protected review data', async () => {
+    let resolveQuiz: ((response: Response) => void) | undefined
+    const delayedQuiz = new Promise<Response>((resolve) => { resolveQuiz = resolve })
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const path = new URL(request.url).pathname
+      if (request.method === 'GET' && path === '/api/quizzes/50') return delayedQuiz
+      if (request.method === 'GET' && path === '/api/quizzes/50/submission') return apiFailure('MATERIAL_NOT_FOUND', 404)
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    render(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace
+            quizId="50"
+            reviewSummary={{ maxScore: 100, passed: true, quizId: '50', quizType: 'MCQ', score: 100, submitted: true, title: '복습 퀴즈' }}
+          />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).toBeInTheDocument()
+    await act(async () => {
+      resolveQuiz?.(new Response(JSON.stringify({ data: {
+        questions: [{ maxScore: 100, options: [{ optionId: 'a', text: '보기' }], questionId: 'q1', questionText: '보호된 문항' }],
+        quizId: 50,
+        quizType: 'MCQ',
+        sessionId: 100,
+        submitted: true,
+        title: '복습 퀴즈',
+      }, success: true }), { headers: { 'Content-Type': 'application/json' }, status: 200 }))
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).toBeInTheDocument())
+    expect(screen.queryByText('보호된 문항')).not.toBeInTheDocument()
+    expect(screen.queryByText('점수 100 / 100 · 통과')).not.toBeInTheDocument()
   })
 
   it('shows a spinning evaluation state while the quiz is being graded', async () => {
@@ -264,3 +327,13 @@ describe('QuizPage', () => {
     expect(await screen.findByText("제출한 퀴즈를 기준으로 '틀린 이유를 알려줘'을 다시 설명할게요.")).toBeInTheDocument()
   })
 })
+
+function apiFailure(code: string, status: number): Response {
+  return new Response(JSON.stringify({
+    error: { code, details: [], message: '자료를 찾을 수 없습니다.' },
+    success: false,
+  }), {
+    headers: { 'Content-Type': 'application/json' },
+    status,
+  })
+}

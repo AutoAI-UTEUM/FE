@@ -126,6 +126,7 @@ describe('shared ui', () => {
     render(<PageHeader title="내 강의실" />)
 
     expect(screen.getByRole('heading', { name: '내 강의실' })).toHaveClass('type-page-title')
+    expect(screen.getByRole('heading', { name: '내 강의실' }).closest('header')).toHaveClass('shrink-0')
     expect(screen.getByRole('heading', { name: '내 강의실' }).closest('header')).toHaveClass('sm:items-start')
   })
 

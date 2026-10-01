@@ -46,6 +46,9 @@ type EmailAvailabilityStatus =
   | 'taken'
   | 'unsupported'
 
+const GOOGLE_EMAIL_CONFLICT_MESSAGE =
+  '같은 이메일을 사용하는 계정이 있어 Google로 자동 연결할 수 없습니다. 기존 로그인 방식을 이용하거나 지원에 문의해 주세요.'
+
 const roleOptions: Array<{
   description: string
   icon: LucideIcon
@@ -92,6 +95,7 @@ export function SignupPage() {
     useState(false)
   const [googleRole, setGoogleRole] = useState<SignupRole>('LEARNER')
   const [googleError, setGoogleError] = useState<string | null>(null)
+  const [googleSignupStopped, setGoogleSignupStopped] = useState(false)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
 
@@ -193,7 +197,29 @@ export function SignupPage() {
         role: googleRole,
       })
       navigate(routes.classrooms, { replace: true })
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.status === 409 &&
+        error.code === 'EMAIL_ALREADY_EXISTS'
+      ) {
+        clearGoogleSignup()
+        setGoogleSignupStopped(true)
+        setGoogleError(GOOGLE_EMAIL_CONFLICT_MESSAGE)
+        return
+      }
+      if (
+        error instanceof ApiClientError &&
+        error.status === 401 &&
+        error.code === 'TOKEN_INVALID'
+      ) {
+        clearGoogleSignup()
+        setGoogleSignupStopped(true)
+        setGoogleError(
+          'Google 인증이 만료되었거나 유효하지 않습니다. 로그인 화면에서 다시 시도해 주세요.',
+        )
+        return
+      }
       setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
     } finally {
       setIsGoogleSubmitting(false)
@@ -228,6 +254,26 @@ export function SignupPage() {
   const selectedRoleLabel =
     values.role === 'INSTRUCTOR' ? '강의자' : '학습자'
   const passwordStrength = getPasswordStrength(values.password)
+
+  if (googleSignupStopped) {
+    return (
+      <div>
+        <h1 className="type-page-title font-bold text-stone-900">
+          Google 회원가입을 계속할 수 없습니다
+        </h1>
+        <p className="mt-4 type-body font-medium text-rose-700" role="alert">
+          {googleError}
+        </p>
+        <Button
+          className="mt-6 h-11 w-full"
+          onClick={() => navigate(routes.login, { replace: true })}
+          type="button"
+        >
+          기존 로그인 방식 선택
+        </Button>
+      </div>
+    )
+  }
 
   if (pendingGoogleIdToken) {
     return (

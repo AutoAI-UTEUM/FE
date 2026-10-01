@@ -119,6 +119,65 @@ describe('InstructorExamSubmissionPage', () => {
     const scoreCall = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).endsWith('/api/exams/10/submissions/300/answers/q1/score'))
     expect(JSON.parse(String(scoreCall?.[1]?.body))).toEqual({ score: 10 })
   })
+
+  it('does not convert an ungraded instructor result into a zero score', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/exams/10') {
+        return success({
+          allowRetake: false,
+          classroomId: 30,
+          examId: 10,
+          questionCount: 1,
+          questions: [{ maxScore: 10, questionId: 'q1', questionText: '스택의 특징을 설명하세요.', questionType: 'SHORT' }],
+          status: 'PUBLISHED',
+          title: '자료구조 시험',
+          totalScore: 10,
+        })
+      }
+      if (url.pathname === '/api/exams/10/submissions/300') {
+        return success({
+          attemptNo: 1,
+          items: [{ answer: '스택', maxScore: 10, questionId: 'q1', score: null, verdict: null }],
+          maxScore: null,
+          normalizedScore: null,
+          score: null,
+          status: 'GRADING_FAILED',
+          submissionId: 300,
+          submittedAt: '2026-09-09T01:01:12Z',
+        })
+      }
+      if (url.pathname === '/api/exams/10/submissions') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      if (url.pathname === '/api/classrooms/30/students') {
+        return success({
+          items: [{ aiQuestionCountLast7Days: 0, email: 'seoyeon@class.kr', joinedAt: '2026-08-01T00:00:00Z', name: '김서연', status: 'ACTIVE', studentId: 8 }],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/classrooms/30/exams/10/submissions/300']}>
+        <AuthProvider initialUser={{ email: 'instructor@example.com', id: 1, name: '강의자', role: 'INSTRUCTOR' }}>
+          <ToastProvider>
+            <Routes>
+              <Route element={<InstructorExamSubmissionPage />} path="/classrooms/:classroomId/exams/:examId/submissions/:submissionId" />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('채점되지 않음')).toBeInTheDocument()
+    expect(screen.queryByText('0/10점')).not.toBeInTheDocument()
+    expect(screen.getByText(/정답률 - · 문항 평균 -/)).toBeInTheDocument()
+  })
 })
 
 function submissionSummary(submissionId: number, userId: number, userName: string) {

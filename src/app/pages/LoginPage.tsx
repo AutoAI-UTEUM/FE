@@ -23,6 +23,9 @@ const initialValues: LoginFormValues = {
   password: '',
 }
 
+const GOOGLE_EMAIL_CONFLICT_MESSAGE =
+  '같은 이메일을 사용하는 계정이 있어 Google로 자동 연결할 수 없습니다. 기존 로그인 방식을 이용하거나 지원에 문의해 주세요.'
+
 export function LoginPage() {
   usePageTitle('로그인')
   const {
@@ -86,14 +89,24 @@ export function LoginPage() {
       const user = await loginWithGoogle({ idToken })
       navigate(isAdminRole(user.role) ? routes.admin : routes.classrooms, { replace: true })
     } catch (error) {
-      if (
-        error instanceof ApiClientError &&
-        error.status === 409 &&
-        error.code === 'SIGNUP_REQUIRED'
-      ) {
-        prepareGoogleSignup(idToken)
-        navigate(routes.signup)
-        return
+      if (error instanceof ApiClientError) {
+        if (error.status === 409 && error.code === 'SIGNUP_REQUIRED') {
+          prepareGoogleSignup(idToken)
+          navigate(routes.signup)
+          return
+        }
+        if (error.status === 409 && error.code === 'EMAIL_ALREADY_EXISTS') {
+          clearGoogleSignup()
+          setGoogleError(GOOGLE_EMAIL_CONFLICT_MESSAGE)
+          return
+        }
+        if (error.status === 401 && error.code === 'TOKEN_INVALID') {
+          clearGoogleSignup()
+          setGoogleError(
+            'Google 인증을 확인하지 못했습니다. Google 로그인을 다시 시도해 주세요.',
+          )
+          return
+        }
       }
       setGoogleError(
         getLoginErrorMessage(error) ??
