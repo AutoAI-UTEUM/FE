@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
 import { installApiFixtureServer } from '../../test/apiFixtureServer'
+import type { PublicQuizQuestion } from '../../features/quiz'
 import { QuizPage, QuizWorkspace } from './QuizPage'
 
 beforeEach(() => {
@@ -36,6 +37,58 @@ async function answerAllQuestions() {
 }
 
 describe('QuizPage', () => {
+  it.each([
+    {
+      answer: 'choice-a',
+      choices: [{ id: 'choice-a', label: '첫 번째 보기' }],
+      kind: 'MCQ',
+      label: '객관식',
+    },
+    { answer: 'true', choices: undefined, kind: 'OX', label: 'OX' },
+    { answer: '핵심 용어', choices: undefined, kind: 'SHORT', label: '단답형' },
+    { answer: '개념을 설명한 서술 답안', choices: undefined, kind: 'ESSAY', label: '서술형' },
+  ] as const)('accepts an answer for a streamed $label question', ({ answer, choices, kind }) => {
+    const question: PublicQuizQuestion = {
+      ...(choices ? { choices: [...choices] } : {}),
+      id: `stream-${kind}`,
+      kind,
+      prompt: `${kind} 생성 문항`,
+    }
+    render(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace
+            embedded
+            expectedQuestionCount={3}
+            progressiveQuestions={[question]}
+          />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    const workspace = screen.getByRole('region', { name: '퀴즈 문항' })
+    expect(within(workspace).getByText('문항 1 / 3')).toBeInTheDocument()
+    expect(within(workspace).getByRole('status')).toHaveTextContent('나머지 2개 문항을 생성하고 있습니다.')
+    expect(within(workspace).queryByRole('button', { name: '제출' })).not.toBeInTheDocument()
+
+    if (kind === 'MCQ') {
+      const input = within(workspace).getByLabelText('첫 번째 보기')
+      fireEvent.click(input)
+      expect(input).toBeChecked()
+      return
+    }
+    if (kind === 'OX') {
+      const input = within(workspace).getByLabelText('O')
+      fireEvent.click(input)
+      expect(input).toBeChecked()
+      return
+    }
+
+    const input = within(workspace).getByRole('textbox', { name: `${kind} 생성 문항` })
+    fireEvent.change(input, { target: { value: answer } })
+    expect(input).toHaveValue(answer)
+  })
+
   it('allows O or X to be selected when the API omits options', async () => {
     renderQuizPage('/quizzes/51')
 

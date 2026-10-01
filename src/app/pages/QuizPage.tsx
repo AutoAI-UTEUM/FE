@@ -49,9 +49,12 @@ export function QuizPage() {
 
 interface QuizWorkspaceProps {
   embedded?: boolean
+  expectedQuestionCount?: number
   onBackToPdf?: () => void
+  onQuizLoaded?: () => void
   onSubmitted?: (result: PublicQuizResult) => void
   materialId?: string
+  progressiveQuestions?: PublicQuizQuestion[]
   quizId?: string
   reviewSummary?: SessionQuizSummary
   showReviewChat?: boolean
@@ -59,9 +62,12 @@ interface QuizWorkspaceProps {
 
 export function QuizWorkspace({
   embedded = false,
+  expectedQuestionCount,
   materialId: materialIdProp,
   onBackToPdf,
+  onQuizLoaded,
   onSubmitted,
+  progressiveQuestions = [],
   quizId: quizIdProp,
   reviewSummary,
   showReviewChat = true,
@@ -100,8 +106,14 @@ export function QuizWorkspace({
   const canSplit = areaWidth >= 720
   const activeTabletPane = tabletPane === 'both' && !canSplit ? 'content' : tabletPane
   const reviewWorkspaceRef = useRef<HTMLDivElement | null>(null)
-  const questions = quiz?.questions ?? []
+  const onQuizLoadedRef = useRef(onQuizLoaded)
+  const questions = quiz?.questions ?? progressiveQuestions
   const question = questions[currentQuestionIndex] ?? questions[0]
+  const isGenerating = !quiz && progressiveQuestions.length > 0
+  const totalQuestionCount = quiz
+    ? questions.length
+    : Math.max(expectedQuestionCount ?? questions.length, questions.length)
+  const remainingQuestionCount = Math.max(totalQuestionCount - questions.length, 0)
   const diagnosisEntry = result?.diagnosisEntry
   const isReviewMode = reviewSummary?.submitted === true || quiz?.submitted === true
   const isReadOnly = isSubmitted || isReviewMode
@@ -116,6 +128,10 @@ export function QuizWorkspace({
   const currentFeedback = result?.feedback.find(
     (candidate) => candidate.questionId === question?.id,
   )
+
+  useEffect(() => {
+    onQuizLoadedRef.current = onQuizLoaded
+  }, [onQuizLoaded])
 
   useEffect(() => {
     const workspace = reviewWorkspaceRef.current
@@ -149,6 +165,7 @@ export function QuizWorkspace({
     ])
       .then(([nextQuiz, submissionResult]) => {
         setQuiz(nextQuiz)
+        if (nextQuiz) onQuizLoadedRef.current?.()
         if (isReviewMode && submissionResult) {
           setResult(submissionResult)
           setAnswers(Object.fromEntries(
@@ -273,7 +290,7 @@ export function QuizWorkspace({
     })
   }
 
-  if (!quizId) {
+  if (!quizId && progressiveQuestions.length === 0) {
     return (
       <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
         <ErrorState
@@ -285,7 +302,7 @@ export function QuizWorkspace({
     )
   }
 
-  if (quiz === undefined) {
+  if (quiz === undefined && progressiveQuestions.length === 0) {
     return (
       <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
         <LoadingState message="퀴즈 문항을 불러오는 중입니다." />
@@ -293,7 +310,7 @@ export function QuizWorkspace({
     )
   }
 
-  if (!quiz) {
+  if (!quiz && progressiveQuestions.length === 0) {
     return (
       <QuizFrame embedded={embedded} onBackToPdf={onBackToPdf}>
         <ErrorState
@@ -355,9 +372,17 @@ export function QuizWorkspace({
       >
       <section aria-label="퀴즈 문항" className={`${(isPhone && mobileReviewPane !== 'quiz') || (isTablet && shouldShowReviewChat && activeTabletPane === 'learning') ? 'hidden' : ''} h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0`}>
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
-          <div className="flex justify-end">
+          <div className="flex min-h-6 items-center justify-between gap-3">
+            {isGenerating ? (
+              <p className="flex min-w-0 items-center gap-2 type-caption font-semibold text-brand-700" role="status">
+                <span aria-hidden="true" className="size-2 shrink-0 animate-pulse rounded-full bg-brand-600" />
+                {remainingQuestionCount > 0
+                  ? `나머지 ${remainingQuestionCount}개 문항을 생성하고 있습니다.`
+                  : '문항을 저장하고 있습니다.'}
+              </p>
+            ) : <span />}
             <span className="whitespace-nowrap text-right type-caption font-semibold tabular-nums text-stone-500">
-              문항 {currentQuestionIndex + 1} / {questions.length}
+              문항 {currentQuestionIndex + 1} / {totalQuestionCount}
             </span>
           </div>
           <h2 className="mt-3 min-w-0 type-dialog-title font-bold text-stone-950" id={`quiz-question-${question.id}`}>
@@ -427,7 +452,7 @@ export function QuizWorkspace({
                   </ButtonLink>
                 )
               ) : null}
-              {!isReviewMode && isLastQuestion ? (
+              {!isReviewMode && !isGenerating && isLastQuestion ? (
                 <Button disabled={isSubmitted || isSubmitting} size="sm" type="submit">
                   {isSubmitting
                     ? <LoaderCircle aria-hidden="true" className="animate-spin" size={14} />
@@ -642,15 +667,17 @@ function QuizFrame({
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white">
       <div className="flex h-13 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
-        <Button
-          onClick={onBackToPdf}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          <ChevronLeft aria-hidden="true" size={15} />
-          PDF로 돌아가기
-        </Button>
+        {onBackToPdf ? (
+          <Button
+            onClick={onBackToPdf}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            <ChevronLeft aria-hidden="true" size={15} />
+            PDF로 돌아가기
+          </Button>
+        ) : null}
         <h2 className="type-body font-semibold text-stone-950">퀴즈</h2>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 mobile-phone:p-0">
@@ -684,10 +711,15 @@ function QuestionInput({
   value: string
 }) {
   if (question.kind === 'MCQ' || question.kind === 'OX') {
+    const choices = question.choices?.length
+      ? question.choices
+      : question.kind === 'OX'
+        ? [{ id: 'true', label: 'O' }, { id: 'false', label: 'X' }]
+        : []
     return (
       <fieldset aria-labelledby={labelId} className="mt-4">
         <div className="grid gap-2">
-          {question.choices?.map((choice) => (
+          {choices.map((choice) => (
             <label
               className={[
                 'flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 type-body font-medium',
