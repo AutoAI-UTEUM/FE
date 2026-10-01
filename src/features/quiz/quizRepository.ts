@@ -101,7 +101,11 @@ export function createQuizRepository(
         )
         return mapQuiz(data)
       } catch (error) {
-        if (error instanceof ApiClientError && error.status === 404) return null
+        if (
+          error instanceof ApiClientError &&
+          error.status === 404 &&
+          error.code !== 'MATERIAL_NOT_FOUND'
+        ) return null
         throw error
       }
     },
@@ -128,7 +132,11 @@ export function createQuizRepository(
           submittedAt: data.submittedAt,
         }
       } catch (error) {
-        if (error instanceof ApiClientError && error.status === 404) return null
+        if (
+          error instanceof ApiClientError &&
+          error.status === 404 &&
+          error.code !== 'MATERIAL_NOT_FOUND'
+        ) return null
         throw error
       }
     },

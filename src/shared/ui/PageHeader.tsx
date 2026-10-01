@@ -16,7 +16,7 @@ export function PageHeader({
   const pathRoot = useContext(PageHeaderPathContext)
 
   return (
-    <header className="flex min-h-10 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mobile-phone:gap-3">
+    <header className="flex min-h-10 shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mobile-phone:gap-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         {pathRoot ? (
           <p

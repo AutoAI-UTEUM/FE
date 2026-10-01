@@ -640,6 +640,33 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* 문서 스크롤바의 예약 영역이 앱 본문 바깥의 흰 띠처럼 보이지 않게 한다. */
+html.app-shell-active,
+html.app-shell-active body {
+  background: #e8ebf0;
+}
+
+html.app-shell-active {
+  scrollbar-color: var(--color-stone-300) #e8ebf0;
+}
+
+html.app-shell-active::-webkit-scrollbar-track {
+  background: #e8ebf0;
+}
+
+html.app-shell-active.dark,
+html.app-shell-active.dark body {
+  background: #1b1c20;
+}
+
+html.app-shell-active.dark {
+  scrollbar-color: var(--color-stone-300) #1b1c20;
+}
+
+html.app-shell-active.dark::-webkit-scrollbar-track {
+  background: #1b1c20;
+}
+
 html.mobile-web {
   min-height: 100dvh;
   overflow-x: hidden;

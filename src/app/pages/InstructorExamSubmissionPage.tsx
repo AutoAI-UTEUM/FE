@@ -92,9 +92,10 @@ export function InstructorExamSubmissionPage() {
     ? data.submissions[currentIndex + 1]
     : undefined
   const studentName = data.student?.name ?? data.summary?.userName ?? '학습자'
-  const score = data.submission.score ?? 0
+  const score = data.submission.score
   const maxScore = data.submission.maxScore ?? data.exam.totalScore
-  const scoreRate = maxScore > 0 ? Math.min(100, Math.max(0, score / maxScore * 100)) : 0
+  const hasScore = score !== undefined
+  const scoreRate = hasScore && maxScore > 0 ? Math.min(100, Math.max(0, score / maxScore * 100)) : 0
   const correctCount = data.submission.items.filter((item) => item.verdict === 'CORRECT').length
 
   return (
@@ -128,11 +129,11 @@ export function InstructorExamSubmissionPage() {
           </Button>
         </div>
         <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
-          <strong className="type-page-title text-stone-950">{formatScore(score)}<small className="type-caption font-medium text-stone-400">/{formatScore(maxScore)}점</small></strong>
+          <strong className="type-page-title text-stone-950">{hasScore ? formatScore(score) : '-'}<small className="type-caption font-medium text-stone-400">{hasScore ? `/${formatScore(maxScore)}점` : '채점되지 않음'}</small></strong>
           <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100">
             <div className={`h-full rounded-full ${scoreRate >= 60 ? 'bg-emerald-600' : 'bg-rose-500'}`} style={{ width: `${scoreRate}%` }} />
           </div>
-          <span className="type-caption text-stone-500">정답률 {formatPercentage(correctCount, data.submission.items.length)} · 문항 평균 {formatAverageScore(score, data.submission.items.length)}</span>
+          <span className="type-caption text-stone-500">정답률 {data.submission.status === 'GRADED' ? formatPercentage(correctCount, data.submission.items.length) : '-'} · 문항 평균 {hasScore ? formatAverageScore(score, data.submission.items.length) : '-'}</span>
         </div>
       </section>
 

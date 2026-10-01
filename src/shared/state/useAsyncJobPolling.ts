@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 interface AsyncJobPollingOptions<T> {
+  continueOnError?: boolean
   enabled: boolean
   fetchNext: (signal: AbortSignal) => Promise<T>
   getDelayMs?: (elapsedMs: number, value?: T) => number
@@ -13,6 +14,7 @@ interface AsyncJobPollingOptions<T> {
 }
 
 export function useAsyncJobPolling<T>({
+  continueOnError = false,
   enabled,
   fetchNext,
   getDelayMs = () => 5000,
@@ -55,7 +57,12 @@ export function useAsyncJobPolling<T>({
         onResult(value)
         if (isPending(value)) schedule(getDelayMs(elapsedMs, value))
       } catch (error) {
-        if (!controller.signal.aborted) onError(error)
+        if (!controller.signal.aborted) {
+          onError(error)
+          if (continueOnError && !stopped) {
+            schedule(getDelayMs(elapsedMs))
+          }
+        }
       }
     }
 
@@ -65,5 +72,5 @@ export function useAsyncJobPolling<T>({
       controller.abort()
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [enabled, fetchNext, getDelayMs, initialDelayMs, isPending, maxDurationMs, onDelayed, onError, onResult])
+  }, [continueOnError, enabled, fetchNext, getDelayMs, initialDelayMs, isPending, maxDurationMs, onDelayed, onError, onResult])
 }

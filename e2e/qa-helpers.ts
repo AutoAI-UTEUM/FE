@@ -114,6 +114,30 @@ export async function assertPageHealthy(page: Page, testInfo: TestInfo, options:
   expect(layout.textLength, 'page must render visible text').toBeGreaterThan(0)
   expect.soft(layout.bodyWidth - layout.viewportWidth, 'page-level horizontal overflow').toBeLessThanOrEqual(2)
 
+  const overlappingPageSections = await page.locator('[data-page-container="standard"] > header').evaluateAll((headers) => (
+    headers.flatMap((header) => {
+      let content = header.nextElementSibling
+      while (content) {
+        const style = window.getComputedStyle(content)
+        const rect = content.getBoundingClientRect()
+        if (style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0) break
+        content = content.nextElementSibling
+      }
+      if (!content) return []
+
+      const headerRect = header.getBoundingClientRect()
+      const contentRect = content.getBoundingClientRect()
+      if (contentRect.top >= headerRect.bottom - 0.5) return []
+
+      return [{
+        contentTop: Math.round(contentRect.top * 10) / 10,
+        headerBottom: Math.round(headerRect.bottom * 10) / 10,
+        title: header.querySelector('h1')?.textContent?.trim() ?? '제목 없음',
+      }]
+    })
+  ))
+  expect.soft(overlappingPageSections, 'page title headers must not overlap following content').toEqual([])
+
   if (/^(phone|tablet)-/.test(testInfo.project.name)) {
     const undersizedTargets = await page.locator('button, a[href], input, select, textarea, [role="button"]').evaluateAll((elements) => (
       elements.flatMap((element) => {

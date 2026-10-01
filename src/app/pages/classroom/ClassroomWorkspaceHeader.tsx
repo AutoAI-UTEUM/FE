@@ -104,7 +104,7 @@ export function ClassroomWorkspaceHeader({
 
   return (
     <header className="shrink-0">
-      <div className="lg:h-10">
+      <div className="min-h-10">
         <PageHeader
           actions={actions || actionSlotRef ? <div className="contents" ref={actionSlotRef}>{actions}</div> : undefined}
           title={classroom.name}

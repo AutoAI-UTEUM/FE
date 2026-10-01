@@ -1,5 +1,6 @@
 import { CircleCheckBig, CircleHelp, CircleX, ChevronLeft, ChevronRight, LoaderCircle, Send, TriangleAlert } from 'lucide-react'
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,7 +16,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth'
 import { DocumentChatPanel } from '../../features/documentChat'
-import { getRequestErrorMessage } from '../../shared/api'
+import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import {
   createQuizRepository,
   shouldShowDiagnosisEntry,
@@ -42,6 +43,10 @@ const DEFAULT_REVIEW_CHAT_WIDTH = 660
 const MIN_REVIEW_CHAT_WIDTH = 360
 const MIN_QUIZ_PANEL_WIDTH = 360
 const REVIEW_PANEL_RESIZER_WIDTH = 6
+
+function isQuizMaterialAccessDenied(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError && error.code === 'MATERIAL_NOT_FOUND'
+}
 
 export function QuizPage() {
   return <QuizWorkspace />
@@ -92,6 +97,7 @@ export function QuizWorkspace({
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [result, setResult] = useState<PublicQuizResult | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [sessionMaterial, setSessionMaterial] = useState<{
     materialId?: string
@@ -107,6 +113,8 @@ export function QuizWorkspace({
   const activeTabletPane = tabletPane === 'both' && !canSplit ? 'content' : tabletPane
   const reviewWorkspaceRef = useRef<HTMLDivElement | null>(null)
   const onQuizLoadedRef = useRef(onQuizLoaded)
+  const accessRevisionRef = useRef(0)
+  const submitControllerRef = useRef<AbortController | null>(null)
   const questions = quiz?.questions ?? progressiveQuestions
   const question = questions[currentQuestionIndex] ?? questions[0]
   const isGenerating = !quiz && progressiveQuestions.length > 0
@@ -128,6 +136,21 @@ export function QuizWorkspace({
   const currentFeedback = result?.feedback.find(
     (candidate) => candidate.questionId === question?.id,
   )
+
+  const denyQuizAccess = useCallback(() => {
+    accessRevisionRef.current += 1
+    submitControllerRef.current?.abort()
+    submitControllerRef.current = null
+    setAccessDenied(true)
+    setQuiz(null)
+    setResult(null)
+    setAnswers({})
+    setIsSubmitted(false)
+    setIsSubmitting(false)
+    setCurrentQuestionIndex(0)
+    setSessionMaterial(undefined)
+    setError(null)
+  }, [])
 
   useEffect(() => {
     onQuizLoadedRef.current = onQuizLoaded
@@ -157,6 +180,7 @@ export function QuizWorkspace({
   useEffect(() => {
     if (!quizId) return
     const controller = new AbortController()
+    const requestRevision = ++accessRevisionRef.current
     Promise.all([
       repository.getById(quizId, controller.signal),
       isReviewMode
@@ -164,6 +188,7 @@ export function QuizWorkspace({
         : Promise.resolve(null),
     ])
       .then(([nextQuiz, submissionResult]) => {
+        if (controller.signal.aborted || requestRevision !== accessRevisionRef.current) return
         setQuiz(nextQuiz)
         if (nextQuiz) onQuizLoadedRef.current?.()
         if (isReviewMode && submissionResult) {
@@ -183,14 +208,19 @@ export function QuizWorkspace({
         }
       })
       .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) {
+        if (isQuizMaterialAccessDenied(requestError)) {
+          controller.abort()
+          denyQuizAccess()
+        } else if (!controller.signal.aborted && requestRevision === accessRevisionRef.current) {
           setQuiz(null)
           setError(getRequestErrorMessage(requestError))
         }
       })
 
     return () => controller.abort()
-  }, [isReviewMode, quizId, reloadKey, repository])
+  }, [denyQuizAccess, isReviewMode, quizId, reloadKey, repository])
+
+  useEffect(() => () => submitControllerRef.current?.abort(), [])
 
   useEffect(() => {
     if (materialIdProp) return
@@ -236,17 +266,29 @@ export function QuizWorkspace({
     }
 
     setIsSubmitting(true)
+    const controller = new AbortController()
+    submitControllerRef.current?.abort()
+    submitControllerRef.current = controller
+    const requestRevision = accessRevisionRef.current
     try {
-      const nextResult = await repository.submit(quiz, answers)
+      const nextResult = await repository.submit(quiz, answers, controller.signal)
+      if (controller.signal.aborted || requestRevision !== accessRevisionRef.current) return
       setResult(nextResult)
       setIsSubmitted(true)
       setCurrentQuestionIndex(0)
       setError(null)
       onSubmitted?.(nextResult)
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (isQuizMaterialAccessDenied(requestError)) {
+        denyQuizAccess()
+      } else if (!controller.signal.aborted && requestRevision === accessRevisionRef.current) {
+        setError(getRequestErrorMessage(requestError))
+      }
     } finally {
-      setIsSubmitting(false)
+      if (submitControllerRef.current === controller) {
+        submitControllerRef.current = null
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -297,6 +339,18 @@ export function QuizWorkspace({
           title="퀴즈를 찾을 수 없습니다."
           description="퀴즈 식별자가 없습니다."
           action={getBackAction(embedded, onBackToPdf)}
+        />
+      </QuizFrame>
+    )
+  }
+
+  if (accessDenied) {
+    return (
+      <QuizFrame embedded={embedded}>
+        <ErrorState
+          title="퀴즈 결과를 표시할 수 없습니다."
+          description="이 자료에 접근할 수 없어 퀴즈 결과를 표시할 수 없습니다."
+          action={<ButtonLink to={routes.classrooms}>접근 가능한 강의실로 돌아가기</ButtonLink>}
         />
       </QuizFrame>
     )
