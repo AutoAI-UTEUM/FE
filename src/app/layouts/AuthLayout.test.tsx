@@ -20,12 +20,14 @@ describe('AuthLayout', () => {
 
     const sidebar = screen.getByRole('complementary')
     expect(within(sidebar).queryByRole('link')).not.toBeInTheDocument()
-    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
+    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent(
+      'Powered by Grok',
+    )
     expect(screen.queryByLabelText('법적 고지')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
   })
 
-  it('does not render legal links or server status on secondary auth pages', () => {
+  it('uses the login sidebar layout on the password reset page', () => {
     render(
       <MemoryRouter initialEntries={['/reset-password']}>
         <Routes>
@@ -36,8 +38,15 @@ describe('AuthLayout', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByText('이용약관')).not.toBeInTheDocument()
-    expect(screen.queryByText('개인정보 처리방침')).not.toBeInTheDocument()
+    const sidebar = screen.getByRole('complementary')
+    expect(within(sidebar).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
+    expect(within(sidebar).getByText(/같은 강의/).parentElement).toHaveClass(
+      'flex-1',
+      'justify-center',
+      'gap-5',
+    )
+    expect(screen.queryByLabelText('법적 고지')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
   })
 })

@@ -97,6 +97,15 @@ html[data-responsive-mode='phone'] [aria-modal='true'][role='dialog'] > div {
   --font-numeric:
     "Uteum Numeric", "Noto Sans KR Variable", "Noto Sans KR", ui-sans-serif,
     system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* 공통 곡률을 유지하면서 기본 Tailwind 라운드를 한 단계씩 낮춘다. */
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.3125rem;
+  --radius-lg: 0.4375rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.875rem;
+  --radius-3xl: 1.25rem;
+  --radius-4xl: 1.75rem;
 }
 
 /* 역할과 페이지 종류에 관계없이 사용하는 기본 콘텐츠 프레임. */
