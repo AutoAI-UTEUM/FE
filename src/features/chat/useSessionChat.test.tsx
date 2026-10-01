@@ -102,7 +102,7 @@ describe('useSessionChat stream readiness', () => {
     }
   })
 
-  it('shows streamed quiz questions only until the persisted quiz result is ready', async () => {
+  it('keeps streamed quiz questions until the persisted quiz has loaded', async () => {
     let handlers: SessionStreamHandlers | undefined
     let resolveTurn: ((result: SessionTurnResult) => void) | undefined
     const repository = createRepository({
@@ -151,6 +151,11 @@ describe('useSessionChat stream readiness', () => {
     }))
     await act(async () => { await turnPromise })
 
+    expect(result.current.quizQuestionPreview).toEqual([
+      expect.objectContaining({ id: 'question-1', prompt: '먼저 완성된 문항' }),
+    ])
+
+    act(() => result.current.clearQuizQuestionPreview())
     expect(result.current.quizQuestionPreview).toEqual([])
   })
 

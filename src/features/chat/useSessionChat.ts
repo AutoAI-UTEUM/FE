@@ -284,6 +284,7 @@ export function useSessionChat(
       let terminalReceived = false
       let turnPostStarted = false
       let quizPreviewGenerationId: string | undefined
+      let preserveQuizQuestionPreview = false
       let recoveryBaseline: TurnRecoveryBaseline = { knownMessageIds }
       let readySettled = false
       let resolveReady: (() => void) | undefined
@@ -500,6 +501,8 @@ export function useSessionChat(
         if (result.noteDraft) setNoteDraft(result.noteDraft)
         onResult?.(result)
         setStreamNotice(null)
+        preserveQuizQuestionPreview = turn.eventType === 'QUIZ_TYPE_SELECTED'
+          && Boolean(result.activeQuizId)
         return result
       } catch (error) {
         if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
@@ -647,7 +650,7 @@ export function useSessionChat(
           streamingMessageIdRef.current = null
           isTurnPendingRef.current = false
           setIsTurnPending(false)
-          setQuizQuestionPreview([])
+          if (!preserveQuizQuestionPreview) setQuizQuestionPreview([])
         }
       }
     },
