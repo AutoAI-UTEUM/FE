@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { ApiSuccess } from '../../shared/api'
 import type { AuthenticatedRawRequest, AuthenticatedRequest } from '../auth'
-import { createExamsRepository, type CreateExamInput } from './examsRepository'
+import { buildExamSubmissionAnswers, createExamsRepository, isBlankExamAnswer, type CreateExamInput } from './examsRepository'
 
 const examDto = {
   allowRetake: false,
@@ -30,6 +30,40 @@ const submissionDto = {
 }
 
 describe('exams repository', () => {
+  it.each(['', '   ', '\u2003', '\u3000', '\u00a0', '\u202f'])(
+    'treats %j as an unanswered final answer',
+    (answer) => {
+      expect(isBlankExamAnswer(answer)).toBe(true)
+      expect(buildExamSubmissionAnswers({ q1: answer })).toEqual([])
+    },
+  )
+
+  it('preserves meaningful Korean and English answers while omitting unanswered items', () => {
+    expect(buildExamSubmissionAnswers({
+      q1: '스택은 LIFO 구조입니다.',
+      q2: '  keep surrounding spaces  ',
+      q3: '\u3000',
+    })).toEqual([
+      { answer: '스택은 LIFO 구조입니다.', questionId: 'q1' },
+      { answer: '  keep surrounding spaces  ', questionId: 'q2' },
+    ])
+  })
+
+  it('posts learner regrade without a request body and maps the returned status', async () => {
+    const request = vi.fn().mockResolvedValueOnce(success({ ...submissionDto, status: 'SUBMITTED' }))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.regradeMySubmission('10')).resolves.toMatchObject({
+      id: '300',
+      status: 'SUBMITTED',
+    })
+    expect(request).toHaveBeenCalledWith('/api/exams/10/submissions/me/regrade', {
+      method: 'POST',
+      signal: undefined,
+    })
+    expect(request.mock.calls[0]?.[1]).not.toHaveProperty('body')
+  })
+
   it('maps the learner latestSubmission field from the backend contract', async () => {
     const request = vi.fn().mockResolvedValueOnce(success({
       ...examDto,

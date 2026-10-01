@@ -2,6 +2,7 @@ export type ApiCapability =
   | 'analytics'
   | 'oauth'
   | 'exam-attempt-drafts'
+  | 'exam-learner-regrade'
   | 'password-reset'
   | 'qa-quiz-proposal'
   | 'quiz-question-stream'

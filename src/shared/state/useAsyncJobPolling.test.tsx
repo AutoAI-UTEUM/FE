@@ -38,20 +38,49 @@ describe('useAsyncJobPolling', () => {
     expect(fetchNext).toHaveBeenCalledTimes(1)
     expect(onDelayed).toHaveBeenCalledTimes(1)
   })
+
+  it('can continue polling after a transient request failure', async () => {
+    vi.useFakeTimers()
+    const fetchNext = vi.fn()
+      .mockRejectedValueOnce(new Error('일시 오류'))
+      .mockResolvedValueOnce({ status: 'COMPLETED' } satisfies Job)
+    const onError = vi.fn()
+    const onResult = vi.fn()
+
+    render(
+      <PollingHarness
+        continueOnError
+        fetchNext={fetchNext}
+        onError={onError}
+        onResult={onResult}
+      />,
+    )
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(fetchNext).toHaveBeenCalledTimes(2)
+    expect(onResult).toHaveBeenCalledWith({ status: 'COMPLETED' })
+  })
 })
 
 function PollingHarness({
+  continueOnError = false,
   fetchNext,
   maxDurationMs = 10_000,
   onDelayed = vi.fn(),
   onResult = vi.fn(),
+  onError = vi.fn(),
 }: {
+  continueOnError?: boolean
   fetchNext: (signal: AbortSignal) => Promise<Job>
   maxDurationMs?: number
   onDelayed?: () => void
   onResult?: (job: Job) => void
+  onError?: (error: unknown) => void
 }) {
   useAsyncJobPolling({
+    continueOnError,
     enabled: true,
     fetchNext,
     getDelayMs: () => 2000,
@@ -59,7 +88,7 @@ function PollingHarness({
     isPending: (job) => job.status === 'PROCESSING',
     maxDurationMs,
     onDelayed,
-    onError: vi.fn(),
+    onError,
     onResult,
   })
   return null

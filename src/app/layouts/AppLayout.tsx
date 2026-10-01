@@ -159,6 +159,8 @@ export function AppLayout() {
       : loadedProfileAvatar?.source === avatarSource
         ? loadedProfileAvatar.url
         : null
+  const isSidebarBrandHidden = isTabletRail
+    || (!isTablet && isCollapsed && !isMobileWeb)
 
   useEffect(() => {
     if (!isMobileWeb) return
@@ -167,11 +169,13 @@ export function AppLayout() {
   }, [isMobileWeb, location.pathname, location.search])
 
   useEffect(() => {
+    document.documentElement.classList.add('app-shell-active')
     document.documentElement.classList.toggle(
       'study-workspace-active',
       isStudyWorkspace,
     )
     return () => {
+      document.documentElement.classList.remove('app-shell-active')
       document.documentElement.classList.remove('study-workspace-active')
     }
   }, [isStudyWorkspace])
@@ -587,26 +591,15 @@ export function AppLayout() {
               !isTablet && isCollapsed && 'lg:flex-col lg:gap-3 mobile-phone:!flex-row mobile-phone:!gap-2',
             )}
           >
-            <Link
-              aria-label={`${SERVICE_NAME} 홈`}
-              className={cx(
-                'flex shrink-0 items-center gap-2.5 rounded-lg px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600',
-                isTabletRail && 'justify-center !px-0',
-                !isTablet && isCollapsed && 'lg:justify-center lg:!px-0',
-              )}
-              to={homeRoute}
-            >
-              <span
-                className={cx(
-                  'type-brand-title font-bold',
-                  isTabletRail && 'hidden',
-                  !isTablet && isCollapsed && !isMobileWeb && 'lg:hidden',
-                )}
+            {!isSidebarBrandHidden ? (
+              <Link
+                aria-label={`${SERVICE_NAME} 홈`}
+                className="flex shrink-0 items-center gap-2.5 rounded-lg px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-600"
+                to={homeRoute}
               >
-                {SERVICE_NAME}
-              </span>
-              <span aria-hidden="true" className={cx('type-brand-title font-bold', isTabletRail ? 'block' : 'hidden', !isTablet && isCollapsed && !isMobileWeb && 'lg:block')}>으</span>
-            </Link>
+                <span className="type-brand-title font-bold">{SERVICE_NAME}</span>
+              </Link>
+            ) : null}
             <div
               className={cx(
                 'flex items-center gap-1',

@@ -146,6 +146,7 @@ export interface ExamsRepository {
   listSubmissions: (examId: string, signal?: AbortSignal) => Promise<InstructorSubmissionSummary[]>
   publish: (examId: string, signal?: AbortSignal) => Promise<Exam>
   regrade: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
+  regradeMySubmission: (examId: string, signal?: AbortSignal) => Promise<ExamSubmission>
   saveAttemptDraft: (examId: string, answers: Record<string, string>, version: number | null, signal?: AbortSignal) => Promise<ExamAttemptDraftSaveResult>
   startAttempt: (examId: string, signal?: AbortSignal) => Promise<void>
   submit: (examId: string, answers: Record<string, string>, requestId: string, signal?: AbortSignal) => Promise<ExamSubmission>
@@ -337,6 +338,13 @@ export function createExamsRepository(
       })
       return mapSubmission(data)
     },
+    async regradeMySubmission(examId, signal) {
+      const { data } = await request<ExamSubmissionDto>(
+        `/api/exams/${encodeURIComponent(examId)}/submissions/me/regrade`,
+        { method: 'POST', signal },
+      )
+      return mapSubmission(data)
+    },
     async saveAttemptDraft(examId, answers, version, signal) {
       const response = await requireRawRequest(rawRequest)(
         `/api/exams/${encodeURIComponent(examId)}/attempts/draft`,
@@ -371,7 +379,7 @@ export function createExamsRepository(
     },
     async submit(examId, answers, requestId, signal) {
       const { data } = await request<ExamSubmissionDto>(`/api/exams/${encodeURIComponent(examId)}/submissions`, {
-        body: { answers: Object.entries(answers).map(([questionId, answer]) => ({ answer, questionId })), requestId },
+        body: { answers: buildExamSubmissionAnswers(answers), requestId },
         method: 'POST', signal,
       })
       return mapSubmission(data)
@@ -388,6 +396,19 @@ export function createExamsRepository(
       return mapExam(data)
     },
   }
+}
+
+export function isBlankExamAnswer(value: string | null | undefined): boolean {
+  return value == null || /^[\s\p{Z}]*$/u.test(value)
+}
+
+export function buildExamSubmissionAnswers(
+  answers: Readonly<Record<string, string | null | undefined>>,
+): Array<{ answer: string; questionId: string }> {
+  return Object.entries(answers).flatMap(([questionId, answer]) => {
+    if (typeof answer !== 'string' || isBlankExamAnswer(answer)) return []
+    return [{ answer, questionId }]
+  })
 }
 
 function mapExamInput(input: CreateExamInput) {

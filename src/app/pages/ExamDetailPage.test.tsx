@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
@@ -8,7 +8,7 @@ import { ExamDetailPage } from './ExamDetailPage'
 
 beforeEach(() => {
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')
-  vi.stubEnv('VITE_API_CAPABILITIES', 'exam-attempt-drafts')
+  vi.stubEnv('VITE_API_CAPABILITIES', 'exam-attempt-drafts,exam-learner-regrade')
 })
 
 afterEach(() => {
@@ -309,6 +309,250 @@ describe('ExamDetailPage learner submission', () => {
     fireEvent.click(screen.getByRole('button', { name: '오답만' }))
     expect(screen.getByRole('heading', { name: '오답이 없습니다' })).toBeInTheDocument()
   })
+
+  it('omits Unicode-only unanswered values and reuses the request id after rejection', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const submittedBodies: Array<{ answers: unknown[]; requestId: string }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+      if (method === 'GET' && url.pathname === '/api/exams/10') return success(learnerExamFixture)
+      if (method === 'POST' && url.pathname === '/api/exams/10/attempts/start') return success({ startedAt: '2026-09-09T00:58:50Z' })
+      if (method === 'POST' && url.pathname === '/api/exams/10/submissions') {
+        const body = JSON.parse(String(init?.body)) as { answers: unknown[]; requestId: string }
+        submittedBodies.push(body)
+        if (submittedBodies.length === 1) return apiFailure('INVALID_EXAM_ANSWER', 400, '답안을 확인해 주세요.')
+        return success({
+          attemptNo: 1,
+          items: [{ answer: null, maxScore: 10, questionId: 'q1', score: 0, verdict: 'WRONG' }],
+          maxScore: 10,
+          normalizedScore: 0,
+          reviewAvailable: false,
+          score: 0,
+          status: 'GRADED',
+          submissionId: 300,
+          submittedAt: '2026-09-09T01:00:00Z',
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    const answer = await screen.findByPlaceholderText('답안을 입력하세요')
+    fireEvent.change(answer, { target: { value: '\u3000\u202f' } })
+    fireEvent.click(screen.getByRole('button', { name: '시험 제출' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('답안을 확인해 주세요.')
+    expect(answer).toHaveValue('\u3000\u202f')
+    expect(sessionStorage.getItem('exam-draft:10:8')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '시험 제출' }))
+
+    expect(await screen.findByRole('heading', { name: '시험 제출 및 채점이 완료되었습니다' })).toBeInTheDocument()
+    expect(submittedBodies).toHaveLength(2)
+    expect(submittedBodies[0]?.answers).toEqual([])
+    expect(submittedBodies[1]?.answers).toEqual([])
+    expect(submittedBodies[1]?.requestId).toBe(submittedBodies[0]?.requestId)
+  })
+
+  it('hides failed PUBLISHED grading data and regrades the same saved submission once', async () => {
+    let resolveRegrade: ((response: Response) => void) | undefined
+    const regradeResponse = new Promise<Response>((resolve) => { resolveRegrade = resolve })
+    let regradeCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        allowRetake: false,
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        submittable: false,
+      })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions/me') return success(failedSubmissionFixture)
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/submissions/me/regrade') {
+        regradeCalls += 1
+        expect(init?.body).toBeUndefined()
+        return regradeResponse
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    expect(await screen.findByRole('heading', { name: '시험 제출은 완료되었지만 채점하지 못했습니다' })).toBeInTheDocument()
+    expect(screen.getByText('제출한 답안').closest('section')).toHaveTextContent('스택')
+    expect(screen.queryByText('노출되면 안 되는 피드백')).not.toBeInTheDocument()
+    expect(screen.queryByText('후입선출')).not.toBeInTheDocument()
+    expect(screen.queryByText('0/10')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '새로 응시' })).not.toBeInTheDocument()
+
+    const regradeButton = screen.getByRole('button', { name: '저장 답안 재채점' })
+    fireEvent.click(regradeButton)
+    fireEvent.click(regradeButton)
+    expect(regradeCalls).toBe(1)
+    expect(regradeButton).toBeDisabled()
+    await act(async () => {
+      resolveRegrade?.(success({ ...failedSubmissionFixture, status: 'SUBMITTED' }))
+      await Promise.resolve()
+    })
+    expect(await screen.findByRole('heading', { name: '시험 제출이 완료되었습니다' })).toBeInTheDocument()
+  })
+
+  it('renders a completed result immediately when learner regrade returns GRADED', async () => {
+    let regradeCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        submittable: false,
+      })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions/me') return success(failedSubmissionFixture)
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/submissions/me/regrade') {
+        regradeCalls += 1
+        return success({
+          ...failedSubmissionFixture,
+          gradedAt: '2026-10-01T10:00:00Z',
+          items: [{ ...failedSubmissionFixture.items[0], feedback: null, score: 10, verdict: 'CORRECT' }],
+          maxScore: 10,
+          normalizedScore: 100,
+          score: 10,
+          status: 'GRADED',
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    fireEvent.click(await screen.findByRole('button', { name: '저장 답안 재채점' }))
+
+    expect(await screen.findByRole('heading', { name: '시험 제출 및 채점이 완료되었습니다' })).toBeInTheDocument()
+    expect(screen.getByText('획득 점수').closest('div')).toHaveTextContent('10/10점')
+    expect(screen.queryByRole('button', { name: '저장 답안 재채점' })).not.toBeInTheDocument()
+    expect(regradeCalls).toBe(1)
+  })
+
+  it('shows only stored partial results for a CLOSED failed submission', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        status: 'CLOSED',
+        submittable: false,
+      })
+      if (url.pathname === '/api/exams/10/submissions/me') return success({ ...failedSubmissionFixture, reviewAvailable: true })
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    expect(await screen.findByText('종료된 시험의 저장된 부분 채점 결과만 표시합니다.')).toBeInTheDocument()
+    expect(screen.getByText('부분 정답')).toBeInTheDocument()
+    expect(screen.getByText('5/10')).toBeInTheDocument()
+    expect(screen.getByText('노출되면 안 되는 피드백')).toBeInTheDocument()
+    expect(screen.getByText('후입선출')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '저장 답안 재채점' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '새로 응시' })).not.toBeInTheDocument()
+  })
+
+  it('keeps regrade separate from a new retake and trusts PUBLISHED over a past dueAt', async () => {
+    const requested: Array<{ method: string; path: string }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      requested.push({ method: request.method, path: url.pathname })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        allowRetake: true,
+        dueAt: '2020-01-01T00:00:00Z',
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        status: 'PUBLISHED',
+        submittable: true,
+      })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions/me') return success(failedSubmissionFixture)
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/attempts/start') return success({ startedAt: '2026-10-01T00:00:00Z' })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/attempts/draft') return new Response(null, { status: 204 })
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    expect(await screen.findByRole('button', { name: '저장 답안 재채점' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '새로 응시' }))
+
+    expect(await screen.findByPlaceholderText('답안을 입력하세요')).toBeInTheDocument()
+    await waitFor(() => expect(requested).toContainEqual({ method: 'POST', path: '/api/exams/10/attempts/start' }))
+    expect(screen.queryByRole('button', { name: '저장 답안 재채점' })).not.toBeInTheDocument()
+  })
+
+  it('does not expose learner regrade when the deployment capability is disabled', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'exam-attempt-drafts')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        submittable: false,
+      })
+      if (url.pathname === '/api/exams/10/submissions/me') return success(failedSubmissionFixture)
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    expect(await screen.findByRole('heading', { name: '시험 제출은 완료되었지만 채점하지 못했습니다' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '저장 답안 재채점' })).not.toBeInTheDocument()
+  })
+
+  it('checks the current submission once after a regrade network failure without resubmitting', async () => {
+    let submissionGets = 0
+    let regradePosts = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        submittable: false,
+      })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions/me') {
+        submissionGets += 1
+        return success(failedSubmissionFixture)
+      }
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/submissions/me/regrade') {
+        regradePosts += 1
+        throw new TypeError('network unavailable')
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    fireEvent.click(await screen.findByRole('button', { name: '저장 답안 재채점' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('재채점 요청 상태를 확인하지 못했습니다.')
+    expect(regradePosts).toBe(1)
+    expect(submissionGets).toBe(2)
+    expect(vi.mocked(globalThis.fetch).mock.calls.filter(([input]) => String(input).endsWith('/api/exams/10/submissions'))).toHaveLength(0)
+  })
+
+  it('clears the failed result when regrade is denied for the current role', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success({
+        ...learnerExamFixture,
+        latestSubmission: { attemptNo: 1, maxScore: null, normalizedScore: null, score: null, status: 'GRADING_FAILED', submissionId: 300 },
+        submittable: false,
+      })
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions/me') return success(failedSubmissionFixture)
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/submissions/me/regrade') return apiFailure('ACCESS_DENIED', 403, '권한이 없습니다.')
+      return new Response(null, { status: 404 })
+    })
+    renderLearnerExam()
+
+    fireEvent.click(await screen.findByRole('button', { name: '저장 답안 재채점' }))
+
+    expect(await screen.findByRole('heading', { name: '시험에 접근할 수 없습니다' })).toBeInTheDocument()
+    expect(screen.getByText('현재 계정 역할로는 이 시험 기능을 사용할 수 없습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('노출되면 안 되는 피드백')).not.toBeInTheDocument()
+  })
 })
 
 function renderLearnerExam() {
@@ -350,9 +594,41 @@ const learnerExamFixture = {
   weekNumber: 4,
 }
 
+const failedSubmissionFixture = {
+  attemptNo: 1,
+  gradedAt: null,
+  items: [{
+    answer: '스택',
+    correctAnswer: '후입선출',
+    explanation: '스택은 후입선출 구조입니다.',
+    feedback: '노출되면 안 되는 피드백',
+    maxScore: 10,
+    questionId: 'q1',
+    score: 5,
+    verdict: 'PARTIAL',
+  }],
+  maxScore: null,
+  normalizedScore: null,
+  reviewAvailable: false,
+  score: null,
+  status: 'GRADING_FAILED',
+  submissionId: 300,
+  submittedAt: '2026-09-09T01:00:00Z',
+}
+
 function success(data: unknown): Response {
   return new Response(JSON.stringify({ data, message: '요청이 성공했습니다.', success: true }), {
     headers: { 'Content-Type': 'application/json' },
     status: 200,
+  })
+}
+
+function apiFailure(code: string, status: number, message: string): Response {
+  return new Response(JSON.stringify({
+    error: { code, details: [], message },
+    success: false,
+  }), {
+    headers: { 'Content-Type': 'application/json' },
+    status,
   })
 }

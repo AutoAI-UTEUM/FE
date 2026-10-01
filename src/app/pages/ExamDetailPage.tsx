@@ -4,10 +4,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, rememberClassroomId, type ClassroomStudent } from '../../features/classrooms'
-import { createExamsRepository, type CreateExamInput, type Exam, type ExamAttemptDraft, type ExamQuestion, type ExamQuestionType, type ExamSubmission, type GenerateExamDraftInput, type InstructorSubmissionSummary } from '../../features/exams'
+import { createExamsRepository, isBlankExamAnswer, type CreateExamInput, type Exam, type ExamAttemptDraft, type ExamQuestion, type ExamQuestionType, type ExamSubmission, type GenerateExamDraftInput, type InstructorSubmissionSummary } from '../../features/exams'
 import { ExamEditor } from '../../features/exams/ExamEditor'
 import { isExamDraftValid } from '../../features/exams/examEditorModel'
-import { getRequestErrorMessage } from '../../shared/api'
+import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { isApiCapabilityEnabled } from '../../shared/config/capabilities'
 import { formatDateTime } from '../../shared/lib/format'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
@@ -131,7 +131,8 @@ function InstructorSubmissionRoster({ classroomId, error, examId, isRegrading, o
     return [...studentRows, ...submissions.filter((submission) => !knownStudentIds.has(submission.userId)).map((submission) => ({ key: submission.userId, name: submission.userName, submission }))]
   }, [students, submissions])
   const graded = submissions.filter((submission) => submission.status === 'GRADED')
-  const average = graded.length > 0 ? graded.reduce((sum, submission) => sum + (submission.normalizedScore ?? 0), 0) / graded.length : null
+  const scored = graded.filter((submission) => submission.normalizedScore !== undefined)
+  const average = scored.length > 0 ? scored.reduce((sum, submission) => sum + (submission.normalizedScore ?? 0), 0) / scored.length : null
 
   return <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
     <div className="border-b border-stone-200 px-5 py-4">
@@ -162,7 +163,9 @@ function ExamMetric({ label, value }: { label: string; value: string }) {
 }
 
 function formatInstructorSubmissionScore(submission: InstructorSubmissionSummary | undefined) {
-  return submission?.status === 'GRADED' ? `${submission.score ?? 0}/${submission.maxScore ?? 0}` : '-'
+  return submission?.status === 'GRADED' && submission.score !== undefined && submission.maxScore !== undefined
+    ? `${submission.score}/${submission.maxScore}`
+    : '-'
 }
 
 const draftQuestionTypes: Array<{ label: string; type: ExamQuestionType }> = [
@@ -198,9 +201,18 @@ function AiExamDraftDialog({ initialWeekNumber, onClose, onGenerate }: { initial
 function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onResultReady: () => void; repository: ReturnType<typeof createExamsRepository> }) {
   const { setExamInProgress, user } = useAuth()
   const isServerDraftEnabled = isApiCapabilityEnabled('exam-attempt-drafts')
+  const isLearnerRegradeEnabled = isApiCapabilityEnabled('exam-learner-regrade')
   const draftStorageKey = createExamDraftStorageKey(exam.id, user?.id)
-  const shouldStartAttempt = Boolean(!exam.mySubmission && exam.submittable)
-  const [answers, setAnswers] = useState<Record<string, string>>(() => readExamDraft(draftStorageKey, exam.questions)); const [index, setIndex] = useState(0); const [submission, setSubmission] = useState<ExamSubmission | null>(null); const [isSubmitting, setIsSubmitting] = useState(false); const [isRestoringSubmission, setIsRestoringSubmission] = useState(Boolean(exam.mySubmission)); const [error, setError] = useState<string | null>(null)
+  const [isStartingRetake, setIsStartingRetake] = useState(false)
+  const shouldStartAttempt = Boolean((!exam.mySubmission || isStartingRetake) && exam.submittable)
+  const [answers, setAnswers] = useState<Record<string, string>>(() => readExamDraft(draftStorageKey, exam.questions))
+  const [index, setIndex] = useState(0)
+  const [submission, setSubmission] = useState<ExamSubmission | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isRegrading, setIsRegrading] = useState(false)
+  const [isRestoringSubmission, setIsRestoringSubmission] = useState(Boolean(exam.mySubmission))
+  const [error, setError] = useState<string | null>(null)
+  const [accessError, setAccessError] = useState<string | null>(null)
   const [attemptStartStatus, setAttemptStartStatus] = useState<'starting' | 'ready' | 'error'>(shouldStartAttempt ? 'starting' : 'ready')
   const [attemptStartError, setAttemptStartError] = useState<string | null>(null)
   const [attemptStartRetryKey, setAttemptStartRetryKey] = useState(0)
@@ -208,21 +220,37 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
   const [draftSyncStatus, setDraftSyncStatus] = useState<'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'conflict'>(shouldStartAttempt && isServerDraftEnabled ? 'loading' : 'idle')
   const [draftConflict, setDraftConflict] = useState<{ server: ExamAttemptDraft | null } | null>(null)
   const answersRef = useRef(answers)
+  const submitRequestIdRef = useRef(createRequestId())
   const draftVersionRef = useRef<number | null>(null)
   const lastSavedDraftRef = useRef<string | null>(null)
   const draftSavePromiseRef = useRef<Promise<void> | null>(null)
   const question = exam.questions[index]
-  const answeredCount = Object.values(answers).filter((answer) => answer.trim().length > 0).length
+  const answeredCount = Object.values(answers).filter((answer) => !isBlankExamAnswer(answer)).length
   const isLastQuestion = index === exam.questions.length - 1
   const fetchSubmission = useCallback((signal: AbortSignal) => repository.getMySubmission(exam.id, undefined, signal), [exam.id, repository])
-  const handlePollingError = useCallback((requestError: unknown) => setError(getRequestErrorMessage(requestError)), [])
-  const handlePollingDelay = useCallback(() => setError('자동 재시도까지 완료되지 않았습니다. 약 90분 이상 지속되면 강의자에게 문의해 주세요.'), [])
+  const handlePollingError = useCallback((requestError: unknown) => {
+    if (isExamAccessDenied(requestError)) {
+      setSubmission(null)
+      setAccessError(getExamAccessDeniedMessage(requestError))
+      return
+    }
+    setError(getRequestErrorMessage(requestError))
+  }, [])
+  const handlePollingDelay = useCallback(() => setError('91분 이상 채점이 완료되지 않아 자동 확인을 중단했습니다. 강의자 또는 지원에 문의해 주세요.'), [])
   useEffect(() => {
     if (!exam.mySubmission) return
     const controller = new AbortController()
     fetchSubmission(controller.signal)
       .then((value) => { setSubmission(value); setError(null) })
-      .catch((requestError) => { if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError)) })
+      .catch((requestError) => {
+        if (controller.signal.aborted) return
+        if (isExamAccessDenied(requestError)) {
+          setSubmission(null)
+          setAccessError(getExamAccessDeniedMessage(requestError))
+        } else {
+          setError(getRequestErrorMessage(requestError))
+        }
+      })
       .finally(() => { if (!controller.signal.aborted) setIsRestoringSubmission(false) })
     return () => controller.abort()
   }, [exam.mySubmission, fetchSubmission])
@@ -273,18 +301,20 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     return () => controller.abort()
   }, [draftStorageKey, exam.id, exam.questions, isServerDraftEnabled, repository, shouldStartAttempt])
   useEffect(() => {
-    const isInProgress = Boolean(!exam.mySubmission && !submission && exam.submittable)
+    const isInProgress = Boolean(
+      (!exam.mySubmission || isStartingRetake) && !submission && exam.submittable,
+    )
     setExamInProgress(isInProgress)
     return () => setExamInProgress(false)
-  }, [exam.mySubmission, exam.submittable, setExamInProgress, submission])
+  }, [exam.mySubmission, exam.submittable, isStartingRetake, setExamInProgress, submission])
   useEffect(() => {
     if (!draftStorageKey) return
-    if (exam.mySubmission || submission) {
+    if ((exam.mySubmission && !isStartingRetake) || submission) {
       removeExamDraft(draftStorageKey)
       return
     }
     writeExamDraft(draftStorageKey, answers)
-  }, [answers, draftStorageKey, exam.mySubmission, submission])
+  }, [answers, draftStorageKey, exam.mySubmission, isStartingRetake, submission])
   const saveDraftToServer = useCallback(async () => {
     if (
       !shouldStartAttempt ||
@@ -339,7 +369,14 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     const intervalId = window.setInterval(() => void saveDraftToServer(), 30_000)
     return () => window.clearInterval(intervalId)
   }, [draftConflict, draftInitialized, saveDraftToServer, shouldStartAttempt, submission])
-  useAsyncJobPolling({ enabled: submission?.status === 'SUBMITTED', fetchNext: fetchSubmission, getDelayMs: getExamPollingDelay, isPending: isExamSubmissionPending, maxDurationMs: 90 * 60_000, onDelayed: handlePollingDelay, onError: handlePollingError, onResult: setSubmission })
+  useAsyncJobPolling({ continueOnError: true, enabled: submission?.status === 'SUBMITTED', fetchNext: fetchSubmission, getDelayMs: getExamPollingDelay, isPending: isExamSubmissionPending, maxDurationMs: 91 * 60_000, onDelayed: handlePollingDelay, onError: handlePollingError, onResult: setSubmission })
+  useEffect(() => {
+    if (submission?.status !== 'SUBMITTED') return
+    const timeoutId = window.setTimeout(() => {
+      setError('채점이 지연되고 있습니다. 저장된 답안을 유지한 채 결과를 계속 확인합니다.')
+    }, 31 * 60_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [submission?.id, submission?.status])
   useEffect(() => {
     if (submission?.status === 'GRADED') onResultReady()
   }, [onResultReady, submission?.status])
@@ -368,6 +405,62 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     setDraftConflict(null)
     setDraftSyncStatus('idle')
   }
+  function startNewAttempt() {
+    if (!exam.allowRetake || !exam.submittable || exam.status !== 'PUBLISHED') return
+    setIsStartingRetake(true)
+    setSubmission(null)
+    setAnswers({})
+    answersRef.current = {}
+    setIndex(0)
+    setError(null)
+    setAccessError(null)
+    submitRequestIdRef.current = createRequestId()
+    draftVersionRef.current = null
+    lastSavedDraftRef.current = null
+    setDraftConflict(null)
+    setDraftInitialized(!isServerDraftEnabled)
+    setDraftSyncStatus(isServerDraftEnabled ? 'loading' : 'idle')
+    setAttemptStartError(null)
+    setAttemptStartStatus('starting')
+    setAttemptStartRetryKey((current) => current + 1)
+  }
+  async function regradeSavedSubmission() {
+    if (
+      !isLearnerRegradeEnabled ||
+      isRegrading ||
+      submission?.status !== 'GRADING_FAILED'
+    ) return
+    setIsRegrading(true)
+    setError(null)
+    try {
+      const nextSubmission = await repository.regradeMySubmission(exam.id)
+      setSubmission(nextSubmission)
+    } catch (requestError) {
+      if (isExamAccessDenied(requestError)) {
+        setSubmission(null)
+        setAccessError(getExamAccessDeniedMessage(requestError))
+      } else {
+        try {
+          const currentSubmission = await repository.getMySubmission(exam.id)
+          setSubmission(currentSubmission)
+          setError(
+            currentSubmission.status === 'GRADING_FAILED'
+              ? '재채점 요청 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+              : null,
+          )
+        } catch (statusError) {
+          if (isExamAccessDenied(statusError)) {
+            setSubmission(null)
+            setAccessError(getExamAccessDeniedMessage(statusError))
+          } else {
+            setError(getRequestErrorMessage(requestError))
+          }
+        }
+      }
+    } finally {
+      setIsRegrading(false)
+    }
+  }
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!isLastQuestion || isSubmitting || !exam.submittable || attemptStartStatus !== 'ready') return
@@ -375,20 +468,41 @@ function LearnerExamView({ exam, onResultReady, repository }: { exam: Exam; onRe
     if (!confirmed) return
     setIsSubmitting(true)
     try {
-      const nextSubmission = await repository.submit(exam.id, answers, createRequestId())
+      const nextSubmission = await repository.submit(
+        exam.id,
+        answers,
+        submitRequestIdRef.current,
+      )
       if (draftStorageKey) removeExamDraft(draftStorageKey)
       setSubmission(nextSubmission)
+      setIsStartingRetake(false)
       setError(null)
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (
+        requestError instanceof ApiClientError &&
+        requestError.code === 'EXAM_ALREADY_SUBMITTED'
+      ) {
+        try {
+          const currentSubmission = await repository.getMySubmission(exam.id)
+          setSubmission(currentSubmission)
+          setIsStartingRetake(false)
+          if (draftStorageKey) removeExamDraft(draftStorageKey)
+          setError(null)
+        } catch (statusError) {
+          setError(getRequestErrorMessage(statusError))
+        }
+      } else {
+        setError(getRequestErrorMessage(requestError))
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
+  if (accessError) return <ErrorState action={<ButtonLink to={classroomExamsPath(exam.classroomId)}>시험 목록으로</ButtonLink>} title="시험에 접근할 수 없습니다" description={accessError} />
   if (isRestoringSubmission) return <LoadingState message="제출 결과를 불러오는 중입니다." />
-  if (exam.mySubmission && !submission) return <ErrorState title="제출 결과를 불러오지 못했습니다" description={error ?? '잠시 후 다시 시도해 주세요.'} />
+  if (exam.mySubmission && !submission && !isStartingRetake) return <ErrorState title="제출 결과를 불러오지 못했습니다" description={error ?? '잠시 후 다시 시도해 주세요.'} />
   if (submission?.status === 'SUBMITTED') return <SubmissionPending error={error} exam={exam} submission={submission} />
-  if (submission) return <SubmissionResult exam={exam} submission={submission} />
+  if (submission) return <SubmissionResult error={error} exam={exam} isRegrading={isRegrading} onRegrade={() => void regradeSavedSubmission()} onStartNewAttempt={startNewAttempt} regradeEnabled={isLearnerRegradeEnabled} submission={submission} />
   if (!question) return <EmptyState title="공개된 문항이 없습니다" description="강의자에게 시험 상태를 문의하세요." />
   return (
     <form className="overflow-hidden rounded-xl border border-stone-200 bg-white" onSubmit={submit}>
@@ -441,23 +555,46 @@ function SubmissionPending({ error, exam, submission }: { error: string | null; 
   return <section className="rounded-xl border border-stone-200 bg-white p-6" role="status"><div className="flex items-start gap-4"><span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><CheckCircle2 aria-hidden="true" size={22} /></span><div><h2 className="type-dialog-title font-bold">시험 제출이 완료되었습니다</h2><p className="mt-1 type-body text-stone-500">{exam.title} · {submission.attemptNo}회차 · {formatDateTime(submission.submittedAt)} 제출</p><p className="mt-3 type-body font-semibold text-stone-700">제출한 답안은 수정할 수 없습니다.</p></div></div><div className="mt-6 flex items-center gap-2 rounded-lg bg-brand-50 px-4 py-3 type-body font-semibold text-brand-800"><LoaderCircle aria-hidden="true" className="animate-spin" size={16} />채점이 진행 중입니다. 완료되면 결과가 자동으로 표시됩니다.</div>{submission.items.length > 0 ? <div className="mt-5 space-y-3" aria-label="제출한 답안">{submission.items.map((item, index) => { const question = exam.questions.find((candidate) => candidate.id === item.questionId); return <article className="rounded-lg border border-stone-200 bg-stone-50/70 px-4 py-3" key={item.questionId}><div className="flex items-center gap-2"><strong className="type-control text-stone-900">{index + 1}번</strong><span className="type-caption text-stone-400">제출한 답안</span></div><p className="mt-2 whitespace-pre-wrap type-body font-semibold text-stone-800">{formatSubmittedAnswer(question, item.answer)}</p></article> })}</div> : null}{error ? <p className="mt-4 type-body text-rose-700" role="alert">{error}</p> : null}</section>
 }
 
-function SubmissionResult({ exam, submission }: { exam: Exam; submission: ExamSubmission }) {
+function SubmissionResult({ error, exam, isRegrading, onRegrade, onStartNewAttempt, regradeEnabled, submission }: {
+  error: string | null
+  exam: Exam
+  isRegrading: boolean
+  onRegrade: () => void
+  onStartNewAttempt: () => void
+  regradeEnabled: boolean
+  submission: ExamSubmission
+}) {
   const [filter, setFilter] = useState<'all' | 'wrong'>('all')
 
   if (submission.status !== 'GRADED') {
+    const canStartNewAttempt = exam.status === 'PUBLISHED' && exam.allowRetake && exam.submittable === true
+    const canShowClosedPartialResults = exam.status === 'CLOSED'
     return (
-      <section className="rounded-lg border border-stone-200 bg-white p-6">
-        <div className="flex items-start gap-4">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-700">
-            <CheckCircle2 aria-hidden="true" size={22} />
-          </span>
-          <div>
-            <h2 className="type-dialog-title font-bold">시험 제출은 완료되었지만 채점하지 못했습니다</h2>
-            <p className="mt-1 type-body text-stone-500">{exam.title} · {submission.attemptNo}회차</p>
-            <p className="mt-4 type-body text-rose-700">자동 재시도를 완료했지만 채점하지 못했습니다. 강의자에게 문의하세요.</p>
+      <div className="space-y-4">
+        <section className="rounded-lg border border-stone-200 bg-white p-6">
+          <div className="flex items-start gap-4">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-700">
+              <CheckCircle2 aria-hidden="true" size={22} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="type-dialog-title font-bold">시험 제출은 완료되었지만 채점하지 못했습니다</h2>
+              <p className="mt-1 type-body text-stone-500">{exam.title} · {submission.attemptNo}회차</p>
+              <p className="mt-4 type-body text-rose-700">채점을 완료하지 못했습니다. 저장된 답안으로 다시 채점할 수 있습니다.</p>
+              <p className="mt-2 type-caption text-stone-500">재채점은 이미 제출한 답안을 그대로 사용하며 새 응시를 만들지 않습니다.</p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {regradeEnabled ? <Button disabled={isRegrading} onClick={onRegrade} type="button">{isRegrading ? '재채점 요청 중' : '저장 답안 재채점'}</Button> : null}
+                {canStartNewAttempt ? <Button onClick={onStartNewAttempt} type="button" variant="secondary">새로 응시</Button> : null}
+              </div>
+              {error ? <p className="mt-4 type-control text-rose-700" role="alert">{error}</p> : null}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+        <FailedSubmissionAnswers
+          exam={exam}
+          showPartialResults={canShowClosedPartialResults}
+          submission={submission}
+        />
+      </div>
     )
   }
 
@@ -467,14 +604,15 @@ function SubmissionResult({ exam, submission }: { exam: Exam; submission: ExamSu
     question: exam.questions.find((question) => question.id === item.questionId),
   }))
   const correctCount = results.filter(({ item }) => item.verdict === 'CORRECT').length
-  const unansweredCount = results.filter(({ item }) => !item.answer?.trim()).length
-  const wrongCount = Math.max(0, results.length - correctCount - unansweredCount)
+  const unansweredCount = results.filter(({ item }) => isBlankExamAnswer(item.answer)).length
+  const wrongCount = results.filter(({ item }) => item.verdict === 'WRONG' || item.verdict === 'PARTIAL').length
   const visibleResults = filter === 'wrong'
     ? results.filter(({ item }) => item.verdict !== 'CORRECT')
     : results
-  const score = submission.score ?? 0
-  const maxScore = submission.maxScore ?? exam.totalScore
-  const percentage = maxScore > 0 ? Math.min(100, Math.max(0, (score / maxScore) * 100)) : 0
+  const score = submission.score
+  const maxScore = submission.maxScore
+  const hasScore = score !== undefined && maxScore !== undefined
+  const percentage = hasScore && maxScore > 0 ? Math.min(100, Math.max(0, (score / maxScore) * 100)) : null
   const reviewNote = buildExamReviewNote(exam, submission, results)
 
   return (
@@ -493,7 +631,7 @@ function SubmissionResult({ exam, submission }: { exam: Exam; submission: ExamSu
             </div>
           </div>
           <dl className="grid border-t border-stone-200 sm:grid-cols-3">
-            <ResultMetric label="획득 점수" value={<>{formatScore(score)}<small>/{formatScore(maxScore)}점</small></>} />
+            <ResultMetric label="획득 점수" value={hasScore ? <>{formatScore(score)}<small>/{formatScore(maxScore)}점</small></> : <span className="type-body">채점되지 않음</span>} />
             <ResultMetric label="정답 문항" value={<>{correctCount}<small>/{results.length}문항</small></>} />
             <ResultMetric label="소요 시간" value={<span className="type-body">{formatDuration(submission.durationSeconds)}</span>} />
           </dl>
@@ -555,14 +693,14 @@ function SubmissionResult({ exam, submission }: { exam: Exam; submission: ExamSu
       <aside className="space-y-3 xl:sticky xl:top-5">
         <section className="rounded-lg border border-stone-200 bg-white p-5" aria-label="시험 점수 요약">
           <div
-            aria-label={`${formatScore(score)}점, 총 ${formatScore(maxScore)}점 중 ${formatPercentage(percentage)}퍼센트`}
+            aria-label={hasScore && percentage !== null ? `${formatScore(score)}점, 총 ${formatScore(maxScore)}점 중 ${formatPercentage(percentage)}퍼센트` : '채점되지 않음'}
             className="relative mx-auto flex size-36 items-center justify-center rounded-full"
             role="img"
-            style={{ background: `conic-gradient(#4F46E5 ${percentage}%, #EEF0F4 0)` }}
+            style={{ background: `conic-gradient(#4F46E5 ${percentage ?? 0}%, #EEF0F4 0)` }}
           >
             <div className="flex size-28 flex-col items-center justify-center rounded-full bg-white">
-              <strong className="type-page-title text-stone-950">{formatPercentage(percentage)}<small className="type-control text-stone-400">%</small></strong>
-              <span className="mt-1 type-caption text-stone-500">{formatScore(score)} / {formatScore(maxScore)}점</span>
+              <strong className="type-page-title text-stone-950">{percentage === null ? '-' : formatPercentage(percentage)}{percentage === null ? null : <small className="type-control text-stone-400">%</small>}</strong>
+              <span className="mt-1 type-caption text-stone-500">{hasScore ? `${formatScore(score)} / ${formatScore(maxScore)}점` : '채점되지 않음'}</span>
             </div>
           </div>
           <dl className="mt-5 space-y-2 type-control">
@@ -580,6 +718,52 @@ function SubmissionResult({ exam, submission }: { exam: Exam; submission: ExamSu
         </section>
       </aside>
     </div>
+  )
+}
+
+function FailedSubmissionAnswers({ exam, showPartialResults, submission }: {
+  exam: Exam
+  showPartialResults: boolean
+  submission: ExamSubmission
+}) {
+  if (submission.items.length === 0) return null
+
+  return (
+    <section aria-labelledby="failed-submission-answers" className="space-y-3">
+      <div>
+        <h2 className="type-section-title font-bold text-stone-950" id="failed-submission-answers">제출한 답안</h2>
+        <p className="mt-1 type-caption text-stone-500">
+          {showPartialResults
+            ? '종료된 시험의 저장된 부분 채점 결과만 표시합니다.'
+            : '채점 실패 상태에서는 점수, 판정, 피드백과 정답을 표시하지 않습니다.'}
+        </p>
+      </div>
+      {submission.items.map((item, index) => {
+        const question = exam.questions.find((candidate) => candidate.id === item.questionId)
+        const correctAnswer = showPartialResults && submission.reviewAvailable
+          ? formatCorrectAnswer(question, item.correctAnswer)
+          : null
+        return (
+          <article className="rounded-lg border border-stone-200 bg-white p-5" key={item.questionId}>
+            <div className="flex flex-wrap items-center gap-2">
+              <strong className="type-body text-stone-950">{index + 1}번</strong>
+              {showPartialResults && item.verdict ? <Badge size="compact" tone={getVerdictTone(item.verdict)}>{getVerdictLabel(item.verdict)}</Badge> : null}
+              {question ? <span className="type-caption text-stone-400">{getQuestionTypeLabel(question.questionType)}</span> : null}
+              <span className="ml-auto type-control font-semibold text-stone-800">
+                {showPartialResults ? `${formatNullableScore(item.score)}/${formatScore(item.maxScore)}` : `${formatScore(item.maxScore)}점`}
+              </span>
+            </div>
+            <h3 className="mt-4 type-body font-semibold leading-6 text-stone-900">{question?.questionText ?? '문항 내용을 불러올 수 없습니다.'}</h3>
+            <div className={`mt-4 grid gap-3 ${correctAnswer ? 'md:grid-cols-2' : ''}`}>
+              <AnswerPanel label="내 답안" value={formatSubmittedAnswer(question, item.answer)} />
+              {correctAnswer ? <AnswerPanel correct label="정답" value={correctAnswer} /> : null}
+            </div>
+            {showPartialResults && item.feedback ? <div className="mt-3 flex gap-2 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 type-control leading-6 text-stone-700"><Sparkles aria-hidden="true" className="mt-1 shrink-0 text-brand-600" size={14} /><p>{item.feedback}</p></div> : null}
+            {showPartialResults && submission.reviewAvailable && item.explanation ? <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3"><p className="type-caption font-semibold text-emerald-700">해설</p><p className="mt-1 whitespace-pre-wrap type-control leading-6 text-stone-700">{item.explanation}</p></div> : null}
+          </article>
+        )
+      })}
+    </section>
   )
 }
 
@@ -628,13 +812,14 @@ function getQuestionTypeLabel(questionType: ExamQuestionType) {
 }
 
 function formatSubmittedAnswer(question: ExamQuestion | undefined, answer: string | undefined) {
-  if (!answer?.trim()) return '무응답'
-  if (question?.questionType === 'OX') return answer === 'true' ? 'O' : answer === 'false' ? 'X' : answer
+  if (isBlankExamAnswer(answer)) return '무응답'
+  const submittedAnswer = answer as string
+  if (question?.questionType === 'OX') return submittedAnswer === 'true' ? 'O' : submittedAnswer === 'false' ? 'X' : submittedAnswer
   if (question?.questionType === 'MCQ') {
-    const option = question.options?.find((item) => item.id === answer)
-    return option ? `${option.id.toUpperCase()}. ${option.text}` : answer
+    const option = question.options?.find((item) => item.id === submittedAnswer)
+    return option ? `${option.id.toUpperCase()}. ${option.text}` : submittedAnswer
   }
-  return answer
+  return submittedAnswer
 }
 
 function formatCorrectAnswer(question: ExamQuestion | undefined, answer: ExamSubmission['items'][number]['correctAnswer']): string | null {
@@ -718,14 +903,26 @@ function serializeExamAnswers(answers: Record<string, string>) {
   return JSON.stringify(
     Object.fromEntries(
       Object.entries(answers)
-        .filter(([, answer]) => answer.trim().length > 0)
+        .filter(([, answer]) => !isBlankExamAnswer(answer))
         .sort(([left], [right]) => left.localeCompare(right)),
     ),
   )
 }
 
 function hasExamAnswers(answers: Record<string, string>) {
-  return Object.values(answers).some((answer) => answer.trim().length > 0)
+  return Object.values(answers).some((answer) => !isBlankExamAnswer(answer))
+}
+
+function isExamAccessDenied(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError && (
+    error.code === 'CLASSROOM_NOT_FOUND' || error.code === 'ACCESS_DENIED'
+  )
+}
+
+function getExamAccessDeniedMessage(error: ApiClientError): string {
+  return error.code === 'CLASSROOM_NOT_FOUND'
+    ? '이 강의실의 시험에 접근할 수 없습니다.'
+    : '현재 계정 역할로는 이 시험 기능을 사용할 수 없습니다.'
 }
 
 function getDraftSyncLabel(status: 'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'conflict') {
