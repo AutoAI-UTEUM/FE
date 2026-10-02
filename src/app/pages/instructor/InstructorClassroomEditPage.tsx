@@ -3,7 +3,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -26,8 +26,18 @@ import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceCont
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
 export function InstructorClassroomEditPage() {
-  usePageTitle('강의실 설정')
   const { classroomId = '' } = useParams()
+  // Each route owns its state and pending work, including direct/legacy mounts.
+  return <InstructorClassroomEditPageScope classroomId={classroomId} key={classroomId} />
+}
+
+function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string }) {
+  const activeRef = useRef(false)
+  useEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false }
+  }, [])
+  usePageTitle('강의실 설정')
   const { apiRequest } = useAuth()
   const { show: showToast } = useToast()
   const navigate = useNavigate()
@@ -49,6 +59,7 @@ export function InstructorClassroomEditPage() {
   const [weekCount, setWeekCount] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
@@ -63,11 +74,13 @@ export function InstructorClassroomEditPage() {
     ])
       .then(([nextClassroom, nextWeeks, nextInviteCode]) => {
         if (cancelled) return
+        if (nextClassroom.id !== classroomId) throw new Error('강의실 정보를 확인할 수 없습니다.')
         setClassroom(nextClassroom)
         setWeeks([...nextWeeks].sort((left, right) => left.weekNumber - right.weekNumber))
         setWeekTitles(Object.fromEntries(nextWeeks.map((week) => [week.weekNumber, week.title])))
         const nextWeekCount = Math.max(nextClassroom.weekCount, nextWeeks.length, 1)
-        setInviteCode(nextInviteCode)
+        if (!activeRef.current) return
+      setInviteCode(nextInviteCode)
         setName(nextClassroom.name)
         setDescription(nextClassroom.description ?? '')
         setStartDate(nextClassroom.startDate)
@@ -82,7 +95,7 @@ export function InstructorClassroomEditPage() {
     return () => {
       cancelled = true
     }
-  }, [classroomId, repository])
+  }, [classroomId, loadAttempt, repository])
 
   const weekByNumber = useMemo(
     () => new Map(weeks.map((week) => [week.weekNumber, week])),
@@ -93,8 +106,10 @@ export function InstructorClassroomEditPage() {
   async function copyInviteCode() {
     try {
       await navigator.clipboard.writeText(inviteCode)
+      if (!activeRef.current) return
       showToast('초대 코드를 복사했습니다.', 'success')
     } catch {
+      if (!activeRef.current) return
       showToast('초대 코드를 복사하지 못했습니다.', 'danger')
     }
   }
@@ -103,9 +118,12 @@ export function InstructorClassroomEditPage() {
     if (!window.confirm('기존 초대 코드는 더 이상 사용할 수 없습니다. 재발급할까요?')) return
     try {
       const nextInviteCode = await repository.regenerateInviteCode(classroomId)
+      if (!activeRef.current) return
       setInviteCode(nextInviteCode)
+      if (!activeRef.current) return
       showToast('새 초대 코드를 발급했습니다.', 'success')
     } catch (requestError) {
+      if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
     }
   }
@@ -140,12 +158,14 @@ export function InstructorClassroomEditPage() {
         week.weekNumber,
         { title: weekTitles[week.weekNumber].trim() },
       )))
+      if (!activeRef.current) return
       showToast('강의실 정보를 저장했습니다.', 'success')
       navigate(classroomDetailPath(classroom.id))
     } catch (requestError) {
+      if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
     } finally {
-      setIsSaving(false)
+      if (activeRef.current) setIsSaving(false)
     }
   }
 
@@ -153,9 +173,11 @@ export function InstructorClassroomEditPage() {
     if (!classroom || classroom.status === 'COMPLETED' || !window.confirm('강의실 운영을 종료할까요? 종료 후에는 새 자료 업로드와 학습자 추가가 불가능하며, 기존 자료와 학습 기록만 확인할 수 있습니다.')) return
     try {
       await repository.complete(classroom.id)
+      if (!activeRef.current) return
       showToast('강의실 운영을 종료했습니다.', 'success')
       navigate(routes.classrooms)
     } catch (requestError) {
+      if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
     }
   }
@@ -166,10 +188,12 @@ export function InstructorClassroomEditPage() {
     setIsDeleting(true)
     try {
       await repository.deletePermanently(classroom.id, deleteConfirmation)
+      if (!activeRef.current) return
       window.dispatchEvent(new Event(CLASSROOMS_CHANGED_EVENT))
       showToast('강의실을 영구 삭제했습니다.', 'success')
       navigate(routes.classrooms, { replace: true })
     } catch (requestError) {
+      if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
       setIsDeleting(false)
     }
@@ -195,7 +219,7 @@ export function InstructorClassroomEditPage() {
     return (
       <ClassroomWorkspaceContainer>
         <EmptyState
-          action={<Button onClick={() => navigate(routes.classrooms)} variant="secondary">내 강의실로 이동</Button>}
+          action={<Button onClick={() => { setError(null); setIsLoading(true); setLoadAttempt((attempt) => attempt + 1) }} variant="secondary">다시 시도</Button>}
           description={error ?? '강의실 정보를 확인할 수 없습니다.'}
           title="강의실을 불러오지 못했습니다"
         />

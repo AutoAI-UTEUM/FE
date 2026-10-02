@@ -82,6 +82,37 @@ describe('NoticeDetailPanel', () => {
 })
 
 describe('ExamContentPanel', () => {
+  it.each([
+    ['update', '변경사항 저장', false],
+    ['publish', '시험 공개', false],
+    ['delete', '삭제', false],
+    ['update', '변경사항 저장', true],
+    ['publish', '시험 공개', true],
+    ['delete', '삭제', true],
+  ] as const)('ignores a pending %s completion on another classroom (reject=%s)', async (method, button, rejects) => {
+    const pending = deferred<Exam>()
+    const onSaved = vi.fn()
+    const onDeleted = vi.fn()
+    const mutation = vi.fn(() => pending.promise)
+    const repository = { get: vi.fn().mockResolvedValue(detailFixture), [method]: mutation }
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const exam = await loadSummary()
+    const view = render(<ToastProvider><ExamContentPanel classroomId="12" disabled={false} exam={exam} key="12" onClose={vi.fn()} onDeleted={onDeleted} onSaved={onSaved} repository={repository as unknown as ReturnType<typeof createExamsRepository>} /></ToastProvider>)
+    await screen.findByLabelText('시험 제목')
+    fireEvent.click(screen.getByRole('button', { name: button }))
+    expect(mutation).toHaveBeenCalledOnce()
+    view.rerender(<ToastProvider><ExamContentPanel classroomId="13" disabled={false} exam={null} key="13" onClose={vi.fn()} onDeleted={onDeleted} onSaved={onSaved} repository={{} as never} /></ToastProvider>)
+    await act(async () => {
+      if (rejects) pending.reject(new Error('Old classroom failure'))
+      else pending.resolve(detailFixture)
+    })
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(onDeleted).not.toHaveBeenCalled()
+    expect(screen.queryByText('Old classroom failure')).not.toBeInTheDocument()
+    expect(screen.queryByText(/시험을 (수정|공개|삭제)했습니다/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('시험 제목')).toHaveValue('')
+  })
+
   it('loads full exam detail before editing a list summary and preserves questions on save', async () => {
     const exam = await loadSummary()
     const pending = deferred<Exam>()
@@ -292,6 +323,7 @@ function renderPanel(exam: PanelExam, repository: object, options: { disabled?: 
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
-  return { promise, resolve }
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+  return { promise, reject, resolve }
 }
