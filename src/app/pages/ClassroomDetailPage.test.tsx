@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '../../features/auth'
 import { ToastProvider } from '../../shared/ui'
 import { ClassroomDetailPage } from './ClassroomDetailPage'
+import { learnerExamListItem } from '../../test/examListFixtures'
 
 afterEach(() => {
   cleanup()
@@ -12,6 +13,35 @@ afterEach(() => {
 })
 
 describe('ClassroomDetailPage instructor materials', () => {
+  it('opens a real exam list summary without requiring detail fields in classroom content', async () => {
+    const requestedPaths: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      requestedPaths.push(url.pathname)
+      if (url.pathname === '/api/classrooms/12') return success(classroomFixture)
+      if (url.pathname === '/api/classrooms/12/weeks') return success({ items: [weekFixture] })
+      if (url.pathname === '/api/classrooms/12/exams') return success({ items: [learnerExamListItem], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+      if (url.pathname === '/api/classrooms/12/notices' || url.pathname === '/api/classrooms/12/resources') return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      return new Response(null, { status: 404 })
+    })
+    render(
+      <MemoryRouter initialEntries={['/classrooms/12']}>
+        <AuthProvider initialUser={{ email: 'learner@example.com', id: 8, name: '학습자', role: 'LEARNER' }}>
+          <ToastProvider><Routes>
+            <Route path="/classrooms/:classroomId" element={<ClassroomDetailPage />} />
+            <Route path="/classrooms/12/exams/30" element={<p>시험 상세 도착</p>} />
+          </Routes></ToastProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    const card = await screen.findByRole('button', { name: /자료구조 확인 시험/ })
+    expect(card).toHaveTextContent('응시 완료')
+    expect(requestedPaths.filter((path) => path.startsWith('/api/exams/'))).toEqual([])
+    fireEvent.click(card)
+    expect(await screen.findByText('시험 상세 도착')).toBeInTheDocument()
+  })
+
   it('renders the classroom resource table in week order and uploads a dropped PDF', async () => {
     let weekListCalls = 0
     let uploadedValues: {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { ClassroomNotice, ClassroomWeek } from '../../../features/classrooms'
-import type { Exam } from '../../../features/exams'
+import type { ExamSummary } from '../../../features/exams'
 import { buildClassroomContent, filterClassroomContent, getGlobalClassroomContent } from './classroomContentModel'
 
 describe('classroomContentModel', () => {
@@ -91,13 +91,11 @@ const noticeFixture: ClassroomNotice = {
   weekNumber: 2,
 }
 
-const examFixture: Exam = {
+const examFixture: ExamSummary = {
   allowRetake: false,
   classroomId: '1',
   createdAt: '2026-08-03T00:00:00Z',
   id: '30',
-  questionCount: 0,
-  questions: [],
   status: 'DRAFT',
   title: '시험',
   totalScore: 0,

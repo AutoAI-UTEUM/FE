@@ -12,6 +12,7 @@ export type {
   ExamQuestionType,
   ExamsRepository,
   ExamStatus,
+  ExamSummary,
   ExamSubmission,
   ExamSubmissionStatus,
   GenerateExamDraftInput,

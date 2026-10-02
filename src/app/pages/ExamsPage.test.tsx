@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import { AuthProvider } from '../../features/auth'
 import { ToastProvider } from '../../shared/ui'
 import { ExamsPage } from './ExamsPage'
+import { instructorExamListItem, learnerExamListItem } from '../../test/examListFixtures'
 
 beforeEach(() => {
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')
@@ -26,10 +27,10 @@ describe('ExamsPage creation entry', () => {
         return success({ items: [classroomFixture, secondClassroomFixture], page: 0, size: 100, totalElements: 2, totalPages: 1 })
       }
       if (url.pathname === '/api/classrooms/12/exams') {
-        return success({ items: [{ ...examFixture, latestSubmission: { attemptNo: 1, maxScore: 10, normalizedScore: 80, score: 8, status: 'GRADED', submissionId: 300 } }], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+        return success({ items: [learnerExamListItem], page: 0, size: 100, totalElements: 1, totalPages: 1 })
       }
       if (url.pathname === '/api/classrooms/13/exams') {
-        return success({ items: [{ ...examFixture, classroomId: 13, examId: 31, title: '알고리즘 중간 시험' }], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+        return success({ items: [{ ...learnerExamListItem, examId: 31, latestSubmission: null, title: '알고리즘 중간 시험' }], page: 0, size: 100, totalElements: 1, totalPages: 1 })
       }
       return new Response(null, { status: 404 })
     })
@@ -51,7 +52,12 @@ describe('ExamsPage creation entry', () => {
     expect(screen.getByText(/자료구조 · 2주차/)).toBeInTheDocument()
     expect(screen.getByText(/알고리즘 · 2주차/)).toBeInTheDocument()
     expect(screen.getByText('응시 완료')).toBeInTheDocument()
-    expect(screen.getByText('80점')).toBeInTheDocument()
+    expect(screen.getByText('10 / 200점')).toBeInTheDocument()
+    expect(screen.queryByText('5점')).not.toBeInTheDocument()
+    expect(screen.queryByText(/0문항/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /자료구조 확인 시험/ })).toHaveAttribute('href', '/classrooms/12/exams/30')
+    expect(screen.getByRole('link', { name: /알고리즘 중간 시험/ })).toHaveAttribute('href', '/classrooms/13/exams/31')
+    expect(requestedPaths.filter((path) => path.startsWith('/api/exams/'))).toEqual([])
     expect(requestedPaths).toContain('/api/classrooms/12/exams')
     expect(requestedPaths).toContain('/api/classrooms/13/exams')
     expect(screen.queryByLabelText('강의실 선택')).not.toBeInTheDocument()
@@ -60,6 +66,54 @@ describe('ExamsPage creation entry', () => {
     expect(statusSelect).toHaveValue('')
     expect(statusSelect.closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
     expect(screen.queryByRole('group', { name: '시험 상태 필터' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['zero raw score', { ...learnerExamListItem.latestSubmission, score: 0, normalizedScore: 0 }, '0 / 200점', '응시 완료'],
+    ['normalized-only score', { ...learnerExamListItem.latestSubmission, score: null, maxScore: null }, '5%', '응시 완료'],
+    ['missing graded score', { ...learnerExamListItem.latestSubmission, score: null, maxScore: null, normalizedScore: null }, '점수 확인 필요', '응시 완료'],
+    ['latest submitted attempt', { attemptNo: 3, submissionId: 302, status: 'SUBMITTED', score: null, maxScore: null, normalizedScore: null }, null, '제출 완료'],
+    ['latest failed attempt', { attemptNo: 3, submissionId: 302, status: 'GRADING_FAILED', score: null, maxScore: null, normalizedScore: null }, null, '채점 확인 필요'],
+    ['no submission', null, null, null],
+  ])('renders %s without inventing points or older results', async (_case, latestSubmission, scoreLabel, statusLabel) => {
+    mockExamLists([{ ...learnerExamListItem, latestSubmission }])
+    renderExamList('/classrooms/12/exams', 'LEARNER')
+
+    const card = await screen.findByRole('link', { name: /자료구조 확인 시험/ })
+    if (scoreLabel) expect(within(card).getByText(scoreLabel)).toBeInTheDocument()
+    expect(card).toHaveAttribute('href', '/classrooms/12/exams/30')
+    expect(card).not.toHaveTextContent('0문항')
+    expect(within(card).queryByText('0점')).not.toBeInTheDocument()
+    if (statusLabel) expect(within(card).getByText(statusLabel)).toBeInTheDocument()
+    if (latestSubmission?.status !== 'GRADED') {
+      expect(within(card).queryByText('응시 완료')).not.toBeInTheDocument()
+      expect(within(card).queryByText(/%|\d+ \/ \d+점/)).not.toBeInTheDocument()
+    }
+  })
+
+  it.each([
+    [0, 0, '2주차 · 0문항 · 0점'],
+    [4, 20, '2주차 · 4문항 · 20점'],
+    [undefined, undefined, '2주차'],
+    [null, null, '2주차'],
+  ])('only displays known count and total (%s, %s)', async (questionCount, totalScore, metadata) => {
+    mockExamLists([{ ...learnerExamListItem, questionCount, totalScore, latestSubmission: null }])
+    renderExamList('/classrooms/12/exams', 'LEARNER')
+
+    const card = await screen.findByRole('link', { name: /자료구조 확인 시험/ })
+    expect(within(card).getByText(metadata)).toBeInTheDocument()
+    if (totalScore == null) expect(card).not.toHaveTextContent(/점/)
+    if (questionCount == null) expect(card).not.toHaveTextContent(/문항/)
+  })
+
+  it('renders the instructor list contract without fabricated questions', async () => {
+    mockExamLists([instructorExamListItem])
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+
+    const card = await screen.findByRole('link', { name: /알고리즘 중간 시험/ })
+    expect(card).toHaveAttribute('href', '/classrooms/12/exams/31')
+    expect(card).toHaveTextContent('20점')
+    expect(card).not.toHaveTextContent('0문항')
   })
 
   it('opens the composer with the requested classroom week', async () => {
@@ -149,25 +203,30 @@ const secondClassroomFixture = {
   name: '알고리즘',
 }
 
-const examFixture = {
-  allowRetake: false,
-  classroomId: 12,
-  createdAt: '2026-08-01T00:00:00Z',
-  examId: 30,
-  latestSubmission: null,
-  publishedAt: '2026-08-02T00:00:00Z',
-  questionCount: 4,
-  questions: [],
-  status: 'PUBLISHED',
-  title: '자료구조 확인 시험',
-  totalScore: 10,
-  updatedAt: '2026-08-03T00:00:00Z',
-  weekNumber: 2,
-}
-
 function success(data: unknown): Response {
   return new Response(JSON.stringify({ data, message: '요청이 성공했습니다.', success: true }), {
     headers: { 'Content-Type': 'application/json' },
     status: 200,
   })
+}
+
+function mockExamLists(items: unknown[]) {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+    if (url.pathname === '/api/classrooms') return success({ items: [classroomFixture], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+    if (url.pathname === '/api/classrooms/12/exams') return success({ items, page: 0, size: 100, totalElements: items.length, totalPages: 1 })
+    return new Response(null, { status: 404 })
+  })
+}
+
+function renderExamList(path: string, role: 'LEARNER' | 'INSTRUCTOR') {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <AuthProvider initialUser={{ email: 'user@example.com', id: 8, name: '사용자', role }}>
+        <ToastProvider>
+          <Routes><Route element={<ExamsPage />} path="/classrooms/:classroomId/exams" /></Routes>
+        </ToastProvider>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
 }

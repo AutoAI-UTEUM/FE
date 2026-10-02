@@ -9,7 +9,7 @@ import {
   type CreateClassroomResourceInput,
 } from '../../features/classroomResources'
 import { createClassroomsRepository, rememberClassroomId, type Classroom, type ClassroomNotice, type ClassroomNoticeInput, type ClassroomWeek } from '../../features/classrooms'
-import { createExamsRepository, type Exam } from '../../features/exams'
+import { createExamsRepository, type ExamSummary } from '../../features/exams'
 import { createMaterialsRepository, getMaterialFailureMessage, MAX_MATERIAL_TITLE_LENGTH, RenameMaterialDialog, validateMaterialTitle, validateMaterialUpload } from '../../features/materials'
 import { createSessionsRepository } from '../../features/sessions'
 import { getRequestErrorMessage } from '../../shared/api'
@@ -53,7 +53,7 @@ export function ClassroomDetailPage() {
   const [classroom, setClassroom] = useState<Classroom | null>(null)
   const [weeks, setWeeks] = useState<ClassroomWeek[]>([])
   const [notices, setNotices] = useState<ClassroomNotice[]>([])
-  const [exams, setExams] = useState<Exam[]>([])
+  const [exams, setExams] = useState<ExamSummary[]>([])
   const [classroomError, setClassroomError] = useState<string | null>(null)
   const [resourceErrors, setResourceErrors] = useState<Partial<Record<ResourceKey, string>>>({})
   const [isLoading, setIsLoading] = useState(true)
