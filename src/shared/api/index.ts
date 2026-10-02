@@ -5,6 +5,7 @@ export {
 } from './rawApiClient'
 export { ApiClientError } from './ApiClientError'
 export { getRequestErrorMessage } from './getRequestErrorMessage'
+export { fetchAllPages } from './pagination'
 export type {
   ApiEnvelope,
   ApiErrorPayload,
