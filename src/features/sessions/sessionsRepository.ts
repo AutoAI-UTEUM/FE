@@ -278,11 +278,25 @@ export function createSessionsRepository(
       }
     },
     async list(signal) {
-      const { data } = await request<PagedResponse<SessionSummaryDto>>(
-        '/api/sessions?page=0&size=20',
-        { signal },
-      )
-      return data.items.map(mapSession)
+      // Snapshot the first page's total so concurrent inserts cannot extend this loop.
+      const readPage = async (page: number) => {
+        signal?.throwIfAborted()
+        const { data } = await request<PagedResponse<SessionSummaryDto>>(
+          `/api/sessions?page=${page}&size=20`,
+          { signal },
+        )
+        if (!Number.isSafeInteger(data.totalPages) || data.totalPages < 0 || data.page !== page) {
+          throw new ApiClientError({ code: 'INVALID_SESSION_PAGE', message: '학습 세션 목록을 불러오지 못했습니다. 다시 시도해 주세요.' })
+        }
+        return data
+      }
+      const first = await readPage(0)
+      const sessions = new Map(first.items.map((session) => [String(session.sessionId), mapSession(session)]))
+      for (let page = 1; page < first.totalPages; page += 1) {
+        const data = await readPage(page)
+        for (const session of data.items) sessions.set(String(session.sessionId), mapSession(session))
+      }
+      return [...sessions.values()]
     },
     async listMessages(sessionId, signal) {
       const page = await listMessagePage(sessionId, undefined, signal)
