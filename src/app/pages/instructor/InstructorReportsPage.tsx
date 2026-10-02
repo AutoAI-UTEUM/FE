@@ -80,7 +80,6 @@ export function InstructorReportsPage() {
   useEffect(() => {
     if (!classroomId) return
     rememberClassroomId(classroomId)
-    setSearchQuery('')
     const requestedScopeKey = scopeKey
     const controller = new AbortController()
     Promise.all([
@@ -160,7 +159,6 @@ export function InstructorStudentReportsPage() {
   const { classroomId = '', studentId = '' } = useParams()
   const scopeKey = `${classroomId}:${studentId}`
   const scopeKeyRef = useRef(scopeKey)
-  scopeKeyRef.current = scopeKey
   const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
@@ -195,6 +193,10 @@ export function InstructorStudentReportsPage() {
   const isDelayed = delayedScopeKey === scopeKey
   const error = errorState?.scopeKey === scopeKey ? errorState.message : null
 
+  useEffect(() => {
+    scopeKeyRef.current = scopeKey
+  }, [scopeKey])
+
   const loadReports = useCallback(async (signal?: AbortSignal) => {
     const requestedScopeKey = `${classroomId}:${studentId}`
     const result = await repository.listReports(classroomId, studentId, signal)
@@ -212,12 +214,6 @@ export function InstructorStudentReportsPage() {
     rememberClassroomId(classroomId)
     const requestedScopeKey = scopeKey
     const controller = new AbortController()
-    requestIdRef.current = null
-    navigatedReportRef.current = null
-    setCreatingScopeKey(null)
-    setDelayedScopeKey(null)
-    setPollingPausedScopeKey(null)
-    setErrorState(null)
     Promise.all([
       repository.listReports(classroomId, studentId, controller.signal),
       classroomsRepository.listWeeks(classroomId, controller.signal),
@@ -407,8 +403,6 @@ export function InstructorReportDetailPage() {
   const { isTablet } = useResponsiveViewport()
   const { classroomId = '', studentId = '', reportId = '' } = useParams()
   const scopeKey = `${classroomId}:${studentId}:${reportId}`
-  const scopeKeyRef = useRef(scopeKey)
-  scopeKeyRef.current = scopeKey
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
   const [reportState, setReportState] = useState<{
@@ -429,7 +423,7 @@ export function InstructorReportDetailPage() {
     const controller = new AbortController()
     repository.getReport(reportId, controller.signal)
       .then((nextReport) => {
-        if (controller.signal.aborted || scopeKeyRef.current !== requestedScopeKey) return
+        if (controller.signal.aborted) return
         const belongsToScope = (
           (!nextReport.classroomId || nextReport.classroomId === classroomId)
           && (!nextReport.studentId || nextReport.studentId === studentId)
@@ -446,7 +440,7 @@ export function InstructorReportDetailPage() {
         setErrorState(null)
       })
       .catch((requestError) => {
-        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+        if (!controller.signal.aborted) {
           setErrorState({
             message: getRequestErrorMessage(requestError),
             scopeKey: requestedScopeKey,
@@ -454,7 +448,7 @@ export function InstructorReportDetailPage() {
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+        if (!controller.signal.aborted) {
           setSettledScopeKey(requestedScopeKey)
         }
       })
