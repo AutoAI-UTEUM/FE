@@ -80,6 +80,8 @@ export function LearnerNotesPage() {
     Array<{ clientId: string; reason: string }>
   >([])
   const [importError, setImportError] = useState<string | null>(null)
+  const [manualNotesError, setManualNotesError] = useState<string | null>(null)
+  const [isShowingManualCache, setIsShowingManualCache] = useState(false)
   const [query, setQuery] = useState('')
   const [expandedNoteKeys, setExpandedNoteKeys] = useState<Set<string>>(
     () => new Set(),
@@ -112,6 +114,7 @@ export function LearnerNotesPage() {
    */
   async function syncManualNotes() {
     setImportError(null)
+    setManualNotesError(null)
     try {
       const result = await manualNotesStore.migrate()
       setImportFailures(result?.failed ?? [])
@@ -122,8 +125,11 @@ export function LearnerNotesPage() {
     }
     try {
       setManualNotes(await manualNotesStore.list())
-    } catch {
+      setIsShowingManualCache(false)
+    } catch (requestError) {
       setManualNotes(manualNotesStore.readLocal())
+      setManualNotesError(getRequestErrorMessage(requestError))
+      setIsShowingManualCache(true)
     }
   }
 
@@ -168,9 +174,16 @@ export function LearnerNotesPage() {
       }
       try {
         const notes = await manualNotesStore.list()
-        if (!cancelled) setManualNotes(notes)
-      } catch {
-        if (!cancelled) setManualNotes(manualNotesStore.readLocal())
+        if (!cancelled) {
+          setManualNotes(notes)
+          setIsShowingManualCache(false)
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setManualNotes(manualNotesStore.readLocal())
+          setManualNotesError(getRequestErrorMessage(requestError))
+          setIsShowingManualCache(true)
+        }
       }
     })()
     return () => {
@@ -267,6 +280,29 @@ export function LearnerNotesPage() {
         title="내 노트"
       />
 
+      {!manualNotesStore.usesServer ? (
+        <p className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 type-body text-stone-700">
+          직접 작성한 노트는 이 브라우저의 현재 계정에서만 사용할 수 있습니다.
+        </p>
+      ) : null}
+
+      {manualNotesError ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 type-body text-amber-900"
+          role="alert"
+        >
+          <span>
+            {isShowingManualCache && manualNotes.length > 0
+              ? '서버 노트를 불러오지 못해 이 브라우저에 저장된 캐시를 표시합니다.'
+              : '서버 노트를 불러오지 못했으며 이 브라우저에 저장된 캐시도 없습니다.'}
+            <span className="ml-1">{manualNotesError}</span>
+          </span>
+          <Button onClick={() => void syncManualNotes()} size="sm" variant="secondary">
+            서버 노트 다시 시도
+          </Button>
+        </div>
+      ) : null}
+
       {/* 이관 실패는 화면을 막지 않는다. 노트는 로컬에 남아 있고 다시 시도할 수 있다. */}
       {importError || importFailures.length > 0 ? (
         <div
@@ -296,7 +332,7 @@ export function LearnerNotesPage() {
           title="노트를 불러오지 못했습니다"
         />
       ) : null}
-      {!isLoading && !error && filteredItems.length === 0 ? (
+      {!isLoading && !error && !manualNotesError && filteredItems.length === 0 ? (
         <EmptyState
           action={!query.trim() ? <ButtonLink to={routes.newNote}>새 노트 작성</ButtonLink> : undefined}
           description={
@@ -435,8 +471,13 @@ export function LearnerNoteCreatePage() {
     if (!content.trim() || isSaving) return
     setIsSaving(true)
     try {
-      await manualNotesStore.create({ content, document })
-      showToast('노트를 추가했습니다.', 'success')
+      const result = await manualNotesStore.create({ content, document })
+      showToast(
+        result.cacheWriteFailed
+          ? '노트는 서버에 저장됐지만 이 브라우저의 캐시를 갱신하지 못했습니다.'
+          : '노트를 추가했습니다.',
+        result.cacheWriteFailed ? 'info' : 'success',
+      )
       navigate(routes.notes)
     } catch (requestError) {
       showToast(getRequestErrorMessage(requestError), 'danger')
@@ -774,4 +815,3 @@ function persistUnavailableSessionIds(storageKey: string, sessionIds: Set<string
     // Browsers can disable session storage; note loading should still continue.
   }
 }
-

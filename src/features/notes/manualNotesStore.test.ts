@@ -46,6 +46,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllEnvs()
   window.localStorage.clear()
 })
@@ -60,6 +61,26 @@ describe('createManualNotesStore — user-notes capability 꺼짐', () => {
     expect(calls).toHaveLength(0)
     expect(await store.list()).toHaveLength(1)
     expect(await store.migrate()).toBeNull()
+  })
+
+  it('계정별 저장 키를 분리한다', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', '')
+    const { request } = stubRequest({})
+    const firstUserStore = createManualNotesStore(request, USER)
+    const secondUserStore = createManualNotesStore(request, USER + 1)
+
+    await firstUserStore.create({ content: '# 첫 번째 계정 노트' })
+    await secondUserStore.create({ content: '# 두 번째 계정 노트' })
+
+    expect(firstUserStore.readLocal().map((note) => note.content)).toEqual([
+      '# 첫 번째 계정 노트',
+    ])
+    expect(secondUserStore.readLocal().map((note) => note.content)).toEqual([
+      '# 두 번째 계정 노트',
+    ])
+    expect(window.localStorage.getItem(getManualNotesStorageKey(USER))).not.toBe(
+      window.localStorage.getItem(getManualNotesStorageKey(USER + 1)),
+    )
   })
 })
 
@@ -86,6 +107,31 @@ describe('createManualNotesStore — user-notes capability 켜짐', () => {
     expect(body.title).toBe('핵심 정리')
     expect(body.content).toBe('# 핵심 정리\n내용')
     expect(body.clientId).toMatch(/[0-9a-f-]{8,}/)
+  })
+
+  it('서버 저장 성공 뒤 캐시 쓰기가 실패해도 저장 성공을 반환한다', async () => {
+    const { calls, request } = stubRequest({
+      'POST /api/user-notes': {
+        content: '# 서버에 저장된 노트',
+        createdAt: '2026-09-26T00:00:00Z',
+        id: 12,
+        title: '서버에 저장된 노트',
+        updatedAt: '2026-09-26T00:00:00Z',
+      },
+    })
+    const originalSetItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (key === 'edupilot:manual-notes:cache:7') {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError')
+      }
+      originalSetItem.call(this, key, value)
+    })
+    const store = createManualNotesStore(request, USER)
+
+    await expect(
+      store.create({ content: '# 서버에 저장된 노트' }),
+    ).resolves.toEqual({ cacheWriteFailed: true })
+    expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1)
   })
 
   it('이관에 성공한 노트만 로컬에서 지우고 실패한 노트는 목록에 남긴다', async () => {

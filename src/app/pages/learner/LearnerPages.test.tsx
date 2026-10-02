@@ -52,6 +52,41 @@ describe('learner collection pages', () => {
     })).toBe(false)
   })
 
+  it('shows a local-only scope notice when server notes are disabled', async () => {
+    mockLearnerCollectionApi()
+    renderPage(<LearnerNotesPage />)
+
+    expect(
+      await screen.findByText('직접 작성한 노트는 이 브라우저의 현재 계정에서만 사용할 수 있습니다.'),
+    ).toBeInTheDocument()
+  })
+
+  it('labels cached manual notes and retries when the server list fails', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'user-notes')
+    window.localStorage.setItem('edupilot:manual-notes:cache:1', JSON.stringify([
+      {
+        content: '# 캐시된 개인 노트',
+        createdAt: '2026-09-01T00:00:00Z',
+        id: 'cached-1',
+        updatedAt: '2026-09-01T00:00:00Z',
+      },
+    ]))
+    mockLearnerCollectionApi({ userNotesUnavailable: true })
+    renderPage(<LearnerNotesPage />)
+
+    expect(await screen.findByText('캐시된 개인 노트')).toBeInTheDocument()
+    expect(
+      screen.getByText('서버 노트를 불러오지 못해 이 브라우저에 저장된 캐시를 표시합니다.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '서버 노트 다시 시도' }))
+    await screen.findByRole('button', { name: '서버 노트 다시 시도' })
+    expect(vi.mocked(globalThis.fetch).mock.calls.filter(([input]) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      return url.pathname === '/api/user-notes'
+    })).toHaveLength(2)
+  })
+
   it('opens manual note creation as a full page instead of a dialog', () => {
     renderPage(<LearnerNoteCreatePage />)
 
@@ -195,7 +230,12 @@ describe('learner collection pages', () => {
 })
 
 function mockLearnerCollectionApi(
-  options: { noteContent?: string; noteContents?: string[]; notesUnavailable?: boolean } = {},
+  options: {
+    noteContent?: string
+    noteContents?: string[]
+    notesUnavailable?: boolean
+    userNotesUnavailable?: boolean
+  } = {},
 ) {
   vi.stubEnv('VITE_API_BASE_URL', '/api')
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -246,6 +286,16 @@ function mockLearnerCollectionApi(
         totalElements: noteContents.length,
         totalPages: noteContents.length > 0 ? 1 : 0,
       })
+    }
+
+    if (url.pathname === '/api/user-notes') {
+      if (options.userNotesUnavailable) {
+        return new Response(JSON.stringify({
+          error: { code: 'SERVER_ERROR', message: '노트 서버 오류' },
+          success: false,
+        }), { headers: { 'Content-Type': 'application/json' }, status: 500 })
+      }
+      return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     }
 
     if (url.pathname === '/api/notes/1' && (input instanceof Request ? input.method : init?.method) === 'PATCH') {
