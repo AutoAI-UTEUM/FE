@@ -23,6 +23,9 @@ function success(data: unknown) {
 function classroom(id: number) {
   return { classroomId: id, name: `Class ${id}`, startDate: '2026-08-03', endDate: '2026-11-15', status: 'ACTIVE', weekCount: 1, learnerCount: 0, instructorName: 'Teacher', color: 'BLUE', progressRate: 0, pendingRequestCount: 0 }
 }
+function emptyStudentPage() {
+  return { items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 }
+}
 function fallback(path: string) {
   if (path === '/api/classrooms') return success({ items: [classroom(12), classroom(13)] })
   if (/\/classrooms\/\d+$/.test(path)) return success(classroom(Number(path.split('/').at(-1))))
@@ -57,7 +60,7 @@ describe('classroom route ownership', () => {
     expect(screen.queryByRole('heading', { name: 'Class 12' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '변경사항 저장' })).not.toBeInTheDocument()
     await waitFor(() => expect(requested.some((path) => path.startsWith('/api/classrooms/13'))).toBe(true))
-    await act(async () => pending.resolve(success(_name === 'learning' ? { items: [] } : classroom(13))))
+    await act(async () => pending.resolve(success(_name === 'learning' ? emptyStudentPage() : classroom(13))))
     expect(await screen.findByRole('heading', { name: 'Class 13' })).toBeInTheDocument()
   })
 
@@ -74,7 +77,7 @@ describe('classroom route ownership', () => {
     await waitFor(() => expect(requested.some((path) => path.startsWith('/api/classrooms/12'))).toBe(true))
     await act(() => router.navigate('/classrooms/13'))
     expect(await screen.findByRole('heading', { name: 'Class 13' })).toBeInTheDocument()
-    await act(async () => pending.resolve(success(_name === 'learning' ? { items: [] } : classroom(12))))
+    await act(async () => pending.resolve(success(_name === 'learning' ? emptyStudentPage() : classroom(12))))
     expect(screen.getByRole('heading', { name: 'Class 13' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Class 12' })).not.toBeInTheDocument()
   })
