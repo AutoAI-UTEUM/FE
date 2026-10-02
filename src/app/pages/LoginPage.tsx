@@ -1,6 +1,6 @@
 import { Eye, EyeOff } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   GoogleSignInButton,
@@ -13,6 +13,7 @@ import {
   type LoginFormErrors,
   type LoginFormValues,
 } from '../../features/auth'
+import { getAuthReturnTarget } from '../../features/auth/authReturnTarget'
 import { ApiClientError } from '../../shared/api'
 import { Button, TextInput } from '../../shared/ui'
 import { routes } from '../routes'
@@ -34,6 +35,7 @@ export function LoginPage() {
     loginWithGoogle,
     prepareGoogleSignup,
   } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [values, setValues] = useState<LoginFormValues>(initialValues)
@@ -47,6 +49,17 @@ export function LoginPage() {
   const isIdleExpired = searchParams.get('reason') === 'idle'
   const isAbsoluteExpired = searchParams.get('reason') === 'absolute-expired'
   const isInactive = searchParams.get('reason') === 'inactive'
+
+  function navigateAfterLogin(role: string | undefined) {
+    const returnTarget = getAuthReturnTarget(
+      location.state,
+      window.location.origin,
+    )
+    navigate(
+      returnTarget ?? (isAdminRole(role) ? routes.admin : routes.classrooms),
+      { replace: true },
+    )
+  }
 
   useEffect(() => {
     clearGoogleSignup()
@@ -62,7 +75,7 @@ export function LoginPage() {
     setServerError(null)
     try {
       const user = await login(values)
-      navigate(isAdminRole(user.role) ? routes.admin : routes.classrooms, { replace: true })
+      navigateAfterLogin(user.role)
     } catch (error) {
       const formErrors = mapAuthErrorToFormErrors(error)
       if (formErrors) setErrors(formErrors as LoginFormErrors)
@@ -87,7 +100,7 @@ export function LoginPage() {
 
     try {
       const user = await loginWithGoogle({ idToken })
-      navigate(isAdminRole(user.role) ? routes.admin : routes.classrooms, { replace: true })
+      navigateAfterLogin(user.role)
     } catch (error) {
       if (error instanceof ApiClientError) {
         if (error.status === 409 && error.code === 'SIGNUP_REQUIRED') {

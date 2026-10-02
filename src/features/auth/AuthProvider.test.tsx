@@ -6,10 +6,11 @@ import {
   render,
   screen,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RequireAuth } from './RequireAuth'
+import { getAuthReturnTarget } from './authReturnTarget'
 import {
   AUTH_ACTIVITY_RECORD_INTERVAL_MS,
   AUTH_IDLE_TIMEOUT_MS,
@@ -170,6 +171,10 @@ describe('AuthProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: '자료 요청' }))
 
     expect(await screen.findByText('로그인 화면')).toBeInTheDocument()
+    expect(screen.getByTestId('login-location')).toHaveTextContent(
+      '/login?reason=session-expired',
+    )
+    expect(screen.getByTestId('auth-return-target')).toHaveTextContent('/private')
   })
 
   it('ends the session when the retried request is also unauthorized', async () => {
@@ -569,10 +574,28 @@ function renderAuthenticatedRoute(element: ReactNode) {
           <Route element={<RequireAuth />}>
             <Route path="/private" element={element} />
           </Route>
-          <Route path="/login" element={<p>로그인 화면</p>} />
+          <Route path="/login" element={<LoginRouteHarness />} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
+  )
+}
+
+function LoginRouteHarness() {
+  const location = useLocation()
+  const target = getAuthReturnTarget(location.state, window.location.origin)
+  const targetText = target && typeof target === 'object'
+    ? `${target.pathname ?? ''}${target.search ?? ''}${target.hash ?? ''}`
+    : 'none'
+
+  return (
+    <>
+      <p>로그인 화면</p>
+      <output data-testid="login-location">
+        {location.pathname}{location.search}
+      </output>
+      <output data-testid="auth-return-target">{targetText}</output>
+    </>
   )
 }
 

@@ -1,8 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AuthProvider } from '../../features/auth'
+import { AuthProvider, RequireAuth } from '../../features/auth'
 import { installApiFixtureServer } from '../../test/apiFixtureServer'
 import { LoginPage } from './LoginPage'
 import { SignupPage } from './SignupPage'
@@ -42,7 +48,14 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-function renderLogin(path = '/login') {
+type LoginEntry = string | {
+  hash?: string
+  pathname: string
+  search?: string
+  state?: unknown
+}
+
+function renderLogin(path: LoginEntry = '/login') {
   return render(
     <AuthProvider initialUser={null}>
       <MemoryRouter initialEntries={[path]}>
@@ -54,6 +67,7 @@ function renderLogin(path = '/login') {
           />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/classrooms" element={<p>내 강의실 화면</p>} />
+          <Route path="/sessions/:sessionId" element={<LocationView />} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
@@ -245,6 +259,114 @@ describe('LoginPage', () => {
     expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
   })
 
+  it('returns a local login to a validated path with query and hash intact', async () => {
+    renderLogin({
+      pathname: '/login',
+      state: {
+        authReturnTo: {
+          hash: '#message-7',
+          pathname: '/sessions/100',
+          search: '?tab=chat&sort=recent',
+        },
+      },
+    })
+
+    submitLocalLogin()
+
+    expect(await screen.findByTestId('current-location')).toHaveTextContent(
+      '/sessions/100?tab=chat&sort=recent#message-7',
+    )
+  })
+
+  it('returns an existing Google member to the validated protected path', async () => {
+    renderLogin({
+      pathname: '/login',
+      state: {
+        authReturnTo: {
+          hash: '#notes',
+          pathname: '/sessions/100',
+          search: '?tab=summary',
+        },
+      },
+    })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Google 계정으로 계속' }),
+    )
+
+    expect(await screen.findByTestId('current-location')).toHaveTextContent(
+      '/sessions/100?tab=summary#notes',
+    )
+  })
+
+  it('keeps the expired-session notice and returns after reauthentication', async () => {
+    renderLogin({
+      pathname: '/login',
+      search: '?reason=session-expired',
+      state: {
+        authReturnTo: {
+          hash: '',
+          pathname: '/sessions/100',
+          search: '?tab=chat',
+        },
+      },
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '세션이 만료되었습니다. 다시 로그인하세요.',
+    )
+    submitLocalLogin()
+
+    expect(await screen.findByTestId('current-location')).toHaveTextContent(
+      '/sessions/100?tab=chat',
+    )
+  })
+
+  it('falls back safely when forged history state contains an external target', async () => {
+    renderLogin({
+      pathname: '/login',
+      state: {
+        authReturnTo: {
+          hash: '',
+          pathname: '//evil.example/phish',
+          search: '',
+        },
+      },
+    })
+
+    submitLocalLogin()
+
+    expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
+    expect(window.location.origin).not.toBe('https://evil.example')
+  })
+
+  it('ignores an external return target supplied in the login URL', async () => {
+    renderLogin('/login?returnTo=https%3A%2F%2Fevil.example%2Fphish')
+
+    submitLocalLogin()
+
+    expect(await screen.findByText('내 강의실 화면')).toBeInTheDocument()
+    expect(window.location.origin).not.toBe('https://evil.example')
+  })
+
+  it('preserves the return state across Back and Forward before login', async () => {
+    renderProtectedHistory()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(screen.getByTestId('return-path')).toHaveTextContent('/sessions/100')
+
+    fireEvent.click(screen.getByRole('button', { name: '뒤로' }))
+    expect(screen.getByTestId('return-path')).toHaveTextContent('none')
+
+    fireEvent.click(screen.getByRole('button', { name: '앞으로' }))
+    expect(screen.getByTestId('return-path')).toHaveTextContent('/sessions/100')
+
+    submitLocalLogin()
+    expect(await screen.findByTestId('current-location')).toHaveTextContent(
+      '/sessions/100?tab=chat#message-7',
+    )
+  })
+
   it('shows the mapped field error for invalid credentials', async () => {
     renderLogin()
 
@@ -285,6 +407,66 @@ describe('LoginPage', () => {
     expect(screen.getByText('비밀번호 찾기 화면')).toBeInTheDocument()
   })
 })
+
+function submitLocalLogin() {
+  fireEvent.change(screen.getByLabelText('이메일'), {
+    target: { value: 'learner@example.com' },
+  })
+  fireEvent.change(screen.getByLabelText('비밀번호'), {
+    target: { value: 'password-123' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '로그인' }))
+}
+
+function LocationView() {
+  const location = useLocation()
+  return (
+    <p data-testid="current-location">
+      {location.pathname}{location.search}{location.hash}
+    </p>
+  )
+}
+
+function HistoryControls() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const state = location.state as {
+    authReturnTo?: { pathname?: string }
+  } | null
+
+  return (
+    <>
+      <button onClick={() => navigate(-1)} type="button">뒤로</button>
+      <button onClick={() => navigate(1)} type="button">앞으로</button>
+      <output data-testid="return-path">
+        {state?.authReturnTo?.pathname ?? 'none'}
+      </output>
+    </>
+  )
+}
+
+function renderProtectedHistory() {
+  return render(
+    <AuthProvider initialUser={null}>
+      <MemoryRouter
+        initialEntries={[
+          '/login',
+          '/sessions/100?tab=chat#message-7',
+        ]}
+        initialIndex={1}
+      >
+        <HistoryControls />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/sessions/:sessionId" element={<LocationView />} />
+          </Route>
+          <Route path="/classrooms" element={<p>내 강의실 화면</p>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
+  )
+}
 
 function apiFailure(code: string, status: number): Response {
   return new Response(JSON.stringify({
