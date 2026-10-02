@@ -61,7 +61,7 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
     const beforeGrant = first.result.current
     const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
     channels.push(sender)
-    sender.postMessage({ type: 'REFRESH_SUCCEEDED', grant: grant(), receivedAt: Date.now() + 1, revision: 50, userId: 1 })
+    sender.postMessage({ type: 'REFRESH_SUCCEEDED', cause: 'refresh', grant: grant(), receivedAt: Date.now() + 1, revision: 50, userId: 1 })
     await waitFor(() => expect(first.result.current).not.toBe(beforeGrant))
 
     const second = renderHook(useAuth, { wrapper: ({ children }) => <AuthProvider initialUser={user}>{children}</AuthProvider> })
@@ -101,7 +101,7 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
     const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
     channels.push(sender)
     const delivered = nextBroadcast()
-    sender.postMessage({ type: 'REFRESH_SUCCEEDED', grant: { ...grant(), accessToken: 'new-account-token' }, receivedAt: Date.now() + 1, revision: 3, userId: 2 })
+    sender.postMessage({ type: 'REFRESH_SUCCEEDED', cause: 'session-start', grant: { ...grant(), accessToken: 'new-account-token' }, receivedAt: Date.now() + 1, revision: 3, userId: 2 })
     await delivered
     await act(async () => { oldUser.resolve(user) })
 
@@ -118,7 +118,7 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
     const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
     channels.push(sender)
     const delivered = nextBroadcast()
-    sender.postMessage({ type: 'REFRESH_SUCCEEDED', grant: { ...grant(), accessToken: 'renewed-token' }, receivedAt: Date.now() + 1, revision: 3, userId: 1 })
+    sender.postMessage({ type: 'REFRESH_SUCCEEDED', cause: 'refresh', grant: { ...grant(), accessToken: 'renewed-token' }, receivedAt: Date.now() + 1, revision: 3, userId: 1 })
     await delivered
     await act(async () => { oldUser.reject(new Error('Previous token expired')) })
 
@@ -146,6 +146,95 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
     const delivered = nextBroadcast()
     await act(async () => { await second.result.current.logout(); await delivered })
     expect(first.result.current.isAuthenticated).toBe(true)
+  })
+
+  it('hides the current identity for a legacy different-user grant without trusting it', async () => {
+    const active = renderHook(useAuth, {
+      wrapper: ({ children }) => <AuthProvider initialUser={user}>{children}</AuthProvider>,
+    })
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      grant: { ...grant(), accessToken: 'legacy-other-user-token' },
+      receivedAt: Date.now() + 1,
+      revision: 3,
+      userId: 2,
+    })
+
+    await waitFor(() => expect(active.result.current.user).toBeNull())
+    expect(active.result.current.isAuthenticated).toBe(false)
+    expect(repository.getMe).not.toHaveBeenCalledWith(
+      'legacy-other-user-token',
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('does not let a late previous-account refresh replace a pending account switch', async () => {
+    const replacementUser = deferred<AuthUser>()
+    const nextUser = { ...user, id: 2, name: '다른 학습자' }
+    repository.getMe.mockImplementation((accessToken: string) => {
+      if (accessToken === 'new-account-token') return replacementUser.promise
+      return Promise.resolve(user)
+    })
+    const active = renderHook(useAuth, {
+      wrapper: ({ children }) => <AuthProvider initialUser={user}>{children}</AuthProvider>,
+    })
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+    const switchedAt = Date.now() + 1
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'session-start',
+      grant: { ...grant(), accessToken: 'new-account-token' },
+      receivedAt: switchedAt,
+      revision: 3,
+      userId: 2,
+    })
+    await waitFor(() => expect(repository.getMe).toHaveBeenCalledWith(
+      'new-account-token',
+      expect.any(AbortSignal),
+    ))
+    expect(active.result.current.user).toBeNull()
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'refresh',
+      grant: { ...grant(), accessToken: 'late-old-account-token' },
+      receivedAt: switchedAt + 1,
+      revision: 4,
+      userId: 1,
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      replacementUser.resolve(nextUser)
+    })
+
+    await waitFor(() => expect(active.result.current.user).toEqual(nextUser))
+    expect(repository.getMe).not.toHaveBeenCalledWith(
+      'late-old-account-token',
+      expect.any(AbortSignal),
+    )
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'refresh',
+      grant: { ...grant(), accessToken: 'late-old-after-switch-token' },
+      receivedAt: switchedAt + 2,
+      revision: 5,
+      userId: 1,
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    })
+
+    expect(active.result.current.user).toEqual(nextUser)
+    expect(repository.getMe).not.toHaveBeenCalledWith(
+      'late-old-after-switch-token',
+      expect.any(AbortSignal),
+    )
   })
 })
 

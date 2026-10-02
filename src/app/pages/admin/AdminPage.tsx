@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, KeyRound, RefreshCw, Search, TriangleAlert, WifiOff, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import {
@@ -208,6 +208,8 @@ function UsersPanel({ repository }: { repository: Repository }) {
   const [error, setError] = useState<AdminErrorInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [resetResult, setResetResult] = useState<{ message: string; name: string; temporaryPassword: string } | null>(null)
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
+  const resetRequestRef = useRef<number | null>(null)
   const [roleCounts, setRoleCounts] = useState<Partial<Record<AdminUserRole, number>>>({})
   const [totalUsers, setTotalUsers] = useState<number | null>(null)
   const [metricComparison, setMetricComparison] = useState<ReturnType<typeof memberMetricComparison> | null>(null)
@@ -289,18 +291,26 @@ function UsersPanel({ repository }: { repository: Repository }) {
   }, [expandedId, repository])
 
   async function resetPassword(target: AdminUserSummary) {
+    if (resetRequestRef.current !== null) return
     if (!window.confirm(`${target.name} 회원의 비밀번호를 임시 비밀번호로 초기화할까요?`)) return
+    resetRequestRef.current = target.id
+    setIsResettingPassword(true)
     try {
       const result = await repository.resetUserPassword(target.id)
       setResetResult({ ...result, name: target.name })
       setError(null)
     } catch (reason) {
       setError(toAdminError(reason))
+    } finally {
+      if (resetRequestRef.current === target.id) {
+        resetRequestRef.current = null
+        setIsResettingPassword(false)
+      }
     }
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto lg:overflow-hidden">
+    <div aria-busy={isResettingPassword} className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto lg:overflow-hidden">
       <AdminPanelHeading title="회원" />
       <AdminMetricStrip
         items={[

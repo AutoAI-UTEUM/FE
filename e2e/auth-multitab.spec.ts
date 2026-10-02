@@ -20,7 +20,7 @@ test.describe('multi-tab authentication regressions', () => {
     await expect(page.getByRole('heading', { name: '내 강의실', exact: true })).toBeVisible()
     await page.evaluate(({ name, grant }) => {
       const channel = new BroadcastChannel(name)
-      channel.postMessage({ type: 'REFRESH_SUCCEEDED', grant, receivedAt: Date.now(), revision: 50, userId: 1 })
+      channel.postMessage({ type: 'REFRESH_SUCCEEDED', cause: 'refresh', grant, receivedAt: Date.now(), revision: 50, userId: 1 })
       channel.close()
     }, { name: channelName, grant: accessGrant() })
 
@@ -88,8 +88,23 @@ async function authenticatedPage(context: BrowserContext) {
 }
 
 async function logout(page: Page) {
-  await page.getByRole('button', { name: '프로필 메뉴', exact: true }).click()
-  await page.getByRole('menuitem', { name: '로그아웃' }).click()
+  const bottomNavigation = page.getByRole('navigation', { name: '하단 주요 메뉴' })
+  const bottomProfileButton = bottomNavigation.getByRole('button', { name: '프로필 메뉴' })
+  if (await bottomProfileButton.isVisible().catch(() => false)) {
+    await bottomProfileButton.click()
+    await bottomNavigation.getByRole('menuitem', { name: '로그아웃', exact: true }).click()
+    return
+  }
+
+  const menuButtons = page.locator('button[aria-haspopup="menu"]:visible')
+  if (await menuButtons.count()) {
+    await menuButtons.last().click()
+    await page.getByRole('complementary').getByRole('menuitem', { name: '로그아웃', exact: true }).click()
+    return
+  }
+
+  await page.locator('a[href="/settings"]:visible').click()
+  await page.getByRole('button', { name: '로그아웃', exact: true }).click()
 }
 
 async function observeNextGrant(page: Page) {

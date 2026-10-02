@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 describe('instructor report route scope and polling recovery', () => {
-  it('does not show a late classroom report list after the next classroom returns 403', async () => {
+  it.each([403, 404])('does not show a late classroom report list after the next classroom returns %s', async (status) => {
     let resolveLateClassroom!: (response: Response) => void
     const lateClassroom = new Promise<Response>((resolve) => {
       resolveLateClassroom = resolve
@@ -28,7 +28,11 @@ describe('instructor report route scope and polling recovery', () => {
       const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
       if (url.pathname === '/api/classrooms/class-a') return lateClassroom
       if (url.pathname === '/api/classrooms/class-b') {
-        return failure('FORBIDDEN', '접근 권한이 없습니다.', 403)
+        return failure(
+          status === 403 ? 'FORBIDDEN' : 'NOT_FOUND',
+          status === 403 ? '접근 권한이 없습니다.' : '강의실을 찾을 수 없습니다.',
+          status,
+        )
       }
       if (url.pathname.endsWith('/students')) {
         return success({

@@ -21,6 +21,7 @@ export type AuthCoordinatorMessage =
       userId?: number
     }
   | {
+      cause?: 'refresh' | 'session-start'
       grant: AccessGrant
       receivedAt: number
       revision: number
@@ -106,6 +107,7 @@ export class AuthRefreshCoordinator {
       const revision = Math.max(current.revision, started.revision) + 1
       applyGrant(grant, revision, receivedAt)
       this.publish({
+        cause: 'refresh',
         grant,
         receivedAt,
         revision,
