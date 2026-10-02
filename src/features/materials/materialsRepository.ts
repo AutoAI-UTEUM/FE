@@ -30,6 +30,8 @@ interface MaterialOverviewDto {
   updatedAt?: string | null
 }
 
+export const MATERIALS_PAGE_SIZE = 20
+
 export interface MaterialsRepository {
   delete: (materialId: string, signal?: AbortSignal) => Promise<void>
   getById: (
@@ -45,6 +47,7 @@ export interface MaterialsRepository {
     signal?: AbortSignal,
   ) => Promise<MaterialOverview | null>
   list: (signal?: AbortSignal) => Promise<StudyMaterial[]>
+  listPage: (page?: number, signal?: AbortSignal) => Promise<PagedResponse<StudyMaterial>>
   refreshStatuses: (signal?: AbortSignal) => Promise<StudyMaterial[]>
   rename: (
     materialId: string,
@@ -126,10 +129,13 @@ export function createMaterialsRepository(
       }
     },
     async list(signal) {
-      return requestMaterials(request, signal)
+      return (await requestMaterials(request, 0, signal)).items
+    },
+    async listPage(page = 0, signal) {
+      return requestMaterials(request, page, signal)
     },
     async refreshStatuses(signal) {
-      return requestMaterials(request, signal)
+      return (await requestMaterials(request, 0, signal)).items
     },
     async rename(materialId, title, signal) {
       const { data } = await request<MaterialDto>(
@@ -163,13 +169,17 @@ export function createMaterialsRepository(
 
 async function requestMaterials(
   request: AuthenticatedRequest,
+  page: number,
   signal?: AbortSignal,
-): Promise<StudyMaterial[]> {
+): Promise<PagedResponse<StudyMaterial>> {
+  if (!Number.isSafeInteger(page) || page < 0) {
+    throw new RangeError('Material page must be a non-negative safe integer.')
+  }
   const { data } = await request<PagedResponse<MaterialDto>>(
-    '/api/materials?page=0&size=20',
+    `/api/materials?page=${page}&size=${MATERIALS_PAGE_SIZE}`,
     { signal },
   )
-  return data.items.map(mapMaterial)
+  return { ...data, items: data.items.map(mapMaterial) }
 }
 
 function mapMaterial(material: MaterialDto): StudyMaterial {

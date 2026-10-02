@@ -7,7 +7,6 @@ import {
   Upload,
 } from 'lucide-react'
 import {
-  useCallback,
   useMemo,
   useEffect,
   useRef,
@@ -42,7 +41,7 @@ import {
   useToast,
 } from '../../shared/ui'
 import { formatDate, formatFileSize } from '../../shared/lib/format'
-import { usePolling } from '../../shared/state'
+import { useMaterialsList } from '../../features/materials/useMaterialsList'
 import { materialViewerPath, sessionDetailPath } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
@@ -54,9 +53,8 @@ export function MaterialsPage() {
     () => createMaterialsRepository(apiRequest),
     [apiRequest],
   )
-  const [materials, setMaterials] = useState<StudyMaterial[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const list = useMaterialsList(repository)
+  const { data: { items: materials, page, size, totalElements, totalPages }, isLoading, isStale, error: loadError } = list
   const [isDropActive, setIsDropActive] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -68,7 +66,8 @@ export function MaterialsPage() {
     null,
   )
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const materialMutationVersionRef = useRef(0)
+  const mutationControllerRef = useRef<AbortController | null>(null)
+  const deleteInFlightRef = useRef(false)
   const uploadInFlightRef = useRef(false)
   const readyCount = useMemo(
     () => materials.filter((material) => material.status === 'READY').length,
@@ -77,40 +76,9 @@ export function MaterialsPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    const mutationVersion = materialMutationVersionRef.current
-
-    repository
-      .list(controller.signal)
-      .then((nextMaterials) => {
-        if (mutationVersion !== materialMutationVersionRef.current) return
-        setMaterials(nextMaterials)
-        setLoadError(null)
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoadError(getRequestErrorMessage(error))
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
-      })
-
+    mutationControllerRef.current = controller
     return () => controller.abort()
   }, [repository])
-
-  const refreshInBackground = useCallback(async () => {
-    try {
-      const nextMaterials = await repository.refreshStatuses()
-      setMaterials((current) => mergeServerMaterials(nextMaterials, current))
-    } catch {
-      // 백그라운드 폴링 실패는 무시 — 에러는 수동 새로고침에서만 표시
-    }
-  }, [repository])
-
-  usePolling(
-    materials.some((material) => material.status === 'PROCESSING'),
-    refreshInBackground,
-  )
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
@@ -150,49 +118,44 @@ export function MaterialsPage() {
     setUploadError(validationError)
     if (validationError || !selectedFile) return
 
+    const signal = mutationControllerRef.current?.signal
+    if (!signal || signal.aborted) return
     uploadInFlightRef.current = true
     setIsUploading(true)
     try {
       const nextMaterial = await repository.upload(selectedFile, {
+        signal,
         title: materialTitle.trim(),
       })
-      materialMutationVersionRef.current += 1
-      setMaterials((current) => [nextMaterial, ...current])
+      if (signal.aborted) return
+      list.uploaded(nextMaterial)
       setSelectedFile(null)
       setSelectedFileName(null)
       setMaterialTitle('')
       showToast('업로드를 시작했습니다. 처리 상태를 확인하세요.', 'success')
     } catch (error) {
-      setUploadError(getRequestErrorMessage(error))
+      if (!signal.aborted) setUploadError(getRequestErrorMessage(error))
     } finally {
       uploadInFlightRef.current = false
-      setIsUploading(false)
-    }
-  }
-
-  async function refreshProcessingStatuses() {
-    try {
-      const nextMaterials = await repository.refreshStatuses()
-      setMaterials((current) => mergeServerMaterials(nextMaterials, current))
-      setLoadError(null)
-    } catch (error) {
-      setLoadError(getRequestErrorMessage(error))
+      if (!signal.aborted) setIsUploading(false)
     }
   }
 
   async function handleDelete(material: StudyMaterial) {
-    if (deletingMaterialId) return
+    if (deleteInFlightRef.current) return
     if (!window.confirm(`'${material.title}' 자료를 삭제할까요?`)) return
 
+    const signal = mutationControllerRef.current?.signal
+    if (!signal || signal.aborted) return
+    deleteInFlightRef.current = true
     setDeletingMaterialId(material.id)
     try {
-      await repository.delete(material.id)
-      materialMutationVersionRef.current += 1
-      setMaterials((current) =>
-        current.filter((item) => item.id !== material.id),
-      )
+      await repository.delete(material.id, signal)
+      if (signal.aborted) return
+      list.deleted(material.id)
       showToast('자료를 삭제했습니다.', 'success')
     } catch (error) {
+      if (signal.aborted) return
       if (
         error instanceof ApiClientError &&
         error.code === 'MATERIAL_HAS_ACTIVE_SESSION'
@@ -205,20 +168,22 @@ export function MaterialsPage() {
         showToast(getRequestErrorMessage(error), 'danger')
       }
     } finally {
-      setDeletingMaterialId(null)
+      deleteInFlightRef.current = false
+      if (!signal.aborted) setDeletingMaterialId(null)
     }
   }
 
   async function handleRename(title: string): Promise<boolean> {
-    if (!renamingMaterial) return false
+    const signal = mutationControllerRef.current?.signal
+    if (!renamingMaterial || !signal || signal.aborted) return false
     try {
-      const renamed = await repository.rename(renamingMaterial.id, title)
-      materialMutationVersionRef.current += 1
-      setMaterials((current) => current.map((item) => item.id === renamed.id ? { ...item, title: renamed.title } : item))
+      const renamed = await repository.rename(renamingMaterial.id, title, signal)
+      if (signal.aborted) return false
+      list.renamed(renamed)
       showToast('자료 이름을 변경했습니다.', 'success')
       return true
     } catch (error) {
-      showToast(getRequestErrorMessage(error), 'danger')
+      if (!signal.aborted) showToast(getRequestErrorMessage(error), 'danger')
       return false
     }
   }
@@ -229,8 +194,8 @@ export function MaterialsPage() {
         title="자료"
         actions={
           <>
-            <Badge tone="success">준비 완료 {readyCount}</Badge>
-            <Badge tone="neutral">전체 {materials.length}</Badge>
+            <Badge tone="success">현재 페이지 준비 완료 {readyCount}</Badge>
+            <Badge tone="neutral">{isStale ? (isLoading ? '전체 확인 중' : '전체 확인 필요') : `전체 ${totalElements}`}</Badge>
           </>
         }
       />
@@ -241,7 +206,7 @@ export function MaterialsPage() {
             <h2 className="type-section-title font-bold text-stone-950">PDF 업로드</h2>
             <p className="mt-1 type-body text-stone-500">45MB 이하 PDF 파일 · PPT/PPTX는 PDF로 변환 후 업로드</p>
           </div>
-          <Button onClick={refreshProcessingStatuses} type="button" variant="secondary">
+          <Button disabled={isLoading} onClick={list.refresh} type="button" variant="secondary">
             <RefreshCw aria-hidden="true" size={15} />
             처리 상태 새로고침
           </Button>
@@ -329,10 +294,10 @@ export function MaterialsPage() {
         ) : null}
       </form>
 
-      <section className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <section aria-busy={isLoading} aria-label="업로드된 자료" className="overflow-hidden rounded-xl border border-stone-200 bg-white">
         <div className="flex items-center justify-between border-b border-stone-200 px-4 py-4 sm:px-5">
           <h2 className="type-section-title font-bold text-stone-950">업로드된 자료</h2>
-          <span className="type-caption font-medium text-stone-500">{materials.length}개 자료</span>
+          <span className="type-caption font-medium text-stone-500">{isStale ? '자료 수 확인 필요' : `전체 ${totalElements}개 자료`}</span>
         </div>
 
         <div className="hidden grid-cols-[minmax(0,1fr)_120px_140px_230px] gap-4 border-b border-stone-200 bg-stone-50 px-5 py-2 type-caption font-bold text-stone-500 lg:grid">
@@ -347,9 +312,9 @@ export function MaterialsPage() {
         ) : loadError && materials.length === 0 ? (
           <ErrorState
             title="자료를 불러오지 못했습니다."
-            description={loadError}
+            description={loadError.message}
             action={
-              <Button onClick={refreshProcessingStatuses} type="button">
+              <Button disabled={isLoading} onClick={list.retry} type="button">
                 다시 시도
               </Button>
             }
@@ -435,7 +400,7 @@ export function MaterialsPage() {
                 </Button>
                 <Button
                   aria-label={`${material.title} 삭제`}
-                  disabled={deletingMaterialId === material.id}
+                  disabled={deletingMaterialId !== null}
                   onClick={() => void handleDelete(material)}
                   size="sm"
                   type="button"
@@ -448,6 +413,25 @@ export function MaterialsPage() {
           ))}
         </div>
         )}
+        {loadError && materials.length > 0 ? (
+          <div className="flex items-center justify-between gap-3 border-t border-stone-200 px-4 py-3 sm:px-5" role="alert">
+            <p className="type-body text-rose-700">{loadError.message}</p>
+            <Button disabled={isLoading} onClick={list.retry} size="sm" type="button" variant="secondary">
+              다시 시도
+            </Button>
+          </div>
+        ) : null}
+        {isLoading && materials.length > 0 ? (
+          <p className="px-5 py-2 type-caption text-stone-500" role="status">자료를 불러오는 중...</p>
+        ) : null}
+        <nav aria-label="자료 페이지" className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-4 py-3 type-caption text-stone-500 sm:px-5">
+          <span>{isStale ? '새로고침 후 자료 수를 확인할 수 있습니다.' : `${materials.length === 0 ? 0 : page * size + 1}-${materials.length === 0 ? 0 : page * size + materials.length} / ${totalElements}개`}</span>
+          <div className="flex items-center gap-2">
+            <Button aria-label="이전 페이지" disabled={isLoading || isStale || page <= 0} onClick={() => void list.loadPage(page - 1)} size="sm" type="button" variant="secondary">이전</Button>
+            <span>{isStale ? '페이지 확인 필요' : `${totalPages === 0 ? 0 : page + 1} / ${totalPages} 페이지`}</span>
+            <Button aria-label="다음 페이지" disabled={isLoading || isStale || page + 1 >= totalPages} onClick={() => void list.loadPage(page + 1)} size="sm" type="button" variant="secondary">다음</Button>
+          </div>
+        </nav>
       </section>
       {renamingMaterial ? (
         <RenameMaterialDialog
@@ -458,17 +442,6 @@ export function MaterialsPage() {
       ) : null}
     </PageContainer>
   )
-}
-
-function mergeServerMaterials(
-  serverMaterials: StudyMaterial[],
-  currentMaterials: StudyMaterial[],
-): StudyMaterial[] {
-  const serverIds = new Set(serverMaterials.map((material) => material.id))
-  const pendingUploads = currentMaterials.filter(
-    (material) => material.status === 'PROCESSING' && !serverIds.has(material.id),
-  )
-  return [...pendingUploads, ...serverMaterials]
 }
 
 function StatusBadge({ status }: { status: MaterialStatus }) {
