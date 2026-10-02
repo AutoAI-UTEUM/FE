@@ -7,13 +7,14 @@ import { createQuestion } from './examEditorModel'
 interface ExamEditorProps {
   value: CreateExamInput
   onChange: (value: CreateExamInput) => void
+  autoFocusTitle?: boolean
 }
 
 const typeLabels: Record<ExamQuestionType, string> = {
   MCQ: '객관식', OX: 'OX', SHORT: '단답형', ESSAY: '서술형',
 }
 
-export function ExamEditor({ onChange, value }: ExamEditorProps) {
+export function ExamEditor({ autoFocusTitle = false, onChange, value }: ExamEditorProps) {
   function updateQuestion(index: number, next: ExamQuestionInput) {
     onChange({ ...value, questions: value.questions.map((question, questionIndex) => questionIndex === index ? next : question) })
   }
@@ -21,7 +22,7 @@ export function ExamEditor({ onChange, value }: ExamEditorProps) {
   return <div className="space-y-5">
     <div className="grid gap-4 md:grid-cols-2">
       <label className="min-w-0 type-control font-semibold text-stone-700">시험 제목
-        <input className="mt-1 h-11 w-full rounded-lg border border-stone-300 px-3 type-body" maxLength={200} onChange={(event) => onChange({ ...value, title: event.target.value })} value={value.title} />
+        <input className="mt-1 h-11 w-full rounded-lg border border-stone-300 px-3 type-body" data-autofocus={autoFocusTitle ? '' : undefined} maxLength={200} onChange={(event) => onChange({ ...value, title: event.target.value })} value={value.title} />
       </label>
       <label className="type-control font-semibold text-stone-700">주차 (선택)
         <input className="mt-1 h-11 w-full rounded-lg border border-stone-300 px-3 type-body" min={1} onChange={(event) => onChange({ ...value, weekNumber: event.target.value ? Number(event.target.value) : undefined })} type="number" value={value.weekNumber ?? ''} />
