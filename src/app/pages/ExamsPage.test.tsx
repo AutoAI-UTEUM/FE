@@ -179,7 +179,111 @@ describe('ExamsPage creation entry', () => {
     await waitFor(() => expect(requestedPaths).toContain('/api/classrooms/13/exams'))
     expect(screen.getByLabelText('강의실 선택')).toHaveValue('13')
   })
+
+  it('reloads when an instructor selects the active status filter again', async () => {
+    const requestedStatuses: Array<string | null> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/classrooms') {
+        return success({ items: [classroomFixture], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        requestedStatuses.push(url.searchParams.get('status'))
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+
+    const draftFilter = await screen.findByRole('button', { name: '초안' })
+    fireEvent.click(draftFilter)
+    await waitFor(() => expect(requestedStatuses).toEqual([null, 'DRAFT']))
+    await waitFor(() => expect(screen.queryByText('시험을 불러오는 중입니다.')).not.toBeInTheDocument())
+
+    fireEvent.click(draftFilter)
+
+    await waitFor(() => expect(requestedStatuses).toEqual([null, 'DRAFT', 'DRAFT']))
+    expect(screen.queryByText('시험을 불러오는 중입니다.')).not.toBeInTheDocument()
+  })
+
+  it('offers an explicit retry after an exam list error', async () => {
+    let examRequests = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/classrooms') {
+        return success({ items: [classroomFixture], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        examRequests += 1
+        if (examRequests === 1) {
+          return new Response(JSON.stringify({
+            error: { code: 'SERVER_ERROR', message: '시험 목록 오류' },
+            success: false,
+          }), { headers: { 'Content-Type': 'application/json' }, status: 500 })
+        }
+        return success({ items: [instructorExamListItem], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+
+    expect(await screen.findByRole('heading', { name: '시험을 불러오지 못했습니다' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+
+    expect(await screen.findByText('알고리즘 중간 시험')).toBeInTheDocument()
+    expect(examRequests).toBe(2)
+  })
+
+  it('ignores a late response from a previously selected filter', async () => {
+    const draftResponse = deferred<Response>()
+    const publishedResponse = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/classrooms') {
+        return success({ items: [classroomFixture], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        if (url.searchParams.get('status') === 'DRAFT') return draftResponse.promise
+        if (url.searchParams.get('status') === 'PUBLISHED') return publishedResponse.promise
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+
+    const draftFilter = await screen.findByRole('button', { name: '초안' })
+    fireEvent.click(draftFilter)
+    await waitFor(() => expect(draftFilter).toHaveAttribute('aria-pressed', 'true'))
+    fireEvent.click(screen.getByRole('button', { name: '공개' }))
+
+    publishedResponse.resolve(success({
+      items: [{ ...instructorExamListItem, examId: 41, status: 'PUBLISHED', title: '게시된 시험' }],
+      page: 0,
+      size: 100,
+      totalElements: 1,
+      totalPages: 1,
+    }))
+    expect(await screen.findByText('게시된 시험')).toBeInTheDocument()
+
+    draftResponse.resolve(success({
+      items: [{ ...instructorExamListItem, examId: 42, status: 'DRAFT', title: '늦게 도착한 초안' }],
+      page: 0,
+      size: 100,
+      totalElements: 1,
+      totalPages: 1,
+    }))
+    await waitFor(() => expect(screen.getByText('게시된 시험')).toBeInTheDocument())
+    expect(screen.queryByText('늦게 도착한 초안')).not.toBeInTheDocument()
+  })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
+}
 
 const classroomFixture = {
   classroomId: 12,
