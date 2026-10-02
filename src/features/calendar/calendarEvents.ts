@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AuthenticatedRequest } from '../auth'
 
 export type CalendarEventKind = 'NOTICE' | 'PERSONAL'
@@ -86,6 +86,49 @@ export function createCalendarRepository(request: AuthenticatedRequest) {
   }
 }
 
+interface CalendarScope {
+  ownerKey: string | number | undefined
+  repository: ReturnType<typeof createCalendarRepository> | null
+}
+
+interface CalendarState {
+  error: unknown
+  events: CalendarEvent[]
+  hasLoaded: boolean
+  isLoading: boolean
+  scope: CalendarScope
+}
+
+interface CalendarChange {
+  event?: CalendarEvent
+  eventId?: string
+  ownerKey: string | number
+  type: 'remove' | 'upsert'
+}
+
+function initialCalendarState(scope: CalendarScope): CalendarState {
+  return {
+    error: null,
+    events: [],
+    hasLoaded: false,
+    isLoading: Boolean(scope.repository && scope.ownerKey !== undefined && scope.ownerKey !== ''),
+    scope,
+  }
+}
+
+function applyCalendarChange(events: CalendarEvent[], change: CalendarChange): CalendarEvent[] {
+  if (change.type === 'remove' && change.eventId) {
+    return events.filter((item) => item.id !== change.eventId)
+  }
+  if (change.type === 'upsert' && change.event) {
+    return [
+      ...events.filter((item) => item.id !== change.event?.id),
+      change.event,
+    ].sort(compareEvents)
+  }
+  return events
+}
+
 export function useCalendarEvents(
   ownerKey: string | number | undefined,
   request?: AuthenticatedRequest,
@@ -94,81 +137,151 @@ export function useCalendarEvents(
     () => request ? createCalendarRepository(request) : null,
     [request],
   )
-  const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [error, setError] = useState<unknown>(null)
-  const [isLoading, setIsLoading] = useState(Boolean(request && ownerKey))
+  const scope = useMemo(() => ({ ownerKey, repository }), [ownerKey, repository])
+  const [state, setState] = useState(() => initialCalendarState(scope))
+  const [reloadVersion, setReloadVersion] = useState(0)
+  const activeScope = useRef<CalendarScope | null>(null)
+  const activeLoad = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    if (!repository || !ownerKey) {
-      return
+  // Reset before rendering another account, rather than showing its predecessor's
+  // events for one frame while an effect clears the cache.
+  if (state.scope !== scope) {
+    const nextState = initialCalendarState(scope)
+    if (repository && state.scope.ownerKey === ownerKey) {
+      nextState.events = state.events
+      nextState.hasLoaded = state.hasLoaded
     }
-    const controller = new AbortController()
-    repository.list(controller.signal)
-      .then((items) => {
-        setEvents(items)
-        setError(null)
-      })
-      .catch((requestError) => {
-        if (!controller.signal.aborted) setError(requestError)
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
-      })
-    return () => controller.abort()
-  }, [ownerKey, repository])
+    setState(nextState)
+  }
 
   useEffect(() => {
+    activeScope.current = scope
+    return () => { activeScope.current = null }
+  }, [scope])
+
+  useEffect(() => {
+    if (!repository || ownerKey === undefined || ownerKey === '') return
+
+    const controller = new AbortController()
+    activeLoad.current = controller
+    const changes: CalendarChange[] = []
+    let isPending = true
     const synchronize = (browserEvent: Event) => {
       if (!(browserEvent instanceof CustomEvent)) return
-      const detail = browserEvent.detail as { event?: CalendarEvent; eventId?: string; type?: 'remove' | 'upsert' }
-      if (detail.type === 'remove' && detail.eventId) {
-        setEvents((current) => current.filter((item) => item.id !== detail.eventId))
-      }
-      if (detail.type === 'upsert' && detail.event) {
-        setEvents((current) => [
-          ...current.filter((item) => item.id !== detail.event?.id),
-          detail.event as CalendarEvent,
-        ].sort(compareEvents))
-      }
+      const change = browserEvent.detail as CalendarChange | undefined
+      if (!change || change.ownerKey !== ownerKey) return
+      if (isPending) changes.push(change)
+      setState((current) => current.scope === scope
+        ? { ...current, events: applyCalendarChange(current.events, change) }
+        : current)
     }
     window.addEventListener(CALENDAR_EVENTS_CHANGED, synchronize)
-    return () => window.removeEventListener(CALENDAR_EVENTS_CHANGED, synchronize)
-  }, [])
+
+    repository.list(controller.signal)
+      .then((items) => {
+        if (controller.signal.aborted) return
+        isPending = false
+        setState((current) => !controller.signal.aborted && current.scope === scope ? {
+          ...current,
+          error: null,
+          // A slow list response must not undo a mutation that already succeeded.
+          events: changes.reduce(applyCalendarChange, items),
+          hasLoaded: true,
+          isLoading: false,
+        } : current)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        isPending = false
+        setState((current) => !controller.signal.aborted && current.scope === scope
+          ? { ...current, error, isLoading: false }
+          : current)
+      })
+
+    return () => {
+      controller.abort()
+      if (activeLoad.current === controller) activeLoad.current = null
+      window.removeEventListener(CALENDAR_EVENTS_CHANGED, synchronize)
+    }
+  }, [ownerKey, repository, scope, reloadVersion])
+
+  const reload = useCallback(() => {
+    if (!repository || ownerKey === undefined || ownerKey === '' || activeScope.current !== scope) return
+    // Invalidate now: batched promise callbacks can run before effect cleanup.
+    activeLoad.current?.abort()
+    setState((current) => current.scope === scope
+      ? { ...current, error: null, isLoading: true }
+      : current)
+    setReloadVersion((version) => version + 1)
+  }, [ownerKey, repository, scope])
+
+  const ensureActiveScope = useCallback(() => {
+    if (activeScope.current !== scope) {
+      throw new DOMException('일정 요청이 취소되었습니다.', 'AbortError')
+    }
+  }, [scope])
 
   const addEvent = useCallback(
     async (input: CreateCalendarEventInput) => {
-      if (!repository) throw new Error('인증된 일정 API가 필요합니다.')
-      const event = await repository.create(input)
-      notifyCalendarChanged({ event, type: 'upsert' })
+      ensureActiveScope()
+      if (!repository || ownerKey === undefined || ownerKey === '') throw new Error('인증된 일정 API가 필요합니다.')
+      let event: CalendarEvent
+      try {
+        event = await repository.create(input)
+      } finally {
+        // Late successes and failures must not reach a different session's UI.
+        ensureActiveScope()
+      }
+      notifyCalendarChanged({ event, ownerKey, type: 'upsert' })
       return event
     },
-    [repository],
+    [ensureActiveScope, ownerKey, repository],
   )
 
   const updateEvent = useCallback(
     async (event: CalendarEvent, input: UpdateCalendarEventInput) => {
-      if (!repository || event.kind !== 'PERSONAL') {
+      ensureActiveScope()
+      if (!repository || ownerKey === undefined || ownerKey === '' || event.kind !== 'PERSONAL') {
         throw new Error('개인 일정만 수정할 수 있습니다.')
       }
-      const updated = await repository.update(event.backendId, input)
-      notifyCalendarChanged({ event: updated, type: 'upsert' })
+      let updated: CalendarEvent
+      try {
+        updated = await repository.update(event.backendId, input)
+      } finally {
+        ensureActiveScope()
+      }
+      notifyCalendarChanged({ event: updated, ownerKey, type: 'upsert' })
       return updated
     },
-    [repository],
+    [ensureActiveScope, ownerKey, repository],
   )
 
   const removeEvent = useCallback(
     async (event: CalendarEvent) => {
-      if (!repository || event.kind !== 'PERSONAL') {
+      ensureActiveScope()
+      if (!repository || ownerKey === undefined || ownerKey === '' || event.kind !== 'PERSONAL') {
         throw new Error('개인 일정만 삭제할 수 있습니다.')
       }
-      await repository.remove(event.backendId)
-      notifyCalendarChanged({ eventId: event.id, type: 'remove' })
+      try {
+        await repository.remove(event.backendId)
+      } finally {
+        ensureActiveScope()
+      }
+      notifyCalendarChanged({ eventId: event.id, ownerKey, type: 'remove' })
     },
-    [repository],
+    [ensureActiveScope, ownerKey, repository],
   )
 
-  return { addEvent, error, events, isLoading, removeEvent, updateEvent }
+  return {
+    addEvent,
+    error: state.error,
+    events: state.events,
+    hasLoaded: state.hasLoaded,
+    isLoading: state.isLoading,
+    reload,
+    removeEvent,
+    updateEvent,
+  }
 }
 
 export function getCalendarEventKindLabel(kind: CalendarEventKind): string {
@@ -184,7 +297,7 @@ function compareEvents(left: CalendarEvent, right: CalendarEvent): number {
   return new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime()
 }
 
-function notifyCalendarChanged(detail: { event?: CalendarEvent; eventId?: string; type: 'remove' | 'upsert' }) {
+function notifyCalendarChanged(detail: CalendarChange) {
   window.dispatchEvent(new CustomEvent(CALENDAR_EVENTS_CHANGED, { detail }))
 }
 

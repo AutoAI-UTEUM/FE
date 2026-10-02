@@ -595,8 +595,10 @@ describe('instructor pages', () => {
     fetchMock.mockRestore()
   })
 
-  it('switches between calendar views', () => {
+  it('switches between calendar views', async () => {
+    stubCalendarApi()
     renderCalendar()
+    await screen.findByRole('region', { name: '월간 캘린더' })
 
     fireEvent.change(screen.getByLabelText('캘린더 보기'), { target: { value: 'list' } })
     expect(
@@ -631,8 +633,10 @@ describe('instructor pages', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('moves between months with the calendar wheel and returns to this month', () => {
+  it('moves between months with the calendar wheel and returns to this month', async () => {
+    stubCalendarApi()
     renderCalendar()
+    await screen.findByRole('region', { name: '월간 캘린더' })
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
     const monthCalendar = screen.getByRole('region', { name: '월간 캘린더' })
@@ -652,8 +656,10 @@ describe('instructor pages', () => {
     expect(screen.queryByRole('button', { name: '이번 달' })).not.toBeInTheDocument()
   })
 
-  it('places the schedule action inside the schedule panel in a fixed-height layout', () => {
+  it('places the schedule action inside the schedule panel in a fixed-height layout', async () => {
+    stubCalendarApi()
     renderCalendar()
+    await screen.findByRole('region', { name: '월간 캘린더' })
     const viewControls = screen.getByLabelText('캘린더 보기')
     expect(viewControls.closest('[data-page-toolbar="filters"]')).toBeInTheDocument()
     const addButton = screen.getByRole('button', { name: '일정 추가' })
@@ -672,7 +678,8 @@ describe('instructor pages', () => {
     expect(screen.queryByText(/자동으로 파생/)).not.toBeInTheDocument()
   })
 
-  it('stacks the selected-day schedule below a full-width calendar in tablet portrait', () => {
+  it('stacks the selected-day schedule below a full-width calendar in tablet portrait', async () => {
+    stubCalendarApi()
     const viewportSpy = vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
       isMobileWeb: true,
       isPhone: false,
@@ -685,6 +692,7 @@ describe('instructor pages', () => {
     const widthSpy = vi.spyOn(responsive, 'useElementWidth').mockReturnValue([vi.fn(), 1000])
 
     const { unmount } = renderCalendar()
+    await screen.findByRole('region', { name: '월간 캘린더' })
 
     const calendar = screen.getByRole('region', { name: '캘린더 본문' })
     const schedule = screen.getByRole('complementary')
@@ -712,8 +720,10 @@ describe('instructor pages', () => {
     widthSpy.mockRestore()
   })
 
-  it('uses distinct colors for Saturday and Sunday dates', () => {
+  it('uses distinct colors for Saturday and Sunday dates', async () => {
+    stubCalendarApi()
     renderCalendar()
+    await screen.findByRole('region', { name: '월간 캘린더' })
 
     fireEvent.click(screen.getByRole('button', { name: '연도와 월 선택' }))
     fireEvent.change(screen.getByLabelText('연도 선택'), {
