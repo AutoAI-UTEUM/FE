@@ -13,9 +13,10 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { ClassroomWeek } from '../../../features/classrooms'
+import { useFocusScope } from '../../../shared/responsive'
 import { Badge, Button, Select } from '../../../shared/ui'
 import type { ClassroomResourcePreviewValue } from './classroomContentModel'
 
@@ -51,6 +52,8 @@ export function ClassroomResourceUploadDialog({
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const uploadInFlightRef = useRef(false)
   const titleError = title.trim() ? null : '자료 제목을 입력하세요.'
   const fileError = file && file.size > MAX_RESOURCE_FILE_BYTES
     ? '파일은 최대 45MB까지 업로드할 수 있습니다.'
@@ -58,13 +61,10 @@ export function ClassroomResourceUploadDialog({
   const urlError = mode === 'link' && url ? validateWebUrl(url) : null
   const canPreview = !titleError && !fileError && (mode === 'file' ? Boolean(file) : Boolean(url) && !urlError)
 
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
+  const close = () => {
+    if (!isUploading && !uploadInFlightRef.current) onClose()
+  }
+  useFocusScope(dialogRef, true, close)
 
   function selectFile(nextFile: File | null) {
     setFile(nextFile)
@@ -73,34 +73,40 @@ export function ClassroomResourceUploadDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!canPreview || isUploading) return
+    if (!canPreview || isUploading || uploadInFlightRef.current) return
 
-    if (mode === 'link') {
+    uploadInFlightRef.current = true
+    try {
+      if (mode === 'link') {
+        await onUpload({
+          title: title.trim(),
+          type: 'LINK',
+          url: normalizeWebUrl(url),
+          weekNumber,
+        })
+        return
+      }
+
+      if (!file) return
       await onUpload({
+        file,
         title: title.trim(),
-        type: 'LINK',
-        url: normalizeWebUrl(url),
+        type: 'FILE',
         weekNumber,
       })
-      return
+    } finally {
+      uploadInFlightRef.current = false
     }
-
-    if (!file) return
-    await onUpload({
-      file,
-      title: title.trim(),
-      type: 'FILE',
-      weekNumber,
-    })
   }
 
   return (
     <div
+      ref={dialogRef}
       aria-label="자료 업로드"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isUploading) onClose()
+        if (event.target === event.currentTarget) close()
       }}
       role="dialog"
     >
@@ -110,7 +116,8 @@ export function ClassroomResourceUploadDialog({
           <button
             aria-label="자료 업로드 닫기"
             className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            onClick={onClose}
+            disabled={isUploading}
+            onClick={close}
             type="button"
           >
             <X aria-hidden="true" size={17} />
@@ -119,6 +126,7 @@ export function ClassroomResourceUploadDialog({
 
         <div aria-label="자료 유형" className="mt-5 grid grid-cols-2 rounded-lg bg-stone-100 p-1" role="group">
           <button
+            data-autofocus
             aria-pressed={mode === 'file'}
             className={modeButtonClass(mode === 'file')}
             onClick={() => setMode('file')}
@@ -196,7 +204,7 @@ export function ClassroomResourceUploadDialog({
         </label>
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose} variant="secondary">취소</Button>
+          <Button disabled={isUploading} onClick={close} variant="secondary">취소</Button>
           <Button disabled={!canPreview || isUploading} type="submit">
             {isUploading ? '업로드 중' : '업로드'}
           </Button>
@@ -312,46 +320,48 @@ export function ClassroomResourceEditDialog({
   const [title, setTitle] = useState(resource.title)
   const [weekNumber, setWeekNumber] = useState<number | null>(resource.weekNumber)
   const [isSaving, setIsSaving] = useState(false)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const saveInFlightRef = useRef(false)
   const orderedWeeks = useMemo(
     () => [...weeks].sort((left, right) => left.weekNumber - right.weekNumber),
     [weeks],
   )
 
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !isSaving) onClose()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [isSaving, onClose])
+  const close = () => {
+    if (!isSaving && !saveInFlightRef.current) onClose()
+  }
+  useFocusScope(dialogRef, true, close)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!title.trim() || isSaving) return
+    if (!title.trim() || isSaving || saveInFlightRef.current) return
+    saveInFlightRef.current = true
     setIsSaving(true)
     try {
       if (await onSave({ title: title.trim(), weekNumber })) onClose()
     } finally {
+      saveInFlightRef.current = false
       setIsSaving(false)
     }
   }
 
   return (
     <div
+      ref={dialogRef}
       aria-label="일반 자료 수정"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4"
-      onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) onClose() }}
+      onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}
       role="dialog"
     >
       <form className="w-full max-w-md rounded-lg bg-white p-5 " onSubmit={submit}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="type-dialog-title font-bold text-stone-950">일반 자료 수정</h2>
-          <button aria-label="일반 자료 수정 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isSaving} onClick={onClose} type="button"><X size={17} /></button>
+          <button aria-label="일반 자료 수정 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isSaving} onClick={close} type="button"><X size={17} /></button>
         </div>
         <label className="mt-5 block type-control font-semibold text-stone-800">
           주차 선택
-          <Select className="mt-1 w-full" onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)} value={weekNumber ?? ''}>
+          <Select data-autofocus className="mt-1 w-full" onChange={(event) => setWeekNumber(event.target.value ? Number(event.target.value) : null)} value={weekNumber ?? ''}>
             <option value="">전체 항목</option>
             {orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}
           </Select>
@@ -361,7 +371,7 @@ export function ClassroomResourceEditDialog({
           <input className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={200} onChange={(event) => setTitle(event.target.value)} value={title} />
         </label>
         <div className="mt-5 flex justify-end gap-2">
-          <Button disabled={isSaving} onClick={onClose} variant="secondary">취소</Button>
+          <Button disabled={isSaving} onClick={close} variant="secondary">취소</Button>
           <Button disabled={!title.trim() || isSaving} type="submit">{isSaving ? '저장 중' : '저장'}</Button>
         </div>
       </form>

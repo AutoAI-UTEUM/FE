@@ -21,7 +21,7 @@ export function PageHeader({
         {pathRoot ? (
           <p
             aria-hidden="true"
-            className="flex items-center gap-1.5 type-caption text-stone-400"
+            className="flex items-center gap-1.5 type-caption text-stone-600"
             data-page-path="true"
           >
             <span>{pathRoot}</span>
