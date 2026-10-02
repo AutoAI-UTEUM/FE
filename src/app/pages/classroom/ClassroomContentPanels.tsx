@@ -1,5 +1,5 @@
 import { ArrowLeft, Pencil, Save, Send, Trash2 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import type { ClassroomNotice, ClassroomNoticeInput } from '../../../features/classrooms'
 import { ExamEditor } from '../../../features/exams/ExamEditor'
@@ -223,6 +223,11 @@ function ExamEditorPanel({
   onSaved,
   repository,
 }: Omit<ExamContentPanelProps, 'exam'> & { exam: Exam | null }) {
+  const activeRef = useRef(false)
+  useEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false }
+  }, [])
   const { show } = useToast()
   const workArea = useTabletWorkArea()
   const [draft, setDraft] = useState<CreateExamInput>(() => exam ? examToDraft(exam) : createInitialDraft(initialWeekNumber))
@@ -236,12 +241,14 @@ function ExamEditorPanel({
       const saved = exam
         ? await repository.update(exam.id, { ...draft, title: draft.title.trim() })
         : await repository.create(classroomId, { ...draft, title: draft.title.trim() })
+      if (!activeRef.current) return
       onSaved(saved)
       show(exam ? '시험을 수정했습니다.' : '시험 초안을 만들었습니다.', 'success')
     } catch (error) {
+      if (!activeRef.current) return
       show(getRequestErrorMessage(error), 'danger')
     } finally {
-      setIsSubmitting(false)
+      if (activeRef.current) setIsSubmitting(false)
     }
   }
 
@@ -250,12 +257,14 @@ function ExamEditorPanel({
     setIsSubmitting(true)
     try {
       const published = await repository.publish(exam.id)
+      if (!activeRef.current) return
       onSaved(published)
       show('시험을 공개했습니다.', 'success')
     } catch (error) {
+      if (!activeRef.current) return
       show(getRequestErrorMessage(error), 'danger')
     } finally {
-      setIsSubmitting(false)
+      if (activeRef.current) setIsSubmitting(false)
     }
   }
 
@@ -264,11 +273,13 @@ function ExamEditorPanel({
     setIsSubmitting(true)
     try {
       await repository.delete(exam.id)
+      if (!activeRef.current) return
       onDeleted(exam.id)
       show('시험을 삭제했습니다.', 'success')
     } catch (error) {
+      if (!activeRef.current) return
       show(getRequestErrorMessage(error), 'danger')
-      setIsSubmitting(false)
+      if (activeRef.current) setIsSubmitting(false)
     }
   }
 

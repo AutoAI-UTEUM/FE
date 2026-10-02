@@ -796,9 +796,10 @@ describe('instructor pages', () => {
 
   it('opens the learning status for the classroom selected in the URL', async () => {
     const fetchMock = stubClassroomsApi()
-    renderInstructorPage(
+    renderInstructorRoute(
       <InstructorLearningStatusPage />,
-      ['/classrooms/12/analytics'],
+      '/classrooms/12/analytics',
+      '/classrooms/:classroomId/analytics',
     )
 
     expect(await screen.findByRole('link', { name: '학습현황' })).toHaveAttribute('aria-current', 'page')
