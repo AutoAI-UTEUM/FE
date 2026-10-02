@@ -535,6 +535,285 @@ describe('useSessionChat stream readiness', () => {
   })
 })
 
+describe('useSessionChat existing-turn recovery', () => {
+  it('recovers a newly saved quiz without an AI message or completed stream event', async () => {
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn()
+        .mockResolvedValueOnce(session('573'))
+        .mockResolvedValue(session('573', 'quiz-new')),
+      listQuizzes: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([quiz('quiz-new')]),
+      stream: vi.fn().mockResolvedValue(undefined),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let recovered: SessionTurnResult | undefined
+    await act(async () => {
+      recovered = await result.current.waitForTurnCompletion(onResult)
+    })
+
+    expect(recovered).toMatchObject({
+      activeQuizId: 'quiz-new',
+      currentPage: 1,
+      messages: [],
+      pageStatus: 'QUIZ_READY',
+    })
+    expect(onResult).toHaveBeenCalledExactlyOnceWith(recovered)
+    expect(repository.submitTurn).not.toHaveBeenCalled()
+    expect(repository.getById).toHaveBeenCalledTimes(2)
+    expect(repository.listQuizzes).toHaveBeenCalledTimes(2)
+    expect(result.current.isTurnPending).toBe(false)
+    expect(result.current.streamNotice).toBeNull()
+  })
+
+  it.each(['quiz-existing', 'quiz-other'])('does not finish for a previously saved quiz: %s', async (activeQuizId) => {
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn()
+        .mockResolvedValueOnce(session('573', 'quiz-existing'))
+        .mockResolvedValue(session('573', activeQuizId)),
+      listQuizzes: vi.fn().mockResolvedValue([
+        quiz('quiz-existing'),
+        quiz('quiz-other'),
+      ]),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+    vi.useFakeTimers()
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion(onResult) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+
+    expect(repository.getById).toHaveBeenCalledTimes(4)
+    expect(onResult).not.toHaveBeenCalled()
+    expect(result.current.isTurnPending).toBe(true)
+    await act(async () => {
+      expect(await result.current.waitForTurnCompletion(onResult)).toBeUndefined()
+      expect(await result.current.cancelTurn()).toBe(true)
+      expect(await waitPromise).toEqual(emptyTurnResult())
+    })
+    expect(repository.stream).toHaveBeenCalledOnce()
+    expect(result.current.isTurnPending).toBe(false)
+    expect(result.current.streamNotice).toBeNull()
+  })
+
+  it('does not treat a quiz from the supplied pre-request snapshot as newly saved', async () => {
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn().mockResolvedValue(session('573', 'quiz-previous')),
+      listQuizzes: vi.fn().mockResolvedValue([quiz('quiz-previous')]),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+    vi.useFakeTimers()
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => {
+      waitPromise = result.current.waitForTurnCompletion(onResult, {
+        quizIds: new Set(['quiz-previous']),
+      })
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500) })
+
+    expect(onResult).not.toHaveBeenCalled()
+    expect(result.current.isTurnPending).toBe(true)
+    await act(async () => {
+      await result.current.cancelTurn()
+      await waitPromise
+    })
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('requires the new active quiz to be present in the saved quiz list', async () => {
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn()
+        .mockResolvedValueOnce(session('573'))
+        .mockResolvedValue(session('573', 'quiz-not-saved')),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+    vi.useFakeTimers()
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion(onResult) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500) })
+
+    expect(onResult).not.toHaveBeenCalled()
+    expect(result.current.isTurnPending).toBe(true)
+    vi.mocked(repository.listQuizzes).mockResolvedValue([quiz('quiz-not-saved')])
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_500)
+      await waitPromise
+    })
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({
+      activeQuizId: 'quiz-not-saved',
+    }))
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('does not infer quiz completion from an incomplete baseline', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn().mockResolvedValue(session('573', 'quiz-existing')),
+      listQuizzes: vi.fn()
+        .mockRejectedValueOnce(new Error('Quiz history is temporarily unavailable'))
+        .mockResolvedValue([quiz('quiz-existing')]),
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        return resolveWhenAborted(signal)
+      }),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+    vi.useFakeTimers()
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion(onResult) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500) })
+
+    expect(onResult).not.toHaveBeenCalled()
+    expect(result.current.isTurnPending).toBe(true)
+    await act(async () => {
+      handlers?.onCompleted?.(undefined, emptyTurnResult())
+      await waitPromise
+    })
+    expect(onResult).toHaveBeenCalledExactlyOnceWith(emptyTurnResult())
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('does not apply a late baseline or stream completion after cancellation', async () => {
+    let resolveBaseline: ((value: ReturnType<typeof session>) => void) | undefined
+    let handlers: SessionStreamHandlers | undefined
+    const onResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn().mockImplementation(() => new Promise((resolve) => {
+        resolveBaseline = resolve
+      })),
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        return resolveWhenAborted(signal)
+      }),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion(onResult) })
+    await act(async () => {
+      expect(await result.current.cancelTurn()).toBe(true)
+      handlers?.onCompleted?.(
+        { content: '취소된 노트', title: '취소된 노트' },
+        { activeQuizId: 'quiz-cancelled', messages: [], uiActions: [] },
+      )
+      resolveBaseline?.(session('573'))
+      expect(await waitPromise).toEqual(emptyTurnResult())
+    })
+
+    expect(onResult).not.toHaveBeenCalled()
+    expect(repository.listMessages).toHaveBeenCalledOnce()
+    expect(result.current.isTurnPending).toBe(false)
+    expect(result.current.streamNotice).toBeNull()
+    expect(result.current.noteDraft).toBeNull()
+  })
+
+  it('does not apply a completed stream result when waiting is cancelled before it settles', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    const onResult = vi.fn()
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        return resolveWhenAborted(signal)
+      }),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion(onResult) })
+    await act(async () => {
+      handlers?.onCompleted?.(undefined, {
+        activeQuizId: 'quiz-cancelled',
+        messages: [],
+        uiActions: [],
+      })
+      expect(await result.current.cancelTurn()).toBe(true)
+      expect(await waitPromise).toEqual(emptyTurnResult())
+    })
+
+    expect(onResult).not.toHaveBeenCalled()
+    expect(result.current.isTurnPending).toBe(false)
+    expect(result.current.streamNotice).toBeNull()
+  })
+
+  it('does not let late quiz recovery from a previous session settle its replacement wait', async () => {
+    let resolveSessionA: ((value: ReturnType<typeof session>) => void) | undefined
+    let sessionACalls = 0
+    const handlers: SessionStreamHandlers[] = []
+    const onOldResult = vi.fn()
+    const onNewResult = vi.fn()
+    const repository = createRepository({
+      getById: vi.fn().mockImplementation((sessionId) => {
+        if (sessionId === 'A' && ++sessionACalls > 1) {
+          return new Promise((resolve) => { resolveSessionA = resolve })
+        }
+        return Promise.resolve(session(sessionId))
+      }),
+      listQuizzes: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([quiz('quiz-session-a')])
+        .mockResolvedValue([]),
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers.push(nextHandlers)
+        return resolveWhenAborted(signal)
+      }),
+    })
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useSessionChat(repository, sessionId),
+      { initialProps: { sessionId: 'A' } },
+    )
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let oldWaitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { oldWaitPromise = result.current.waitForTurnCompletion(onOldResult) })
+    const supersededExpectation = expect(oldWaitPromise).rejects.toMatchObject({
+      code: 'TURN_ATTEMPT_SUPERSEDED',
+    })
+    await waitFor(() => expect(resolveSessionA).toBeTypeOf('function'))
+    rerender({ sessionId: 'B' })
+
+    let newWaitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { newWaitPromise = result.current.waitForTurnCompletion(onNewResult) })
+    await act(async () => {
+      handlers[0]?.onCompleted?.(
+        { content: 'A 세션의 노트', title: '이전 세션' },
+        { activeQuizId: 'quiz-session-a', messages: [], uiActions: [] },
+      )
+      resolveSessionA?.(session('A', 'quiz-session-a'))
+      await supersededExpectation
+    })
+
+    expect(onOldResult).not.toHaveBeenCalled()
+    expect(onNewResult).not.toHaveBeenCalled()
+    expect(result.current.messages).toEqual([])
+    expect(result.current.noteDraft).toBeNull()
+    expect(result.current.isTurnPending).toBe(true)
+    expect(result.current.streamNotice).not.toBeNull()
+
+    await act(async () => {
+      handlers[1]?.onCompleted?.(undefined, emptyTurnResult())
+      await newWaitPromise
+    })
+    expect(onNewResult).toHaveBeenCalledExactlyOnceWith(emptyTurnResult())
+    expect(result.current.isTurnPending).toBe(false)
+  })
+})
+
 function createRepository(
   overrides: Partial<SessionsRepository> = {},
 ): SessionsRepository {
