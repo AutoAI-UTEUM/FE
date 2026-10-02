@@ -31,7 +31,7 @@ export interface ExamQuestion extends ExamQuestionInput {
   maxScore: number
 }
 
-export interface Exam {
+export interface ExamSummary {
   allowRetake: boolean
   classroomId: string
   closedAt?: string
@@ -41,15 +41,20 @@ export interface Exam {
   id: string
   mySubmission?: ExamSubmissionSummary
   publishedAt?: string
-  questionCount: number
-  questions: ExamQuestion[]
+  questionCount?: number
   status: ExamStatus
   submissionCount?: number
   submittable?: boolean
   title: string
-  totalScore: number
+  totalScore?: number
   updatedAt?: string
   weekNumber?: number
+}
+
+export interface Exam extends ExamSummary {
+  totalScore: number
+  questionCount: number
+  questions: ExamQuestion[]
 }
 
 export interface ExamSubmissionSummary {
@@ -142,7 +147,7 @@ export interface ExamsRepository {
   getSubmission: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
   adjustScore: (examId: string, submissionId: string, questionId: string, score: number, signal?: AbortSignal) => Promise<ExamSubmission>
   generateDraftQuestions: (classroomId: string, examId: string, input: GenerateExamDraftInput, signal?: AbortSignal) => Promise<ExamDraftResult>
-  list: (classroomId: string, status?: ExamStatus, signal?: AbortSignal) => Promise<Exam[]>
+  list: (classroomId: string, status?: ExamStatus, signal?: AbortSignal) => Promise<ExamSummary[]>
   listSubmissions: (examId: string, signal?: AbortSignal) => Promise<InstructorSubmissionSummary[]>
   publish: (examId: string, signal?: AbortSignal) => Promise<Exam>
   regrade: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
@@ -187,6 +192,29 @@ interface ExamDraftResponseDto {
   schemaVersion?: string
   truncated?: boolean
 }
+// Classroom-scoped list responses are summaries, not exam detail responses.
+// Neither instructor nor learner lists include classroomId or questions/count.
+interface ExamListItemDto {
+  allowRetake: boolean
+  closedAt?: string | null
+  createdAt?: string
+  description?: string | null
+  dueAt?: string | null
+  examId: number | string
+  latestSubmission?: ExamSubmissionSummaryDto | null
+  // Preserve existing compatibility fields only when explicitly returned.
+  mySubmission?: ExamSubmissionSummaryDto | null
+  questionCount?: number | null
+  publishedAt?: string | null
+  status: ExamStatus
+  submissionCount?: number
+  submittable?: boolean
+  title: string
+  totalScore?: number | null
+  updatedAt?: string
+  weekNumber?: number | null
+}
+
 interface ExamDto {
   allowRetake?: boolean
   classroomId: number | string
@@ -320,8 +348,8 @@ export function createExamsRepository(
     async list(classroomId, status, signal) {
       const params = new URLSearchParams({ page: '0', size: '100' })
       if (status) params.set('status', status)
-      const { data } = await request<PagedResponse<ExamDto>>(`/api/classrooms/${encodeURIComponent(classroomId)}/exams?${params}`, { signal })
-      return data.items.map(mapExam)
+      const { data } = await request<PagedResponse<ExamListItemDto>>(`/api/classrooms/${encodeURIComponent(classroomId)}/exams?${params}`, { signal })
+      return data.items.map((item) => mapExamSummary(item, classroomId))
     },
     async listSubmissions(examId, signal) {
       const { data } = await request<PagedResponse<SubmissionSummaryDto>>(`/api/exams/${encodeURIComponent(examId)}/submissions?page=0&size=100`, { signal })
@@ -489,6 +517,29 @@ async function readRawSuccess<T>(response: Response): Promise<T> {
 
 function toApiId(value: string): string | number {
   return /^\d+$/.test(value) ? Number(value) : value
+}
+
+function mapExamSummary(value: ExamListItemDto, classroomId: string): ExamSummary {
+  const latestSubmission = value.latestSubmission !== undefined ? value.latestSubmission : value.mySubmission
+  return {
+    allowRetake: value.allowRetake,
+    classroomId,
+    closedAt: value.closedAt ?? undefined,
+    createdAt: value.createdAt,
+    description: value.description ?? undefined,
+    dueAt: value.dueAt ?? undefined,
+    id: String(value.examId),
+    mySubmission: latestSubmission ? mapLatestSubmission(latestSubmission) : undefined,
+    publishedAt: value.publishedAt ?? undefined,
+    questionCount: value.questionCount ?? undefined,
+    status: value.status,
+    submissionCount: value.submissionCount,
+    submittable: value.submittable,
+    title: value.title,
+    totalScore: value.totalScore ?? undefined,
+    updatedAt: value.updatedAt,
+    weekNumber: value.weekNumber ?? undefined,
+  }
 }
 
 function mapExam(value: ExamDto): Exam {

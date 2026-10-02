@@ -1,13 +1,13 @@
 import { ArrowLeft, Pencil, Save, Send, Trash2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 import type { ClassroomNotice, ClassroomNoticeInput } from '../../../features/classrooms'
 import { ExamEditor } from '../../../features/exams/ExamEditor'
 import { createQuestion, isExamDraftValid } from '../../../features/exams/examEditorModel'
-import type { CreateExamInput, Exam, ExamsRepository } from '../../../features/exams/examsRepository'
+import type { CreateExamInput, Exam, ExamSummary, ExamsRepository } from '../../../features/exams/examsRepository'
 import { getRequestErrorMessage } from '../../../shared/api'
 import { formatDateTime } from '../../../shared/lib/format'
-import { Badge, Button, useToast } from '../../../shared/ui'
+import { Badge, Button, EmptyState, useToast } from '../../../shared/ui'
 import { useTabletWorkArea } from '../../../shared/responsive/useTabletWorkArea'
 import { MarkdownContent } from '../../../shared/ui/MarkdownContent'
 import { MarkdownEditor } from '../../../shared/ui/MarkdownEditor'
@@ -162,7 +162,58 @@ function toDateTimeLocal(value?: string | null): string {
   return localDate.toISOString().slice(0, 16)
 }
 
-export function ExamContentPanel({
+interface ExamContentPanelProps {
+  classroomId: string
+  disabled: boolean
+  exam: ExamSummary | null
+  initialWeekNumber?: number
+  onClose: () => void
+  onDeleted: (examId: string) => void
+  onSaved: (exam: Exam) => void
+  repository: ExamsRepository
+}
+
+export function ExamContentPanel(props: ExamContentPanelProps) {
+  return props.exam
+    ? <ExistingExamContentPanel {...props} exam={props.exam} key={`${props.classroomId}:${props.exam.id}`} />
+    : <ExamEditorPanel {...props} exam={null} />
+}
+
+function ExistingExamContentPanel(props: ExamContentPanelProps & { exam: ExamSummary }) {
+  const { classroomId, exam: { id: examId }, onClose, repository } = props
+  const [exam, setExam] = useState<Exam | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
+
+  // Fetch only the selected exam. A refreshed list row must not reset a dirty draft.
+  useEffect(() => {
+    const controller = new AbortController()
+    repository.get(examId, controller.signal)
+      .then((detail) => {
+        if (controller.signal.aborted) return
+        if (detail.classroomId !== classroomId) {
+          setError('시험의 강의실 정보를 확인해 주세요.')
+          return
+        }
+        setExam(detail)
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
+      })
+    return () => controller.abort()
+  }, [classroomId, examId, repository, retry])
+
+  if (exam) return <ExamEditorPanel {...props} exam={exam} onSaved={(saved) => { setExam(saved); props.onSaved(saved) }} />
+
+  return <section className="rounded-lg border border-stone-200 bg-white p-5">
+    <Button aria-label="목록으로 돌아가기" onClick={onClose} variant="ghost"><ArrowLeft size={16} />목록으로</Button>
+    {error
+      ? <EmptyState action={<Button onClick={() => { setError(null); setRetry((count) => count + 1) }} variant="secondary">다시 시도</Button>} description={error} title="시험을 불러오지 못했습니다" />
+      : <p className="py-16 text-center type-body text-stone-500" role="status">시험을 불러오는 중입니다.</p>}
+  </section>
+}
+
+function ExamEditorPanel({
   classroomId,
   disabled,
   exam,
@@ -171,16 +222,7 @@ export function ExamContentPanel({
   onDeleted,
   onSaved,
   repository,
-}: {
-  classroomId: string
-  disabled: boolean
-  exam: Exam | null
-  initialWeekNumber?: number
-  onClose: () => void
-  onDeleted: (examId: string) => void
-  onSaved: (exam: Exam) => void
-  repository: ExamsRepository
-}) {
+}: Omit<ExamContentPanelProps, 'exam'> & { exam: Exam | null }) {
   const { show } = useToast()
   const workArea = useTabletWorkArea()
   const [draft, setDraft] = useState<CreateExamInput>(() => exam ? examToDraft(exam) : createInitialDraft(initialWeekNumber))

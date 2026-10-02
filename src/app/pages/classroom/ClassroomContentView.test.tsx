@@ -324,8 +324,6 @@ const globalExam: ClassroomContentItem = {
     classroomId: '1',
     createdAt: '2026-08-03T00:00:00Z',
     id: '30',
-    questionCount: 0,
-    questions: [],
     mySubmission: {
       attemptNo: 1,
       id: '300',

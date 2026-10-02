@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ApiSuccess } from '../../shared/api'
+import { instructorExamListItem, learnerExamListItem } from '../../test/examListFixtures'
 import type { AuthenticatedRawRequest, AuthenticatedRequest } from '../auth'
 import { buildExamSubmissionAnswers, createExamsRepository, isBlankExamAnswer, type CreateExamInput } from './examsRepository'
 
@@ -30,6 +31,113 @@ const submissionDto = {
 }
 
 describe('exams repository', () => {
+  it.each([
+    ['learner', learnerExamListItem],
+    ['instructor', instructorExamListItem],
+  ])('maps the %s list contract with the requested classroom and unknown question count', async (_role, item) => {
+    const request = vi.fn().mockResolvedValue(success({ items: [item], page: 0, size: 100, totalElements: 1, totalPages: 1 }))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+    const signal = new AbortController().signal
+
+    const [exam] = await repository.list('47', undefined, signal)
+
+    expect(exam.classroomId).toBe('47')
+    expect(exam.questionCount).toBeUndefined()
+    expect(exam).not.toHaveProperty('questions')
+    expect(exam.totalScore).toBe(item.totalScore)
+    expect(request).toHaveBeenCalledExactlyOnceWith('/api/classrooms/47/exams?page=0&size=100', { signal })
+  })
+
+  it('keeps concurrent classroom lists separate without fetching exam details', async () => {
+    const request = vi.fn().mockImplementation(async (path: string) => success({
+      items: [{ ...learnerExamListItem, examId: path.includes('/47/') ? 30 : 31 }],
+      page: 0, size: 100, totalElements: 1, totalPages: 1,
+    }))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+
+    const exams = (await Promise.all(['47', '58'].map((id) => repository.list(id)))).flat()
+
+    expect(exams.map(({ id, classroomId }) => ({ id, classroomId }))).toEqual([
+      { id: '30', classroomId: '47' },
+      { id: '31', classroomId: '58' },
+    ])
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['SUBMITTED', 'GRADING_FAILED'] as const)('retains the latest %s attempt and unknown scores', async (status) => {
+    const request = vi.fn().mockResolvedValue(success({
+      items: [{ ...learnerExamListItem, latestSubmission: { attemptNo: 3, submissionId: 302, status, score: null, maxScore: null, normalizedScore: null } }],
+      page: 0, size: 100, totalElements: 1, totalPages: 1,
+    }))
+    const [exam] = await createExamsRepository(request as AuthenticatedRequest).list('47')
+
+    expect(exam.mySubmission).toEqual({ attemptNo: 3, id: '302', status, score: undefined, maxScore: undefined, normalizedScore: undefined })
+  })
+
+  it('preserves zero scores and a missing latest submission', async () => {
+    const request = vi.fn().mockResolvedValue(success({
+      items: [
+        { ...learnerExamListItem, latestSubmission: { ...learnerExamListItem.latestSubmission, score: 0, normalizedScore: 0 } },
+        { ...learnerExamListItem, examId: 31, latestSubmission: null },
+      ],
+      page: 0, size: 100, totalElements: 2, totalPages: 1,
+    }))
+    const [scored, unsubmitted] = await createExamsRepository(request as AuthenticatedRequest).list('47')
+
+    expect(scored.mySubmission).toMatchObject({ score: 0, normalizedScore: 0, maxScore: 200 })
+    expect(unsubmitted.mySubmission).toBeUndefined()
+  })
+
+  it.each(['2026-08-04T00:00:00Z', null])('preserves and normalizes the list closedAt metadata (%s)', async (closedAt) => {
+    const request = vi.fn().mockResolvedValue(success({ items: [{ ...instructorExamListItem, closedAt, status: 'CLOSED' }] }))
+    const [exam] = await createExamsRepository(request as AuthenticatedRequest).list('47')
+
+    expect(exam.closedAt).toBe(closedAt ?? undefined)
+  })
+
+  it.each([0, 4])('preserves an explicit legacy count of %i and trusts the request classroom', async (questionCount) => {
+    const request = vi.fn().mockResolvedValue(success({ items: [{ ...instructorExamListItem, classroomId: 999, questionCount, totalScore: 0 }] }))
+    const [exam] = await createExamsRepository(request as AuthenticatedRequest).list('47')
+
+    expect(exam).toMatchObject({ classroomId: '47', questionCount, totalScore: 0 })
+    expect(exam).not.toHaveProperty('questions')
+  })
+
+  it.each([undefined, null])('keeps an absent or null total unknown (%s)', async (totalScore) => {
+    const request = vi.fn().mockResolvedValue(success({ items: [{ ...instructorExamListItem, totalScore }] }))
+    const [exam] = await createExamsRepository(request as AuthenticatedRequest).list('47')
+
+    expect(exam.totalScore).toBeUndefined()
+  })
+
+  it.each([
+    ['SUBMITTED', { attemptNo: 3, submissionId: 302, status: 'SUBMITTED', score: null, maxScore: null, normalizedScore: null }, '302'],
+    ['GRADING_FAILED', { attemptNo: 3, submissionId: 302, status: 'GRADING_FAILED', score: null, maxScore: null, normalizedScore: null }, '302'],
+    ['explicitly absent', null, undefined],
+    ['legacy-only', undefined, '301'],
+  ])('uses the authoritative latest submission when %s', async (_case, latestSubmission, expectedId) => {
+    const request = vi.fn().mockResolvedValue(success({ items: [{
+      ...learnerExamListItem, latestSubmission, mySubmission: learnerExamListItem.latestSubmission,
+    }] }))
+    const [exam] = await createExamsRepository(request as AuthenticatedRequest).list('47')
+
+    expect(exam.mySubmission?.id).toBe(expectedId)
+    if (latestSubmission !== undefined) expect(exam.mySubmission?.score).toBeUndefined()
+    else expect(exam.mySubmission).toMatchObject({ score: 10, maxScore: 200, normalizedScore: 5 })
+  })
+
+  it('preserves full detail question mapping and legitimate empty exams', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(success(examDto))
+      .mockResolvedValueOnce(success({ ...examDto, questionCount: 0, questions: [], totalScore: 0 }))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+
+    await expect(repository.get('10')).resolves.toMatchObject({
+      classroomId: '30', questionCount: 1, questions: [{ id: 'q1', maxScore: 20, points: 20 }], totalScore: 20,
+    })
+    await expect(repository.get('11')).resolves.toMatchObject({ questionCount: 0, questions: [], totalScore: 0 })
+  })
+
   it.each(['', '   ', '\u2003', '\u3000', '\u00a0', '\u202f'])(
     'treats %j as an unanswered final answer',
     (answer) => {
@@ -92,7 +200,7 @@ describe('exams repository', () => {
 
   it('connects instructor exam lifecycle endpoints and maps patch presence fields', async () => {
     const request = vi.fn()
-      .mockResolvedValueOnce(success({ items: [examDto], page: 0, size: 100, totalElements: 1, totalPages: 1 }))
+      .mockResolvedValueOnce(success({ items: [instructorExamListItem], page: 0, size: 100, totalElements: 1, totalPages: 1 }))
       .mockResolvedValueOnce(success(examDto))
       .mockResolvedValueOnce(success(examDto))
       .mockResolvedValueOnce(success(examDto))
@@ -102,7 +210,7 @@ describe('exams repository', () => {
     const repository = createExamsRepository(request as AuthenticatedRequest)
     const input: CreateExamInput = { allowRetake: false, dueAt: '2026-12-31T14:59:00Z', questions: [{ points: 20, questionText: '표준편차란?', questionType: 'SHORT', referenceAnswer: '퍼진 정도' }], title: '중간 점검', weekNumber: 4 }
 
-    await expect(repository.list('30', 'DRAFT')).resolves.toMatchObject([{ id: '10', questions: [{ id: 'q1', points: 20 }] }])
+    await expect(repository.list('30', 'DRAFT')).resolves.toMatchObject([{ id: '31', classroomId: '30', questionCount: undefined, totalScore: 20 }])
     await repository.create('30', input)
     await repository.get('10')
     await repository.update('10', { dueAt: input.dueAt, title: '수정 시험', questions: input.questions })

@@ -1,5 +1,5 @@
 import type { ClassroomMaterial, ClassroomNotice, ClassroomWeek } from '../../../features/classrooms'
-import type { Exam } from '../../../features/exams'
+import type { ExamSummary } from '../../../features/exams'
 
 export type ClassroomContentFilter = 'all' | 'exam' | 'material' | 'notice' | 'resource'
 
@@ -31,12 +31,12 @@ export type ClassroomContentItem =
   | { id: string; kind: 'material'; occurredAt: string; source: ClassroomMaterial; title: string; weekNumber: number; weekOrder: number }
   | { id: string; kind: 'resource'; occurredAt: string; source: ClassroomResource; title: string; weekNumber: number | null; weekOrder: number | null }
   | { id: string; kind: 'notice'; occurredAt: string; source: ClassroomNotice; title: string; weekNumber: number | null; weekOrder: number | null }
-  | { id: string; kind: 'exam'; occurredAt: string; source: Exam; title: string; weekNumber: number | null; weekOrder: number | null }
+  | { id: string; kind: 'exam'; occurredAt: string; source: ExamSummary; title: string; weekNumber: number | null; weekOrder: number | null }
 
 export function buildClassroomContent(
   weeks: ClassroomWeek[],
   notices: ClassroomNotice[],
-  exams: Exam[],
+  exams: ExamSummary[],
   resources: ClassroomResource[] = [],
 ): ClassroomContentItem[] {
   const weekOrderByNumber = new Map(
