@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, FileDown, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth'
@@ -21,8 +21,16 @@ interface SubmissionPageData {
 
 export function InstructorExamSubmissionPage() {
   usePageTitle('시험 답안 상세')
-  const { apiRequest } = useAuth()
+  const { user } = useAuth()
   const { classroomId = '', examId = '', submissionId = '' } = useParams()
+  const ownerId = user?.id ?? user?.email ?? ''
+  const scopeKey = JSON.stringify([ownerId, classroomId, examId, submissionId])
+
+  return <InstructorExamSubmissionScope classroomId={classroomId} examId={examId} key={scopeKey} submissionId={submissionId} />
+}
+
+function InstructorExamSubmissionScope({ classroomId, examId, submissionId }: { classroomId: string; examId: string; submissionId: string }) {
+  const { apiRequest } = useAuth()
   const examsRepository = useMemo(() => createExamsRepository(apiRequest), [apiRequest])
   const classroomsRepository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
   const { show } = useToast()
@@ -31,16 +39,30 @@ export function InstructorExamSubmissionPage() {
   const [adjustmentError, setAdjustmentError] = useState<string | null>(null)
   const [adjustingQuestionId, setAdjustingQuestionId] = useState<string | null>(null)
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({})
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const isMountedRef = useRef(true)
+  const adjustmentInFlightRef = useRef(false)
+  const adjustmentControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      adjustmentControllerRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     if (!classroomId || !examId || !submissionId) return
     const controller = new AbortController()
+    let isCurrent = true
     Promise.all([
       examsRepository.get(examId, controller.signal),
       examsRepository.getSubmission(examId, submissionId, controller.signal),
       examsRepository.listSubmissions(examId, controller.signal),
       classroomsRepository.listStudents(classroomId, {}, controller.signal),
     ]).then(([exam, submission, submissions, students]) => {
+      if (!isCurrent || controller.signal.aborted) return
       const summary = submissions.find((item) => item.id === submissionId)
       setData({
         exam,
@@ -52,29 +74,47 @@ export function InstructorExamSubmissionPage() {
       setScoreDrafts(Object.fromEntries(submission.items.map((item) => [item.questionId, item.score === undefined ? '' : String(item.score)])))
       setError(null)
     }).catch((requestError) => {
-      if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
+      if (isCurrent && !controller.signal.aborted) setError(getRequestErrorMessage(requestError))
     })
-    return () => controller.abort()
-  }, [classroomId, classroomsRepository, examId, examsRepository, submissionId])
+    return () => {
+      isCurrent = false
+      controller.abort()
+    }
+  }, [classroomId, classroomsRepository, examId, examsRepository, loadAttempt, submissionId])
 
   async function adjustScore(questionId: string, maxScore: number) {
-    if (!data || adjustingQuestionId) return
+    if (
+      !data ||
+      data.exam.classroomId !== classroomId ||
+      data.exam.id !== examId ||
+      data.submission.id !== submissionId ||
+      !data.submission.items.some((item) => item.questionId === questionId) ||
+      adjustmentInFlightRef.current
+    ) return
     const score = Number(scoreDrafts[questionId])
     if (!Number.isFinite(score) || score < 0 || score > maxScore || !/^\d+(?:\.\d{1,2})?$/.test(scoreDrafts[questionId] ?? '')) {
       setAdjustmentError(`점수는 0점부터 ${formatScore(maxScore)}점까지 소수 둘째 자리 이내로 입력하세요.`)
       return
     }
+    const controller = new AbortController()
+    adjustmentInFlightRef.current = true
+    adjustmentControllerRef.current = controller
     setAdjustingQuestionId(questionId)
     setAdjustmentError(null)
     try {
-      const submission = await examsRepository.adjustScore(examId, submissionId, questionId, score)
+      const submission = await examsRepository.adjustScore(examId, submissionId, questionId, score, controller.signal)
+      if (!isMountedRef.current || controller.signal.aborted || submission.id !== submissionId) return
       setData((current) => current ? { ...current, submission } : current)
       setScoreDrafts(Object.fromEntries(submission.items.map((item) => [item.questionId, item.score === undefined ? '' : String(item.score)])))
       show('문항 점수를 저장했습니다.', 'success')
     } catch (requestError) {
-      setAdjustmentError(getRequestErrorMessage(requestError))
+      if (isMountedRef.current && !controller.signal.aborted) setAdjustmentError(getRequestErrorMessage(requestError))
     } finally {
-      setAdjustingQuestionId(null)
+      if (adjustmentControllerRef.current === controller) {
+        adjustmentControllerRef.current = null
+        adjustmentInFlightRef.current = false
+        if (isMountedRef.current) setAdjustingQuestionId(null)
+      }
     }
   }
 
@@ -82,7 +122,7 @@ export function InstructorExamSubmissionPage() {
     return <ErrorState description="시험 또는 제출 식별자가 없습니다." title="답안을 찾을 수 없습니다" />
   }
   if (error) {
-    return <ErrorState action={<ButtonLink to={classroomExamDetailPath(classroomId, examId)}>응시 현황으로</ButtonLink>} description={error} title="답안을 불러오지 못했습니다" />
+    return <ErrorState action={<div className="flex flex-wrap justify-center gap-2"><Button onClick={() => { setError(null); setLoadAttempt((current) => current + 1) }}>다시 시도</Button><ButtonLink to={classroomExamDetailPath(classroomId, examId)} variant="secondary">응시 현황으로</ButtonLink></div>} description={error} title="답안을 불러오지 못했습니다" />
   }
   if (!data) return <LoadingState message="제출 답안을 불러오는 중입니다." />
 
