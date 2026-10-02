@@ -1,5 +1,5 @@
 import { ArrowLeft, Mail } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getAuthRepository } from '../../features/auth'
@@ -16,6 +16,12 @@ export function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submissionRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => {
+    submissionRef.current?.abort()
+    submissionRef.current = null
+  }, [])
 
   if (!enabled) {
     return <ErrorState action={<ButtonLink to={routes.login}>로그인으로</ButtonLink>} description="비밀번호 재설정 기능을 준비하고 있습니다." title="현재 이용할 수 없습니다" />
@@ -23,19 +29,27 @@ export function ForgotPasswordPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submissionRef.current) return
     const nextError = validateEmail(email)
     setError(nextError)
     if (nextError) return
 
+    const controller = new AbortController()
+    submissionRef.current = controller
     setIsSubmitting(true)
     setSuccessMessage(null)
     try {
-      const message = await getAuthRepository().requestPasswordReset(email)
+      const message = await getAuthRepository().requestPasswordReset(email, controller.signal)
+      if (submissionRef.current !== controller || controller.signal.aborted) return
       setSuccessMessage(message)
     } catch (requestError) {
+      if (submissionRef.current !== controller || controller.signal.aborted) return
       setError(getRequestErrorMessage(requestError))
     } finally {
-      setIsSubmitting(false)
+      if (submissionRef.current === controller) {
+        submissionRef.current = null
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -69,6 +83,7 @@ export function ForgotPasswordPage() {
           }
           aria-invalid={error ? true : undefined}
           autoComplete="email"
+          disabled={isSubmitting}
           className={[
             'mt-1.5 block h-11 w-full rounded-[10px] border bg-white px-3.5 type-body text-stone-950',
             'placeholder:text-stone-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100',

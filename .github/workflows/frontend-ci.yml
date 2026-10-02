@@ -45,3 +45,34 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  auth-browser-regressions:
+    name: auth-browser-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Check native multi-tab authentication with local mock APIs
+        run: npm run test:e2e:mock -- e2e/auth-multitab.spec.ts --project chromium-1440 --workers 1
+
+      - name: Upload browser test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-browser-regressions
+          path: qa-artifacts/mock/
+          retention-days: 7

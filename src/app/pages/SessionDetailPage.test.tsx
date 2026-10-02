@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -6,7 +7,7 @@ import {
   within,
   waitFor,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
@@ -26,6 +27,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   sessionStorage.clear()
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
@@ -313,6 +315,251 @@ describe('SessionDetailPage', () => {
 
     await waitFor(() => expect(screen.getByLabelText('질문')).toBeEnabled())
     expect(patchCalls).toBe(1)
+  })
+
+  it.each([
+    { delayInitialQuizzes: false, savedBeforeWaiting: true },
+    { delayInitialQuizzes: false, savedBeforeWaiting: false },
+    { delayInitialQuizzes: true, savedBeforeWaiting: true },
+  ])('recovers a saved quiz without completed or AI messages (saved before waiting: $savedBeforeWaiting, quiz list delayed: $delayInitialQuizzes)', async ({ delayInitialQuizzes, savedBeforeWaiting }) => {
+    let patchCalls = 0
+    let quizSaved = false
+    let quizReads = 0
+    let resolveInitialQuizzes: ((response: Response) => void) | undefined
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/100/page') {
+        patchCalls += 1
+        if (savedBeforeWaiting) quizSaved = true
+        return apiFailure('TURN_IN_PROGRESS', '이미 답변 생성 중입니다.', 409)
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100') {
+        return apiSuccess({
+          activeQuizId: quizSaved ? 50 : null,
+          currentPage: 1,
+          materialId: 10,
+          pageStatus: quizSaved ? 'QUIZ_READY' : 'EXPLAINED',
+          sessionId: 100,
+          status: 'ACTIVE',
+          uiActions: [],
+        })
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/quizzes') {
+        quizReads += 1
+        if (delayInitialQuizzes && quizReads === 1) {
+          return new Promise<Response>((resolve) => { resolveInitialQuizzes = resolve })
+        }
+        return apiSuccess({ quizzes: quizSaved ? [{
+          quizId: 50,
+          quizType: 'MCQ',
+          title: '학습 확인 퀴즈',
+        }] : [] })
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/messages') {
+        return apiSuccess({ hasMore: false, items: [], nextCursor: null })
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/stream') {
+        return new Response('event: ready\ndata: {"sessionId":100}\n\n', {
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }
+      return undefined
+    })
+    renderSessionDetail()
+
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    if (!delayInitialQuizzes) {
+      fireEvent.click(screen.getByRole('tab', { name: /내 퀴즈/ }))
+      await screen.findByText('생성된 퀴즈가 없습니다.')
+      fireEvent.click(screen.getByRole('tab', { name: '학습' }))
+    }
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+
+    if (!savedBeforeWaiting) {
+      expect(await screen.findByText(
+        'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.',
+        {},
+        { timeout: 1_500 },
+      )).toBeInTheDocument()
+      expect(screen.getByLabelText('질문')).toBeDisabled()
+      await waitFor(() => expect(quizReads).toBeGreaterThanOrEqual(2))
+      quizSaved = true
+    }
+
+    expect(await screen.findByRole(
+      'button',
+      { name: 'PDF로 돌아가기' },
+      { timeout: 3_000 },
+    )).toBeInTheDocument()
+    expect(await screen.findByText('문항 1 / 2')).toBeInTheDocument()
+    expect(screen.queryByText(
+      'AI가 답변 중이에요. 기존 답변이 끝날 때까지 기다려 주세요.',
+    )).not.toBeInTheDocument()
+    expect(patchCalls).toBe(1)
+    await act(async () => { resolveInitialQuizzes?.(apiSuccess({ quizzes: [] })) })
+  })
+
+  it.each(['navigation', 'unmount'])('ignores a delayed page conflict after %s', async (endOfSession) => {
+    let resolveOldPageMove: ((response: Response) => void) | undefined
+    let resolveNewPageMove: ((response: Response) => void) | undefined
+    const streamRequests: string[] = []
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/100/page') {
+        return new Promise<Response>((resolve) => { resolveOldPageMove = resolve })
+      }
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/103/page') {
+        return new Promise<Response>((resolve) => { resolveNewPageMove = resolve })
+      }
+      if (request.method === 'GET' && url.pathname === '/api/sessions/103') {
+        return apiSuccess({
+          currentPage: 3,
+          materialId: 10,
+          pageStatus: 'EXPLAINED',
+          sessionId: 103,
+          status: 'ACTIVE',
+          uiActions: [],
+        })
+      }
+      if (request.method === 'GET' && url.pathname.endsWith('/stream')) {
+        streamRequests.push(url.pathname)
+      }
+      return undefined
+    })
+    const { unmount } = render(
+      <TestAuthProvider>
+        <MemoryRouter initialEntries={['/sessions/100']}>
+          <Link to="/sessions/103">다른 세션으로</Link>
+          <Routes>
+            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    await waitFor(() => expect(resolveOldPageMove).toBeTypeOf('function'), { timeout: 1_500 })
+
+    if (endOfSession === 'navigation') {
+      fireEvent.click(screen.getByRole('link', { name: '다른 세션으로' }))
+      await screen.findByRole('progressbar', { name: '학습 진행률 3 / 5쪽' })
+      expect(screen.getByLabelText('질문')).toBeEnabled()
+      fireEvent.click(screen.getByRole('button', { name: '다음' }))
+      await waitFor(() => expect(resolveNewPageMove).toBeTypeOf('function'), { timeout: 1_500 })
+      expect(screen.getByRole('button', { name: '다음 (사용 불가)' })).toBeDisabled()
+    } else {
+      unmount()
+    }
+
+    await act(async () => {
+      resolveOldPageMove?.(apiFailure('TURN_IN_PROGRESS', '이전 세션의 늦은 충돌', 409))
+    })
+    expect(streamRequests).toEqual([])
+
+    if (endOfSession === 'navigation') {
+      expect(screen.getByRole('button', { name: '다음 (사용 불가)' })).toBeDisabled()
+      await act(async () => {
+        resolveNewPageMove?.(apiSuccess({ currentPage: 4, uiActions: [] }))
+      })
+      await waitFor(() => expect(screen.getByRole('button', { name: '다음' })).toBeEnabled())
+      expect(screen.getByRole('progressbar', { name: '학습 진행률 4 / 5쪽' })).toBeInTheDocument()
+    }
+  })
+
+  it('releases a page move when its quiz baseline fails and allows a safe retry', async () => {
+    let quizReads = 0
+    let patchCalls = 0
+    let turnPosts = 0
+    installApiFixtureServer(async (request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/quizzes') {
+        quizReads += 1
+        return quizReads <= 2
+          ? apiFailure('QUIZ_LIST_UNAVAILABLE', '퀴즈 목록을 불러오지 못했습니다.', 503)
+          : apiSuccess({ quizzes: [] })
+      }
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/100/page') {
+        patchCalls += 1
+        const body = await request.json() as { pageNumber: number }
+        return apiSuccess({ currentPage: body.pageNumber, uiActions: [] })
+      }
+      if (request.method === 'POST' && url.pathname === '/api/sessions/100/turns') {
+        turnPosts += 1
+      }
+      return undefined
+    })
+    renderSessionDetail()
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    await waitFor(() => expect(quizReads).toBe(1))
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+
+    expect(await screen.findByText(
+      '퀴즈 목록을 불러오지 못했습니다.',
+      {},
+      { timeout: 1_500 },
+    )).toBeInTheDocument()
+    expect(patchCalls).toBe(0)
+    expect(screen.getByLabelText('질문')).toBeEnabled()
+    expect(screen.getByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    await waitFor(() => expect(patchCalls).toBe(1), { timeout: 1_500 })
+    await waitFor(() => expect(screen.getByLabelText('질문')).toBeEnabled())
+    expect(screen.getByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
+    expect(screen.queryByText('퀴즈 목록을 불러오지 못했습니다.')).not.toBeInTheDocument()
+    expect(turnPosts).toBe(0)
+  })
+
+  it.each(['timeout', 'unmount'])('aborts an unresolved pre-page quiz read on %s', async (endOfRequest) => {
+    let quizReads = 0
+    let patchCalls = 0
+    let baselineSignal: AbortSignal | undefined
+    let allowRetry = false
+    installApiFixtureServer(async (request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/sessions/100/quizzes') {
+        quizReads += 1
+        if (quizReads === 1) {
+          return apiFailure('QUIZ_LIST_UNAVAILABLE', '목록을 불러오지 못했습니다.', 503)
+        }
+        if (allowRetry) return apiSuccess({ quizzes: [] })
+        baselineSignal = request.signal
+        return new Promise<Response>(() => undefined)
+      }
+      if (request.method === 'PATCH' && url.pathname === '/api/sessions/100/page') {
+        patchCalls += 1
+        const body = await request.json() as { pageNumber: number }
+        return apiSuccess({ currentPage: body.pageNumber, uiActions: [] })
+      }
+      return undefined
+    })
+    const { unmount } = renderSessionDetail()
+    await screen.findByRole('progressbar', { name: '학습 진행률 1 / 5쪽' })
+    await waitFor(() => expect(quizReads).toBe(1))
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+
+    expect(baselineSignal?.aborted).toBe(false)
+    expect(patchCalls).toBe(0)
+    if (endOfRequest === 'unmount') {
+      unmount()
+      expect(baselineSignal?.aborted).toBe(true)
+      return
+    }
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(baselineSignal?.aborted).toBe(true)
+    expect(screen.getByText('퀴즈 목록 확인이 지연되고 있습니다. 다시 시도해 주세요.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '다음' })).toBeEnabled()
+    expect(patchCalls).toBe(0)
+
+    allowRetry = true
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(patchCalls).toBe(1)
+    expect(screen.getByRole('progressbar', { name: '학습 진행률 2 / 5쪽' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '다음' })).toBeEnabled()
   })
 
   it('runs an explain turn from the restored widget and shows the AI message', async () => {
