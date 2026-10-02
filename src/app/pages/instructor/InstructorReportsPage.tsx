@@ -57,21 +57,31 @@ const CRITERIA_GENERATION_POLL_INTERVAL_MS = 2_500
 export function InstructorReportsPage() {
   usePageTitle('학습 리포트')
   const { classroomId = '' } = useParams()
+  const scopeKey = classroomId
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
   const classroomsRepository = useMemo(
     () => createClassroomsRepository(apiRequest),
     [apiRequest],
   )
-  const [classroom, setClassroom] = useState<Classroom | null>(null)
-  const [students, setStudents] = useState<ReportStudent[]>([])
+  const [dataState, setDataState] = useState<{
+    classroom: Classroom
+    scopeKey: string
+    students: ReportStudent[]
+  } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
+  const [errorState, setErrorState] = useState<{ message: string; scopeKey: string } | null>(null)
+  const classroom = dataState?.scopeKey === scopeKey ? dataState.classroom : null
+  const students = dataState?.scopeKey === scopeKey ? dataState.students : []
+  const error = errorState?.scopeKey === scopeKey ? errorState.message : null
+  const isLoading = reportsEnabled
+    && dataState?.scopeKey !== scopeKey
+    && errorState?.scopeKey !== scopeKey
   useEffect(() => {
     if (!classroomId) return
     rememberClassroomId(classroomId)
+    setSearchQuery('')
+    const requestedScopeKey = scopeKey
     const controller = new AbortController()
     Promise.all([
       classroomsRepository.get(classroomId, controller.signal),
@@ -80,18 +90,24 @@ export function InstructorReportsPage() {
         : Promise.resolve([]),
     ])
       .then(([nextClassroom, nextStudents]) => {
-        setClassroom(nextClassroom)
-        setStudents(nextStudents)
+        if (controller.signal.aborted) return
+        setDataState({
+          classroom: nextClassroom,
+          scopeKey: requestedScopeKey,
+          students: nextStudents,
+        })
+        setErrorState(null)
       })
       .catch((requestError) => {
-        if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
+        if (!controller.signal.aborted) {
+          setErrorState({
+            message: getRequestErrorMessage(requestError),
+            scopeKey: requestedScopeKey,
+          })
+        }
       })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
-    })
     return () => controller.abort()
-  }, [classroomId, classroomsRepository, repository])
-
+  }, [classroomId, classroomsRepository, repository, scopeKey])
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
   const visibleStudents = students.filter((student) => !normalizedQuery
     || student.name.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
@@ -100,11 +116,9 @@ export function InstructorReportsPage() {
   const headerActions = classroomId
     ? <ButtonLink to={classroomReportCriteriaPath(classroomId)} variant="secondary"><Settings2 aria-hidden="true" size={14} />평가 지표</ButtonLink>
     : undefined
-
   return (
     <ClassroomWorkspaceContainer>
       {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="learning" classroom={classroom} /> : null}
-
       {!reportsEnabled ? <ReportsUnavailableState /> : null}
       {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
       {reportsEnabled && error ? <ErrorState description={error} title="학습자 목록을 불러오지 못했습니다" /> : null}
@@ -141,73 +155,167 @@ export function InstructorReportsPage() {
     </ClassroomWorkspaceContainer>
   )
 }
-
 export function InstructorStudentReportsPage() {
   usePageTitle('학생 리포트')
   const { classroomId = '', studentId = '' } = useParams()
+  const scopeKey = `${classroomId}:${studentId}`
+  const scopeKeyRef = useRef(scopeKey)
+  scopeKeyRef.current = scopeKey
   const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
   const classroomsRepository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
-  const [reports, setReports] = useState<StudentReport[]>([])
-  const [weeks, setWeeks] = useState<ClassroomWeek[]>([])
+  const [dataState, setDataState] = useState<{
+    reports: StudentReport[]
+    scopeKey: string
+    weeks: ClassroomWeek[]
+  } | null>(null)
   const [scopeType, setScopeType] = useState<ReportScope['type']>('FULL')
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
-  const [activeReport, setActiveReport] = useState<StudentReport | null>(null)
-  const [isLoading, setIsLoading] = useState(reportsEnabled)
-  const [isCreating, setIsCreating] = useState(false)
-  const [isDelayed, setIsDelayed] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const requestIdRef = useRef<string | null>(null)
+  const [activeReportState, setActiveReportState] = useState<{
+    report: StudentReport
+    scopeKey: string
+  } | null>(null)
+  const [settledScopeKey, setSettledScopeKey] = useState<string | null>(
+    reportsEnabled ? null : scopeKey,
+  )
+  const [creatingScopeKey, setCreatingScopeKey] = useState<string | null>(null)
+  const [delayedScopeKey, setDelayedScopeKey] = useState<string | null>(null)
+  const [pollingPausedScopeKey, setPollingPausedScopeKey] = useState<string | null>(null)
+  const [errorState, setErrorState] = useState<{ message: string; scopeKey: string } | null>(null)
+  const requestIdRef = useRef<{ id: string; scopeKey: string } | null>(null)
+  const navigatedReportRef = useRef<string | null>(null)
+  const reports = dataState?.scopeKey === scopeKey ? dataState.reports : []
+  const weeks = dataState?.scopeKey === scopeKey ? dataState.weeks : []
+  const activeReport = activeReportState?.scopeKey === scopeKey
+    ? activeReportState.report
+    : null
+  const isLoading = reportsEnabled && settledScopeKey !== scopeKey
+  const isCreating = creatingScopeKey === scopeKey
+  const isDelayed = delayedScopeKey === scopeKey
+  const error = errorState?.scopeKey === scopeKey ? errorState.message : null
 
   const loadReports = useCallback(async (signal?: AbortSignal) => {
+    const requestedScopeKey = `${classroomId}:${studentId}`
     const result = await repository.listReports(classroomId, studentId, signal)
-    setReports(result.items)
-    setActiveReport((current) => current ?? result.activeGeneration)
+    if (signal?.aborted || scopeKeyRef.current !== requestedScopeKey) return result.items
+    setDataState((current) => ({
+      reports: result.items,
+      scopeKey: requestedScopeKey,
+      weeks: current?.scopeKey === requestedScopeKey ? current.weeks : [],
+    }))
     return result.items
   }, [classroomId, repository, studentId])
 
   useEffect(() => {
     if (!classroomId || !studentId || !reportsEnabled) return
     rememberClassroomId(classroomId)
+    const requestedScopeKey = scopeKey
     const controller = new AbortController()
-    Promise.all([repository.listReports(classroomId, studentId, controller.signal), classroomsRepository.listWeeks(classroomId, controller.signal)])
+    requestIdRef.current = null
+    navigatedReportRef.current = null
+    setCreatingScopeKey(null)
+    setDelayedScopeKey(null)
+    setPollingPausedScopeKey(null)
+    setErrorState(null)
+    Promise.all([
+      repository.listReports(classroomId, studentId, controller.signal),
+      classroomsRepository.listWeeks(classroomId, controller.signal),
+    ])
       .then(([nextReports, nextWeeks]) => {
-        setReports(nextReports.items)
-        setActiveReport(nextReports.activeGeneration)
-        setWeeks(nextWeeks)
+        if (controller.signal.aborted || scopeKeyRef.current !== requestedScopeKey) return
+        setDataState({
+          reports: nextReports.items,
+          scopeKey: requestedScopeKey,
+          weeks: nextWeeks,
+        })
+        setActiveReportState(nextReports.activeGeneration
+          ? { report: nextReports.activeGeneration, scopeKey: requestedScopeKey }
+          : null)
       })
       .catch((requestError) => {
-        if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
+        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+          setErrorState({
+            message: getRequestErrorMessage(requestError),
+            scopeKey: requestedScopeKey,
+          })
+        }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
+        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+          setSettledScopeKey(requestedScopeKey)
+        }
       })
     return () => controller.abort()
-  }, [classroomId, classroomsRepository, repository, studentId])
+  }, [classroomId, classroomsRepository, repository, scopeKey, studentId])
 
+  const activeReportId = activeReport?.reportId ?? null
   const fetchReport = useCallback((signal: AbortSignal) => {
-    if (!activeReport) throw new Error('진행 중인 리포트가 없습니다.')
-    return repository.getReport(activeReport.reportId, signal)
-  }, [activeReport, repository])
+    if (!activeReportId) throw new Error('진행 중인 리포트가 없습니다.')
+    return repository.getReport(activeReportId, signal)
+  }, [activeReportId, repository])
+  const reportBelongsToCurrentScope = useCallback((report: StudentReport) => (
+    (!report.classroomId || report.classroomId === classroomId)
+    && (!report.studentId || report.studentId === studentId)
+  ), [classroomId, studentId])
+  const navigateToReportOnce = useCallback((reportId: string, replace = true) => {
+    if (scopeKeyRef.current !== scopeKey) return
+    const navigationKey = `${scopeKey}:${reportId}`
+    if (navigatedReportRef.current === navigationKey) return
+    navigatedReportRef.current = navigationKey
+    navigate(classroomReportDetailPath(classroomId, studentId, reportId), { replace })
+  }, [classroomId, navigate, scopeKey, studentId])
   const handlePollingResult = useCallback((report: StudentReport) => {
-    setActiveReport(report)
+    if (
+      scopeKeyRef.current !== scopeKey
+      || report.reportId !== activeReportId
+      || !reportBelongsToCurrentScope(report)
+    ) return
+    setActiveReportState({ report, scopeKey })
+    setErrorState(null)
+    setDelayedScopeKey(null)
+    setPollingPausedScopeKey(null)
     if (report.status === 'COMPLETED') {
       requestIdRef.current = null
-      void loadReports()
-      navigate(classroomReportDetailPath(classroomId, studentId, report.reportId), { replace: true })
+      setCreatingScopeKey(null)
+      void loadReports().catch((requestError) => {
+        if (scopeKeyRef.current === scopeKey) {
+          setErrorState({ message: getRequestErrorMessage(requestError), scopeKey })
+        }
+      })
+      navigateToReportOnce(report.reportId)
     }
     if (report.status === 'FAILED') {
       requestIdRef.current = null
-      setIsCreating(false)
+      setCreatingScopeKey(null)
     }
-  }, [classroomId, loadReports, navigate, studentId])
-  const handlePollingError = useCallback((requestError: unknown) => setError(getRequestErrorMessage(requestError)), [])
-  const handlePollingDelay = useCallback(() => { setIsDelayed(true); setIsCreating(false) }, [])
+  }, [
+    activeReportId,
+    loadReports,
+    navigateToReportOnce,
+    reportBelongsToCurrentScope,
+    scopeKey,
+  ])
+  const handlePollingError = useCallback((requestError: unknown) => {
+    if (scopeKeyRef.current !== scopeKey) return
+    setErrorState({ message: getRequestErrorMessage(requestError), scopeKey })
+    setCreatingScopeKey(null)
+    setDelayedScopeKey(scopeKey)
+    setPollingPausedScopeKey(scopeKey)
+  }, [scopeKey])
+  const handlePollingDelay = useCallback(() => {
+    if (scopeKeyRef.current !== scopeKey) return
+    setCreatingScopeKey(null)
+    setDelayedScopeKey(scopeKey)
+    setPollingPausedScopeKey(scopeKey)
+  }, [scopeKey])
   const getReportDelay = useCallback((_elapsedMs: number, report?: StudentReport) => Math.max(1000, Math.min(10_000, (report?.pollAfterSeconds ?? 3) * 1000)), [])
-
   useAsyncJobPolling({
-    enabled: activeReport?.status === 'PENDING' || activeReport?.status === 'PROCESSING',
+    enabled: Boolean(
+      activeReport
+      && isReportPending(activeReport)
+      && pollingPausedScopeKey !== scopeKey,
+    ),
     fetchNext: fetchReport,
     getDelayMs: getReportDelay,
     isPending: isReportPending,
@@ -219,38 +327,61 @@ export function InstructorStudentReportsPage() {
 
   async function createReport() {
     if (!reportsEnabled || isCreating || (scopeType === 'WEEK' && selectedWeek === null)) return
-    setIsCreating(true)
-    setIsDelayed(false)
-    setError(null)
-    requestIdRef.current ??= createRequestId()
+    const requestedScopeKey = scopeKey
+    setCreatingScopeKey(requestedScopeKey)
+    setDelayedScopeKey(null)
+    setPollingPausedScopeKey(null)
+    setErrorState(null)
+    if (requestIdRef.current?.scopeKey !== requestedScopeKey) {
+      requestIdRef.current = { id: createRequestId(), scopeKey: requestedScopeKey }
+    }
+    const requestId = requestIdRef.current.id
     const scope: ReportScope = scopeType === 'FULL'
       ? { type: 'FULL' }
       : { type: 'WEEK', weekNumber: selectedWeek as number }
     try {
-      const report = await repository.createReport(classroomId, studentId, { requestId: requestIdRef.current, scope })
-      setActiveReport(report)
+      const report = await repository.createReport(
+        classroomId,
+        studentId,
+        { requestId, scope },
+      )
+      if (
+        scopeKeyRef.current !== requestedScopeKey
+        || !reportBelongsToCurrentScope(report)
+      ) return
+      setActiveReportState({ report, scopeKey: requestedScopeKey })
       if (report.status === 'COMPLETED') {
         requestIdRef.current = null
-        navigate(classroomReportDetailPath(classroomId, studentId, report.reportId))
+        setCreatingScopeKey(null)
+        navigateToReportOnce(report.reportId, false)
       } else if (report.status === 'FAILED') {
         requestIdRef.current = null
-        setIsCreating(false)
+        setCreatingScopeKey(null)
       }
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
-      setIsCreating(false)
+      if (scopeKeyRef.current !== requestedScopeKey) return
+      setErrorState({
+        message: getRequestErrorMessage(requestError),
+        scopeKey: requestedScopeKey,
+      })
+      setCreatingScopeKey(null)
     }
   }
-
   function startNewGeneration() {
     requestIdRef.current = null
-    setActiveReport(null)
-    setIsDelayed(false)
+    setActiveReportState(null)
+    setDelayedScopeKey(null)
+    setPollingPausedScopeKey(null)
     void createReport()
+  }
+  function retryCurrentReport() {
+    setErrorState(null)
+    setDelayedScopeKey(null)
+    setCreatingScopeKey(scopeKey)
+    setPollingPausedScopeKey(null)
   }
 
   const isReportGenerating = isCreating || Boolean(activeReport && isReportPending(activeReport))
-
   return <PageContainer>
     <PageHeader actions={<ButtonLink to={classroomReportsPath(classroomId)} variant="secondary">학습자 목록</ButtonLink>} title="학생 리포트" />
     {!reportsEnabled ? <ReportsUnavailableState /> : null}
@@ -262,7 +393,7 @@ export function InstructorStudentReportsPage() {
         {scopeType === 'WEEK' ? <label className="mt-4 block max-w-sm type-control font-semibold text-stone-700" htmlFor="report-week-select">분석 주차<Select className="mt-1 w-full font-normal" disabled={weeks.length === 0} id="report-week-select" onChange={(event) => setSelectedWeek(event.target.value ? Number(event.target.value) : null)} value={selectedWeek ?? ''}><option value="">{weeks.length === 0 ? '선택 가능한 주차가 없습니다' : '주차를 선택하세요'}</option>{weeks.map((week) => <option key={week.weekNumber} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</Select></label> : null}
       </section>
       {activeReport?.status === 'FAILED' ? <ErrorState action={<Button onClick={startNewGeneration}>다시 생성</Button>} description={activeReport.failureMessage ?? '리포트 생성에 실패했습니다.'} title="리포트를 생성하지 못했습니다" /> : null}
-      {isDelayed ? <ErrorState action={<Button onClick={() => { setIsDelayed(false); setIsCreating(true); setActiveReport((current) => current ? { ...current, status: 'PROCESSING' } : current) }} variant="secondary">상태 다시 확인</Button>} description="서버 작업은 계속될 수 있습니다. 새 작업을 만들지 않고 현재 작업 상태를 다시 확인합니다." title="리포트 생성이 지연되고 있습니다" /> : null}
+      {isDelayed ? <ErrorState action={<Button onClick={retryCurrentReport} variant="secondary">상태 다시 확인</Button>} description="서버 작업은 계속될 수 있습니다. 새 작업을 만들지 않고 현재 작업 상태를 다시 확인합니다." title="리포트 생성이 지연되고 있습니다" /> : null}
       {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}
       <section className="overflow-hidden rounded-lg border border-stone-200 bg-white" aria-label="저장된 리포트 버전">
         <div className="border-b border-stone-200 bg-stone-50 px-5 py-3"><h2 className="type-body font-bold text-stone-900">저장된 버전</h2></div>
@@ -271,41 +402,71 @@ export function InstructorStudentReportsPage() {
     </> : null}
   </PageContainer>
 }
-
 export function InstructorReportDetailPage() {
   usePageTitle('리포트 상세')
   const { isTablet } = useResponsiveViewport()
   const { classroomId = '', studentId = '', reportId = '' } = useParams()
+  const scopeKey = `${classroomId}:${studentId}:${reportId}`
+  const scopeKeyRef = useRef(scopeKey)
+  scopeKeyRef.current = scopeKey
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
-  const [report, setReport] = useState<StudentReport | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(reportsEnabled)
-
+  const [reportState, setReportState] = useState<{
+    report: StudentReport
+    scopeKey: string
+  } | null>(null)
+  const [errorState, setErrorState] = useState<{ message: string; scopeKey: string } | null>(null)
+  const [settledScopeKey, setSettledScopeKey] = useState<string | null>(
+    reportsEnabled ? null : scopeKey,
+  )
+  const report = reportState?.scopeKey === scopeKey ? reportState.report : null
+  const error = errorState?.scopeKey === scopeKey ? errorState.message : null
+  const isLoading = reportsEnabled && settledScopeKey !== scopeKey
   useEffect(() => {
     if (!reportId || !reportsEnabled) return
     rememberClassroomId(classroomId)
+    const requestedScopeKey = scopeKey
     const controller = new AbortController()
     repository.getReport(reportId, controller.signal)
-      .then(setReport)
+      .then((nextReport) => {
+        if (controller.signal.aborted || scopeKeyRef.current !== requestedScopeKey) return
+        const belongsToScope = (
+          (!nextReport.classroomId || nextReport.classroomId === classroomId)
+          && (!nextReport.studentId || nextReport.studentId === studentId)
+          && nextReport.reportId === reportId
+        )
+        if (!belongsToScope) {
+          setErrorState({
+            message: '요청한 범위와 다른 리포트 응답을 받았습니다.',
+            scopeKey: requestedScopeKey,
+          })
+          return
+        }
+        setReportState({ report: nextReport, scopeKey: requestedScopeKey })
+        setErrorState(null)
+      })
       .catch((requestError) => {
-        if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError))
+        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+          setErrorState({
+            message: getRequestErrorMessage(requestError),
+            scopeKey: requestedScopeKey,
+          })
+        }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
+        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+          setSettledScopeKey(requestedScopeKey)
+        }
       })
     return () => controller.abort()
-  }, [classroomId, reportId, repository])
-
+  }, [classroomId, reportId, repository, scopeKey, studentId])
   if (!reportsEnabled) return <PageContainer><PageHeader title="리포트 상세" /><ReportsUnavailableState /></PageContainer>
   if (isLoading) return <LoadingState message="리포트를 불러오는 중입니다." />
   if (!report) return <ErrorState action={<ButtonLink to={classroomStudentReportsPath(classroomId, studentId)}>리포트 목록</ButtonLink>} description={error ?? '리포트가 없거나 접근 권한이 없습니다.'} title="리포트를 불러오지 못했습니다" />
   if (report.status !== 'COMPLETED') return <ErrorState action={<ButtonLink to={classroomStudentReportsPath(classroomId, studentId)}>생성 상태 확인</ButtonLink>} description={report.failureMessage ?? '완료된 리포트만 상세 내용을 확인할 수 있습니다.'} title="리포트가 아직 준비되지 않았습니다" />
-
   const overallStage = report.overallScore === null
     ? '관찰 데이터 축적 중'
     : report.stage ?? '단계 정보 없음'
-
   return <PageContainer>
     <PageHeader actions={<ButtonLink to={classroomStudentReportsPath(classroomId, studentId)} variant="secondary">버전 목록</ButtonLink>} title={report.studentName ? `${report.studentName} 리포트` : '학생 리포트'} titleAccessory={<span className="type-caption text-stone-500">버전 {report.version ?? '-'}</span>} />
     {isTablet ? <nav aria-label="리포트 섹션" className="sticky top-0 z-10 flex gap-2 overflow-x-auto border-y border-stone-200 bg-white py-2">{[['report-summary', '요약'], ['criteria-results-title', '평가 항목'], ['report-guidance', '지도 방향']].map(([id, label]) => <a className="flex shrink-0 items-center rounded-lg px-3 font-semibold text-brand-700" key={id} href={`#${id}`}>{label}</a>)}</nav> : null}
@@ -316,7 +477,6 @@ export function InstructorReportDetailPage() {
     {error ? <p className="type-body text-rose-700" role="alert">{error}</p> : null}
   </PageContainer>
 }
-
 export function InstructorReportCriteriaPage() {
   usePageTitle('리포트 평가 기준')
   const { classroomId = '' } = useParams()
