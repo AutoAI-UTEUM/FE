@@ -1,5 +1,5 @@
 import { ClipboardList, Plus, X } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { isInstructorRole, useAuth } from '../../features/auth'
@@ -10,6 +10,7 @@ import { createQuestion, isExamDraftValid } from '../../features/exams/examEdito
 import { getRequestErrorMessage } from '../../shared/api'
 import { formatDateTime } from '../../shared/lib/format'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+import { useFocusScope } from '../../shared/responsive'
 import { Badge, Button, EmptyState, PageHeader, PageToolbar, Select, useToast } from '../../shared/ui'
 import { classroomExamsPath, examDetailPath } from '../routes'
 import { ClassroomWorkspaceContainer } from './classroom/ClassroomWorkspaceContainer'
@@ -137,8 +138,12 @@ function ClassroomSelect({ classrooms, onChange, value }: { classrooms: Classroo
 
 function ExamComposer({ classroomId, initialWeekNumber, onClose, onCreated, repository }: { classroomId: string; initialWeekNumber?: number; onClose: () => void; onCreated: (exam: Exam) => void; repository: ReturnType<typeof createExamsRepository> }) {
   const { show } = useToast(); const [draft, setDraft] = useState<CreateExamInput>({ ...initialDraft, weekNumber: initialWeekNumber }); const [isSubmitting, setIsSubmitting] = useState(false)
-  async function submit(event: FormEvent) { event.preventDefault(); if (!isExamDraftValid(draft) || isSubmitting) return; setIsSubmitting(true); try { onCreated(await repository.create(classroomId, { ...draft, title: draft.title.trim() })); show('시험 초안을 만들었습니다.', 'success') } catch (error) { show(getRequestErrorMessage(error), 'danger') } finally { setIsSubmitting(false) } }
-  return <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 py-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSubmitting) onClose() }} role="dialog"><form className="max-h-[calc(100dvh-3rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-xl bg-white p-6 [scrollbar-gutter:stable]" onSubmit={submit}><div className="mb-5 flex items-center justify-between"><h2 className="type-dialog-title font-bold">시험 만들기</h2><button aria-label="닫기" className="p-2 text-stone-400" onClick={onClose} type="button"><X size={17} /></button></div><ExamEditor onChange={setDraft} value={draft} /><div className="mt-6 flex justify-end gap-2"><Button onClick={onClose} variant="ghost">취소</Button><Button disabled={!isExamDraftValid(draft) || isSubmitting} type="submit">{isSubmitting ? '저장 중' : '초안 저장'}</Button></div></form></div>
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const submitInFlightRef = useRef(false)
+  const close = () => { if (!submitInFlightRef.current) onClose() }
+  useFocusScope(dialogRef, true, close)
+  async function submit(event: FormEvent) { event.preventDefault(); if (!isExamDraftValid(draft) || submitInFlightRef.current) return; submitInFlightRef.current = true; setIsSubmitting(true); try { onCreated(await repository.create(classroomId, { ...draft, title: draft.title.trim() })); show('시험 초안을 만들었습니다.', 'success') } catch (error) { show(getRequestErrorMessage(error), 'danger') } finally { submitInFlightRef.current = false; setIsSubmitting(false) } }
+  return <div ref={dialogRef} aria-labelledby="exam-composer-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 py-6" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }} role="dialog"><form className="max-h-[calc(100dvh-3rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-xl bg-white p-6 [scrollbar-gutter:stable]" onSubmit={submit}><div className="mb-5 flex items-center justify-between"><h2 className="type-dialog-title font-bold" id="exam-composer-title">시험 만들기</h2><button aria-label="시험 만들기 닫기" className="p-2 text-stone-400 disabled:cursor-not-allowed disabled:opacity-50" disabled={isSubmitting} onClick={close} type="button"><X size={17} /></button></div><ExamEditor autoFocusTitle onChange={setDraft} value={draft} /><div className="mt-6 flex justify-end gap-2"><Button disabled={isSubmitting} onClick={close} variant="ghost">취소</Button><Button disabled={!isExamDraftValid(draft) || isSubmitting} type="submit">{isSubmitting ? '저장 중' : '초안 저장'}</Button></div></form></div>
 }
 
 export function ExamStatusBadge({ status }: { status: ExamStatus }) { const values = { DRAFT: ['초안', 'neutral'], PUBLISHED: ['공개', 'success'], CLOSED: ['종료', 'warning'] } as const; return <Badge tone={values[status][1]}>{values[status][0]}</Badge> }

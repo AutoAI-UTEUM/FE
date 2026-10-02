@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
@@ -145,6 +145,88 @@ describe('ExamsPage creation entry', () => {
     expect(composerTitle.closest('form')).toHaveClass('max-h-[calc(100dvh-3rem)]', 'overflow-y-auto', 'overscroll-contain', '[scrollbar-gutter:stable]')
     expect(screen.getByLabelText('강의실 선택')).toHaveValue('12')
     expect(screen.getByLabelText('주차 (선택)')).toHaveValue(3)
+  })
+
+  it('traps focus in the composer, closes on Escape, and restores the trigger', async () => {
+    vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
+      () => ([{}] as unknown as DOMRectList),
+    )
+    mockExamLists([])
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+    const trigger = await screen.findByRole('button', { name: '시험 만들기' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '시험 만들기' })
+    const titleInput = within(dialog).getByRole('textbox', { name: '시험 제목' })
+    expect(titleInput).toHaveFocus()
+    const closeButton = within(dialog).getByRole('button', { name: '시험 만들기 닫기' })
+    const lastTextInput = within(dialog).getAllByRole('textbox').at(-1)
+    expect(lastTextInput).toBeDefined()
+    closeButton.focus()
+    expect(closeButton).toHaveFocus()
+    fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true })
+    expect(lastTextInput).toHaveFocus()
+    fireEvent.keyDown(lastTextInput!, { key: 'Tab' })
+    expect(closeButton).toHaveFocus()
+
+    fireEvent.keyDown(titleInput, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(trigger).toHaveFocus()
+  })
+
+  it('prevents every composer close action while creating an exam', async () => {
+    vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
+      () => ([{}] as unknown as DOMRectList),
+    )
+    const createResponse = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : init?.method ?? 'GET'
+      if (url.pathname === '/api/classrooms') {
+        return success({ items: [classroomFixture], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+      }
+      if (url.pathname === '/api/classrooms/12/exams' && method === 'POST') {
+        return createResponse.promise
+      }
+      if (url.pathname === '/api/classrooms/12/exams') {
+        return success({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+    const trigger = await screen.findByRole('button', { name: '시험 만들기' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '시험 만들기' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '시험 제목' }), {
+      target: { value: '접근성 시험' },
+    })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '질문' }), {
+      target: { value: '핵심 내용을 설명하세요.' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: '초안 저장' }))
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    fireEvent.mouseDown(dialog)
+
+    expect(await within(dialog).findByRole('button', { name: '저장 중' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: '시험 만들기 닫기' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: '취소' })).toBeDisabled()
+    expect(screen.getByRole('dialog', { name: '시험 만들기' })).toBeInTheDocument()
+
+    await act(async () => createResponse.resolve(success({
+      allowRetake: false,
+      classroomId: 12,
+      examId: 44,
+      questionCount: 1,
+      questions: [{ maxScore: 10, questionId: 1, questionText: '핵심 내용을 설명하세요.', questionType: 'SHORT' }],
+      status: 'DRAFT',
+      title: '접근성 시험',
+      totalScore: 10,
+    })))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(trigger).toHaveFocus()
   })
 
   it('reloads exams when the instructor selects another classroom', async () => {
