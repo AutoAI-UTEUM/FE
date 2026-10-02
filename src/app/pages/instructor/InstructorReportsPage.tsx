@@ -13,7 +13,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -55,9 +55,21 @@ const CUSTOM_CRITERIA_LIMIT = 11
 const CRITERIA_GENERATION_POLL_INTERVAL_MS = 2_500
 
 export function InstructorReportsPage() {
-  usePageTitle('학습 리포트')
   const { classroomId = '' } = useParams()
-  const scopeKey = classroomId
+  const { user } = useAuth()
+  const ownerKey = user?.id ?? user?.email ?? 'signed-out'
+  const scopeKey = createReportScopeKey(ownerKey, classroomId)
+  return <InstructorReportsPageContent classroomId={classroomId} key={scopeKey} scopeKey={scopeKey} />
+}
+
+function InstructorReportsPageContent({
+  classroomId,
+  scopeKey,
+}: {
+  classroomId: string
+  scopeKey: string
+}) {
+  usePageTitle('학습 리포트')
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
   const classroomsRepository = useMemo(
@@ -155,10 +167,30 @@ export function InstructorReportsPage() {
   )
 }
 export function InstructorStudentReportsPage() {
-  usePageTitle('학생 리포트')
   const { classroomId = '', studentId = '' } = useParams()
-  const scopeKey = `${classroomId}:${studentId}`
+  const { user } = useAuth()
+  const ownerKey = user?.id ?? user?.email ?? 'signed-out'
+  const scopeKey = createReportScopeKey(ownerKey, classroomId, studentId)
+  return <InstructorStudentReportsPageContent
+    classroomId={classroomId}
+    key={scopeKey}
+    scopeKey={scopeKey}
+    studentId={studentId}
+  />
+}
+
+function InstructorStudentReportsPageContent({
+  classroomId,
+  scopeKey,
+  studentId,
+}: {
+  classroomId: string
+  scopeKey: string
+  studentId: string
+}) {
+  usePageTitle('학생 리포트')
   const scopeKeyRef = useRef(scopeKey)
+  const isActiveRef = useRef(true)
   const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
@@ -193,21 +225,24 @@ export function InstructorStudentReportsPage() {
   const isDelayed = delayedScopeKey === scopeKey
   const error = errorState?.scopeKey === scopeKey ? errorState.message : null
 
-  useEffect(() => {
-    scopeKeyRef.current = scopeKey
-  }, [scopeKey])
+  useLayoutEffect(() => {
+    isActiveRef.current = true
+    return () => { isActiveRef.current = false }
+  }, [])
 
   const loadReports = useCallback(async (signal?: AbortSignal) => {
-    const requestedScopeKey = `${classroomId}:${studentId}`
+    const requestedScopeKey = scopeKey
     const result = await repository.listReports(classroomId, studentId, signal)
-    if (signal?.aborted || scopeKeyRef.current !== requestedScopeKey) return result.items
+    if (!isActiveRef.current || signal?.aborted || scopeKeyRef.current !== requestedScopeKey) {
+      return result.items
+    }
     setDataState((current) => ({
       reports: result.items,
       scopeKey: requestedScopeKey,
       weeks: current?.scopeKey === requestedScopeKey ? current.weeks : [],
     }))
     return result.items
-  }, [classroomId, repository, studentId])
+  }, [classroomId, repository, scopeKey, studentId])
 
   useEffect(() => {
     if (!classroomId || !studentId || !reportsEnabled) return
@@ -219,7 +254,11 @@ export function InstructorStudentReportsPage() {
       classroomsRepository.listWeeks(classroomId, controller.signal),
     ])
       .then(([nextReports, nextWeeks]) => {
-        if (controller.signal.aborted || scopeKeyRef.current !== requestedScopeKey) return
+        if (
+          !isActiveRef.current
+          || controller.signal.aborted
+          || scopeKeyRef.current !== requestedScopeKey
+        ) return
         setDataState({
           reports: nextReports.items,
           scopeKey: requestedScopeKey,
@@ -230,7 +269,11 @@ export function InstructorStudentReportsPage() {
           : null)
       })
       .catch((requestError) => {
-        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+        if (
+          isActiveRef.current
+          && !controller.signal.aborted
+          && scopeKeyRef.current === requestedScopeKey
+        ) {
           setErrorState({
             message: getRequestErrorMessage(requestError),
             scopeKey: requestedScopeKey,
@@ -238,7 +281,11 @@ export function InstructorStudentReportsPage() {
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted && scopeKeyRef.current === requestedScopeKey) {
+        if (
+          isActiveRef.current
+          && !controller.signal.aborted
+          && scopeKeyRef.current === requestedScopeKey
+        ) {
           setSettledScopeKey(requestedScopeKey)
         }
       })
@@ -255,7 +302,7 @@ export function InstructorStudentReportsPage() {
     && (!report.studentId || report.studentId === studentId)
   ), [classroomId, studentId])
   const navigateToReportOnce = useCallback((reportId: string, replace = true) => {
-    if (scopeKeyRef.current !== scopeKey) return
+    if (!isActiveRef.current || scopeKeyRef.current !== scopeKey) return
     const navigationKey = `${scopeKey}:${reportId}`
     if (navigatedReportRef.current === navigationKey) return
     navigatedReportRef.current = navigationKey
@@ -263,7 +310,8 @@ export function InstructorStudentReportsPage() {
   }, [classroomId, navigate, scopeKey, studentId])
   const handlePollingResult = useCallback((report: StudentReport) => {
     if (
-      scopeKeyRef.current !== scopeKey
+      !isActiveRef.current
+      || scopeKeyRef.current !== scopeKey
       || report.reportId !== activeReportId
       || !reportBelongsToCurrentScope(report)
     ) return
@@ -275,7 +323,7 @@ export function InstructorStudentReportsPage() {
       requestIdRef.current = null
       setCreatingScopeKey(null)
       void loadReports().catch((requestError) => {
-        if (scopeKeyRef.current === scopeKey) {
+        if (isActiveRef.current && scopeKeyRef.current === scopeKey) {
           setErrorState({ message: getRequestErrorMessage(requestError), scopeKey })
         }
       })
@@ -293,14 +341,14 @@ export function InstructorStudentReportsPage() {
     scopeKey,
   ])
   const handlePollingError = useCallback((requestError: unknown) => {
-    if (scopeKeyRef.current !== scopeKey) return
+    if (!isActiveRef.current || scopeKeyRef.current !== scopeKey) return
     setErrorState({ message: getRequestErrorMessage(requestError), scopeKey })
     setCreatingScopeKey(null)
     setDelayedScopeKey(scopeKey)
     setPollingPausedScopeKey(scopeKey)
   }, [scopeKey])
   const handlePollingDelay = useCallback(() => {
-    if (scopeKeyRef.current !== scopeKey) return
+    if (!isActiveRef.current || scopeKeyRef.current !== scopeKey) return
     setCreatingScopeKey(null)
     setDelayedScopeKey(scopeKey)
     setPollingPausedScopeKey(scopeKey)
@@ -342,7 +390,8 @@ export function InstructorStudentReportsPage() {
         { requestId, scope },
       )
       if (
-        scopeKeyRef.current !== requestedScopeKey
+        !isActiveRef.current
+        || scopeKeyRef.current !== requestedScopeKey
         || !reportBelongsToCurrentScope(report)
       ) return
       setActiveReportState({ report, scopeKey: requestedScopeKey })
@@ -355,7 +404,7 @@ export function InstructorStudentReportsPage() {
         setCreatingScopeKey(null)
       }
     } catch (requestError) {
-      if (scopeKeyRef.current !== requestedScopeKey) return
+      if (!isActiveRef.current || scopeKeyRef.current !== requestedScopeKey) return
       setErrorState({
         message: getRequestErrorMessage(requestError),
         scopeKey: requestedScopeKey,
@@ -399,10 +448,32 @@ export function InstructorStudentReportsPage() {
   </PageContainer>
 }
 export function InstructorReportDetailPage() {
+  const { classroomId = '', studentId = '', reportId = '' } = useParams()
+  const { user } = useAuth()
+  const ownerKey = user?.id ?? user?.email ?? 'signed-out'
+  const scopeKey = createReportScopeKey(ownerKey, classroomId, studentId, reportId)
+  return <InstructorReportDetailPageContent
+    classroomId={classroomId}
+    key={scopeKey}
+    reportId={reportId}
+    scopeKey={scopeKey}
+    studentId={studentId}
+  />
+}
+
+function InstructorReportDetailPageContent({
+  classroomId,
+  reportId,
+  scopeKey,
+  studentId,
+}: {
+  classroomId: string
+  reportId: string
+  scopeKey: string
+  studentId: string
+}) {
   usePageTitle('리포트 상세')
   const { isTablet } = useResponsiveViewport()
-  const { classroomId = '', studentId = '', reportId = '' } = useParams()
-  const scopeKey = `${classroomId}:${studentId}:${reportId}`
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createReportsRepository(apiRequest), [apiRequest])
   const [reportState, setReportState] = useState<{
@@ -842,6 +913,7 @@ function EvidenceDetails({ evidence, evidenceIds }: { evidence: StudentReport['e
 }
 
 function isReportPending(report: StudentReport): boolean { return report.status === 'PENDING' || report.status === 'PROCESSING' }
+function createReportScopeKey(...parts: Array<string | number>): string { return JSON.stringify(parts) }
 function createRequestId(): string { return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `report-${Date.now()}` }
 function createCriterionKey(name: string): string { return `custom_${name.trim().toLowerCase().replace(/[^a-z0-9가-힣]+/g, '_').replace(/^_|_$/g, '')}_${Date.now().toString(36)}`.slice(0, 50) }
 function hasCriterionNameConflict(criteria: ReportCriterion[], name: string, ignoredId?: string): boolean {

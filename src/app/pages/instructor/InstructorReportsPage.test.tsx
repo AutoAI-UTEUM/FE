@@ -3,10 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useEffect } from 'react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
-import { AuthProvider } from '../../../features/auth'
+import { AuthProvider, useAuth } from '../../../features/auth'
 import { ToastProvider } from '../../../shared/ui'
 import {
   InstructorReportDetailPage,
+  InstructorReportsPage,
   InstructorStudentReportsPage,
 } from './InstructorReportsPage'
 
@@ -17,6 +18,115 @@ afterEach(() => {
 })
 
 describe('instructor report route scope and polling recovery', () => {
+  it('does not show a late classroom report list after the next classroom returns 403', async () => {
+    let resolveLateClassroom!: (response: Response) => void
+    const lateClassroom = new Promise<Response>((resolve) => {
+      resolveLateClassroom = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/classrooms/class-a') return lateClassroom
+      if (url.pathname === '/api/classrooms/class-b') {
+        return failure('FORBIDDEN', '접근 권한이 없습니다.', 403)
+      }
+      if (url.pathname.endsWith('/students')) {
+        return success({
+          items: [studentFixture({ name: url.pathname.includes('class-a') ? '이전 학생' : '현재 학생' })],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderClassroomReportRoutes('/classrooms/class-a/reports', '/classrooms/class-b/reports')
+
+    fireEvent.click(screen.getByRole('button', { name: '다음 범위로 이동' }))
+    expect(await screen.findByRole('heading', { name: '학습자 목록을 불러오지 못했습니다' })).toBeInTheDocument()
+
+    await act(async () => {
+      resolveLateClassroom(success(classroomFixture({ classroomId: 'class-a', name: '이전 강의실' })))
+      await lateClassroom
+    })
+
+    expect(screen.queryByText('이전 학생')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '학습자 목록을 불러오지 못했습니다' })).toBeInTheDocument()
+  })
+
+  it('resets search results when the classroom scope changes', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/classrooms/search-a') {
+        return success(classroomFixture({ classroomId: 'search-a', name: 'A 강의실' }))
+      }
+      if (url.pathname === '/api/classrooms/search-b') {
+        return success(classroomFixture({ classroomId: 'search-b', name: 'B 강의실' }))
+      }
+      if (url.pathname.endsWith('/students')) {
+        const isFirstClassroom = url.pathname.includes('search-a')
+        return success({
+          items: [studentFixture({
+            email: isFirstClassroom ? 'alpha@example.com' : 'beta@example.com',
+            name: isFirstClassroom ? '알파 학생' : '베타 학생',
+            studentId: isFirstClassroom ? 'student-a' : 'student-b',
+          })],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderClassroomReportRoutes('/classrooms/search-a/reports', '/classrooms/search-b/reports')
+
+    const search = await screen.findByRole('searchbox', { name: '리포트 학습자 검색' })
+    fireEvent.change(search, { target: { value: '알파' } })
+    expect(screen.getByText('알파 학생')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '다음 범위로 이동' }))
+
+    expect(await screen.findByText('베타 학생')).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: '리포트 학습자 검색' })).toHaveValue('')
+  })
+
+  it('isolates the classroom report list when the authenticated owner changes', async () => {
+    let classroomRequests = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/classrooms/owner-a') {
+        classroomRequests += 1
+        if (classroomRequests === 1) {
+          return success(classroomFixture({ classroomId: 'owner-a', name: '첫 소유자 강의실' }))
+        }
+        return failure('FORBIDDEN', '접근 권한이 없습니다.', 403)
+      }
+      if (url.pathname.endsWith('/students')) {
+        return success({
+          items: [studentFixture({ name: '첫 소유자 학생' })],
+          page: 0,
+          size: 100,
+          totalElements: 1,
+          totalPages: 1,
+        })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderClassroomReportRoutes('/classrooms/owner-a/reports', undefined, true)
+
+    expect(await screen.findByText('첫 소유자 학생')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '소유자 변경' }))
+
+    expect(await screen.findByRole('heading', { name: '학습자 목록을 불러오지 못했습니다' })).toBeInTheDocument()
+    expect(screen.queryByText('첫 소유자 학생')).not.toBeInTheDocument()
+    expect(classroomRequests).toBe(2)
+  })
+
   it('does not show a late report from the previous route after the current route returns 403', async () => {
     let resolveLateReport!: (response: Response) => void
     const lateReport = new Promise<Response>((resolve) => {
@@ -108,6 +218,72 @@ describe('instructor report route scope and polling recovery', () => {
       '/classrooms/class-b/students/student-b/reports',
     )
     expect(createRequests).toBe(1)
+  })
+
+  it('resets generation controls and does not revive stale state after returning to a scope', async () => {
+    let resolveGeneration!: (response: Response) => void
+    const generation = new Promise<Response>((resolve) => {
+      resolveGeneration = resolve
+    })
+    let createRequests = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+      const isFirstScope = url.pathname.includes('/classrooms/class-a/')
+
+      if (method === 'GET' && url.pathname.endsWith('/reports')) {
+        return success({ activeGeneration: null, items: [] })
+      }
+      if (method === 'GET' && url.pathname.endsWith('/weeks')) {
+        return success({
+          items: isFirstScope ? [weekFixture({ weekNumber: 3 })] : [],
+        })
+      }
+      if (
+        method === 'POST'
+        && url.pathname === '/api/classrooms/class-a/students/student-a/reports'
+      ) {
+        createRequests += 1
+        return generation
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderReportRoutes(
+      '/classrooms/class-a/students/student-a/reports',
+      '/classrooms/class-b/students/student-b/reports',
+      undefined,
+      '/classrooms/class-a/students/student-a/reports',
+    )
+
+    fireEvent.click(await screen.findByRole('radio', { name: '주차 선택' }))
+    fireEvent.change(screen.getByLabelText('분석 주차'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: '새 리포트 생성' }))
+    await waitFor(() => expect(createRequests).toBe(1))
+
+    fireEvent.click(screen.getByRole('button', { name: '다음 범위로 이동' }))
+    expect(await screen.findByRole('radio', { name: '전체 기간' })).toBeChecked()
+    expect(screen.queryByLabelText('분석 주차')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '이전 범위로 이동' }))
+    expect(await screen.findByRole('radio', { name: '전체 기간' })).toBeChecked()
+    expect(screen.getByRole('button', { name: '새 리포트 생성' })).toBeEnabled()
+
+    await act(async () => {
+      resolveGeneration(success(reportFixture({
+        classroomId: 'class-a',
+        reportId: 'late-generation',
+        status: 'COMPLETED',
+        studentId: 'student-a',
+      }), 202))
+      await generation
+    })
+
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/classrooms/class-a/students/student-a/reports',
+    )
+    expect(screen.getByRole('button', { name: '새 리포트 생성' })).toBeEnabled()
   })
 
   it('keeps one 210 second lifetime for a permanently pending report', async () => {
@@ -203,19 +379,13 @@ function renderReportRoutes(
   initialPath: string,
   targetPath?: string,
   onLocationChange?: (pathname: string) => void,
+  returnPath?: string,
 ) {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
-      <AuthProvider
-        initialUser={{
-          email: 'instructor@example.com',
-          id: 7,
-          name: '강의자',
-          role: 'INSTRUCTOR',
-        }}
-      >
+      <AuthProvider initialUser={instructorUserFixture}>
         <ToastProvider>
-          {targetPath ? <RouteNavigation targetPath={targetPath} /> : null}
+          {targetPath ? <RouteNavigation returnPath={returnPath} targetPath={targetPath} /> : null}
           <LocationProbe onChange={onLocationChange} />
           <Routes>
             <Route
@@ -233,9 +403,51 @@ function renderReportRoutes(
   )
 }
 
-function RouteNavigation({ targetPath }: { targetPath: string }) {
+function renderClassroomReportRoutes(
+  initialPath: string,
+  targetPath?: string,
+  includeOwnerNavigation = false,
+) {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <AuthProvider initialUser={instructorUserFixture}>
+        <ToastProvider>
+          {targetPath ? <RouteNavigation targetPath={targetPath} /> : null}
+          {includeOwnerNavigation ? <OwnerNavigation /> : null}
+          <Routes>
+            <Route
+              path="/classrooms/:classroomId/reports"
+              element={<InstructorReportsPage />}
+            />
+          </Routes>
+        </ToastProvider>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+}
+
+function RouteNavigation({
+  returnPath,
+  targetPath,
+}: {
+  returnPath?: string
+  targetPath: string
+}) {
   const navigate = useNavigate()
-  return <button onClick={() => navigate(targetPath)}>다음 범위로 이동</button>
+  return <>
+    <button onClick={() => navigate(targetPath)}>다음 범위로 이동</button>
+    {returnPath ? <button onClick={() => navigate(returnPath)}>이전 범위로 이동</button> : null}
+  </>
+}
+
+function OwnerNavigation() {
+  const { updateUser, user } = useAuth()
+  return <button
+    onClick={() => {
+      if (!user) return
+      updateUser({ ...user, email: 'next-owner@example.com', id: 8 })
+    }}
+  >소유자 변경</button>
 }
 
 function LocationProbe({ onChange }: { onChange?: (pathname: string) => void }) {
@@ -279,4 +491,52 @@ function reportFixture(overrides: Record<string, unknown> = {}) {
     studentId: '9',
     ...overrides,
   }
+}
+
+function classroomFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    classroomId: 'class-a',
+    color: 'BLUE',
+    description: '리포트 테스트 강의실',
+    endDate: '2026-12-31',
+    instructorName: '강의자',
+    inviteCode: 'REPORT-TEST',
+    learnerCount: 1,
+    name: '리포트 강의실',
+    pendingRequestCount: 0,
+    progressRate: 50,
+    startDate: '2026-09-01',
+    status: 'ACTIVE',
+    weekCount: 3,
+    ...overrides,
+  }
+}
+
+function studentFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    affiliation: '테스트 소속',
+    email: 'student@example.com',
+    latestReport: null,
+    name: '테스트 학생',
+    studentId: 'student-a',
+    ...overrides,
+  }
+}
+
+function weekFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    materials: [],
+    releaseAt: '2026-09-15T00:00:00Z',
+    status: 'PUBLISHED',
+    title: '리포트 테스트 주차',
+    weekNumber: 1,
+    ...overrides,
+  }
+}
+
+const instructorUserFixture = {
+  email: 'instructor@example.com',
+  id: 7,
+  name: '강의자',
+  role: 'INSTRUCTOR' as const,
 }
