@@ -887,8 +887,23 @@ describe('AppRoutes', () => {
     expect(screen.getByLabelText('이메일')).toBeInTheDocument()
   })
 
-  it('opens classrooms after login instead of returning to a protected route', async () => {
-    renderRoute('/sessions/100', null)
+  it('returns to the protected route requested before login', async () => {
+    renderRoute('/sessions/100?tab=chat#message-7', null)
+
+    fireEvent.change(screen.getByLabelText('이메일'), {
+      target: { value: 'learner@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'password1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '로그인' }))
+
+    expect(await screen.findByRole('heading', { name: '학습 공간' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '내 강의실' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the admin role guard when returning after login', async () => {
+    renderRoute('/admin', null)
 
     fireEvent.change(screen.getByLabelText('이메일'), {
       target: { value: 'learner@example.com' },
@@ -899,7 +914,6 @@ describe('AppRoutes', () => {
     fireEvent.click(screen.getByRole('button', { name: '로그인' }))
 
     expect(await screen.findByRole('heading', { name: '내 강의실' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '학습 공간' })).not.toBeInTheDocument()
   })
 
   it('shows the session expired login notice', () => {
