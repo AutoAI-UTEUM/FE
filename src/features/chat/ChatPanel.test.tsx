@@ -1010,6 +1010,157 @@ $$`,
     expect(screen.getByRole('tab', { name: /내 노트/ })).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('cancels a note draft preview without creating a note', async () => {
+    const request = vi.fn(async (_path: string, options?: { method?: string }) => {
+      if (!options?.method || options.method === 'GET') {
+        return {
+          data: { items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 },
+          success: true,
+        }
+      }
+      throw new Error('a cancelled preview must not be posted')
+    }) as unknown as AuthenticatedRequest
+    const repository = createRepository({
+      submitTurn: vi.fn().mockResolvedValue({
+        messages: [],
+        noteDraft: { content: '저장하지 않을 내용', title: '취소할 초안' },
+        uiActions: [],
+      }),
+    })
+
+    render(<ChatHarness repository={repository} request={request} />)
+    fireEvent.change(await screen.findByLabelText('질문'), {
+      target: { value: '노트 초안' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    expect(await screen.findByRole('article', { name: '노트 초안 미리보기' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '초안 취소' }))
+
+    expect(screen.queryByRole('article', { name: '노트 초안 미리보기' })).not.toBeInTheDocument()
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+
+  it('posts a draft once and ignores its late completion after cancellation', async () => {
+    let postCalls = 0
+    let resolvePost!: (value: {
+      data: { content: string; noteId: number; pageNumber: number }
+      success: true
+    }) => void
+    const pendingPost = new Promise<{
+      data: { content: string; noteId: number; pageNumber: number }
+      success: true
+    }>((resolve) => {
+      resolvePost = resolve
+    })
+    const request = vi.fn(async (_path: string, options?: { method?: string }) => {
+      if (!options?.method || options.method === 'GET') {
+        return {
+          data: { items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 },
+          success: true,
+        }
+      }
+      postCalls += 1
+      return pendingPost
+    }) as unknown as AuthenticatedRequest
+    const repository = createRepository({
+      submitTurn: vi.fn().mockResolvedValue({
+        messages: [],
+        noteDraft: { content: '늦게 완료될 내용', title: '늦은 초안' },
+        uiActions: [],
+      }),
+    })
+
+    render(<ChatHarness currentPage={4} repository={repository} request={request} />)
+    fireEvent.change(await screen.findByLabelText('질문'), {
+      target: { value: '노트 초안' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    await screen.findByRole('article', { name: '노트 초안 미리보기' })
+
+    const saveButton = screen.getByRole('button', { name: '저장' })
+    fireEvent.click(saveButton)
+    fireEvent.click(saveButton)
+    await waitFor(() => expect(postCalls).toBe(1))
+    fireEvent.click(screen.getByRole('button', { name: '초안 취소' }))
+
+    await act(async () => {
+      resolvePost({
+        data: { content: '# 늦은 초안\n\n늦게 완료될 내용', noteId: 88, pageNumber: 4 },
+        success: true,
+      })
+      await pendingPost
+    })
+
+    expect(screen.queryByRole('article', { name: '노트 초안 미리보기' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /내 노트/ })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('unlocks draft saving when ownership changes to another session', async () => {
+    let resolvePost!: (value: {
+      data: { content: string; noteId: number; pageNumber: number }
+      success: true
+    }) => void
+    const pendingPost = new Promise<{
+      data: { content: string; noteId: number; pageNumber: number }
+      success: true
+    }>((resolve) => {
+      resolvePost = resolve
+    })
+    const request = vi.fn(async (_path: string, options?: { method?: string }) => {
+      if (!options?.method || options.method === 'GET') {
+        return {
+          data: { items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 },
+          success: true,
+        }
+      }
+      return pendingPost
+    }) as unknown as AuthenticatedRequest
+    const repository = createRepository({
+      submitTurn: vi.fn().mockResolvedValue({
+        messages: [],
+        noteDraft: { content: '세션별 초안 내용', title: '세션별 초안' },
+        uiActions: [],
+      }),
+    })
+    const { rerender } = render(
+      <ChatHarness repository={repository} request={request} sessionId="100" />,
+    )
+    fireEvent.change(await screen.findByLabelText('질문'), {
+      target: { value: '첫 세션 초안' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    await screen.findByRole('article', { name: '노트 초안 미리보기' })
+    fireEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장 중' })).toBeDisabled())
+
+    rerender(<ChatHarness repository={repository} request={request} sessionId="101" />)
+    fireEvent.change(await screen.findByLabelText('질문'), {
+      target: { value: '새 세션 초안' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    await screen.findByRole('article', { name: '노트 초안 미리보기' })
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled()
+
+    rerender(<ChatHarness repository={repository} request={request} sessionId="100" />)
+    fireEvent.change(await screen.findByLabelText('질문'), {
+      target: { value: '돌아온 세션 초안' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    await screen.findByRole('article', { name: '노트 초안 미리보기' })
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '초안 취소' }))
+
+    await act(async () => {
+      resolvePost({
+        data: { content: '# 세션별 초안\n\n세션별 초안 내용', noteId: 89, pageNumber: 1 },
+        success: true,
+      })
+      await pendingPost
+    })
+    expect(screen.getByRole('tab', { name: /내 노트/ })).toHaveAttribute('aria-selected', 'false')
+  })
+
   it('shows message actions on user chat bubbles', async () => {
     const repository = createRepository({
       listMessages: vi.fn().mockResolvedValue([

@@ -2,11 +2,42 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { SessionPageViewer } from './SessionPageViewer'
+import { DocumentState, SessionPageViewer } from './SessionPageViewer'
 
 afterEach(cleanup)
 
 describe('SessionPageViewer', () => {
+  it('offers an explicit retry action when PDF parsing fails', () => {
+    const onRetry = vi.fn()
+    render(
+      <DocumentState
+        isError
+        message="PDF 문서를 열지 못했습니다."
+        onRetry={onRetry}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('PDF 문서를 열지 못했습니다.')
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    expect(onRetry).toHaveBeenCalledOnce()
+  })
+
+  it('offers a full-page retry when the original PDF request fails', () => {
+    render(
+      <SessionPageViewer
+        currentPage={1}
+        file={null}
+        fileError="PDF 원본 요청에 실패했습니다."
+        onMovePage={vi.fn()}
+        totalPages={1}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('PDF 원본 요청에 실패했습니다.')
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument()
+  })
+
+
   it('toggles the outline and exposes bounded page controls', () => {
     const onMovePage = vi.fn()
     render(

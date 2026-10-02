@@ -135,6 +135,7 @@ export function ChatPanel({
   const [messageActionStatus, setMessageActionStatus] = useState('')
   const [turnStatus, setTurnStatus] = useState('')
   const [isCancellingTurn, setIsCancellingTurn] = useState(false)
+  const [savingNoteDraftSessionId, setSavingNoteDraftSessionId] = useState<string | null>(null)
   const [includeCurrentPage, setIncludeCurrentPage] = useState(true)
   const [learningTextSize, setLearningTextSize] = useState<LearningTextSize>(
     () => readLearningTextSize(textSizeOwnerId),
@@ -143,11 +144,15 @@ export function ChatPanel({
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
   const turnSubmissionLockRef = useRef(false)
+  const noteDraftSaveInFlightRef = useRef(false)
+  const noteDraftSaveAttemptRef = useRef(0)
   const olderMessagesScrollSnapshotRef = useRef<{ height: number; top: number } | null>(null)
   const notesRepository = useMemo(
     () => request ? createNotesRepository(request) : null,
     [request],
   )
+  const isSavingNoteDraft = savingNoteDraftSessionId === sessionId
+    && noteDraftSaveInFlightRef.current
 
   function changeLearningTextSize(direction: -1 | 1) {
     setLearningTextSize((current) => {
@@ -165,6 +170,11 @@ export function ChatPanel({
     })
     return () => { cancelled = true }
   }, [notesRepository, sessionId])
+
+  useEffect(() => () => {
+    noteDraftSaveAttemptRef.current += 1
+    noteDraftSaveInFlightRef.current = false
+  }, [sessionId])
 
   useLayoutEffect(() => {
     const log = logRef.current
@@ -362,8 +372,14 @@ export function ChatPanel({
     if (!loaded) olderMessagesScrollSnapshotRef.current = null
   }
 
-  const saveNote = useCallback(async (content: string, pageNumber?: number, sourceMessageId?: string): Promise<boolean> => {
+  const saveNote = useCallback(async (
+    content: string,
+    pageNumber?: number,
+    sourceMessageId?: string,
+    shouldApply: () => boolean = () => true,
+  ): Promise<boolean> => {
     if (!notesRepository) {
+      if (!shouldApply()) return false
       setNotes((current) => [...current, { content, id: `local-${Date.now()}`, pageNumber, sourceMessageId }])
       setTab('notes')
       return true
@@ -375,6 +391,7 @@ export function ChatPanel({
         pageNumber,
         sourceMessageId: Number.isSafeInteger(numericMessageId) && numericMessageId > 0 ? numericMessageId : undefined,
       })
+      if (!shouldApply()) return false
       setNotes((current) => [...current, note])
       setNotesError(null)
       setError(null)
@@ -382,6 +399,7 @@ export function ChatPanel({
       setTab('notes')
       return true
     } catch (requestError) {
+      if (!shouldApply()) return false
       const message = getRequestErrorMessage(requestError)
       setNotesError(message)
       setError(`노트를 저장하지 못했습니다. ${message}`)
@@ -391,9 +409,33 @@ export function ChatPanel({
   }, [notesRepository, sessionId])
 
   async function saveNoteDraft() {
-    if (!chat.noteDraft) return
-    const saved = await saveNote(`# ${chat.noteDraft.title}\n\n${chat.noteDraft.content}`, currentPage)
-    if (saved) chat.clearNoteDraft()
+    const draft = chat.noteDraft
+    if (!draft || noteDraftSaveInFlightRef.current) return
+    noteDraftSaveInFlightRef.current = true
+    setSavingNoteDraftSessionId(sessionId)
+    const attempt = noteDraftSaveAttemptRef.current + 1
+    noteDraftSaveAttemptRef.current = attempt
+    try {
+      const saved = await saveNote(
+        `# ${draft.title}\n\n${draft.content}`,
+        currentPage,
+        undefined,
+        () => noteDraftSaveAttemptRef.current === attempt,
+      )
+      if (saved && noteDraftSaveAttemptRef.current === attempt) chat.clearNoteDraft()
+    } finally {
+      if (noteDraftSaveAttemptRef.current === attempt) {
+        noteDraftSaveInFlightRef.current = false
+        setSavingNoteDraftSessionId(null)
+      }
+    }
+  }
+
+  function cancelNoteDraft() {
+    noteDraftSaveAttemptRef.current += 1
+    noteDraftSaveInFlightRef.current = false
+    setSavingNoteDraftSessionId(null)
+    chat.clearNoteDraft()
   }
 
   async function removeNote(id: string) {
@@ -593,15 +635,27 @@ export function ChatPanel({
                 <p className="type-caption font-semibold text-brand-700">노트 초안</p>
                 <h3 className="mt-1 type-section-title font-bold text-stone-950">{chat.noteDraft.title}</h3>
               </div>
-              <Button
-                disabled={chat.isTurnPending}
-                onClick={() => void saveNoteDraft()}
-                size="sm"
-                type="button"
-              >
-                <Save aria-hidden="true" size={13} />
-                저장
-              </Button>
+              <div className="flex shrink-0 gap-1.5">
+                <Button
+                  aria-label="초안 취소"
+                  onClick={cancelNoteDraft}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  <XCircle aria-hidden="true" size={13} />
+                  취소
+                </Button>
+                <Button
+                  disabled={chat.isTurnPending || isSavingNoteDraft}
+                  onClick={() => void saveNoteDraft()}
+                  size="sm"
+                  type="button"
+                >
+                  <Save aria-hidden="true" size={13} />
+                  {isSavingNoteDraft ? '저장 중' : '저장'}
+                </Button>
+              </div>
             </div>
             <MarkdownContent className="mt-3 border-t border-brand-100 pt-3 text-stone-800" content={chat.noteDraft.content} />
           </article>
