@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -29,63 +29,75 @@ const quizDateFormatter = new Intl.DateTimeFormat('ko-KR', {
 
 export function LearnerReviewQuizzesPage() {
   usePageTitle('복습 퀴즈')
-  const { apiRequest } = useAuth()
-  const repository = useMemo(
-    () => createSessionsRepository(apiRequest),
-    [apiRequest],
-  )
-  const [items, setItems] = useState<ReviewQuizItem[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { user } = useAuth()
+  return <ReviewQuizCollection key={`${user?.id ?? user?.email ?? 'anonymous'}:${user?.role ?? ''}`} />
+}
 
-  async function load() {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const sessions = (await repository.list()).filter(
-        (session) => session.status !== 'DELETED',
-      )
-      const quizzesBySession = await Promise.all(
-        sessions.map(async (session) => ({
-          quizzes: await repository.listQuizzes(session.id).catch(() => []),
-          session,
-        })),
-      )
-      setItems(flattenAndSortQuizzes(quizzesBySession))
-    } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
-    } finally {
-      setIsLoading(false)
-    }
-  }
+type QuizBatch = { quizzes: SessionQuizSummary[]; session: LearningSession }
+type Repository = ReturnType<typeof createSessionsRepository>
+interface CollectionResult {
+  repository: Repository
+  attempt: number
+  batches: QuizBatch[]
+  failed: LearningSession[]
+  error: string | null
+}
+
+function ReviewQuizCollection() {
+  const { apiRequest } = useAuth()
+  const repository = useMemo(() => createSessionsRepository(apiRequest), [apiRequest])
+  const [attempt, setAttempt] = useState(0)
+  const [result, setResult] = useState<CollectionResult | null>(null)
+  const cache = useRef<CollectionResult | null>(null)
+  const current = result?.repository === repository ? result : null
+  const items = flattenAndSortQuizzes(current?.batches ?? [])
+  const failed = current?.failed ?? []
+  const error = current?.error ?? null
+  const isLoading = current?.attempt !== attempt
 
   useEffect(() => {
-    let cancelled = false
-    repository
-      .list()
-      .then((sessions) =>
-        Promise.all(
-          sessions
-            .filter((session) => session.status !== 'DELETED')
-            .map(async (session) => ({
-              quizzes: await repository.listQuizzes(session.id).catch(() => []),
-              session,
-            })),
-        ),
-      )
-      .then((quizzesBySession) => {
-        if (!cancelled) setItems(flattenAndSortQuizzes(quizzesBySession))
-      })
-      .catch((requestError) => {
-        if (!cancelled) setError(getRequestErrorMessage(requestError))
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
-    return () => {
-      cancelled = true
+    const controller = new AbortController()
+    const { signal } = controller
+    async function load() {
+      const previous = cache.current?.repository === repository ? cache.current : null
+      const retryFailed = previous && previous.failed.length > 0
+      try {
+        const sessions = retryFailed
+          ? previous.failed
+          : (await repository.list(signal)).filter((session) => session.status !== 'DELETED')
+        const batches: QuizBatch[] = retryFailed ? [...previous.batches] : []
+        const failed: LearningSession[] = []
+        let next = 0
+        async function worker() {
+          while (!signal.aborted && next < sessions.length) {
+            const session = sessions[next++]
+            try {
+              const quizzes = await repository.listQuizzes(session.id, signal)
+              if (!signal.aborted) batches.push({ quizzes, session })
+            } catch {
+              if (!signal.aborted) failed.push(session)
+            }
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(4, sessions.length) }, worker))
+        if (signal.aborted) return
+        const updated = { repository, attempt, batches, failed, error: null }
+        cache.current = updated
+        setResult(updated)
+      } catch (requestError) {
+        if (signal.aborted) return
+        const updated = { repository, attempt, batches: [], failed: [], error: getRequestErrorMessage(requestError) }
+        cache.current = updated
+        setResult(updated)
+      }
     }
-  }, [repository])
+    void load()
+    return () => controller.abort()
+  }, [repository, attempt])
+
+  function retry() {
+    if (!isLoading) setAttempt((value) => value + 1)
+  }
 
   return (
     <PageContainer>
@@ -98,12 +110,22 @@ export function LearnerReviewQuizzesPage() {
       ) : null}
       {error ? (
         <EmptyState
-          action={<Button onClick={() => void load()}>다시 시도</Button>}
+          action={<Button disabled={isLoading} onClick={retry}>다시 시도</Button>}
           description={error}
           title="복습 퀴즈를 불러오지 못했습니다"
         />
       ) : null}
-      {!isLoading && !error && items.length === 0 ? (
+      {failed.length > 0 ? (
+        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 type-body text-amber-900">
+          <p>{current?.batches.length
+            ? `일부 복습 퀴즈를 불러오지 못했습니다. 학습 세션 ${failed.length}개의 퀴즈를 다시 불러와 주세요.`
+            : '복습 퀴즈를 불러오지 못했습니다. 다시 시도해 주세요.'}</p>
+          <Button disabled={isLoading} onClick={retry} variant="secondary">
+            {isLoading ? '다시 불러오는 중' : '다시 시도'}
+          </Button>
+        </div>
+      ) : null}
+      {!isLoading && !error && failed.length === 0 && items.length === 0 ? (
         <EmptyState
           description="학습 중 만든 퀴즈가 이곳에 모입니다."
           title="저장된 복습 퀴즈가 없습니다"
