@@ -1,4 +1,4 @@
-import type { PagedResponse } from '../../shared/api'
+import { fetchAllPages, type PagedResponse } from '../../shared/api'
 import type { AuthenticatedRequest } from '../auth'
 
 export type ClassroomColor = 'BLUE' | 'GREEN' | 'PURPLE' | 'ORANGE' | 'RED' | 'GRAY'
@@ -391,11 +391,19 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
       const params = new URLSearchParams({ page: '0', size: '100' })
       if (options.query?.trim()) params.set('q', options.query.trim())
       if (options.sort) params.set('sort', options.sort)
-      const { data } = await request<PagedResponse<ClassroomStudentDto>>(
-        `/api/classrooms/${encodeURIComponent(id)}/students?${params}`,
-        { signal },
-      )
-      return data.items.map(mapStudent)
+      const items = await fetchAllPages({
+        getKey: (item: ClassroomStudentDto) => item.studentId,
+        loadPage: async (page) => {
+          params.set('page', String(page))
+          const { data } = await request<PagedResponse<ClassroomStudentDto>>(
+            `/api/classrooms/${encodeURIComponent(id)}/students?${params}`,
+            { signal },
+          )
+          return data
+        },
+        signal,
+      })
+      return items.map(mapStudent)
     },
     async removeStudent(id: string, studentId: string) {
       await request(
@@ -446,8 +454,20 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
     },
     async deleteNotice(id: string, noticeId: string) { await request(`/api/classrooms/${encodeURIComponent(id)}/notices/${encodeURIComponent(noticeId)}`, { method: 'DELETE' }) },
     async listJoinRequests(id: string, status: JoinRequestStatus, signal?: AbortSignal) {
-      const { data } = await request<PagedResponse<JoinRequestDto>>(`/api/classrooms/${encodeURIComponent(id)}/join-requests?status=${status}&page=0&size=100`, { signal })
-      return data.items.map(mapJoinRequest)
+      const params = new URLSearchParams({ status, page: '0', size: '100' })
+      const items = await fetchAllPages({
+        getKey: (item: JoinRequestDto) => item.requestId,
+        loadPage: async (page) => {
+          params.set('page', String(page))
+          const { data } = await request<PagedResponse<JoinRequestDto>>(
+            `/api/classrooms/${encodeURIComponent(id)}/join-requests?${params}`,
+            { signal },
+          )
+          return data
+        },
+        signal,
+      })
+      return items.map(mapJoinRequest)
     },
     async processJoinRequest(id: string, requestId: string, decision: 'approve' | 'reject') {
       await request(`/api/classrooms/${encodeURIComponent(id)}/join-requests/${encodeURIComponent(requestId)}/${decision}`, { method: 'POST' })

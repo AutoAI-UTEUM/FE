@@ -1,4 +1,4 @@
-import type { PagedResponse } from '../../shared/api'
+import { fetchAllPages, type PagedResponse } from '../../shared/api'
 import type { AuthenticatedRequest } from '../auth'
 
 export type ReportGenerationStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
@@ -176,11 +176,18 @@ interface ReportCriterionDto {
 export function createReportsRepository(request: AuthenticatedRequest) {
   return {
     async listStudents(classroomId: string, signal?: AbortSignal) {
-      const { data } = await request<PagedResponse<ReportStudentDto>>(
-        `/api/classrooms/${encodeURIComponent(classroomId)}/students?page=0&size=100`,
-        { signal },
-      )
-      return data.items.map(mapStudent)
+      const items = await fetchAllPages({
+        getKey: (item: ReportStudentDto) => item.studentId,
+        loadPage: async (page) => {
+          const { data } = await request<PagedResponse<ReportStudentDto>>(
+            `/api/classrooms/${encodeURIComponent(classroomId)}/students?page=${page}&size=100`,
+            { signal },
+          )
+          return data
+        },
+        signal,
+      })
+      return items.map(mapStudent)
     },
     async createReport(classroomId: string, studentId: string, input: CreateReportInput) {
       const { data } = await request<ReportDto>(
