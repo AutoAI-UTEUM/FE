@@ -32,6 +32,7 @@ export function ExamsPage() {
   const [classroomId, setClassroomId] = useState(routeClassroomId)
   const [exams, setExams] = useState<ExamSummary[]>([])
   const [status, setStatus] = useState<ExamStatus | ''>('')
+  const [reloadToken, setReloadToken] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const requestedWeek = Number(searchParams.get('weekNumber'))
@@ -69,21 +70,41 @@ export function ExamsPage() {
       : examsRepository.list(classroomId, status || undefined, controller.signal)
     request
       .then((items) => {
+        if (controller.signal.aborted) return
         setExams(sortExamsByRecent(items))
         setError(null)
       })
       .catch((requestError) => { if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError)) })
       .finally(() => { if (!controller.signal.aborted) setIsLoading(false) })
     return () => controller.abort()
-  }, [classroomId, classrooms, classroomsLoaded, examsRepository, isGlobalRoute, status])
+  }, [classroomId, classrooms, classroomsLoaded, examsRepository, isGlobalRoute, reloadToken, status])
+
+  function selectStatus(nextStatus: ExamStatus | '') {
+    beginListLoad()
+    if (nextStatus === status) {
+      setReloadToken((current) => current + 1)
+      return
+    }
+    setStatus(nextStatus)
+  }
+
+  function retryList() {
+    beginListLoad()
+    setReloadToken((current) => current + 1)
+  }
+
+  function beginListLoad() {
+    setIsLoading(true)
+    setError(null)
+  }
 
   return <ClassroomWorkspaceContainer>
     {selectedClassroom && !isGlobalRoute ? <ClassroomWorkspaceHeader actions={isInstructor ? <Button disabled={!classroomId} onClick={() => { setComposerWeekNumber(undefined); setIsComposerOpen(true) }}><Plus size={15} />시험 만들기</Button> : undefined} activeTab="course" classroom={selectedClassroom} /> : <PageHeader title="시험" />}
     <PageToolbar>
-      {selectedClassroom && !isGlobalRoute ? <ClassroomSelect classrooms={classrooms} onChange={(nextClassroomId) => navigate(classroomExamsPath(nextClassroomId), { replace: true })} value={classroomId} /> : null}
+      {selectedClassroom && !isGlobalRoute ? <ClassroomSelect classrooms={classrooms} onChange={(nextClassroomId) => { beginListLoad(); navigate(classroomExamsPath(nextClassroomId), { replace: true }) }} value={classroomId} /> : null}
       {isInstructor ? (
         <div className="flex flex-wrap gap-2" role="group" aria-label="시험 상태 필터">
-          {([['', '전체'], ['DRAFT', '초안'], ['PUBLISHED', '공개'], ['CLOSED', '종료']] as const).map(([value, label]) => <button aria-pressed={status === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${status === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600'}`} key={value} onClick={() => { setIsLoading(true); setStatus(value) }} type="button">{label}</button>)}
+          {([['', '전체'], ['DRAFT', '초안'], ['PUBLISHED', '공개'], ['CLOSED', '종료']] as const).map(([value, label]) => <button aria-pressed={status === value} className={`h-9 rounded-lg border px-3 type-control font-semibold ${status === value ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-stone-200 bg-white text-stone-600'}`} key={value} onClick={() => selectStatus(value)} type="button">{label}</button>)}
         </div>
       ) : (
         <label className="block w-full min-[520px]:w-auto">
@@ -91,8 +112,7 @@ export function ExamsPage() {
           <Select
             className="w-full min-w-36 font-semibold min-[520px]:w-auto"
             onChange={(event) => {
-              setIsLoading(true)
-              setStatus(event.target.value as ExamStatus | '')
+              selectStatus(event.target.value as ExamStatus | '')
             }}
             value={status}
           >
@@ -104,7 +124,7 @@ export function ExamsPage() {
       )}
     </PageToolbar>
     {isLoading ? <p className="py-16 text-center type-body text-stone-500" role="status">시험을 불러오는 중입니다.</p> : null}
-    {error ? <EmptyState description={error} title="시험을 불러오지 못했습니다" /> : null}
+    {error ? <EmptyState action={<Button onClick={retryList}>다시 시도</Button>} description={error} title="시험을 불러오지 못했습니다" /> : null}
     {!isLoading && !error && exams.length === 0 ? <EmptyState description={isInstructor ? '시험 초안을 만들고 문항을 구성해 보세요.' : '강의자가 시험을 공개하면 여기에 표시됩니다.'} title="등록된 시험이 없습니다" /> : null}
     {exams.length > 0 ? <section className="overflow-hidden rounded-lg border border-stone-200 bg-white" aria-label="시험 목록">{exams.map((exam) => <Link className="flex min-h-20 items-center gap-4 border-b border-stone-100 px-5 py-4 last:border-0 hover:bg-stone-50" key={exam.id} to={examDetailPath(exam.id, exam.classroomId)}><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700"><ClipboardList size={17} /></span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><strong className="truncate type-body text-stone-950">{exam.title}</strong><ExamStatusBadge status={exam.status} /></span><span className="mt-1 block type-caption text-stone-500">{examMetadata(exam, isGlobalRoute ? classroomNameById.get(exam.classroomId) ?? '강의실' : undefined)}</span></span>{!isInstructor && exam.mySubmission ? <LearnerExamStatus exam={exam} /> : null}</Link>)}</section> : null}
     {isComposerOpen ? <ExamComposer classroomId={classroomId} initialWeekNumber={composerWeekNumber} onClose={() => setIsComposerOpen(false)} onCreated={(exam) => { setExams((items) => [exam, ...items]); setIsComposerOpen(false) }} repository={examsRepository} /> : null}
