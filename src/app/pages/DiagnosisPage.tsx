@@ -1,5 +1,5 @@
 import { ArrowRight, CheckCircle2, RotateCcw } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth'
@@ -35,6 +35,15 @@ const QUIZ_TYPE_OPTIONS: Array<{ kind: QuizKind; label: string }> = [
 export function DiagnosisPage() {
   usePageTitle('진단·교정')
   const { diagnosisId, sessionId } = useParams()
+  const { user } = useAuth()
+
+  // A route/account change owns a fresh draft and request lifecycle. Reloads
+  // within this scope keep the user's answer so a failed request can be retried.
+  return <DiagnosisWorkspace key={JSON.stringify([user?.id, sessionId, diagnosisId])} />
+}
+
+function DiagnosisWorkspace() {
+  const { diagnosisId, sessionId } = useParams()
   const navigate = useNavigate()
   const { apiRequest } = useAuth()
   const sessionsRepository = useMemo(
@@ -55,6 +64,13 @@ export function DiagnosisPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isStartingRetest, setIsStartingRetest] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const submitControllerRef = useRef<AbortController | null>(null)
+  const retestControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => {
+    submitControllerRef.current?.abort()
+    retestControllerRef.current?.abort()
+  }, [])
 
   useEffect(() => {
     if (!diagnosisId || !sessionId) return
@@ -63,6 +79,7 @@ export function DiagnosisPage() {
     repository
       .restore(diagnosisId, sessionId, controller.signal)
       .then((diagnosis) => {
+        if (controller.signal.aborted) return
         setPendingDiagnosis(diagnosis)
         setError(null)
       })
@@ -78,29 +95,39 @@ export function DiagnosisPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!pendingDiagnosis || isSubmitted || submitControllerRef.current) return
     const validationError = validateDiagnosisAnswer(answer)
     setError(validationError)
     if (validationError) return
-    if (!pendingDiagnosis || isSubmitting) return
-
+    const controller = new AbortController()
+    submitControllerRef.current = controller
     setIsSubmitting(true)
     try {
       const nextCorrection = await repository.submitAnswer(
         pendingDiagnosis,
         answer,
+        controller.signal,
       )
+      if (controller.signal.aborted) return
       setCorrection(nextCorrection)
       setIsSubmitted(true)
       setError(null)
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (!controller.signal.aborted) {
+        setError(getRequestErrorMessage(requestError))
+      }
     } finally {
-      setIsSubmitting(false)
+      if (!controller.signal.aborted) {
+        submitControllerRef.current = null
+        setIsSubmitting(false)
+      }
     }
   }
 
   async function handleRetest(kind: QuizKind) {
-    if (!sessionId || isStartingRetest) return
+    if (!sessionId || !isSubmitted || retestControllerRef.current) return
+    const controller = new AbortController()
+    retestControllerRef.current = controller
     setIsStartingRetest(true)
     setError(null)
     try {
@@ -108,16 +135,22 @@ export function DiagnosisPage() {
         eventType: 'QUIZ_TYPE_SELECTED',
         payload: { quizType: kind },
         requestId: createRequestId(),
-      })
+      }, controller.signal)
+      if (controller.signal.aborted) return
       if (!result.activeQuizId) {
         setError('재평가 퀴즈를 생성하지 못했습니다. 다시 시도해 주세요.')
         return
       }
       navigate(sessionDetailPath(sessionId), { replace: true })
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (!controller.signal.aborted) {
+        setError(getRequestErrorMessage(requestError))
+      }
     } finally {
-      setIsStartingRetest(false)
+      if (!controller.signal.aborted) {
+        retestControllerRef.current = null
+        setIsStartingRetest(false)
+      }
     }
   }
 
@@ -192,7 +225,7 @@ export function DiagnosisPage() {
             </span>
             <textarea
               className="mt-4 min-h-40 w-full rounded-lg border border-stone-300 px-3 py-2 type-body focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
-              disabled={isSubmitted}
+              disabled={isSubmitted || isSubmitting}
               onChange={(event) => {
                 setAnswer(event.target.value)
                 setError(null)

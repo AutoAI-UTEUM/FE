@@ -31,16 +31,30 @@ import { ClassroomWorkspaceContainer } from '../classroom/ClassroomWorkspaceCont
 import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
 export function InstructorLearningStatusPage() {
+  const { classroomId = '' } = useParams()
+  // Each route owns its state and pending work, including direct/legacy mounts.
+  return <InstructorLearningStatusPageScope classroomId={classroomId} key={classroomId} />
+}
+
+function InstructorLearningStatusPageScope({ classroomId }: { classroomId: string }) {
+  const activeRef = useRef(false)
+  useEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false }
+  }, [])
   usePageTitle('학습 현황')
   const { apiRequest } = useAuth()
-  const { classroomId = '' } = useParams()
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
   const [classroom, setClassroom] = useState<Classroom | null>(null)
   const [students, setStudents] = useState<ClassroomStudent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  const loadVersionRef = useRef(0)
   const load = useCallback(async () => {
+    if (!activeRef.current) return
+    const version = ++loadVersionRef.current
+    const isCurrent = () => activeRef.current && version === loadVersionRef.current
     setIsLoading(true)
     setError(null)
     try {
@@ -48,14 +62,15 @@ export function InstructorLearningStatusPage() {
         repository.list(),
         repository.listStudents(classroomId, { sort: 'RECENT_ACTIVITY' }),
       ])
-      const nextClassroom = classrooms.find((item) => item.id === classroomId) ?? classrooms[0]
+      if (!isCurrent()) return
+      const nextClassroom = classrooms.find((item) => item.id === classroomId)
       if (!nextClassroom) throw new Error('강의실 정보를 확인할 수 없습니다.')
       setClassroom(nextClassroom)
       setStudents(nextStudents)
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (isCurrent()) setError(getRequestErrorMessage(requestError) || '강의실 정보를 불러오지 못했습니다.')
     } finally {
-      setIsLoading(false)
+      if (isCurrent()) setIsLoading(false)
     }
   }, [classroomId, repository])
 
