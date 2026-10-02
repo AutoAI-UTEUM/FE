@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 
-const focusable = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
+const focusable = ':is(button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"])'
 
 export function useFocusScope(ref: RefObject<HTMLElement | null>, active: boolean, onClose: () => void, trap = true) {
   const closeRef = useRef(onClose)
@@ -19,15 +19,17 @@ export function useFocusScope(ref: RefObject<HTMLElement | null>, active: boolea
       if (!nodes.length) { event.preventDefault(); container.focus(); return }
       const first = nodes[0]
       const last = nodes[nodes.length - 1]
-      if (event.shiftKey && (document.activeElement === first || !container.contains(document.activeElement))) {
+      const activeElement = document.activeElement
+      const focusIsOutsideSequence = !(activeElement instanceof HTMLElement) || !nodes.includes(activeElement)
+      if (event.shiftKey && (activeElement === first || focusIsOutsideSequence)) {
         event.preventDefault(); last.focus()
-      } else if (!event.shiftKey && (document.activeElement === last || !container.contains(document.activeElement))) {
+      } else if (!event.shiftKey && (activeElement === last || focusIsOutsideSequence)) {
         event.preventDefault(); first.focus()
       }
     }
-    container.addEventListener('keydown', handleKey)
+    document.addEventListener('keydown', handleKey, true)
     return () => {
-      container.removeEventListener('keydown', handleKey)
+      document.removeEventListener('keydown', handleKey, true)
       if (previous?.isConnected) previous.focus({ preventScroll: true })
     }
   }, [active, ref, trap])

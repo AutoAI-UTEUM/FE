@@ -28,11 +28,12 @@ describe('RenameMaterialDialog keyboard accessibility', () => {
 
     fireEvent.change(titleInput, { target: { value: '새 자료 이름' } })
     const closeButton = within(dialog).getByRole('button', { name: '자료 이름 변경 닫기' })
+    const lastButton = within(dialog).getByRole('button', { name: '변경사항 저장' })
     closeButton.focus()
     expect(closeButton).toHaveFocus()
     fireEvent.keyDown(closeButton, { key: 'Tab', shiftKey: true })
-    expect(titleInput).toHaveFocus()
-    fireEvent.keyDown(titleInput, { key: 'Tab' })
+    expect(lastButton).toHaveFocus()
+    fireEvent.keyDown(lastButton, { key: 'Tab' })
     expect(closeButton).toHaveFocus()
 
     fireEvent.keyDown(titleInput, { key: 'Escape' })

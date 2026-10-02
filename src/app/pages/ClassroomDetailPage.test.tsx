@@ -43,6 +43,9 @@ describe('ClassroomDetailPage instructor materials', () => {
   })
 
   it('renders the classroom resource table in week order and uploads a dropped PDF', async () => {
+    vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
+      () => ([{}] as unknown as DOMRectList),
+    )
     let weekListCalls = 0
     let uploadedValues: {
       classroomId: FormDataEntryValue | null
@@ -215,14 +218,23 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('button', { name: '공지 추가' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '시험 추가' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
+    const resourceUploadTrigger = screen.getByRole('button', { name: '자료 업로드' })
+    resourceUploadTrigger.focus()
+    fireEvent.click(resourceUploadTrigger)
     let resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
+    expect(within(resourceDialog).getByRole('button', { name: '파일' })).toHaveFocus()
+    const resourceClose = within(resourceDialog).getByRole('button', { name: '자료 업로드 닫기' })
+    resourceClose.focus()
+    fireEvent.keyDown(resourceClose, { key: 'Tab', shiftKey: true })
+    expect(within(resourceDialog).getByRole('button', { name: '취소' })).toHaveFocus()
+    fireEvent.keyDown(resourceDialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: '자료 업로드' })).not.toBeInTheDocument()
+    expect(resourceUploadTrigger).toHaveFocus()
+    fireEvent.click(resourceUploadTrigger)
+    resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
     fireEvent.mouseDown(resourceDialog)
     expect(screen.queryByRole('dialog', { name: '자료 업로드' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog', { name: '자료 업로드' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '자료 업로드' }))
+    fireEvent.click(resourceUploadTrigger)
     resourceDialog = screen.getByRole('dialog', { name: '자료 업로드' })
     const resourceFile = new File(['document'], '수업 참고자료.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -245,14 +257,23 @@ describe('ClassroomDetailPage instructor materials', () => {
     expect(screen.getByRole('button', { name: '수업 참고자료' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '전체' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
+    const lessonUploadTrigger = screen.getByRole('button', { name: '수업 생성' })
+    lessonUploadTrigger.focus()
+    fireEvent.click(lessonUploadTrigger)
     let uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
+    expect(within(uploadDialog).getByRole('combobox', { name: '주차 선택' })).toHaveFocus()
+    const lessonClose = within(uploadDialog).getByRole('button', { name: '수업 생성 닫기' })
+    lessonClose.focus()
+    fireEvent.keyDown(lessonClose, { key: 'Tab', shiftKey: true })
+    expect(within(uploadDialog).getByRole('button', { name: '취소' })).toHaveFocus()
+    fireEvent.keyDown(uploadDialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: '수업 생성' })).not.toBeInTheDocument()
+    expect(lessonUploadTrigger).toHaveFocus()
+    fireEvent.click(lessonUploadTrigger)
+    uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
     fireEvent.mouseDown(uploadDialog)
     expect(screen.queryByRole('dialog', { name: '수업 생성' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog', { name: '수업 생성' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '수업 생성' }))
+    fireEvent.click(lessonUploadTrigger)
     uploadDialog = screen.getByRole('dialog', { name: '수업 생성' })
     expect(within(uploadDialog).queryByText('PDF · 최대 45MB')).not.toBeInTheDocument()
     expect(within(uploadDialog).queryByText('PPT/PPTX는 PDF로 변환 후 업로드해 주세요.')).not.toBeInTheDocument()

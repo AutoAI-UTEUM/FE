@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -17,6 +18,7 @@ import { isInstructorRole, useAuth } from '../../features/auth'
 import { createClassroomsRepository, type Classroom } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
+import { useFocusScope } from '../../shared/responsive'
 import { Button, EmptyState, PageContainer, PageHeader, PageToolbar, Select, useToast } from '../../shared/ui'
 import { classroomDetailPath } from '../routes'
 import { InstructorClassroomsPage } from './instructor/InstructorClassroomsPage'
@@ -53,9 +55,13 @@ function LearnerClassroomsPage() {
   const [isJoinOpen, setIsJoinOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [inviteCode, setInviteCode] = useState('')
-  const searchInputRef = useRef<HTMLInputElement | null>(null)
-  const joinInputRef = useRef<HTMLInputElement | null>(null)
+  const joinRequestInFlightRef = useRef(false)
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
+
+  const closeSearchDialog = () => setIsSearchOpen(false)
+  const closeJoinDialog = () => {
+    if (!joinRequestInFlightRef.current) setIsJoinOpen(false)
+  }
 
   async function loadClassrooms(search = '') {
     setIsLoading(true)
@@ -81,27 +87,16 @@ function LearnerClassroomsPage() {
         event.preventDefault()
         setIsSearchOpen(true)
       }
-      if (event.key === 'Escape') {
-        setIsSearchOpen(false)
-        setIsJoinOpen(false)
-      }
     }
 
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
   }, [])
 
-  useEffect(() => {
-    if (isSearchOpen) searchInputRef.current?.focus()
-  }, [isSearchOpen])
-
-  useEffect(() => {
-    if (isJoinOpen) joinInputRef.current?.focus()
-  }, [isJoinOpen])
-
   async function submitInviteCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!inviteCode.trim() || isJoining) return
+    if (!inviteCode.trim() || joinRequestInFlightRef.current) return
+    joinRequestInFlightRef.current = true
     setIsJoining(true)
     try {
       await repository.join(inviteCode)
@@ -116,6 +111,7 @@ function LearnerClassroomsPage() {
         'danger',
       )
     } finally {
+      joinRequestInFlightRef.current = false
       setIsJoining(false)
     }
   }
@@ -136,13 +132,13 @@ function LearnerClassroomsPage() {
         actions={<>
           <button
             aria-label="강의실 검색"
-            className="flex h-10 w-full min-w-0 flex-[1_1_100%] items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-400 transition-colors hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 min-[520px]:w-auto min-[520px]:min-w-56 min-[520px]:flex-1 sm:min-w-72 xl:flex-none"
+            className="flex h-10 w-full min-w-0 flex-[1_1_100%] items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-left type-body text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 min-[520px]:w-auto min-[520px]:min-w-56 min-[520px]:flex-1 sm:min-w-72 xl:flex-none"
             onClick={() => setIsSearchOpen(true)}
             type="button"
           >
             <Search aria-hidden="true" size={15} />
             <span className="flex-1">강의실 검색</span>
-            <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 type-micro text-stone-400">
+            <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 type-micro text-stone-500">
               Ctrl K
             </kbd>
           </button>
@@ -216,30 +212,26 @@ function LearnerClassroomsPage() {
       </section> : null}
 
       {isSearchOpen ? (
-        <div
-          aria-label="강의실 검색"
-          aria-modal="true"
+        <FocusScopeDialog
+          ariaLabel="강의실 검색"
           className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/35 px-4 pt-[15vh]"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setIsSearchOpen(false)
-          }}
-          role="dialog"
+          onClose={closeSearchDialog}
         >
           <div className="w-full max-w-xl overflow-hidden rounded-xl border border-stone-200 bg-white ">
             <div className="flex h-14 items-center gap-3 border-b border-stone-100 px-4">
               <Search aria-hidden="true" className="text-stone-400" size={16} />
               <input
+                data-autofocus
                 aria-label="검색어"
                 className="h-full min-w-0 flex-1 border-0 bg-transparent type-body text-stone-900 outline-none placeholder:text-stone-400"
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="강의실 이름을 검색하세요"
-                ref={searchInputRef}
                 value={searchQuery}
               />
               <button
                 aria-label="검색 닫기"
                 className="flex size-7 items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                onClick={() => setIsSearchOpen(false)}
+                onClick={closeSearchDialog}
                 type="button"
               >
                 <X aria-hidden="true" size={14} />
@@ -250,18 +242,14 @@ function LearnerClassroomsPage() {
               {!searchQuery.trim() ? <p className="py-12 text-center type-body text-stone-500">검색할 강의실 이름을 입력하세요</p> : null}
             </div>
           </div>
-        </div>
+        </FocusScopeDialog>
       ) : null}
 
       {isJoinOpen ? (
-        <div
-          aria-labelledby="join-classroom-title"
-          aria-modal="true"
+        <FocusScopeDialog
+          ariaLabelledBy="join-classroom-title"
           className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !isJoining) setIsJoinOpen(false)
-          }}
-          role="dialog"
+          onClose={closeJoinDialog}
         >
           <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 ">
             <div className="flex items-start gap-3">
@@ -282,7 +270,8 @@ function LearnerClassroomsPage() {
               <button
                 aria-label="참여 창 닫기"
                 className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                onClick={() => setIsJoinOpen(false)}
+                disabled={isJoining}
+                onClick={closeJoinDialog}
                 type="button"
               >
                 <X aria-hidden="true" size={16} />
@@ -297,17 +286,18 @@ function LearnerClassroomsPage() {
                 초대 코드
               </label>
               <input
+                data-autofocus
                 autoComplete="off"
                 className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 type-invite-code text-stone-900 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-stone-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
                 id="classroom-invite-code"
                 onChange={(event) => setInviteCode(event.target.value)}
                 placeholder="예: EDU-2026"
-                ref={joinInputRef}
                 value={inviteCode}
               />
               <div className="mt-5 flex justify-end gap-2">
                 <Button
-                  onClick={() => setIsJoinOpen(false)}
+                  disabled={isJoining}
+                  onClick={closeJoinDialog}
                   variant="secondary"
                 >
                   취소
@@ -318,9 +308,42 @@ function LearnerClassroomsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </FocusScopeDialog>
       ) : null}
     </PageContainer>
+  )
+}
+
+function FocusScopeDialog({
+  ariaLabel,
+  ariaLabelledBy,
+  children,
+  className,
+  onClose,
+}: {
+  ariaLabel?: string
+  ariaLabelledBy?: string
+  children: ReactNode
+  className: string
+  onClose: () => void
+}) {
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useFocusScope(dialogRef, true, onClose)
+
+  return (
+    <div
+      ref={dialogRef}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      aria-modal="true"
+      className={className}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      role="dialog"
+    >
+      {children}
+    </div>
   )
 }
 
