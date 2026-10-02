@@ -107,9 +107,27 @@ export function AppLayout() {
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const notificationOwnerKey = user
+    ? `${user.id ?? user.email}:${user.email}:${user.role ?? ''}`
+    : null
+  const notificationOwnerRef = useRef(notificationOwnerKey)
+  const notificationRequestIdRef = useRef(0)
+  const notificationMutationRevisionRef = useRef(0)
+  const pendingNotificationMutationsRef = useRef(new Set<symbol>())
+  const pendingNotificationControllersRef = useRef(new Map<symbol, AbortController>())
+  const pendingNotificationDeletesRef = useRef(new Map<string, symbol>())
+  const pendingNotificationReadsRef = useRef(new Map<string, symbol>())
+  const [notificationState, setNotificationState] = useState<{
+    items: AppNotification[]
+    ownerKey: string | null
+  }>(() => ({ items: [], ownerKey: notificationOwnerKey }))
+  const notifications = notificationState.ownerKey === notificationOwnerKey
+    ? notificationState.items
+    : []
   const [notificationsError, setNotificationsError] = useState<string | null>(null)
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true)
+  const areNotificationsLoading = notificationState.ownerKey !== notificationOwnerKey
+    || isLoadingNotifications
   const [notificationReloadKey, setNotificationReloadKey] = useState(0)
   const [loadedProfileAvatar, setLoadedProfileAvatar] = useState<{
     source: string
@@ -279,16 +297,42 @@ export function AppLayout() {
   }, [isNotificationsOpen])
 
   useEffect(() => {
-    if (isAdmin) return
+    if (notificationOwnerRef.current !== notificationOwnerKey) {
+      pendingNotificationControllersRef.current.forEach((controller) => controller.abort())
+      pendingNotificationControllersRef.current.clear()
+      notificationOwnerRef.current = notificationOwnerKey
+      notificationMutationRevisionRef.current += 1
+      pendingNotificationMutationsRef.current.clear()
+      pendingNotificationDeletesRef.current.clear()
+      pendingNotificationReadsRef.current.clear()
+    }
+    notificationRequestIdRef.current += 1
+    if (isAdmin || notificationOwnerKey === null) return
 
     const controller = new AbortController()
+    const requestId = notificationRequestIdRef.current
+    const mutationRevision = notificationMutationRevisionRef.current
     notificationsRepository.list(controller.signal)
       .then((items) => {
-        setNotifications(items)
+        if (
+          controller.signal.aborted
+          || requestId !== notificationRequestIdRef.current
+          || notificationOwnerKey !== notificationOwnerRef.current
+          || mutationRevision !== notificationMutationRevisionRef.current
+          || pendingNotificationMutationsRef.current.size > 0
+        ) return
+        setNotificationState({ items, ownerKey: notificationOwnerKey })
         setNotificationsError(null)
       })
       .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) {
+        if (
+          !controller.signal.aborted
+          && requestId === notificationRequestIdRef.current
+          && notificationOwnerKey === notificationOwnerRef.current
+        ) {
+          setNotificationState((current) => current.ownerKey === notificationOwnerKey
+            ? current
+            : { items: [], ownerKey: notificationOwnerKey })
           setNotificationsError(
             requestError instanceof Error
               ? requestError.message
@@ -297,46 +341,181 @@ export function AppLayout() {
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingNotifications(false)
+        if (
+          !controller.signal.aborted
+          && requestId === notificationRequestIdRef.current
+          && notificationOwnerKey === notificationOwnerRef.current
+        ) setIsLoadingNotifications(false)
       })
     return () => controller.abort()
-  }, [isAdmin, notificationReloadKey, notificationsRepository])
+  }, [
+    isAdmin,
+    notificationOwnerKey,
+    notificationReloadKey,
+    notificationsRepository,
+  ])
+
+  useEffect(() => () => {
+    pendingNotificationControllersRef.current.forEach((controller) => controller.abort())
+    pendingNotificationControllersRef.current.clear()
+  }, [])
+
+  function reloadNotifications() {
+    if (notificationOwnerKey !== notificationOwnerRef.current) return
+    setIsLoadingNotifications(true)
+    setNotificationReloadKey((key) => key + 1)
+  }
+
+  function updateNotificationItems(
+    ownerKey: string,
+    update: (current: AppNotification[]) => AppNotification[],
+  ) {
+    setNotificationState((current) => current.ownerKey === ownerKey
+      ? { ...current, items: update(current.items) }
+      : current)
+  }
 
   async function markAllNotificationsRead() {
-    const unread = notifications.filter((notification) => !notification.readAt)
+    const ownerKey = notificationOwnerKey
+    if (ownerKey === null) return
+    const unread = notifications.filter((notification) =>
+      !notification.readAt
+      && !pendingNotificationReadsRef.current.has(notification.id)
+      && !pendingNotificationDeletesRef.current.has(notification.id))
     if (unread.length === 0) return
     const readAt = new Date().toISOString()
-    setNotifications((current) => current.map((notification) =>
-      notification.readAt ? notification : { ...notification, readAt }))
-    const results = await Promise.allSettled(
-      unread.map((notification) => notificationsRepository.markRead(notification.id)),
-    )
-    if (results.some((result) => result.status === 'rejected')) {
-      setNotificationReloadKey((key) => key + 1)
-    }
+    const operations = unread.map((notification) => {
+      const token = Symbol(notification.id)
+      const controller = new AbortController()
+      pendingNotificationReadsRef.current.set(notification.id, token)
+      pendingNotificationMutationsRef.current.add(token)
+      pendingNotificationControllersRef.current.set(token, controller)
+      return { controller, notification, token }
+    })
+    notificationMutationRevisionRef.current += 1
+    updateNotificationItems(ownerKey, (current) => current.map((notification) =>
+      operations.some((operation) => operation.notification.id === notification.id)
+        ? { ...notification, readAt }
+        : notification))
+    let hadFailure = false
+    await Promise.all(operations.map(async ({ controller, notification, token }) => {
+      let failed = false
+      try {
+        await notificationsRepository.markRead(notification.id, controller.signal)
+      } catch {
+        failed = true
+      }
+      const isCurrentOperation = ownerKey === notificationOwnerRef.current
+        && pendingNotificationReadsRef.current.get(notification.id) === token
+      if (isCurrentOperation && failed) {
+        hadFailure = true
+        updateNotificationItems(ownerKey, (current) => current.map((item) =>
+          item.id === notification.id && item.readAt === readAt
+            ? { ...item, readAt: notification.readAt }
+            : item))
+        setNotificationsError('일부 알림을 읽음 처리하지 못했습니다.')
+      }
+      if (pendingNotificationReadsRef.current.get(notification.id) === token) {
+        pendingNotificationReadsRef.current.delete(notification.id)
+      }
+      pendingNotificationMutationsRef.current.delete(token)
+      pendingNotificationControllersRef.current.delete(token)
+      if (isCurrentOperation) notificationMutationRevisionRef.current += 1
+    }))
+    if (hadFailure && ownerKey === notificationOwnerRef.current) reloadNotifications()
   }
 
   function openNotification(notification: AppNotification) {
     setIsNotificationsOpen(false)
-    if (!notification.readAt) {
+    const ownerKey = notificationOwnerKey
+    if (
+      ownerKey !== null
+      && !notification.readAt
+      && !pendingNotificationReadsRef.current.has(notification.id)
+      && !pendingNotificationDeletesRef.current.has(notification.id)
+    ) {
+      const operationOwnerKey = ownerKey
       const readAt = new Date().toISOString()
-      setNotifications((current) => current.map((item) =>
+      const token = Symbol(notification.id)
+      const controller = new AbortController()
+      pendingNotificationReadsRef.current.set(notification.id, token)
+      pendingNotificationMutationsRef.current.add(token)
+      pendingNotificationControllersRef.current.set(token, controller)
+      notificationMutationRevisionRef.current += 1
+      updateNotificationItems(operationOwnerKey, (current) => current.map((item) =>
         item.id === notification.id ? { ...item, readAt } : item))
-      void notificationsRepository.markRead(notification.id).catch(() => {
-        setNotificationReloadKey((key) => key + 1)
-      })
+      void notificationsRepository.markRead(notification.id, controller.signal)
+        .then(() => settleOpenNotificationRead())
+        .catch(() => settleOpenNotificationRead(true))
+
+      function settleOpenNotificationRead(failed = false) {
+        if (pendingNotificationReadsRef.current.get(notification.id) !== token) return
+        pendingNotificationReadsRef.current.delete(notification.id)
+        pendingNotificationMutationsRef.current.delete(token)
+        pendingNotificationControllersRef.current.delete(token)
+        if (operationOwnerKey !== notificationOwnerRef.current) return
+        notificationMutationRevisionRef.current += 1
+        if (!failed) return
+        updateNotificationItems(operationOwnerKey, (current) => current.map((item) =>
+          item.id === notification.id && item.readAt === readAt
+            ? { ...item, readAt: notification.readAt }
+            : item))
+        setNotificationsError('알림을 읽음 처리하지 못했습니다.')
+        reloadNotifications()
+      }
     }
     navigate(getNotificationPath(notification))
   }
 
   async function deleteNotification(notificationId: string) {
-    const previous = notifications
-    setNotifications((current) => current.filter((item) => item.id !== notificationId))
+    const ownerKey = notificationOwnerKey
+    if (
+      ownerKey === null
+      || pendingNotificationDeletesRef.current.has(notificationId)
+    ) return
+    const deletedIndex = notifications.findIndex((item) => item.id === notificationId)
+    const deletedNotification = notifications[deletedIndex]
+    if (!deletedNotification) return
+    const token = Symbol(notificationId)
+    const pendingReadToken = pendingNotificationReadsRef.current.get(notificationId)
+    if (pendingReadToken) {
+      pendingNotificationControllersRef.current.get(pendingReadToken)?.abort()
+      pendingNotificationControllersRef.current.delete(pendingReadToken)
+      pendingNotificationMutationsRef.current.delete(pendingReadToken)
+      pendingNotificationReadsRef.current.delete(notificationId)
+      notificationMutationRevisionRef.current += 1
+    }
+    const controller = new AbortController()
+    pendingNotificationDeletesRef.current.set(notificationId, token)
+    pendingNotificationMutationsRef.current.add(token)
+    pendingNotificationControllersRef.current.set(token, controller)
+    notificationMutationRevisionRef.current += 1
+    updateNotificationItems(ownerKey, (current) =>
+      current.filter((item) => item.id !== notificationId))
     try {
-      await notificationsRepository.delete(notificationId)
+      await notificationsRepository.delete(notificationId, controller.signal)
     } catch {
-      setNotifications(previous)
-      setNotificationsError('알림을 삭제하지 못했습니다.')
+      if (
+        ownerKey === notificationOwnerRef.current
+        && pendingNotificationDeletesRef.current.get(notificationId) === token
+      ) {
+        updateNotificationItems(ownerKey, (current) => {
+          if (current.some((item) => item.id === notificationId)) return current
+          const next = [...current]
+          next.splice(Math.min(deletedIndex, next.length), 0, deletedNotification)
+          return next
+        })
+        setNotificationsError('알림을 삭제하지 못했습니다.')
+      }
+    } finally {
+      if (pendingNotificationDeletesRef.current.get(notificationId) === token) {
+        pendingNotificationDeletesRef.current.delete(notificationId)
+      }
+      pendingNotificationMutationsRef.current.delete(token)
+      pendingNotificationControllersRef.current.delete(token)
+      if (ownerKey === notificationOwnerRef.current) {
+        notificationMutationRevisionRef.current += 1
+      }
     }
   }
 
@@ -389,7 +568,7 @@ export function AppLayout() {
         <NotificationPanel
           error={notificationsError}
           isCollapsed={isCollapsed}
-          isLoading={isLoadingNotifications}
+          isLoading={areNotificationsLoading}
           notifications={notifications}
           onDelete={(notificationId) => void deleteNotification(notificationId)}
           onMarkRead={() => void markAllNotificationsRead()}
@@ -890,7 +1069,7 @@ export function AppLayout() {
             <NotificationPanel
               error={notificationsError}
               isCollapsed={false}
-              isLoading={isLoadingNotifications}
+              isLoading={areNotificationsLoading}
               notifications={notifications}
               onDelete={(notificationId) => void deleteNotification(notificationId)}
               onMarkRead={() => void markAllNotificationsRead()}
@@ -1002,9 +1181,20 @@ function NotificationPanel({
       ) : notifications.length > 0 ? (
         <div className="max-h-80 overflow-y-auto py-1.5">
           {error ? (
-            <p className="px-4 py-2 type-micro font-medium text-rose-700" role="alert">
-              {error}
-            </p>
+            <div
+              className="flex items-center justify-between gap-3 px-4 py-2 type-micro font-medium text-rose-700"
+              role="alert"
+            >
+              <span>{error}</span>
+              <button
+                className="shrink-0 font-semibold text-brand-700 hover:text-brand-900 disabled:opacity-40"
+                disabled={isLoading}
+                onClick={onRetry}
+                type="button"
+              >
+                다시 시도
+              </button>
+            </div>
           ) : null}
           {notifications.map((notification) => (
             <div
