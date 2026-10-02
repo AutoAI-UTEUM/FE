@@ -37,6 +37,11 @@ type CalendarView = 'list' | 'month' | 'week'
 const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
 export function InstructorCalendarPage() {
+  const { user } = useAuth()
+  return <CalendarPageContent key={user?.id ?? user?.email ?? 'signed-out'} />
+}
+
+function CalendarPageContent() {
   usePageTitle('캘린더')
   const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
@@ -44,7 +49,7 @@ export function InstructorCalendarPage() {
   const [measureArea, areaWidth] = useElementWidth()
   const { classroomId = '' } = useParams()
   const canManagePersonalEvents = !isAdminRole(user?.role)
-  const { addEvent, events, removeEvent, updateEvent } = useCalendarEvents(
+  const { addEvent, error, events, hasLoaded, isLoading, reload, removeEvent, updateEvent } = useCalendarEvents(
     user?.id ?? user?.email,
     apiRequest,
   )
@@ -59,11 +64,25 @@ export function InstructorCalendarPage() {
   const [pickerYear, setPickerYear] = useState(cursor.getFullYear())
   const pickerRef = useRef<HTMLDivElement | null>(null)
   const lastWheelNavigationAt = useRef(0)
+  const isActive = useRef(true)
+
+  useEffect(() => {
+    isActive.current = true
+    return () => { isActive.current = false }
+  }, [])
 
   useEffect(() => {
     if (classroomId) rememberClassroomId(classroomId)
   }, [classroomId])
 
+  const unavailableMessage = isLoading
+    ? '일정을 불러오는 중입니다.'
+    : error
+      ? '일정을 불러오지 못했습니다. 다시 시도해 주세요.'
+      : !hasLoaded
+        ? '일정을 불러올 수 없습니다.'
+        : undefined
+  const showCalendar = events.length > 0 || (hasLoaded && !unavailableMessage)
   const label = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
   const isViewingCurrentMonth = isSameMonth(cursor, today)
   const visibleMonthEvents = useMemo(
@@ -236,33 +255,52 @@ export function InstructorCalendarPage() {
             </span>
           </div>
 
-          {isTablet && areaWidth < 400 && view !== 'list' ? <div className="p-3"><label className="block type-control font-semibold">날짜 선택<input type="date" className="mt-2 w-full min-w-0 rounded-lg border border-stone-200 p-2" value={toDateTimeLocal(selectedDay).slice(0, 10)} onChange={(event) => { if (event.target.value) { const day = new Date(`${event.target.value}T12:00:00`); setSelectedDay(day); setCursor(day) } }} /></label></div> : view === 'month' ? (
-            <MonthView
-              cursor={cursor}
-              events={events}
-              onWheel={isTablet ? () => undefined : handleMonthWheel}
-              onSelectDay={isTablet ? setSelectedDay : undefined}
-              selectedDay={isTablet ? selectedDay : undefined}
-              onSelectEvent={setSelectedEvent}
-              today={today}
-            />
+          {isLoading ? (
+            <p className="p-4 type-body text-stone-600" role="status">
+              {hasLoaded ? '일정을 새로 불러오는 중입니다. 기존 일정을 표시하고 있습니다.' : '일정을 불러오는 중입니다.'}
+            </p>
           ) : null}
-          {view === 'week' && !(isTablet && areaWidth < 400) ? (
-            <WeekView
-              onSelectDay={isTablet ? setSelectedDay : undefined}
-              selectedDay={selectedDay}
-              cursor={cursor}
-              events={events}
-              onSelectEvent={setSelectedEvent}
-              today={today}
-            />
+          {error ? (
+            <div className="border-b border-rose-100 bg-rose-50 p-4" role="alert">
+              <h2 className="type-body font-semibold text-rose-900">일정을 불러오지 못했습니다</h2>
+              <p className="mt-1 type-caption text-rose-800">{getRequestErrorMessage(error)}</p>
+              {hasLoaded ? <p className="mt-1 type-caption text-rose-800">마지막으로 불러온 일정을 표시하고 있습니다.</p> : null}
+              <Button className="mt-3" onClick={reload} size="sm" variant="secondary">다시 시도</Button>
+            </div>
           ) : null}
-          {view === 'list' ? (
-            <ListView events={events} onSelectEvent={setSelectedEvent} />
+
+          {showCalendar ? (
+            <>
+              {isTablet && areaWidth < 400 && view !== 'list' ? <div className="p-3"><label className="block type-control font-semibold">날짜 선택<input type="date" className="mt-2 w-full min-w-0 rounded-lg border border-stone-200 p-2" value={toDateTimeLocal(selectedDay).slice(0, 10)} onChange={(event) => { if (event.target.value) { const day = new Date(`${event.target.value}T12:00:00`); setSelectedDay(day); setCursor(day) } }} /></label></div> : view === 'month' ? (
+                <MonthView
+                  cursor={cursor}
+                  events={events}
+                  onWheel={isTablet ? () => undefined : handleMonthWheel}
+                  onSelectDay={isTablet ? setSelectedDay : undefined}
+                  selectedDay={isTablet ? selectedDay : undefined}
+                  onSelectEvent={setSelectedEvent}
+                  today={today}
+                />
+              ) : null}
+              {view === 'week' && !(isTablet && areaWidth < 400) ? (
+                <WeekView
+                  onSelectDay={isTablet ? setSelectedDay : undefined}
+                  selectedDay={selectedDay}
+                  cursor={cursor}
+                  events={events}
+                  onSelectEvent={setSelectedEvent}
+                  today={today}
+                />
+              ) : null}
+              {view === 'list' ? (
+                <ListView events={events} onSelectEvent={setSelectedEvent} />
+              ) : null}
+            </>
           ) : null}
         </section>
 
         <MonthlySchedulePanel
+          unavailableMessage={unavailableMessage}
           title={isTablet ? `${formatCalendarDate(selectedDay)} 일정` : undefined}
           events={isTablet ? getEventsForDay(events, selectedDay) : visibleMonthEvents}
           onAddEvent={canManagePersonalEvents
@@ -282,11 +320,13 @@ export function InstructorCalendarPage() {
               const event = editingEvent
                 ? await updateEvent(editingEvent, input)
                 : await addEvent(input)
+              if (!isActive.current) return
               setCursor(startOfMonth(new Date(event.startsAt)))
               setEditingEvent(null)
               setIsComposerOpen(false)
               showToast(editingEvent ? '일정을 수정했습니다.' : '일정을 추가했습니다.', 'success')
             } catch (requestError) {
+              if (!isActive.current || (requestError instanceof DOMException && requestError.name === 'AbortError')) return
               showToast(getRequestErrorMessage(requestError), 'danger')
             }
           }}
@@ -305,9 +345,11 @@ export function InstructorCalendarPage() {
           onRemove={canManagePersonalEvents && selectedEvent.kind === 'PERSONAL' ? async () => {
             try {
               await removeEvent(selectedEvent)
+              if (!isActive.current) return
               setSelectedEvent(null)
               showToast('일정을 삭제했습니다.', 'success')
             } catch (requestError) {
+              if (!isActive.current || (requestError instanceof DOMException && requestError.name === 'AbortError')) return
               showToast(getRequestErrorMessage(requestError), 'danger')
             }
           } : undefined}
@@ -588,12 +630,14 @@ function MonthlySchedulePanel({
   onAddEvent,
   onSelectEvent,
   title = '이번 달 일정',
+  unavailableMessage,
 }: {
   events: CalendarEvent[]
   /** 개인 일정을 만들 수 있을 때만 넘어온다. */
   onAddEvent?: () => void
   onSelectEvent: (event: CalendarEvent) => void
   title?: string
+  unavailableMessage?: string
 }) {
   return (
     <aside
@@ -639,7 +683,7 @@ function MonthlySchedulePanel({
           ))}
         </div>
       ) : (
-        <p className="mt-4 type-caption text-stone-400">등록된 일정이 없습니다.</p>
+        <p className="mt-4 type-caption text-stone-400">{unavailableMessage ?? '등록된 일정이 없습니다.'}</p>
       )}
     </aside>
   )
