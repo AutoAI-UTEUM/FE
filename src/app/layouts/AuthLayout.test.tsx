@@ -27,6 +27,25 @@ describe('AuthLayout', () => {
     expect(screen.queryByLabelText('서비스 연결 상태')).not.toBeInTheDocument()
   })
 
+  it('uses the login sidebar layout on the forgot password page', () => {
+    render(
+      <MemoryRouter initialEntries={['/forgot-password']}>
+        <Routes>
+          <Route element={<AuthLayout />}>
+            <Route path="/forgot-password" element={<h1>비밀번호 찾기 폼</h1>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const sidebar = screen.getByRole('complementary')
+    expect(within(sidebar).queryByRole('link')).not.toBeInTheDocument()
+    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent(
+      'Powered by Grok',
+    )
+    expect(within(sidebar).queryByText(/© 2026/)).not.toBeInTheDocument()
+  })
+
   it('uses the login sidebar layout on the password reset page', () => {
     render(
       <MemoryRouter initialEntries={['/reset-password']}>
@@ -40,7 +59,9 @@ describe('AuthLayout', () => {
 
     const sidebar = screen.getByRole('complementary')
     expect(within(sidebar).queryByRole('link')).not.toBeInTheDocument()
-    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent('Powered by Grok')
+    expect(within(sidebar).getByText(/Powered by/)).toHaveTextContent(
+      'Powered by Grok',
+    )
     expect(within(sidebar).getByText(/같은 강의/).parentElement).toHaveClass(
       'flex-1',
       'justify-center',

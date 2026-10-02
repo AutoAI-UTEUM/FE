@@ -95,6 +95,10 @@ describe('ClassroomsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '강의실 참여' }))
     const joinDialog = screen.getByRole('dialog', { name: '강의실 참여' })
+    expect(joinDialog.querySelector('.lucide-door-open')).not.toBeInTheDocument()
+    expect(
+      within(joinDialog).queryByText('강의자가 공유한 초대 코드를 입력하세요.'),
+    ).not.toBeInTheDocument()
     fireEvent.mouseDown(within(joinDialog).getByRole('textbox', { name: '초대 코드' }))
     expect(joinDialog).toBeInTheDocument()
     fireEvent.mouseDown(joinDialog)

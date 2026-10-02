@@ -1,5 +1,4 @@
 import {
-  DoorOpen,
   Plus,
   Search,
   X,
@@ -265,9 +264,6 @@ function LearnerClassroomsPage() {
         >
           <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-5 ">
             <div className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
-                <DoorOpen aria-hidden="true" size={18} />
-              </span>
               <div className="min-w-0 flex-1">
                 <h2
                   className="type-section-title font-bold text-stone-950"
@@ -275,9 +271,6 @@ function LearnerClassroomsPage() {
                 >
                   강의실 참여
                 </h2>
-                <p className="mt-1 type-body text-stone-500">
-                  강의자가 공유한 초대 코드를 입력하세요.
-                </p>
               </div>
               <button
                 aria-label="참여 창 닫기"

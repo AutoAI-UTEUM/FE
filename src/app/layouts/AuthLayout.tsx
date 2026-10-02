@@ -13,6 +13,7 @@ export function AuthLayout() {
   const usesFocusedAuthPanel =
     isLoginPage ||
     location.pathname === routes.signup ||
+    location.pathname === routes.forgotPassword ||
     location.pathname === routes.resetPassword
 
   return (
