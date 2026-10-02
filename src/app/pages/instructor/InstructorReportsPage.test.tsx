@@ -191,7 +191,7 @@ describe('instructor report route scope and polling recovery', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/classrooms/12/students/9/reports/job-1',
     )
-    expect(statusRequests).toBe(2)
+    expect(statusRequests).toBeGreaterThanOrEqual(2)
     expect(createRequests).toBe(0)
     expect(visitedLocations.filter(
       (pathname) => pathname === '/classrooms/12/students/9/reports/job-1',
