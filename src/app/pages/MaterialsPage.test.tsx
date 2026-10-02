@@ -12,11 +12,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_MATERIAL_UPLOAD_BYTES } from '../../features/materials'
 import { TestAuthProvider } from '../../test/TestAuthProvider'
 import { apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
+import { handleApiFixtureRequest } from '../../test/apiFixtures'
 import { MaterialViewerRedirectPage } from './MaterialViewerRedirectPage'
 import { MaterialsPage } from './MaterialsPage'
 
 beforeEach(() => {
-  installApiFixtureServer()
+  installMaterialsFixtureServer()
 })
 
 afterEach(() => {
@@ -25,6 +26,29 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
 })
+
+// Material mutations are followed by a page reload. Model their persisted server state.
+function installMaterialsFixtureServer(override?: Parameters<typeof installApiFixtureServer>[0]) {
+  const deleted = new Set<number>()
+  const renamed = new Map<number, string>()
+  const uploaded = new Map<number, Record<string, unknown>>()
+  return installApiFixtureServer(async (request) => {
+    const response = await override?.(request) ?? await handleApiFixtureRequest(request)
+    const url = new URL(request.url)
+    if (!url.pathname.startsWith('/api/materials') || !response.ok) return response
+    const payload = await response.clone().json()
+    if (request.method === 'DELETE') deleted.add(Number(url.pathname.split('/').at(-1)))
+    if (request.method === 'PATCH') renamed.set(payload.data.materialId, payload.data.title)
+    if (request.method === 'POST' && url.pathname === '/api/materials') uploaded.set(payload.data.materialId, payload.data)
+    if (request.method === 'GET' && url.pathname === '/api/materials') {
+      const items = [...uploaded.values(), ...payload.data.items]
+        .filter((item) => !deleted.has(Number(item.materialId)))
+        .map((item) => ({ ...item, title: renamed.get(Number(item.materialId)) ?? item.title }))
+      return apiSuccess({ ...payload.data, items, totalElements: items.length, totalPages: items.length ? 1 : 0 })
+    }
+    return response
+  })
+}
 
 function renderMaterialsPage() {
   return render(
@@ -68,7 +92,7 @@ describe('MaterialsPage', () => {
   it('polls the list while a material is processing and stops when ready', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let listCalls = 0
-    installApiFixtureServer((request) => {
+    installMaterialsFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/api/materials') {
         listCalls += 1
@@ -135,7 +159,7 @@ describe('MaterialsPage', () => {
   it('renames an existing material', async () => {
     let renameBody: unknown
     let renameContentType: string | null = null
-    installApiFixtureServer((request) => {
+    installMaterialsFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'PATCH' && url.pathname === '/api/materials/11') {
         renameContentType = request.headers.get('Content-Type')
@@ -199,7 +223,7 @@ describe('MaterialsPage', () => {
   it(
     'uses the full file name as the editable default title',
     async () => {
-      installApiFixtureServer((request) => {
+      installMaterialsFixtureServer((request) => {
         const url = new URL(request.url)
         if (request.method === 'POST' && url.pathname === '/api/materials') {
           return apiSuccess({
@@ -268,7 +292,7 @@ describe('MaterialsPage', () => {
     const pendingUpload = new Promise<Response>((resolve) => {
       resolveUpload = resolve
     })
-    installApiFixtureServer((request) => {
+    installMaterialsFixtureServer((request) => {
       const url = new URL(request.url)
       if (request.method === 'POST' && url.pathname === '/api/materials') {
         uploadCalls += 1
