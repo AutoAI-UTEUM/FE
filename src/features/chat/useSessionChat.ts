@@ -41,6 +41,7 @@ export interface SessionChat {
   ) => Promise<SessionTurnResult>
   waitForTurnCompletion: (
     onResult?: (result: SessionTurnResult) => void,
+    quizBaseline?: QuizRecoveryBaseline,
   ) => Promise<SessionTurnResult | undefined>
 }
 
@@ -269,9 +270,9 @@ export function useSessionChat(
       const recoveryBaselinePromise = captureTurnRecoveryBaseline(
         repository,
         sessionId,
-        turn,
         knownMessageIds,
         attempt.streamController.signal,
+        turn.eventType,
       )
       const recoveredUiActions: UiAction[] = []
       let completedNoteDraft: NoteDraft | undefined
@@ -718,6 +719,7 @@ export function useSessionChat(
 
   const waitForTurnCompletion = useCallback(async (
     onResult?: (result: SessionTurnResult) => void,
+    quizBaseline?: QuizRecoveryBaseline,
   ) => {
     if (isTurnPendingRef.current) return undefined
     isTurnPendingRef.current = true
@@ -727,10 +729,11 @@ export function useSessionChat(
     const knownMessageIds = new Set(messagesRef.current
       .filter((message) => message.role === 'assistant' && message.status === 'sent')
       .map((message) => message.id))
+    const pollController = new AbortController()
     const attempt: ActiveTurnAttempt = {
       cancellationRequested: false,
       id: ++attemptSequenceRef.current,
-      pollController: new AbortController(),
+      pollController,
       requestId: 'turn-recovery',
       streamController: new AbortController(),
       superseded: false,
@@ -738,6 +741,22 @@ export function useSessionChat(
     }
     activeAttemptRef.current = attempt
     const isCurrentAttempt = () => activeAttemptRef.current === attempt
+    const acceptsStreamEvents = () => isCurrentAttempt()
+      && !attempt.streamController.signal.aborted
+    // Prefer the page's pre-request snapshot: the running turn may have saved its
+    // quiz by the time the conflicting page request returns. Other callers still
+    // capture a baseline because the running turn's event type is unknown.
+    const recoveryBaselinePromise: Promise<TurnRecoveryBaseline> = quizBaseline
+      ? Promise.resolve({
+          knownMessageIds,
+          quiz: { ...quizBaseline, quizIds: new Set(quizBaseline.quizIds) },
+        })
+      : captureTurnRecoveryBaseline(
+          repository,
+          sessionId,
+          knownMessageIds,
+          pollController.signal,
+        )
     let resolveStreamCompleted: (() => void) | undefined
     let completedStreamResult: SessionTurnResult | undefined
     const streamCompleted = new Promise<void>((resolve) => {
@@ -746,30 +765,30 @@ export function useSessionChat(
     logSessionStreamEvent('stream_open_start', attempt, sessionId, 'turn_recovery')
     const streamPromise = repository.stream(sessionId, {
       onCompleted: (draft, result) => {
-        if (!isCurrentAttempt()) return
+        if (!acceptsStreamEvents()) return
         if (draft) setNoteDraft(draft)
         completedStreamResult = result
         logSessionStreamEvent('terminal', attempt, sessionId, 'completed')
         resolveStreamCompleted?.()
       },
       onError: () => {
-        if (isCurrentAttempt()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+        if (acceptsStreamEvents()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
       },
       onReady: () => {
-        if (isCurrentAttempt()) {
+        if (acceptsStreamEvents()) {
           logSessionStreamEvent('ready_received', attempt, sessionId, 'turn_recovery')
         }
       },
       onStatus: () => {
-        if (isCurrentAttempt()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+        if (acceptsStreamEvents()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
       },
     }, attempt.streamController.signal).catch(() => undefined)
-    const recoveredTurnPromise = pollForCompletedTurn(
+    const recoveredTurnPromise = recoveryBaselinePromise.then((baseline) => pollForCompletedTurn(
       repository,
       sessionId,
-      { knownMessageIds },
-      attempt.pollController!.signal,
-    )
+      baseline,
+      pollController.signal,
+    ))
 
     try {
       const recoverySource = await Promise.race([
@@ -783,15 +802,16 @@ export function useSessionChat(
           ?? await queryRecoveredTurnResult(
             repository,
             sessionId,
-            { knownMessageIds },
-            attempt.pollController!.signal,
+            await recoveryBaselinePromise,
+            pollController.signal,
           )
           ?? emptyTurnResult()
       } else {
         result = await recoveredTurnPromise
       }
-      attempt.pollController?.abort()
       if (!isCurrentAttempt()) throw createInactiveTurnError(attempt)
+      throwIfRequestAborted(pollController.signal)
+      pollController.abort()
       appendMessages(result.messages)
       setStreamUiActions(result.uiActions)
       setStreamUiActionSource(undefined)
@@ -850,12 +870,12 @@ export function useSessionChat(
 async function captureTurnRecoveryBaseline(
   repository: SessionsRepository,
   sessionId: string,
-  turn: SessionTurnRequest,
   knownMessageIds: ReadonlySet<string>,
   signal: AbortSignal,
+  eventType?: SessionTurnRequest['eventType'],
 ): Promise<TurnRecoveryBaseline> {
   const baseline: TurnRecoveryBaseline = { knownMessageIds }
-  if (turn.eventType !== 'QUIZ_TYPE_SELECTED') return baseline
+  if (eventType && eventType !== 'QUIZ_TYPE_SELECTED') return baseline
 
   const [sessionResult, quizzesResult] = await Promise.allSettled([
     repository.getById(sessionId, signal),

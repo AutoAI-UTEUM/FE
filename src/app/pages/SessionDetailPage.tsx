@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { LockKeyhole } from 'lucide-react'
 
@@ -15,6 +15,7 @@ import {
   UiActionsRenderer,
   type LearningSession,
   type SessionQuizSummary,
+  type SessionsRepository,
   type SessionTurnResult,
   type UiAction,
   type UiActionEvent,
@@ -53,6 +54,7 @@ const MIN_PDF_PANEL_WIDTH = 360
 const PANEL_RESIZER_WIDTH = 6
 const OVERVIEW_POLL_INTERVAL_MS = 15_000
 const PAGE_MOVE_DEBOUNCE_MS = 500
+const PAGE_MOVE_BASELINE_TIMEOUT_MS = 10_000
 
 interface QueuedPageMove {
   pageNumber: number
@@ -90,6 +92,7 @@ export function SessionDetailPage() {
     sessionId?: string
   }>(() => ({ pages: new Set(), sessionId }))
   const [sessionQuizzes, setSessionQuizzes] = useState<SessionQuizSummary[]>([])
+  const [sessionQuizzesSessionId, setSessionQuizzesSessionId] = useState<string>()
   const [sessionQuizzesError, setSessionQuizzesError] = useState<string | null>(null)
   const [isLoadingSessionQuizzes, setIsLoadingSessionQuizzes] = useState(false)
   const [quizReloadKey, setQuizReloadKey] = useState(0)
@@ -111,6 +114,8 @@ export function SessionDetailPage() {
   const currentPageRef = useRef(1)
   const pageMoveTimerRef = useRef<number | undefined>(undefined)
   const queuedPageMoveRef = useRef<QueuedPageMove | null>(null)
+  const pageMoveLifecycleRef = useRef({ active: false, sessionId })
+  const pageMoveBaselineControllerRef = useRef<AbortController | null>(null)
   const chat = useSessionChat(sessionsRepository, sessionId ?? '')
   const chatTurnPendingRef = useRef(chat.isTurnPending)
   const rememberedClassroomId = getRememberedClassroomId()
@@ -126,13 +131,21 @@ export function SessionDetailPage() {
     chatTurnPendingRef.current = chat.isTurnPending
   }, [chat.isTurnPending])
 
-  useEffect(() => () => {
-    if (pageMoveTimerRef.current !== undefined) {
-      window.clearTimeout(pageMoveTimerRef.current)
+  useLayoutEffect(() => {
+    const lifecycle = { active: true, sessionId }
+    pageMoveLifecycleRef.current = lifecycle
+    return () => {
+      lifecycle.active = false
+      pageMoveBaselineControllerRef.current?.abort()
+      pageMoveBaselineControllerRef.current = null
+      if (pageMoveTimerRef.current !== undefined) {
+        window.clearTimeout(pageMoveTimerRef.current)
+      }
+      queuedPageMoveRef.current?.resolvers.forEach((resolve) => resolve(false))
+      queuedPageMoveRef.current = null
+      setIsActionPending(false)
     }
-    queuedPageMoveRef.current?.resolvers.forEach((resolve) => resolve(false))
-    queuedPageMoveRef.current = null
-  }, [])
+  }, [sessionId])
 
   useEffect(() => {
     if (!sessionId) return
@@ -283,6 +296,7 @@ export function SessionDetailPage() {
       await Promise.resolve()
       if (controller.signal.aborted) return
 
+      setSessionQuizzesSessionId(undefined)
       setIsLoadingSessionQuizzes(true)
       try {
         const quizzes = await sessionsRepository.listQuizzes(
@@ -291,6 +305,7 @@ export function SessionDetailPage() {
         )
         if (controller.signal.aborted) return
         setSessionQuizzes(quizzes)
+        setSessionQuizzesSessionId(activeSessionId)
         setSessionQuizzesError(null)
       } catch (requestError: unknown) {
         if (!controller.signal.aborted) {
@@ -397,19 +412,49 @@ export function SessionDetailPage() {
     nextPage: number,
     suppressUiActions = false,
   ): Promise<boolean> {
+    const lifecycle = pageMoveLifecycleRef.current
+    const isCurrentPageMove = () => lifecycle.active
+      && pageMoveLifecycleRef.current === lifecycle
+      && lifecycle.sessionId === activeSession.id
+    if (!isCurrentPageMove()) return false
     if (isActionPending || chatTurnPendingRef.current) {
       currentPageRef.current = activeSession.currentPage
       setCurrentPage(activeSession.currentPage)
       return false
     }
     const nextSafePage = movePage(nextPage, totalPages)
+    let quizRecoveryBaseline = sessionQuizzesSessionId === activeSession.id
+      && !isLoadingSessionQuizzes && !sessionQuizzesError
+      ? {
+          activeQuizId: activeSession.activeQuizId,
+          quizIds: new Set(sessionQuizzes.map((quiz) => quiz.quizId)),
+        }
+      : undefined
     setIsActionPending(true)
     setError(null)
     try {
+      if (!quizRecoveryBaseline) {
+        const controller = new AbortController()
+        pageMoveBaselineControllerRef.current = controller
+        let quizzes: SessionQuizSummary[]
+        try {
+          quizzes = await loadPageMoveQuizzes(sessionsRepository, activeSession.id, controller)
+        } finally {
+          if (pageMoveBaselineControllerRef.current === controller) {
+            pageMoveBaselineControllerRef.current = null
+          }
+        }
+        if (!isCurrentPageMove()) return false
+        quizRecoveryBaseline = {
+          activeQuizId: activeSession.activeQuizId,
+          quizIds: new Set(quizzes.map((quiz) => quiz.quizId)),
+        }
+      }
       const result = await sessionsRepository.movePage(
         activeSession.id,
         nextSafePage,
       )
+      if (!isCurrentPageMove()) return false
       chat.clearUiActions()
       currentPageRef.current = result.currentPage
       setCurrentPage(result.currentPage)
@@ -430,12 +475,18 @@ export function SessionDetailPage() {
       )
       return true
     } catch (requestError) {
+      if (!isCurrentPageMove()) return false
       if (isTurnInProgressError(requestError)) {
         setError(null)
         try {
-          await chat.waitForTurnCompletion((result) => applyTurnResult(result))
+          await chat.waitForTurnCompletion(
+            (result) => {
+              if (isCurrentPageMove()) applyTurnResult(result)
+            },
+            quizRecoveryBaseline,
+          )
         } catch (recoveryError) {
-          if (!isSupersededTurnError(recoveryError)) {
+          if (isCurrentPageMove() && !isSupersededTurnError(recoveryError)) {
             setError(getRequestErrorMessage(recoveryError))
           }
         }
@@ -446,7 +497,7 @@ export function SessionDetailPage() {
       }
       return false
     } finally {
-      setIsActionPending(false)
+      if (isCurrentPageMove()) setIsActionPending(false)
     }
   }
 
@@ -922,6 +973,38 @@ export function SessionDetailPage() {
       </section>
     </div>
   )
+}
+
+async function loadPageMoveQuizzes(
+  repository: SessionsRepository,
+  sessionId: string,
+  controller: AbortController,
+): Promise<SessionQuizSummary[]> {
+  let timedOut = false
+  let onAbort = () => {}
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new ApiClientError({
+      code: timedOut ? 'QUIZ_BASELINE_TIMEOUT' : 'REQUEST_ABORTED',
+      message: timedOut
+        ? '퀴즈 목록 확인이 지연되고 있습니다. 다시 시도해 주세요.'
+        : '요청이 취소되었습니다.',
+    }))
+    controller.signal.addEventListener('abort', onAbort, { once: true })
+    if (controller.signal.aborted) onAbort()
+  })
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, PAGE_MOVE_BASELINE_TIMEOUT_MS)
+  try {
+    return await Promise.race([
+      aborted,
+      repository.listQuizzes(sessionId, controller.signal),
+    ])
+  } finally {
+    window.clearTimeout(timeoutId)
+    controller.signal.removeEventListener('abort', onAbort)
+  }
 }
 
 function QuizChatLockPanel({

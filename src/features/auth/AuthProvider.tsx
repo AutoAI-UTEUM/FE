@@ -98,6 +98,9 @@ export function AuthProvider({
   )
   const sessionRef = useRef(session)
   const sessionRevisionRef = useRef(0)
+  // Grant/activity revisions can advance harmlessly in another tab. Only a
+  // local session transition invalidates an in-flight identity restoration.
+  const sessionTransitionRef = useRef(0)
   const lastActivityAtRef = useRef(initialUser ? initialReceivedAt : 0)
   const lastServerActivityAtRef = useRef(initialUser ? initialReceivedAt : 0)
   const lastActivityBroadcastAtRef = useRef(0)
@@ -149,6 +152,7 @@ export function AuthProvider({
       const currentUserId = sessionRef.current?.user.id
       const revision = sessionRevisionRef.current + 1
       sessionRevisionRef.current = revision
+      sessionTransitionRef.current += 1
       sessionRef.current = null
       pendingGrantRef.current = null
       activityPromiseRef.current = null
@@ -235,10 +239,9 @@ export function AuthProvider({
         return
       }
 
-      if (message.revision >= sessionRevisionRef.current) {
-        sessionRevisionRef.current = message.revision
-        clearSession(message.reason, false)
-      }
+      // Revisions start independently in each tab. A same-user logout must
+      // not be ignored just because it originated from a newer, lower counter.
+      clearSession(message.reason, false)
     },
     [applyGrant, clearSession, updateSessionPolicy],
   )
@@ -318,6 +321,7 @@ export function AuthProvider({
         usesPendingGrant ? pending.revision : 0,
       )
       sessionRevisionRef.current = revision
+      sessionTransitionRef.current += 1
       lastActivityAtRef.current = receivedAt
       lastServerActivityAtRef.current = effectiveReceivedAt
       pendingGrantRef.current = null
@@ -352,18 +356,46 @@ export function AuthProvider({
       if (isActive) setIsInitializing(false)
     }, AUTH_RESTORE_TIMEOUT_MS)
 
+    const sessionTransition = sessionTransitionRef.current
     void renewAccessToken(true)
       .then(async (grant) => {
         if (!grant) return
-        const grantRevision = sessionRevisionRef.current
-        const user = await repository.getMe(grant.accessToken, controller.signal)
-        if (
-          controller.signal.aborted ||
-          grantRevision !== sessionRevisionRef.current
+        let currentGrant = pendingGrantRef.current?.grant ?? grant
+        while (
+          !controller.signal.aborted &&
+          sessionTransition === sessionTransitionRef.current
         ) {
+          let user: AuthUser
+          try {
+            user = await repository.getMe(currentGrant.accessToken, controller.signal)
+          } catch (error) {
+            const latestGrant = pendingGrantRef.current?.grant
+            if (
+              !controller.signal.aborted &&
+              sessionTransition === sessionTransitionRef.current &&
+              latestGrant && latestGrant.accessToken !== currentGrant.accessToken
+            ) {
+              currentGrant = latestGrant
+              continue
+            }
+            throw error
+          }
+          if (
+            controller.signal.aborted ||
+            sessionTransition !== sessionTransitionRef.current
+          ) {
+            return
+          }
+          const latestGrant = pendingGrantRef.current?.grant
+          if (latestGrant && latestGrant.accessToken !== currentGrant.accessToken) {
+            // Another tab may refresh or sign into a different account while
+            // getMe is pending. Verify that grant's identity before restoring it.
+            currentGrant = latestGrant
+            continue
+          }
+          beginSession(currentGrant, user)
           return
         }
-        beginSession(grant, user)
       })
       .catch(() => {
         // 쿠키 없음·만료 또는 일시적 복구 실패는 비로그인 상태로 시작한다.
