@@ -28,7 +28,9 @@ export interface NotePreview {
 }
 
 export interface ManualNotesStore {
-  create: (input: { content: string; document?: string }) => Promise<void>
+  create: (input: { content: string; document?: string }) => Promise<{
+    cacheWriteFailed: boolean
+  }>
   get: (noteId: string) => Promise<ManualNote | undefined>
   list: (signal?: AbortSignal) => Promise<ManualNote[]>
   /** 서버 조회 없이 즉시 읽는다. 첫 렌더와 이관 실패 시 쓴다. */
@@ -117,7 +119,7 @@ export function createManualNotesStore(
           { content: trimmed, createdAt: now, document, id: clientId, updatedAt: now },
           ...readPending(),
         ])
-        return
+        return { cacheWriteFailed: false }
       }
 
       const created = await repository.create({
@@ -125,16 +127,23 @@ export function createManualNotesStore(
         content: trimmed,
         title: getNotePreview(trimmed).title,
       })
-      writeServerCache([
-        {
-          content: created.content,
-          createdAt: created.createdAt,
-          document,
-          id: created.id,
-          updatedAt: created.updatedAt,
-        },
-        ...readServerCache(),
-      ])
+      try {
+        writeServerCache([
+          {
+            content: created.content,
+            createdAt: created.createdAt,
+            document,
+            id: created.id,
+            updatedAt: created.updatedAt,
+          },
+          ...readServerCache(),
+        ])
+        return { cacheWriteFailed: false }
+      } catch {
+        // The server already committed this clientId. Do not surface a save
+        // failure that would invite a second create with a new clientId.
+        return { cacheWriteFailed: true }
+      }
     },
 
     async update(noteId, { content, document }) {
