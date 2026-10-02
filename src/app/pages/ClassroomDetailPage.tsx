@@ -33,15 +33,28 @@ import { ClassroomHeaderInfoBar, ClassroomWorkspaceHeader } from './classroom/Cl
 type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
 
 export function ClassroomDetailPage() {
+  const { classroomId = '' } = useParams()
+  // Each route owns its state and pending work, including direct/legacy mounts.
+  return <ClassroomDetailPageScope classroomId={classroomId} key={classroomId} />
+}
+
+function ClassroomDetailPageScope({ classroomId }: { classroomId: string }) {
+  const activeRef = useRef(false)
+  useEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false }
+  }, [])
   const [measureArea, areaWidth] = useElementWidth<HTMLElement>()
   const { isTablet } = useResponsiveViewport()
   const compactWeeks = isTablet && areaWidth < 960
   usePageTitle('강의실 콘텐츠')
-  const { classroomId = '' } = useParams()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { apiRequest, rawApiRequest, user } = useAuth()
-  const { show: showToast } = useToast()
+  const { show: displayToast } = useToast()
+  const showToast = useCallback((...args: Parameters<typeof displayToast>) => {
+    if (activeRef.current) displayToast(...args)
+  }, [displayToast])
   const classroomsRepository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
   const classroomResourcesRepository = useMemo(
     () => createClassroomResourcesRepository(apiRequest, rawApiRequest),
@@ -78,29 +91,49 @@ export function ClassroomDetailPage() {
   const isReadOnly = classroom?.status === 'COMPLETED'
   const canManage = isInstructor && !isReadOnly
 
+  const resourceVersionsRef = useRef<Record<ResourceKey, number>>({ exams: 0, notices: 0, resources: 0, weeks: 0 })
   const loadResource = useCallback(async (key: ResourceKey) => {
+    if (!activeRef.current) return
+    const version = ++resourceVersionsRef.current[key]
+    const isCurrent = () => activeRef.current && version === resourceVersionsRef.current[key]
     try {
       if (key === 'weeks') {
         const loadedWeeks = await classroomsRepository.listWeeks(classroomId)
+        if (!isCurrent()) return
         setWeeks(sortWeeks(loadedWeeks))
       }
-      if (key === 'notices') setNotices(await classroomsRepository.listNotices(classroomId))
-      if (key === 'exams') setExams(await examsRepository.list(classroomId))
+      if (key === 'notices') {
+        const loadedNotices = await classroomsRepository.listNotices(classroomId)
+        if (!isCurrent()) return
+        setNotices(loadedNotices)
+      }
+      if (key === 'exams') {
+        const loadedExams = await examsRepository.list(classroomId)
+        if (!isCurrent()) return
+        setExams(loadedExams)
+      }
       if (key === 'resources') {
         const loadedResources = await classroomResourcesRepository.list(classroomId)
+        if (!isCurrent()) return
         setResources(loadedResources.map(mapClassroomResource))
       }
       setResourceErrors((current) => ({ ...current, [key]: undefined }))
     } catch (error) {
-      setResourceErrors((current) => ({ ...current, [key]: getRequestErrorMessage(error) }))
+      if (isCurrent()) setResourceErrors((current) => ({ ...current, [key]: getRequestErrorMessage(error) || '자료를 불러오지 못했습니다.' }))
     }
   }, [classroomId, classroomResourcesRepository, classroomsRepository, examsRepository])
 
+  const loadVersionRef = useRef(0)
   const load = useCallback(async () => {
+    if (!activeRef.current) return
+    const version = ++loadVersionRef.current
+    const isCurrent = () => activeRef.current && version === loadVersionRef.current
     setIsLoading(true)
     setClassroomError(null)
     try {
       const nextClassroom = await classroomsRepository.get(classroomId)
+      if (!isCurrent()) return
+      if (nextClassroom.id !== classroomId) throw new Error('강의실 정보를 확인할 수 없습니다.')
       setClassroom(nextClassroom)
       await Promise.all([
         loadResource('weeks'),
@@ -109,9 +142,9 @@ export function ClassroomDetailPage() {
         loadResource('resources'),
       ])
     } catch (error) {
-      setClassroomError(getRequestErrorMessage(error))
+      if (isCurrent()) setClassroomError(getRequestErrorMessage(error) || '강의실 정보를 불러오지 못했습니다.')
     } finally {
-      setIsLoading(false)
+      if (isCurrent()) setIsLoading(false)
     }
   }, [classroomId, classroomsRepository, loadResource])
 
@@ -146,12 +179,16 @@ export function ClassroomDetailPage() {
   }, [loadResource])
 
   const refreshWeekMaterials = useCallback(async (materialId?: string) => {
-    if (materialRefreshInFlightRef.current) return
+    if (!activeRef.current || materialRefreshInFlightRef.current) return
     const expectedId = materialId ?? pendingMaterial?.id
     materialRefreshInFlightRef.current = true
+    const version = ++resourceVersionsRef.current.weeks
+    const isCurrent = () => activeRef.current && version === resourceVersionsRef.current.weeks
     try {
       const nextWeeks = sortWeeks(await classroomsRepository.listWeeks(classroomId))
+      if (!isCurrent()) return
       setWeeks(nextWeeks)
+      setResourceErrors((current) => ({ ...current, weeks: undefined }))
       const uploadedMaterial = expectedId
         ? nextWeeks.flatMap((week) => week.materials).find((material) => material.id === expectedId)
         : undefined
@@ -171,8 +208,8 @@ export function ClassroomDetailPage() {
         }
         showToast(failureMessage, 'danger')
       }
-    } catch {
-      // The visible retry control handles background refresh failures.
+    } catch (error) {
+      if (isCurrent()) setResourceErrors((current) => ({ ...current, weeks: getRequestErrorMessage(error) || '수업 자료를 불러오지 못했습니다.' }))
     } finally {
       materialRefreshInFlightRef.current = false
     }
@@ -214,6 +251,7 @@ export function ClassroomDetailPage() {
   const editingExam = panel === 'exam-new' || Boolean(selectedExam)
 
   function updateQuery(updates: Record<string, string | null>, replace = false) {
+    if (!activeRef.current) return
     setSearchParams((current) => {
       const params = new URLSearchParams(current)
       Object.entries(updates).forEach(([key, value]) => value === null ? params.delete(key) : params.set(key, value))
@@ -255,7 +293,7 @@ export function ClassroomDetailPage() {
     setOpeningMaterialId(materialId)
     try {
       const session = await sessionsRepository.create(materialId)
-      navigate(sessionDetailPath(session.id))
+      if (activeRef.current) navigate(sessionDetailPath(session.id))
     } catch (error) {
       showToast(getRequestErrorMessage(error), 'danger')
       setOpeningMaterialId(null)
@@ -292,12 +330,14 @@ export function ClassroomDetailPage() {
   }
 
   async function openClassroomResource(resource: ClassroomResource) {
+    if (!activeRef.current) return
     if (resource.source.kind === 'link' || resource.source.objectUrl) {
       setResourcePreview(resource)
       return
     }
     try {
       const blob = await classroomResourcesRepository.getFile(resource.id)
+      if (!activeRef.current) return
       const objectUrl = typeof URL.createObjectURL === 'function'
         ? URL.createObjectURL(blob)
         : undefined
@@ -368,6 +408,9 @@ export function ClassroomDetailPage() {
       const saved = noticeId
         ? await classroomsRepository.updateNotice(classroomId, noticeId, input)
         : await classroomsRepository.createNotice(classroomId, input)
+      if (!activeRef.current) return
+      // Invalidate any list read that started before this mutation completed.
+      resourceVersionsRef.current.notices += 1
       setNotices((items) => noticeId ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items])
       updateQuery({ panel: `notice-${saved.id}` }, true)
       showToast(noticeId ? '공지를 수정했습니다.' : '공지를 등록했습니다.', 'success')
@@ -380,6 +423,8 @@ export function ClassroomDetailPage() {
     if (!window.confirm(`'${notice.title}' 공지를 삭제할까요?`)) return
     try {
       await classroomsRepository.deleteNotice(classroomId, notice.id)
+      if (!activeRef.current) return
+      resourceVersionsRef.current.notices += 1
       setNotices((items) => items.filter((item) => item.id !== notice.id))
       updateQuery({ panel: null }, true)
       showToast('공지를 삭제했습니다.', 'success')
@@ -396,7 +441,7 @@ export function ClassroomDetailPage() {
 
   return <ClassroomWorkspaceContainer className="lg:overflow-hidden">
     <ClassroomWorkspaceHeader
-      actions={isInstructor ? <ClassroomHeaderInfoBar classroom={classroom} inviteCodeDisabled={isReadOnly} onInviteCodeClick={() => void copyInviteCode(classroom, classroomsRepository, setClassroom, showToast)} showInviteCode /> : undefined}
+      actions={isInstructor ? <ClassroomHeaderInfoBar classroom={classroom} inviteCodeDisabled={isReadOnly} onInviteCodeClick={() => void copyInviteCode(classroom, classroomsRepository, setClassroom, showToast, () => activeRef.current)} showInviteCode /> : undefined}
       activeTab="course"
       classroom={classroom}
       showClassroomSummary={false}
@@ -419,7 +464,7 @@ export function ClassroomDetailPage() {
       <div className="min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden tablet-portrait:flex tablet-portrait:h-full tablet-portrait:min-h-0 tablet-portrait:flex-col tablet-portrait:overflow-hidden tablet-landscape:flex tablet-landscape:h-full tablet-landscape:min-h-0 tablet-landscape:flex-col tablet-landscape:overflow-hidden">
         {viewingNotice && selectedNotice ? <NoticeDetailPanel canEdit={canManage} notice={selectedNotice} onClose={() => updateQuery({ panel: null })} onEdit={() => updateQuery({ panel: `notice-edit-${selectedNotice.id}` })} /> : null}
         {editingNotice ? <NoticeContentPanel disabled={!canManage} key={panel} notice={selectedNotice} onClose={() => updateQuery({ panel: selectedNotice ? `notice-${selectedNotice.id}` : null })} onDelete={canManage && selectedNotice ? deleteNotice : undefined} onSave={saveNotice} weekNumber={selectedWeekNumber} /> : null}
-        {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}
+        {editingExam ? <ExamContentPanel classroomId={classroomId} disabled={!canManage} exam={selectedExam} initialWeekNumber={selectedWeekNumber ?? undefined} key={panel} onClose={() => updateQuery({ panel: null })} onDeleted={(examId) => { if (!activeRef.current) return; resourceVersionsRef.current.exams += 1; setExams((items) => items.filter((item) => item.id !== examId)); updateQuery({ panel: null }, true) }} onSaved={(saved) => { if (!activeRef.current) return; resourceVersionsRef.current.exams += 1; setExams((items) => items.some((item) => item.id === saved.id) ? items.map((item) => item.id === saved.id ? saved : item) : [saved, ...items]); updateQuery({ panel: `exam-${saved.id}` }, true) }} repository={examsRepository} /> : null}
         {resourcePreview ? <ClassroomResourcePreviewPanel
           canManage={canManage}
           onDelete={() => void deleteClassroomResource(resourcePreview)}
@@ -528,9 +573,10 @@ function getResourcePreviewKind(
   return 'document'
 }
 
-async function copyInviteCode(classroom: Classroom, repository: ReturnType<typeof createClassroomsRepository>, setClassroom: (updater: (current: Classroom | null) => Classroom | null) => void, showToast: (message: string, tone: 'danger' | 'success') => void) {
+async function copyInviteCode(classroom: Classroom, repository: ReturnType<typeof createClassroomsRepository>, setClassroom: (updater: (current: Classroom | null) => Classroom | null) => void, showToast: (message: string, tone: 'danger' | 'success') => void, isCurrent: () => boolean) {
   try {
     const inviteCode = classroom.inviteCode || await repository.getInviteCode(classroom.id)
+    if (!isCurrent()) return
     await navigator.clipboard.writeText(inviteCode)
     setClassroom((current) => current ? { ...current, inviteCode } : current)
     showToast('초대 코드를 복사했습니다.', 'success')

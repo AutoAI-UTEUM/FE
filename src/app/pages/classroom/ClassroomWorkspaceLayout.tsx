@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -11,6 +11,16 @@ import { ClassroomWorkspaceShellContext } from './ClassroomWorkspaceShellContext
 
 export function ClassroomWorkspaceLayout() {
   const { classroomId = '' } = useParams()
+  // Each route owns its state and pending work, including direct/legacy mounts.
+  return <ClassroomWorkspaceLayoutScope classroomId={classroomId} key={classroomId} />
+}
+
+function ClassroomWorkspaceLayoutScope({ classroomId }: { classroomId: string }) {
+  const activeRef = useRef(false)
+  useEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false }
+  }, [])
   const { pathname } = useLocation()
   const { apiRequest } = useAuth()
   const repository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
@@ -27,15 +37,22 @@ export function ClassroomWorkspaceLayout() {
     `/classrooms/${classroomId}/report-criteria`,
   ].includes(normalizedPathname)
 
+  const loadVersionRef = useRef(0)
   const load = useCallback(async () => {
+    if (!activeRef.current) return
+    const version = ++loadVersionRef.current
+    const isCurrent = () => activeRef.current && version === loadVersionRef.current
     setIsLoading(true)
     setError(null)
     try {
-      setClassroom(await repository.get(classroomId))
+      const nextClassroom = await repository.get(classroomId)
+      if (!isCurrent()) return
+      if (nextClassroom.id !== classroomId) throw new Error('강의실 정보를 확인할 수 없습니다.')
+      setClassroom(nextClassroom)
     } catch (requestError) {
-      setError(getRequestErrorMessage(requestError))
+      if (isCurrent()) setError(getRequestErrorMessage(requestError) || '강의실 정보를 불러오지 못했습니다.')
     } finally {
-      setIsLoading(false)
+      if (isCurrent()) setIsLoading(false)
     }
   }, [classroomId, repository])
 
@@ -46,8 +63,9 @@ export function ClassroomWorkspaceLayout() {
   }, [classroomId, load])
 
   const syncClassroom = useCallback((nextClassroom: Classroom) => {
+    if (!activeRef.current || nextClassroom.id !== classroomId) return
     setClassroom((current) => current === nextClassroom ? current : nextClassroom)
-  }, [])
+  }, [classroomId])
   const shellValue = useMemo(
     () => ({ actionTarget, syncClassroom, titleAccessoryTarget }),
     [actionTarget, syncClassroom, titleAccessoryTarget],
