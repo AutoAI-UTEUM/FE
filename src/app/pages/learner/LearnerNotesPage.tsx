@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronDown, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -51,11 +51,23 @@ interface LearnerNoteGroup {
   session?: LearningSession
 }
 
+interface SessionNoteFailure {
+  error: unknown
+  session: LearningSession
+}
+
+interface SessionNoteLoadResult {
+  failures: SessionNoteFailure[]
+  items: SessionNoteItem[]
+  sessionCount: number
+}
+
 export function LearnerNotesPage() {
   usePageTitle('내 노트')
   const navigate = useNavigate()
   const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
+  const ownerKey = String(user?.id ?? user?.email ?? 'anonymous')
   const sessionsRepository = useMemo(
     () => createSessionsRepository(apiRequest),
     [apiRequest],
@@ -65,17 +77,19 @@ export function LearnerNotesPage() {
     [apiRequest],
   )
   const manualNotesStore = useMemo(
-    () => createManualNotesStore(apiRequest, user?.id ?? user?.email ?? 'anonymous'),
-    [apiRequest, user?.email, user?.id],
+    () => createManualNotesStore(apiRequest, ownerKey),
+    [apiRequest, ownerKey],
   )
   const unavailableSessionsStorageKey = useMemo(
-    () => getUnavailableNoteSessionsStorageKey(user?.id ?? user?.email ?? 'anonymous'),
-    [user?.email, user?.id],
+    () => getUnavailableNoteSessionsStorageKey(ownerKey),
+    [ownerKey],
   )
   const [sessionItems, setSessionItems] = useState<SessionNoteItem[]>([])
+  const [sessionItemsOwnerKey, setSessionItemsOwnerKey] = useState(ownerKey)
   const [manualNotes, setManualNotes] = useState<ManualNote[]>(() =>
     manualNotesStore.readLocal(),
   )
+  const [manualNotesOwnerKey, setManualNotesOwnerKey] = useState(ownerKey)
   const [importFailures, setImportFailures] = useState<
     Array<{ clientId: string; reason: string }>
   >([])
@@ -88,38 +102,86 @@ export function LearnerNotesPage() {
   )
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [sessionNoteFailures, setSessionNoteFailures] = useState<SessionNoteFailure[]>([])
+  const [sessionNoteSessionCount, setSessionNoteSessionCount] = useState(0)
+  const [isRetryingSessionNotes, setIsRetryingSessionNotes] = useState(false)
   const manualNotesOwnerControllerRef = useRef<AbortController | null>(null)
+  const manualNotesRequestControllerRef = useRef<AbortController | null>(null)
+  const sessionNotesOwnerControllerRef = useRef<AbortController | null>(null)
+  const sessionNotesRequestControllerRef = useRef<AbortController | null>(null)
+  const deleteRequestsRef = useRef(new Set<string>())
+  const ownerKeyRef = useRef(ownerKey)
+  useLayoutEffect(() => {
+    ownerKeyRef.current = ownerKey
+  }, [ownerKey])
 
-  async function load() {
+  const load = useCallback(async (
+    ownerController = sessionNotesOwnerControllerRef.current,
+    resetOwnerState = false,
+  ) => {
+    if (!ownerController || ownerController.signal.aborted) return
+    sessionNotesRequestControllerRef.current?.abort()
+    const requestController = new AbortController()
+    sessionNotesRequestControllerRef.current = requestController
+    const isCurrentOwner = () =>
+      sessionNotesOwnerControllerRef.current === ownerController
+      && sessionNotesRequestControllerRef.current === requestController
+      && !ownerController.signal.aborted
+      && !requestController.signal.aborted
+
+    if (resetOwnerState) {
+      setSessionItems([])
+      setSessionItemsOwnerKey(ownerKey)
+      setSessionNoteFailures([])
+      setSessionNoteSessionCount(0)
+      setIsRetryingSessionNotes(false)
+    }
     setIsLoading(true)
     setError(null)
     try {
-      setSessionItems(
-        await loadSessionNoteItems(
-          sessionsRepository,
-          notesRepository,
-          unavailableSessionsStorageKey,
-        ),
+      const result = await loadSessionNoteItems(
+        sessionsRepository,
+        notesRepository,
+        unavailableSessionsStorageKey,
+        requestController.signal,
       )
+      if (!isCurrentOwner()) return
+      setSessionItems(result.items)
+      setSessionItemsOwnerKey(ownerKey)
+      setSessionNoteFailures(result.failures)
+      setSessionNoteSessionCount(result.sessionCount)
     } catch (requestError) {
+      if (!isCurrentOwner()) return
       setError(getRequestErrorMessage(requestError))
     } finally {
-      setIsLoading(false)
+      if (isCurrentOwner()) setIsLoading(false)
     }
-    await syncManualNotes()
-  }
+  }, [notesRepository, ownerKey, sessionsRepository, unavailableSessionsStorageKey])
 
   /**
    * 이관을 먼저 끝내고 서버 목록을 읽는다.
    * 이관 호출 자체가 실패하면 아직 로컬에만 있는 노트를 서버 목록으로 덮지 않는다.
    */
-  async function syncManualNotes() {
-    const ownerController = manualNotesOwnerControllerRef.current
-    if (!ownerController) return
+  const syncManualNotes = useCallback(async (
+    ownerController = manualNotesOwnerControllerRef.current,
+    resetOwnerState = false,
+  ) => {
+    if (!ownerController || ownerController.signal.aborted) return
+    manualNotesRequestControllerRef.current?.abort()
+    const requestController = new AbortController()
+    manualNotesRequestControllerRef.current = requestController
     const isCurrentOwner = () =>
       manualNotesOwnerControllerRef.current === ownerController
       && !ownerController.signal.aborted
+      && manualNotesRequestControllerRef.current === requestController
+      && !requestController.signal.aborted
 
+    if (resetOwnerState) {
+      setManualNotes(manualNotesStore.readLocal())
+      setManualNotesOwnerKey(ownerKey)
+      setImportFailures([])
+      setIsShowingManualCache(false)
+    }
     setImportError(null)
     setManualNotesError(null)
     try {
@@ -129,92 +191,117 @@ export function LearnerNotesPage() {
     } catch (requestError) {
       if (!isCurrentOwner()) return
       setManualNotes(manualNotesStore.readLocal())
+      setManualNotesOwnerKey(ownerKey)
       setImportError(getRequestErrorMessage(requestError))
       return
     }
     try {
-      const notes = await manualNotesStore.list(ownerController.signal)
+      const notes = await manualNotesStore.list(requestController.signal)
       if (!isCurrentOwner()) return
       setManualNotes(notes)
+      setManualNotesOwnerKey(ownerKey)
       setIsShowingManualCache(false)
     } catch (requestError) {
       if (!isCurrentOwner()) return
       setManualNotes(manualNotesStore.readLocal())
+      setManualNotesOwnerKey(ownerKey)
       setManualNotesError(getRequestErrorMessage(requestError))
       setIsShowingManualCache(true)
     }
-  }
+  }, [manualNotesStore, ownerKey])
 
   useEffect(() => {
-    let cancelled = false
-    const controller = new AbortController()
-    loadSessionNoteItems(
-      sessionsRepository,
-      notesRepository,
-      unavailableSessionsStorageKey,
-      controller.signal,
-    )
-      .then((items) => {
-        if (!cancelled) setSessionItems(items)
-      })
-      .catch((requestError) => {
-        if (!cancelled && !controller.signal.aborted) {
-          setError(getRequestErrorMessage(requestError))
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
+    const ownerController = new AbortController()
+    sessionNotesOwnerControllerRef.current = ownerController
+    void Promise.resolve().then(() => load(ownerController, true))
     return () => {
-      cancelled = true
-      controller.abort()
+      ownerController.abort()
+      sessionNotesRequestControllerRef.current?.abort()
+      if (sessionNotesOwnerControllerRef.current === ownerController) {
+        sessionNotesOwnerControllerRef.current = null
+      }
     }
-  }, [notesRepository, sessionsRepository, unavailableSessionsStorageKey])
+  }, [load])
 
   useEffect(() => {
-    let cancelled = false
-    const controller = new AbortController()
-    manualNotesOwnerControllerRef.current = controller
-    void (async () => {
-      try {
-        const result = await manualNotesStore.migrate()
-        if (cancelled) return
-        setImportFailures(result?.failed ?? [])
-      } catch (requestError) {
-        if (cancelled) return
-        setManualNotes(manualNotesStore.readLocal())
-        setImportError(getRequestErrorMessage(requestError))
-        return
-      }
-      try {
-        const notes = await manualNotesStore.list(controller.signal)
-        if (!cancelled) {
-          setManualNotes(notes)
-          setIsShowingManualCache(false)
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setManualNotes(manualNotesStore.readLocal())
-          setManualNotesError(getRequestErrorMessage(requestError))
-          setIsShowingManualCache(true)
-        }
-      }
-    })()
+    const ownerController = new AbortController()
+    manualNotesOwnerControllerRef.current = ownerController
+    void Promise.resolve().then(() => syncManualNotes(ownerController, true))
     return () => {
-      cancelled = true
-      controller.abort()
-      if (manualNotesOwnerControllerRef.current === controller) {
+      ownerController.abort()
+      manualNotesRequestControllerRef.current?.abort()
+      if (manualNotesOwnerControllerRef.current === ownerController) {
         manualNotesOwnerControllerRef.current = null
       }
     }
-  }, [manualNotesStore])
+  }, [syncManualNotes])
 
+  async function retryFailedSessionNotes() {
+    const ownerController = sessionNotesOwnerControllerRef.current
+    if (
+      !ownerController
+      || ownerController.signal.aborted
+      || isRetryingSessionNotes
+      || sessionNoteFailures.length === 0
+    ) return
+
+    sessionNotesRequestControllerRef.current?.abort()
+    const requestController = new AbortController()
+    sessionNotesRequestControllerRef.current = requestController
+    const failuresToRetry = sessionNoteFailures
+    const isCurrentOwner = () =>
+      sessionNotesOwnerControllerRef.current === ownerController
+      && sessionNotesRequestControllerRef.current === requestController
+      && !ownerController.signal.aborted
+      && !requestController.signal.aborted
+
+    setIsRetryingSessionNotes(true)
+    try {
+      const result = await loadSessionNotesForSessions(
+        failuresToRetry.map((failure) => failure.session),
+        notesRepository,
+        unavailableSessionsStorageKey,
+        requestController.signal,
+      )
+      if (!isCurrentOwner()) return
+      const retriedSessionIds = new Set(
+        failuresToRetry.map((failure) => failure.session.id),
+      )
+      setSessionItems((current) => [
+        ...current.filter((item) => !retriedSessionIds.has(item.session.id)),
+        ...result.items,
+      ])
+      setSessionNoteFailures(result.failures)
+    } catch (requestError) {
+      if (isCurrentOwner()) setError(getRequestErrorMessage(requestError))
+    } finally {
+      if (isCurrentOwner()) setIsRetryingSessionNotes(false)
+    }
+  }
+
+  const isSessionStateCurrentOwner = sessionItemsOwnerKey === ownerKey
+  const currentSessionItems = useMemo(
+    () => isSessionStateCurrentOwner ? sessionItems : [],
+    [isSessionStateCurrentOwner, sessionItems],
+  )
+  const currentSessionNoteFailures = isSessionStateCurrentOwner ? sessionNoteFailures : []
+  const currentSessionError = isSessionStateCurrentOwner ? error : null
+  const isSessionLoading = isLoading || !isSessionStateCurrentOwner
+  const isManualStateCurrentOwner = manualNotesOwnerKey === ownerKey
+  const currentManualNotes = useMemo(
+    () => isManualStateCurrentOwner ? manualNotes : [],
+    [isManualStateCurrentOwner, manualNotes],
+  )
+  const currentManualNotesError = isManualStateCurrentOwner ? manualNotesError : null
+  const currentImportError = isManualStateCurrentOwner ? importError : null
+  const currentImportFailures = isManualStateCurrentOwner ? importFailures : []
+  const currentIsShowingManualCache = isManualStateCurrentOwner && isShowingManualCache
   const allItems = useMemo<LearnerNoteItem[]>(
     () => [
-      ...manualNotes.map((note): ManualNoteItem => ({ kind: 'manual', note })),
-      ...sessionItems,
+      ...currentManualNotes.map((note): ManualNoteItem => ({ kind: 'manual', note })),
+      ...currentSessionItems,
     ],
-    [manualNotes, sessionItems],
+    [currentManualNotes, currentSessionItems],
   )
 
   const filteredItems = useMemo(() => {
@@ -232,22 +319,33 @@ export function LearnerNotesPage() {
   )
 
   async function deleteNote(item: LearnerNoteItem) {
+    const mutationOwnerKey = ownerKey
+    const noteKey = `${mutationOwnerKey}:${getNoteKey(item)}`
+    if (deleteRequestsRef.current.has(noteKey)) return
     if (!window.confirm('이 노트를 삭제할까요?')) return
+    deleteRequestsRef.current.add(noteKey)
     try {
       if (item.kind === 'manual') {
         await manualNotesStore.remove(item.note.id)
+        if (ownerKeyRef.current !== mutationOwnerKey) return
         setManualNotes((current) =>
           current.filter((note) => note.id !== item.note.id),
         )
       } else {
         await notesRepository.delete(item.note.id)
+        if (ownerKeyRef.current !== mutationOwnerKey) return
         setSessionItems((current) =>
           current.filter((currentItem) => currentItem.note.id !== item.note.id),
         )
       }
+      if (ownerKeyRef.current !== mutationOwnerKey) return
       showToast('노트를 삭제했습니다.', 'success')
     } catch (requestError) {
-      showToast(getRequestErrorMessage(requestError), 'danger')
+      if (ownerKeyRef.current === mutationOwnerKey) {
+        showToast(getRequestErrorMessage(requestError), 'danger')
+      }
+    } finally {
+      deleteRequestsRef.current.delete(noteKey)
     }
   }
 
@@ -304,16 +402,16 @@ export function LearnerNotesPage() {
         </p>
       ) : null}
 
-      {manualNotesError ? (
+      {currentManualNotesError ? (
         <div
           className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 type-body text-amber-900"
           role="alert"
         >
           <span>
-            {isShowingManualCache && manualNotes.length > 0
+            {currentIsShowingManualCache && currentManualNotes.length > 0
               ? '서버 노트를 불러오지 못해 이 브라우저에 저장된 캐시를 표시합니다.'
               : '서버 노트를 불러오지 못했으며 이 브라우저에 저장된 캐시도 없습니다.'}
-            <span className="ml-1">{manualNotesError}</span>
+            <span className="ml-1">{currentManualNotesError}</span>
           </span>
           <Button onClick={() => void syncManualNotes()} size="sm" variant="secondary">
             서버 노트 다시 시도
@@ -322,15 +420,15 @@ export function LearnerNotesPage() {
       ) : null}
 
       {/* 이관 실패는 화면을 막지 않는다. 노트는 로컬에 남아 있고 다시 시도할 수 있다. */}
-      {importError || importFailures.length > 0 ? (
+      {currentImportError || currentImportFailures.length > 0 ? (
         <div
           className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 type-body text-amber-900"
           role="alert"
         >
           <span>
-            {importError
-              ? `노트를 서버로 옮기지 못했습니다. ${importError}`
-              : `노트 ${importFailures.length}개를 서버로 옮기지 못했습니다. (${[...new Set(importFailures.map((failure) => failure.reason))].join(', ')})`}
+            {currentImportError
+              ? `노트를 서버로 옮기지 못했습니다. ${currentImportError}`
+              : `노트 ${currentImportFailures.length}개를 서버로 옮기지 못했습니다. (${[...new Set(currentImportFailures.map((failure) => failure.reason))].join(', ')})`}
           </span>
           <Button onClick={() => void syncManualNotes()} size="sm" variant="secondary">
             다시 시도
@@ -338,19 +436,45 @@ export function LearnerNotesPage() {
         </div>
       ) : null}
 
-      {isLoading ? (
+      {currentSessionNoteFailures.length > 0 && !currentSessionError ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 type-body text-amber-900"
+          role="alert"
+        >
+          <span>
+            {currentSessionNoteFailures.length === sessionNoteSessionCount
+              ? '세션 노트를 불러오지 못했습니다.'
+              : `일부 세션의 노트를 불러오지 못했습니다. 실패한 세션: ${currentSessionNoteFailures.length}개.`}
+            <span className="ml-1">
+              {[...new Set(currentSessionNoteFailures.map((failure) =>
+                getRequestErrorMessage(failure.error),
+              ))].join(' ')}
+            </span>
+          </span>
+          <Button
+            disabled={isRetryingSessionNotes}
+            onClick={() => void retryFailedSessionNotes()}
+            size="sm"
+            variant="secondary"
+          >
+            {isRetryingSessionNotes ? '다시 시도 중' : '실패한 세션 다시 시도'}
+          </Button>
+        </div>
+      ) : null}
+
+      {isSessionLoading ? (
         <p className="py-16 text-center type-body text-stone-500" role="status">
           노트를 불러오는 중입니다.
         </p>
       ) : null}
-      {error ? (
+      {currentSessionError ? (
         <EmptyState
           action={<Button onClick={() => void load()}>다시 시도</Button>}
-          description={error}
+          description={currentSessionError}
           title="노트를 불러오지 못했습니다"
         />
       ) : null}
-      {!isLoading && !error && !manualNotesError && filteredItems.length === 0 ? (
+      {!isSessionLoading && !currentSessionError && !currentManualNotesError && currentSessionNoteFailures.length === 0 && filteredItems.length === 0 ? (
         <EmptyState
           action={!query.trim() ? <ButtonLink to={routes.newNote}>새 노트 작성</ButtonLink> : undefined}
           description={
@@ -484,12 +608,16 @@ export function LearnerNoteCreatePage() {
   const [content, setContent] = useState(initialContent)
   const [document, setDocument] = useState<string | undefined>()
   const [isSaving, setIsSaving] = useState(false)
+  const saveRequestRef = useRef<object | null>(null)
 
   async function saveNote() {
-    if (!content.trim() || isSaving) return
+    if (!content.trim() || saveRequestRef.current) return
+    const request = {}
+    saveRequestRef.current = request
     setIsSaving(true)
     try {
       const result = await manualNotesStore.create({ content, document })
+      if (saveRequestRef.current !== request) return
       showToast(
         result.cacheWriteFailed
           ? '노트는 서버에 저장됐지만 이 브라우저의 캐시를 갱신하지 못했습니다.'
@@ -498,9 +626,13 @@ export function LearnerNoteCreatePage() {
       )
       navigate(routes.notes)
     } catch (requestError) {
+      if (saveRequestRef.current !== request) return
       showToast(getRequestErrorMessage(requestError), 'danger')
     } finally {
-      setIsSaving(false)
+      if (saveRequestRef.current === request) {
+        saveRequestRef.current = null
+        setIsSaving(false)
+      }
     }
   }
 
@@ -582,55 +714,82 @@ export function LearnerNoteEditPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
+  const editorOwnerRef = useRef<object | null>(null)
+  const saveRequestRef = useRef<object | null>(null)
+  const editorScope = `${user?.id ?? user?.email ?? 'anonymous'}:${noteKind}:${noteId}:${sourceSessionId ?? ''}`
 
   useEffect(() => {
-    let cancelled = false
+    const owner = {}
+    const controller = new AbortController()
+    editorOwnerRef.current = owner
+    saveRequestRef.current = null
 
     async function loadNote() {
+      setContent('')
+      setDocument(undefined)
+      setSourceLabel('')
+      setLoadedScope(null)
+      setIsSaving(false)
       setIsLoading(true)
       setError(null)
       try {
         if (noteKind === 'manual') {
           const note = await manualNotesStore.get(noteId)
           if (!note) throw new Error('수정할 노트를 찾을 수 없습니다.')
-          if (!cancelled) {
+          if (editorOwnerRef.current === owner) {
             setContent(note.content)
             setDocument(note.document)
             setSourceLabel('개인 노트')
+            setLoadedScope(editorScope)
           }
           return
         }
 
         if (noteKind !== 'session') throw new Error('잘못된 노트 경로입니다.')
-        const sessionItems = await loadSessionNoteItems(
+        const result = await loadSessionNoteItems(
           sessionsRepository,
           notesRepository,
           unavailableSessionsStorageKey,
-          undefined,
+          controller.signal,
           sourceSessionId,
         )
-        const match = sessionItems.find((item) => item.note.id === noteId)
+        if (result.failures.length > 0) throw result.failures[0].error
+        const match = result.items.find((item) => item.note.id === noteId)
         if (!match) throw new Error('수정할 노트를 찾을 수 없습니다.')
-        if (!cancelled) {
+        if (editorOwnerRef.current === owner) {
           setContent(match.note.content)
           setDocument(undefined)
           setSourceLabel(match.session.materialTitle)
+          setLoadedScope(editorScope)
         }
       } catch (requestError) {
-        if (!cancelled) setError(getRequestErrorMessage(requestError))
+        if (editorOwnerRef.current === owner && !controller.signal.aborted) {
+          setError(getRequestErrorMessage(requestError))
+        }
       } finally {
-        if (!cancelled) setIsLoading(false)
+        if (editorOwnerRef.current === owner) setIsLoading(false)
       }
     }
 
     void loadNote()
     return () => {
-      cancelled = true
+      controller.abort()
+      if (editorOwnerRef.current === owner) editorOwnerRef.current = null
     }
-  }, [manualNotesStore, noteId, noteKind, notesRepository, sessionsRepository, sourceSessionId, unavailableSessionsStorageKey])
+  }, [editorScope, manualNotesStore, noteId, noteKind, notesRepository, sessionsRepository, sourceSessionId, unavailableSessionsStorageKey])
 
   async function saveNote() {
-    if (!content.trim() || isSaving) return
+    const owner = editorOwnerRef.current
+    if (
+      !owner
+      || loadedScope !== editorScope
+      || error
+      || !content.trim()
+      || saveRequestRef.current
+    ) return
+    const request = {}
+    saveRequestRef.current = request
     setIsSaving(true)
     try {
       if (noteKind === 'manual') {
@@ -640,12 +799,26 @@ export function LearnerNoteEditPage() {
       } else {
         throw new Error('잘못된 노트 경로입니다.')
       }
+      if (
+        editorOwnerRef.current !== owner
+        || saveRequestRef.current !== request
+      ) return
       showToast('노트를 수정했습니다.', 'success')
       navigate(routes.notes)
     } catch (requestError) {
+      if (
+        editorOwnerRef.current !== owner
+        || saveRequestRef.current !== request
+      ) return
       showToast(getRequestErrorMessage(requestError), 'danger')
     } finally {
-      setIsSaving(false)
+      if (
+        editorOwnerRef.current === owner
+        && saveRequestRef.current === request
+      ) {
+        saveRequestRef.current = null
+        setIsSaving(false)
+      }
     }
   }
 
@@ -658,7 +831,7 @@ export function LearnerNoteEditPage() {
               <ArrowLeft aria-hidden="true" size={15} />
               목록으로
             </ButtonLink>
-            <Button disabled={isLoading || !content.trim() || isSaving} onClick={() => void saveNote()}>
+            <Button disabled={isLoading || loadedScope !== editorScope || Boolean(error) || !content.trim() || isSaving} onClick={() => void saveNote()}>
               {isSaving ? '저장 중' : '변경사항 저장'}
             </Button>
           </div>
@@ -666,7 +839,7 @@ export function LearnerNoteEditPage() {
         title="노트 수정"
         titleAccessory={sourceLabel ? <p className="type-caption text-stone-400">{sourceLabel}</p> : undefined}
       />
-      {isLoading ? <EditorLoadingState /> : null}
+      {(isLoading || loadedScope !== editorScope) && !error ? <EditorLoadingState /> : null}
       {!isLoading && error ? (
         <EmptyState
           action={<ButtonLink to={routes.notes}>목록으로</ButtonLink>}
@@ -674,7 +847,7 @@ export function LearnerNoteEditPage() {
           title="노트를 불러오지 못했습니다"
         />
       ) : null}
-      {!isLoading && !error ? (
+      {!isLoading && !error && loadedScope === editorScope ? (
         <section className="min-h-[calc(100dvh-13rem)] rounded-lg border border-stone-200 bg-white p-5">
           <Suspense fallback={<EditorLoadingState />}>
             <NotionBlockEditor
@@ -753,11 +926,25 @@ async function loadSessionNoteItems(
   unavailableSessionsStorageKey: string,
   signal?: AbortSignal,
   sourceSessionId?: string | null,
-): Promise<SessionNoteItem[]> {
+): Promise<SessionNoteLoadResult> {
   const sessions = (await sessionsRepository.list(signal)).filter(
     (session) => session.status !== 'DELETED'
       && (sourceSessionId ? session.id === sourceSessionId : true),
   )
+  return loadSessionNotesForSessions(
+    sessions,
+    notesRepository,
+    unavailableSessionsStorageKey,
+    signal,
+  )
+}
+
+async function loadSessionNotesForSessions(
+  sessions: LearningSession[],
+  notesRepository: NotesRepository,
+  unavailableSessionsStorageKey: string,
+  signal?: AbortSignal,
+): Promise<SessionNoteLoadResult> {
   const unavailableSessionIds = readUnavailableSessionIds(unavailableSessionsStorageKey)
   const availableSessions = sessions.filter(
     (session) => !unavailableSessionIds.has(session.id),
@@ -768,21 +955,30 @@ async function loadSessionNoteItems(
     async (session) => {
       try {
         return {
+          error: undefined,
           notes: await notesRepository.listForSession(session.id, signal),
           session,
         }
       } catch (error) {
+        if (signal?.aborted) throw error
         if (error instanceof ApiClientError && error.status === 404) {
           unavailableSessionIds.add(session.id)
+          return { error: undefined, notes: [], session }
         }
-        return { notes: [], session }
+        return { error, notes: [], session }
       }
     },
   )
   persistUnavailableSessionIds(unavailableSessionsStorageKey, unavailableSessionIds)
-  return notesBySession.flatMap(({ notes, session }) =>
-    notes.map((note): SessionNoteItem => ({ kind: 'session', note, session })),
-  )
+  return {
+    failures: notesBySession.flatMap(({ error, session }) =>
+      error === undefined ? [] : [{ error, session }],
+    ),
+    items: notesBySession.flatMap(({ notes, session }) =>
+      notes.map((note): SessionNoteItem => ({ kind: 'session', note, session })),
+    ),
+    sessionCount: sessions.length,
+  }
 }
 
 async function mapWithConcurrency<T, R>(
