@@ -360,7 +360,7 @@ function InfraDetailsDrawer({ cost, onClose, repository, returnFocusTo, type, xa
   return <div aria-labelledby="infra-drawer-title" aria-modal="true" className="fixed inset-0 z-[90] flex justify-end bg-[#172033]/35" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog">
     <div className="flex h-full w-full max-w-[640px] flex-col bg-white " ref={drawerRef} tabIndex={-1}>
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-100 px-7 py-6">
-        <div><h2 className="type-section-title font-bold text-stone-950" id="infra-drawer-title">{type === 'aws' ? 'AWS 사용량 · 비용' : 'xAI 사용량 · 호출'}</h2><p className="mt-1 type-caption text-stone-400">{period} 주간 기준</p></div>
+        <div><h2 className="type-section-title font-bold text-stone-950" id="infra-drawer-title">{type === 'aws' ? 'AWS 사용량 · 비용' : 'xAI 사용량 · 호출'}</h2><p className="mt-1 type-caption text-stone-500">{period} 주간 기준</p></div>
         <button aria-label="상세 패널 닫기" autoFocus className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={onClose} type="button"><X aria-hidden="true" size={18} /></button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">{type === 'aws' ? <AwsDrawerBody cost={cost} daily={daily} /> : <XaiDrawerBody repository={repository} xai={xai} />}</div>
@@ -382,8 +382,8 @@ function AwsDrawerBody({ cost, daily }: { cost: LoadState<InfraCost>; daily: Arr
   return <>
     <DrawerMetrics items={[{ label: '이번 달 AWS 비용', value: data?.available && data.monthToDate ? formatMoney(data.monthToDate.total, currency) : '-' }, { label: '주간 합계', value: data?.available && daily.length ? formatMoney(weeklyTotal, currency) : '-' }, { label: '최다 지출 서비스', value: services[0] ? shortServiceName(services[0].service) : '-' }]} />
     <h3 className="mt-7 type-section-title font-bold text-stone-950">서비스별 비용</h3>
-    {!data?.available || services.length === 0 ? <PanelMessage message="서비스별 AWS 비용 데이터가 없습니다." /> : <div className="mt-7 flex h-64 items-end gap-2.5" role="img" aria-label="AWS 서비스별 비용 그래프">{services.slice(0, 7).map((service) => <div className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2" key={service.service}><strong className="type-micro font-semibold text-stone-800">{formatMoney(service.amount, currency)}</strong><div className="w-full rounded-t-xl bg-[#1B2436]" style={{ height: `${Math.max(4, (service.amount / maxService) * 176)}px` }} title={service.service} /><span className="w-full truncate text-center type-micro font-semibold text-stone-500" title={service.service}>{shortServiceName(service.service)}</span><span className="type-micro text-stone-400">{serviceTotal > 0 ? `${Math.round((service.amount / serviceTotal) * 100)}%` : '-'}</span></div>)}</div>}
-    {data?.note ? <p className="mt-8 type-caption text-stone-400">{data.note}</p> : null}
+    {!data?.available || services.length === 0 ? <PanelMessage message="서비스별 AWS 비용 데이터가 없습니다." /> : <div className="mt-7 flex h-64 items-end gap-2.5" role="img" aria-label="AWS 서비스별 비용 그래프">{services.slice(0, 7).map((service) => <div className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2" key={service.service}><strong className="type-micro font-semibold text-stone-800">{formatMoney(service.amount, currency)}</strong><div className="w-full rounded-t-xl bg-[#1B2436]" style={{ height: `${Math.max(4, (service.amount / maxService) * 176)}px` }} title={service.service} /><span className="w-full truncate text-center type-micro font-semibold text-stone-500" title={service.service}>{shortServiceName(service.service)}</span><span className="type-micro text-stone-500">{serviceTotal > 0 ? `${Math.round((service.amount / serviceTotal) * 100)}%` : '-'}</span></div>)}</div>}
+    {data?.note ? <p className="mt-8 type-caption text-stone-500">{data.note}</p> : null}
   </>
 }
 
