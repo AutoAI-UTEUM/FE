@@ -5,6 +5,13 @@ import { loginAs } from './qa-helpers'
 test.describe('release learning acceptance with synthetic APIs', () => {
   test('rapid page moves, one SSE turn, and browser back preserve the completed response without reposting', async ({ page }) => {
     const externalRequests: string[] = []
+    const canonicalMessages: Array<{
+      content: string
+      createdAt: string
+      messageId: number
+      senderType: 'AI' | 'USER'
+      status: 'COMPLETED'
+    }> = []
     const pageMoves: number[] = []
     let streamGets = 0
     let turnPosts = 0
@@ -15,6 +22,37 @@ test.describe('release learning acceptance with synthetic APIs', () => {
       if (url.hostname !== '127.0.0.1') {
         externalRequests.push(url.origin)
         await route.abort('blockedbyclient')
+        return
+      }
+      if (
+        request.method() === 'GET'
+        && url.pathname === '/api/sessions/100/messages'
+        && canonicalMessages.length > 0
+      ) {
+        await route.fulfill({
+          json: success({ hasMore: false, items: canonicalMessages, nextCursor: null }),
+        })
+        return
+      }
+      if (request.method() === 'POST' && url.pathname === '/api/sessions/100/turns') {
+        const body = request.postDataJSON() as {
+          eventType?: string
+          payload?: { message?: string }
+        }
+        const response = await route.fetch()
+        const envelope = await response.json() as {
+          data?: { messages?: typeof canonicalMessages }
+        }
+        if (body.eventType === 'USER_QUESTION' && body.payload?.message) {
+          canonicalMessages.push({
+            content: body.payload.message,
+            createdAt: '2026-10-03T00:00:00Z',
+            messageId: 900,
+            senderType: 'USER',
+            status: 'COMPLETED',
+          }, ...(envelope.data?.messages ?? []))
+        }
+        await route.fulfill({ json: envelope, status: response.status() })
         return
       }
       await route.continue()
@@ -70,3 +108,7 @@ test.describe('release learning acceptance with synthetic APIs', () => {
     expect(externalRequests).toEqual([])
   })
 })
+
+function success(data: unknown) {
+  return { data, message: 'Synthetic canonical history', success: true }
+}

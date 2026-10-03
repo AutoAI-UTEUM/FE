@@ -66,6 +66,66 @@ test.describe('volatile chat question drafts', () => {
     await spaNavigate(page, '/sessions/100')
     await expect(page.locator('#chat-question')).toHaveValue('first user secret draft')
   })
+
+  test('does not apply a delayed turn response from the previous owner after logout and login', async ({ page }) => {
+    let releaseOldTurn: (() => void) | undefined
+    const oldTurnCanFinish = new Promise<void>((resolve) => { releaseOldTurn = resolve })
+    let turnPosts = 0
+
+    await installSyntheticAuth(page)
+    await page.route('**/api/sessions/100/stream', (route) => route.fulfill({
+      body: [
+        'event: ready',
+        'data: {"sessionId":100,"connectedAt":"2026-10-03T00:00:00Z"}',
+        '',
+        'event: completed',
+        'data: {"result":{"messages":[],"uiActions":[]}}',
+        '',
+        '',
+      ].join('\n'),
+      contentType: 'text/event-stream',
+    }))
+    await page.route('**/api/sessions/100/turns', async (route) => {
+      turnPosts += 1
+      await oldTurnCanFinish
+      try {
+        await route.fulfill({
+          json: success({
+            messages: [{
+              content: '첫 번째 사용자에게만 속한 늦은 답변',
+              createdAt: '2026-10-03T00:00:01Z',
+              messageId: 920,
+              senderType: 'AI',
+              status: 'COMPLETED',
+            }],
+            state: {},
+            uiActions: [],
+          }),
+        })
+      } catch {
+        // The previous owner's AbortSignal may close the intercepted request first.
+      }
+    })
+
+    await login(page, 'first@example.com')
+    await spaNavigate(page, '/sessions/100')
+    await page.locator('#chat-question').fill('첫 사용자 전용 질문')
+    await page.getByRole('button', { name: '질문 보내기' }).click()
+    await expect.poll(() => turnPosts).toBe(1)
+
+    await logout(page)
+    await login(page, 'second@example.com')
+    await spaNavigate(page, '/sessions/100')
+    releaseOldTurn?.()
+
+    await expect(page.locator('#chat-question')).toBeEnabled()
+    await expect(page.locator('#chat-question')).toHaveValue('')
+    await expect(page.getByRole('log').locator('article').filter({
+      hasText: '첫 번째 사용자에게만 속한 늦은 답변',
+    })).toHaveCount(0)
+    await page.waitForTimeout(250)
+    expect(turnPosts).toBe(1)
+  })
 })
 
 async function spaNavigate(page: Page, path: string) {
