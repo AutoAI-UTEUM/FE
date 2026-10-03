@@ -27,12 +27,19 @@ import { ClassroomWorkspaceHeader } from '../classroom/ClassroomWorkspaceHeader'
 
 export function InstructorClassroomEditPage() {
   const { classroomId = '' } = useParams()
+  const { user } = useAuth()
+  const accountScope = user?.id ?? user?.email ?? 'anonymous'
   // Each route owns its state and pending work, including direct/legacy mounts.
-  return <InstructorClassroomEditPageScope classroomId={classroomId} key={classroomId} />
+  return <InstructorClassroomEditPageScope classroomId={classroomId} key={`${accountScope}:${classroomId}`} />
 }
 
 function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string }) {
   const activeRef = useRef(false)
+  const completeLockRef = useRef(false)
+  const deleteLockRef = useRef(false)
+  const editRevisionRef = useRef(0)
+  const inviteCodeLockRef = useRef(false)
+  const saveLockRef = useRef(false)
   useEffect(() => {
     activeRef.current = true
     return () => { activeRef.current = false }
@@ -61,6 +68,8 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
   const [isLoading, setIsLoading] = useState(true)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
+  const [isRegeneratingInviteCode, setIsRegeneratingInviteCode] = useState(false)
+  const [isCompleting, setIsCompleting] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
@@ -73,14 +82,25 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
       repository.getInviteCode(classroomId),
     ])
       .then(([nextClassroom, nextWeeks, nextInviteCode]) => {
-        if (cancelled) return
+        if (cancelled || !activeRef.current) return
         if (nextClassroom.id !== classroomId) throw new Error('강의실 정보를 확인할 수 없습니다.')
+        const nextWeekCount = Math.max(
+          nextClassroom.weekCount,
+          ...nextWeeks.map((week) => week.weekNumber),
+        )
+        if (
+          !Number.isInteger(nextClassroom.weekCount) ||
+          nextClassroom.weekCount < 1 ||
+          nextClassroom.weekCount > 52 ||
+          nextWeekCount > 52 ||
+          nextWeeks.some((week) => !Number.isInteger(week.weekNumber) || week.weekNumber < 1 || week.weekNumber > 52)
+        ) {
+          throw new Error('주차 수는 1주 이상 52주 이하여야 합니다.')
+        }
         setClassroom(nextClassroom)
         setWeeks([...nextWeeks].sort((left, right) => left.weekNumber - right.weekNumber))
         setWeekTitles(Object.fromEntries(nextWeeks.map((week) => [week.weekNumber, week.title])))
-        const nextWeekCount = Math.max(nextClassroom.weekCount, nextWeeks.length, 1)
-        if (!activeRef.current) return
-      setInviteCode(nextInviteCode)
+        setInviteCode(nextInviteCode)
         setName(nextClassroom.name)
         setDescription(nextClassroom.description ?? '')
         setStartDate(nextClassroom.startDate)
@@ -102,6 +122,12 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
     [weeks],
   )
   const hasInvalidWeekTitle = weeks.some((week) => !(weekTitles[week.weekNumber] ?? '').trim())
+  const calculatedEndDate = getEndDate(startDate, weekCount)
+  const canSave = Boolean(name.trim() && calculatedEndDate && !hasInvalidWeekTitle)
+
+  function markEdited() {
+    editRevisionRef.current += 1
+  }
 
   async function copyInviteCode() {
     try {
@@ -115,7 +141,10 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
   }
 
   async function regenerateInviteCode() {
+    if (inviteCodeLockRef.current) return
     if (!window.confirm('기존 초대 코드는 더 이상 사용할 수 없습니다. 재발급할까요?')) return
+    inviteCodeLockRef.current = true
+    setIsRegeneratingInviteCode(true)
     try {
       const nextInviteCode = await repository.regenerateInviteCode(classroomId)
       if (!activeRef.current) return
@@ -125,52 +154,80 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
     } catch (requestError) {
       if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      inviteCodeLockRef.current = false
+      if (activeRef.current) setIsRegeneratingInviteCode(false)
     }
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!classroom || !name.trim() || !startDate || hasInvalidWeekTitle || isSaving) return
+    if (!classroom || !canSave || saveLockRef.current) return
 
+    saveLockRef.current = true
     setIsSaving(true)
+    const submittedRevision = editRevisionRef.current
+    const submittedName = name.trim()
+    const submittedDescription = description.trim()
+    const submittedStartDate = startDate
+    const submittedEndDate = calculatedEndDate
+    const submittedWeekTitles = Object.fromEntries(
+      weeks.map((week) => [week.weekNumber, weekTitles[week.weekNumber]?.trim() ?? '']),
+    )
     try {
-      const periodChanged = startDate !== classroom.startDate
-      const nextEndDate = periodChanged
-        ? getEndDate(startDate, weekCount)
-        : classroom.endDate
       const classroomChanges = {
-        ...(name.trim() !== classroom.name ? { name: name.trim() } : {}),
-        ...(description.trim() !== (classroom.description ?? '')
-          ? { description: description.trim() || null }
+        ...(submittedName !== classroom.name ? { name: submittedName } : {}),
+        ...(submittedDescription !== (classroom.description ?? '')
+          ? { description: submittedDescription || null }
           : {}),
-        ...(startDate !== classroom.startDate ? { startDate } : {}),
-        ...(nextEndDate !== classroom.endDate ? { endDate: nextEndDate } : {}),
+        ...(submittedStartDate !== classroom.startDate ? { startDate: submittedStartDate } : {}),
+        ...(submittedEndDate !== classroom.endDate ? { endDate: submittedEndDate } : {}),
       }
       if (Object.keys(classroomChanges).length > 0) {
-        await repository.update(classroomId, classroomChanges)
+        const updatedClassroom = await repository.update(classroomId, classroomChanges)
+        if (activeRef.current) {
+          setClassroom((current) => current?.id === classroomId ? updatedClassroom : current)
+        }
       }
       const changedWeeks = weeks.filter((week) => {
-        const nextTitle = weekTitles[week.weekNumber]?.trim() ?? ''
+        const nextTitle = submittedWeekTitles[week.weekNumber] ?? ''
         return nextTitle && nextTitle !== week.title
       })
-      await Promise.all(changedWeeks.map((week) => repository.updateWeek(
+      const weekResults = await Promise.allSettled(changedWeeks.map((week) => repository.updateWeek(
         classroomId,
         week.weekNumber,
-        { title: weekTitles[week.weekNumber].trim() },
+        { title: submittedWeekTitles[week.weekNumber] },
       )))
+      const savedWeeks = new Map<number, ClassroomWeek>()
+      weekResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          savedWeeks.set(changedWeeks[index].weekNumber, result.value)
+        }
+      })
+      if (activeRef.current && savedWeeks.size > 0) {
+        setWeeks((current) => current.map((week) => savedWeeks.get(week.weekNumber) ?? week))
+      }
+      const failedWeek = weekResults.find((result) => result.status === 'rejected')
+      if (failedWeek?.status === 'rejected') throw failedWeek.reason
       if (!activeRef.current) return
       showToast('강의실 정보를 저장했습니다.', 'success')
-      navigate(classroomDetailPath(classroom.id))
+      if (editRevisionRef.current === submittedRevision) {
+        navigate(classroomDetailPath(classroom.id))
+      }
     } catch (requestError) {
       if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
     } finally {
+      saveLockRef.current = false
       if (activeRef.current) setIsSaving(false)
     }
   }
 
   async function completeClassroom() {
-    if (!classroom || classroom.status === 'COMPLETED' || !window.confirm('강의실 운영을 종료할까요? 종료 후에는 새 자료 업로드와 학습자 추가가 불가능하며, 기존 자료와 학습 기록만 확인할 수 있습니다.')) return
+    if (!classroom || classroom.status === 'COMPLETED' || completeLockRef.current) return
+    if (!window.confirm('강의실 운영을 종료할까요? 종료 후에는 새 자료 업로드와 학습자 추가가 불가능하며, 기존 자료와 학습 기록만 확인할 수 있습니다.')) return
+    completeLockRef.current = true
+    setIsCompleting(true)
     try {
       await repository.complete(classroom.id)
       if (!activeRef.current) return
@@ -179,12 +236,16 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
     } catch (requestError) {
       if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      completeLockRef.current = false
+      if (activeRef.current) setIsCompleting(false)
     }
   }
 
   async function deleteClassroomPermanently(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!classroom || deleteConfirmation.trim() !== classroom.name || isDeleting) return
+    if (!classroom || deleteConfirmation.trim() !== classroom.name || deleteLockRef.current) return
+    deleteLockRef.current = true
     setIsDeleting(true)
     try {
       await repository.deletePermanently(classroom.id, deleteConfirmation)
@@ -195,7 +256,9 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
     } catch (requestError) {
       if (!activeRef.current) return
       showToast(getRequestErrorMessage(requestError), 'danger')
-      setIsDeleting(false)
+    } finally {
+      deleteLockRef.current = false
+      if (activeRef.current) setIsDeleting(false)
     }
   }
 
@@ -230,7 +293,7 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
   return (
     <ClassroomWorkspaceContainer className="xl:h-[calc(100dvh-2.5rem)] xl:min-h-0 xl:overflow-hidden">
       <ClassroomWorkspaceHeader
-        actions={<><Button onClick={() => navigate(classroomDetailPath(classroom.id))} variant="secondary">되돌리기</Button><Button disabled={!name.trim() || !startDate || hasInvalidWeekTitle || isSaving} form="classroom-edit-form" type="submit">{isSaving ? '저장 중' : '변경사항 저장'}</Button></>}
+        actions={<><Button onClick={() => navigate(classroomDetailPath(classroom.id))} variant="secondary">되돌리기</Button><Button disabled={!canSave || isSaving} form="classroom-edit-form" type="submit">{isSaving ? '저장 중' : '변경사항 저장'}</Button></>}
         activeTab="settings"
         classroom={classroom}
       />
@@ -247,10 +310,11 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
               inviteCode={inviteCode}
               name={name}
               onCopyInviteCode={() => void copyInviteCode()}
-              onDescriptionChange={setDescription}
-              onNameChange={setName}
+              onDescriptionChange={(value) => { markEdited(); setDescription(value) }}
+              onNameChange={(value) => { markEdited(); setName(value) }}
               onRegenerateInviteCode={() => void regenerateInviteCode()}
-              onStartDateChange={setStartDate}
+              onStartDateChange={(value) => { markEdited(); setStartDate(value) }}
+              isRegeneratingInviteCode={isRegeneratingInviteCode}
               startDate={startDate}
               weekCount={weekCount}
             />
@@ -261,13 +325,13 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
                 운영 종료는 기록을 보존합니다. 영구 삭제는 강의실 운영 데이터와 시험을 복구할 수 없게 제거합니다.
               </p>
               <Button
-                disabled={classroom.status === 'COMPLETED'}
+                disabled={classroom.status === 'COMPLETED' || isCompleting}
                 onClick={() => void completeClassroom()}
                 size="sm"
                 title={classroom.status === 'COMPLETED' ? '종료된 강의실은 다시 활성화할 수 없습니다.' : undefined}
                 variant="secondary"
               >
-                <Archive aria-hidden="true" size={13} />강의실 종료
+                <Archive aria-hidden="true" size={13} />{isCompleting ? '종료 중' : '강의실 종료'}
               </Button>
               <Button className="text-rose-700 hover:border-rose-200 hover:bg-rose-50" onClick={() => setIsDeleteDialogOpen(true)} size="sm" variant="secondary">
                 <Trash2 aria-hidden="true" size={13} />강의실 삭제
@@ -295,10 +359,13 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
                       aria-label={`${weekNumber}주차 이름`}
                       className="h-8 min-w-0 rounded-md border border-stone-200 px-2 type-caption font-semibold text-stone-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                       maxLength={100}
-                      onChange={(event) => setWeekTitles((current) => ({
-                        ...current,
-                        [weekNumber]: event.target.value,
-                      }))}
+                      onChange={(event) => {
+                        markEdited()
+                        setWeekTitles((current) => ({
+                          ...current,
+                          [weekNumber]: event.target.value,
+                        }))
+                      }}
                       value={weekTitles[weekNumber] ?? week.title}
                     /> : <span className="min-w-0 truncate type-caption text-stone-400">등록 정보 없음</span>}
                   </div>
@@ -337,6 +404,7 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
 function BasicInformationSection({
   description,
   inviteCode,
+  isRegeneratingInviteCode,
   name,
   onCopyInviteCode,
   onDescriptionChange,
@@ -348,6 +416,7 @@ function BasicInformationSection({
 }: {
   description: string
   inviteCode: string
+  isRegeneratingInviteCode: boolean
   name: string
   onCopyInviteCode: () => void
   onDescriptionChange: (value: string) => void
@@ -403,7 +472,7 @@ function BasicInformationSection({
           <div className="mt-1 flex min-h-11 items-center gap-2 rounded-lg bg-stone-50 px-3">
             <strong className="min-w-0 flex-1 truncate type-invite-code text-stone-900">{inviteCode}</strong>
             <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-brand-700" onClick={onCopyInviteCode} type="button">복사</button>
-            <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-stone-600" onClick={onRegenerateInviteCode} type="button">재발급</button>
+            <button className="h-8 rounded-md border border-stone-200 bg-white px-2.5 type-micro font-semibold text-stone-600 disabled:cursor-not-allowed disabled:text-stone-400" disabled={isRegeneratingInviteCode} onClick={onRegenerateInviteCode} type="button">{isRegeneratingInviteCode ? '재발급 중' : '재발급'}</button>
           </div>
         </div>
       </div>
@@ -412,7 +481,19 @@ function BasicInformationSection({
 }
 
 function getEndDate(startDate: string, weekCount: number): string {
-  const date = new Date(`${startDate}T00:00:00Z`)
+  if (!Number.isInteger(weekCount) || weekCount < 1 || weekCount > 52) return ''
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startDate)
+  if (!match) return ''
+  const [, yearValue, monthValue, dayValue] = match
+  const year = Number(yearValue)
+  const month = Number(monthValue)
+  const day = Number(dayValue)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return ''
   date.setUTCDate(date.getUTCDate() + weekCount * 7 - 1)
   return date.toISOString().slice(0, 10)
 }
