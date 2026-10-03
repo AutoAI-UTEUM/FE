@@ -1,0 +1,141 @@
+import { expect, test, type Page } from '@playwright/test'
+
+import { loginAs, qaEnvironment } from './qa-helpers'
+
+test.describe('volatile chat question drafts', () => {
+  test.beforeEach(() => {
+    test.skip(qaEnvironment !== 'mock', 'synthetic browser regression only')
+  })
+
+  test('restores an unsent question after SPA navigation and browser back', async ({ page }) => {
+    await loginAs(page, 'LEARNER')
+    await page.goto('/sessions/100')
+    const question = page.locator('#chat-question')
+    await expect(question).toBeVisible()
+    await question.fill('synthetic unsent question')
+
+    await page.locator('a[href="/classrooms"]:visible').first().click()
+    await expect(page).toHaveURL(/\/classrooms$/)
+    await page.goBack()
+
+    await expect(page).toHaveURL(/\/sessions\/100$/)
+    await expect(page.locator('#chat-question')).toHaveValue('synthetic unsent question')
+  })
+
+  test('does not expose an unsent question in another session', async ({ page }) => {
+    await loginAs(page, 'LEARNER')
+    await page.goto('/sessions/100')
+    await page.locator('#chat-question').fill('session 100 only')
+
+    await spaNavigate(page, '/sessions/102')
+    await expect(page.locator('#chat-question')).toHaveValue('')
+    await page.goBack()
+
+    await expect(page).toHaveURL(/\/sessions\/100$/)
+    await expect(page.locator('#chat-question')).toHaveValue('session 100 only')
+  })
+
+  test('removes a submitted question before SPA navigation and browser back', async ({ page }) => {
+    await loginAs(page, 'LEARNER')
+    await page.goto('/sessions/100')
+    const question = page.locator('#chat-question')
+    await question.fill('synthetic submitted question')
+    await question.press('Enter')
+    await expect(question).toHaveValue('')
+
+    await page.locator('a[href="/classrooms"]:visible').first().click()
+    await expect(page).toHaveURL(/\/classrooms$/)
+    await page.goBack()
+
+    await expect(page.locator('#chat-question')).toHaveValue('')
+  })
+
+  test('isolates a retained draft from a different user after SPA logout and login', async ({ page }) => {
+    await installSyntheticAuth(page)
+    await login(page, 'first@example.com')
+    await spaNavigate(page, '/sessions/100')
+    await page.locator('#chat-question').fill('first user secret draft')
+
+    await logout(page)
+    await login(page, 'second@example.com')
+    await spaNavigate(page, '/sessions/100')
+    await expect(page.locator('#chat-question')).toHaveValue('')
+
+    await logout(page)
+    await login(page, 'first@example.com')
+    await spaNavigate(page, '/sessions/100')
+    await expect(page.locator('#chat-question')).toHaveValue('first user secret draft')
+  })
+})
+
+async function spaNavigate(page: Page, path: string) {
+  await page.evaluate((nextPath) => {
+    window.history.pushState({}, '', nextPath)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, path)
+  await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`))
+}
+
+async function installSyntheticAuth(page: Page) {
+  let currentUser: { email: string; id: number; name: string; role: 'LEARNER' } | null = null
+  await page.route('**/api/auth/refresh', async (route) => {
+    if (!currentUser) {
+      await route.fulfill({
+        status: 401,
+        json: { success: false, error: { code: 'TOKEN_INVALID', message: 'Synthetic signed out' } },
+      })
+      return
+    }
+    await route.fulfill({ json: success(accessGrant()) })
+  })
+  await page.route('**/api/auth/login', async (route) => {
+    const email = String(route.request().postDataJSON().email)
+    currentUser = {
+      email,
+      id: email === 'first@example.com' ? 11 : 22,
+      name: email === 'first@example.com' ? 'First synthetic user' : 'Second synthetic user',
+      role: 'LEARNER',
+    }
+    await route.fulfill({ json: success({ ...accessGrant(), user: currentUser }) })
+  })
+  await page.route('**/api/auth/logout', async (route) => {
+    currentUser = null
+    await route.fulfill({ json: success(null) })
+  })
+  await page.route('**/api/users/me', async (route) => {
+    await route.fulfill(currentUser
+      ? { json: success(currentUser) }
+      : { status: 401, json: { success: false, error: { code: 'TOKEN_INVALID', message: 'Synthetic signed out' } } })
+  })
+}
+
+async function login(page: Page, email: string) {
+  if (!/\/login(?:\?|$)/.test(page.url())) await page.goto('/login')
+  await page.locator('#login-email').fill(email)
+  await page.locator('#login-password').fill('synthetic-password')
+  await page.locator('form button[type="submit"]').click()
+  await expect(page).toHaveURL(/\/classrooms$/)
+}
+
+async function logout(page: Page) {
+  await page.getByRole('button', { name: '프로필 메뉴', exact: true }).first().click()
+  await page.getByRole('menuitem', { name: '로그아웃' }).click()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+}
+
+function accessGrant() {
+  return {
+    accessToken: 'synthetic-token',
+    expiresIn: 3600,
+    session: {
+      absoluteExpiresAt: '2026-10-04T00:00:00.000Z',
+      idleExpiresAt: '2026-10-03T03:00:00.000Z',
+      idleTimeoutSeconds: 7200,
+    },
+    tokenType: 'Bearer',
+  }
+}
+
+function success(data: unknown) {
+  return { success: true, message: 'Synthetic fixture', data }
+}

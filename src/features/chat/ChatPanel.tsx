@@ -93,6 +93,30 @@ const QUICK_ACTIONS = [
 ] as const
 
 const MAX_QUESTION_INPUT_HEIGHT = 160
+const MAX_VOLATILE_QUESTION_DRAFTS = 20
+const volatileQuestionDrafts = new Map<string, string>()
+
+function getQuestionDraftKey(
+  ownerId: number | string | undefined,
+  sessionId: string,
+): string | null {
+  if (ownerId === undefined) return null
+  return JSON.stringify([String(ownerId), sessionId])
+}
+
+function readQuestionDraft(key: string | null): string {
+  return key ? volatileQuestionDrafts.get(key) ?? '' : ''
+}
+
+function writeQuestionDraft(key: string | null, value: string): void {
+  if (!key) return
+  volatileQuestionDrafts.delete(key)
+  if (!value) return
+  volatileQuestionDrafts.set(key, value)
+  if (volatileQuestionDrafts.size <= MAX_VOLATILE_QUESTION_DRAFTS) return
+  const oldestKey = volatileQuestionDrafts.keys().next().value
+  if (oldestKey) volatileQuestionDrafts.delete(oldestKey)
+}
 
 function createRequestId(): string {
   return typeof crypto.randomUUID === 'function'
@@ -127,7 +151,14 @@ export function ChatPanel({
     markMessageRetrying,
     submitTurn,
   } = chat
-  const [question, setQuestion] = useState('')
+  const questionDraftKey = getQuestionDraftKey(textSizeOwnerId, sessionId)
+  const [questionDraft, setQuestionDraft] = useState(() => ({
+    key: questionDraftKey,
+    value: readQuestionDraft(questionDraftKey),
+  }))
+  const question = questionDraft.key === questionDraftKey
+    ? questionDraft.value
+    : readQuestionDraft(questionDraftKey)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<ChatPanelTab>('chat')
   const [notes, setNotes] = useState<Note[]>([])
@@ -152,7 +183,11 @@ export function ChatPanel({
     [request],
   )
   const isSavingNoteDraft = savingNoteDraftSessionId === sessionId
-    && noteDraftSaveInFlightRef.current
+
+  function setQuestion(value: string) {
+    writeQuestionDraft(questionDraftKey, value)
+    setQuestionDraft({ key: questionDraftKey, value })
+  }
 
   function changeLearningTextSize(direction: -1 | 1) {
     setLearningTextSize((current) => {
@@ -174,6 +209,7 @@ export function ChatPanel({
   useEffect(() => () => {
     noteDraftSaveAttemptRef.current += 1
     noteDraftSaveInFlightRef.current = false
+    setSavingNoteDraftSessionId((current) => current === sessionId ? null : current)
   }, [sessionId])
 
   useLayoutEffect(() => {

@@ -226,6 +226,74 @@ describe('ChatPanel', () => {
     expect(repository.submitTurn).not.toHaveBeenCalled()
   })
 
+  it('restores an unsent question only for the same user and session after remount', async () => {
+    const repository = createRepository()
+    const firstView = render(
+      <ChatHarness repository={repository} sessionId="draft-session" textSizeOwnerId={701} />,
+    )
+    fireEvent.change(await screen.findByRole('textbox'), {
+      target: { value: 'send this only in the original session' },
+    })
+    firstView.rerender(
+      <ChatHarness repository={repository} sessionId="draft-session" textSizeOwnerId={702} />,
+    )
+    expect(screen.getByRole('textbox')).toHaveValue('')
+    firstView.rerender(
+      <ChatHarness repository={repository} sessionId="draft-session" textSizeOwnerId={701} />,
+    )
+    expect(screen.getByRole('textbox')).toHaveValue('send this only in the original session')
+    firstView.unmount()
+
+    const otherSession = render(
+      <ChatHarness repository={repository} sessionId="other-session" textSizeOwnerId={701} />,
+    )
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+    otherSession.unmount()
+
+    const otherUser = render(
+      <ChatHarness repository={repository} sessionId="draft-session" textSizeOwnerId={702} />,
+    )
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+    otherUser.unmount()
+
+    render(
+      <ChatHarness repository={repository} sessionId="draft-session" textSizeOwnerId={701} />,
+    )
+    expect(await screen.findByRole('textbox'))
+      .toHaveValue('send this only in the original session')
+  })
+
+  it('does not retain an unsent question when the user identity is unavailable', async () => {
+    const repository = createRepository()
+    const firstView = render(
+      <ChatHarness repository={repository} sessionId="anonymous-draft-session" />,
+    )
+    fireEvent.change(await screen.findByRole('textbox'), {
+      target: { value: 'do not retain without an owner' },
+    })
+    firstView.unmount()
+
+    render(<ChatHarness repository={repository} sessionId="anonymous-draft-session" />)
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+  })
+
+  it('clears the volatile question draft as soon as it is submitted', async () => {
+    const repository = createRepository()
+    const firstView = render(
+      <ChatHarness repository={repository} sessionId="submitted-draft-session" textSizeOwnerId={703} />,
+    )
+    const input = await screen.findByRole('textbox')
+    fireEvent.change(input, { target: { value: 'submit and forget this draft' } })
+    fireEvent.submit(input.closest('form')!)
+    expect(input).toHaveValue('')
+    firstView.unmount()
+
+    render(
+      <ChatHarness repository={repository} sessionId="submitted-draft-session" textSizeOwnerId={703} />,
+    )
+    expect(await screen.findByRole('textbox')).toHaveValue('')
+  })
+
   it('keeps a failed question available for retry when ready is not reached', async () => {
     let handlers: SessionStreamHandlers | undefined
     const submitTurn = vi.fn()
