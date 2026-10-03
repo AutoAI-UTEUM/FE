@@ -897,7 +897,7 @@ export function AppLayout() {
                 <span className="block truncate type-control font-semibold text-stone-800">
                   {user?.name}
                 </span>
-                <span className="block truncate type-micro text-stone-400">
+                <span className="block truncate type-micro text-stone-500">
                   {roleLabel}
                 </span>
               </span>
@@ -943,7 +943,7 @@ export function AppLayout() {
               <span className="block truncate type-control font-semibold text-stone-800">
                 {user?.name}
               </span>
-              <span className="block truncate type-micro text-stone-400">
+              <span className="block truncate type-micro text-stone-500">
                 {roleLabel}
               </span>
             </span>
