@@ -17,44 +17,105 @@ import { ExamStatusBadge } from './ExamsPage'
 import { classroomExamSubmissionPath, classroomExamsPath, routes } from '../routes'
 
 export function ExamDetailPage() {
+  const { examId } = useParams()
+  const { user } = useAuth()
+  const accountScope = user?.id === undefined ? `email:${user?.email ?? ''}` : `id:${user.id}`
+  const scopeKey = `${accountScope}:exam:${examId ?? ''}`
+  return <ScopedExamDetailPage key={scopeKey} scopeKey={scopeKey} />
+}
+
+function ScopedExamDetailPage({ scopeKey }: { scopeKey: string }) {
   usePageTitle('시험')
   const { classroomId = '', examId } = useParams(); const { apiRequest, rawApiRequest, user } = useAuth(); const navigate = useNavigate(); const { show } = useToast()
   const isInstructor = isInstructorRole(user?.role)
   const repository = useMemo(() => createExamsRepository(apiRequest, rawApiRequest), [apiRequest, rawApiRequest])
-  const [exam, setExam] = useState<Exam | null>()
-  const [error, setError] = useState<string | null>(null)
-  const [isWorking, setIsWorking] = useState(false)
-  const [learnerResultExamId, setLearnerResultExamId] = useState<string | null>(null)
+  const [examState, setExamState] = useState<{ error: string | null; scopeKey: string; value: Exam | null | undefined }>(() => ({ error: null, scopeKey, value: undefined }))
+  const [workingScope, setWorkingScope] = useState<string | null>(null)
+  const actionControllersRef = useRef(new Map<string, AbortController>())
+  const isMountedRef = useRef(true)
+  const [learnerResultScope, setLearnerResultScope] = useState<string | null>(null)
+  const exam = examState.scopeKey === scopeKey ? examState.value : undefined
+  const error = examState.scopeKey === scopeKey ? examState.error : null
+  const isWorking = workingScope === scopeKey
   const handleLearnerResultReady = useCallback(() => {
-    if (examId) setLearnerResultExamId(examId)
-  }, [examId])
+    setLearnerResultScope(scopeKey)
+  }, [scopeKey])
 
-  useEffect(() => { if (!examId) return; const controller = new AbortController(); repository.get(examId, controller.signal).then((value) => { setExam(value); setError(null); rememberClassroomId(value.classroomId) }).catch((requestError) => { if (!controller.signal.aborted) { setExam(null); setError(getRequestErrorMessage(requestError)) } }); return () => controller.abort() }, [examId, repository])
+  useEffect(() => {
+    if (!examId) return
+    const requestScope = scopeKey
+    const controller = new AbortController()
+    repository.get(examId, controller.signal)
+      .then((value) => {
+        if (controller.signal.aborted || !isMountedRef.current) return
+        setExamState({ error: null, scopeKey: requestScope, value })
+        rememberClassroomId(value.classroomId)
+      })
+      .catch((requestError) => {
+        if (controller.signal.aborted || !isMountedRef.current) return
+        setExamState({ error: getRequestErrorMessage(requestError), scopeKey: requestScope, value: null })
+      })
+    return () => controller.abort()
+  }, [examId, repository, scopeKey])
+  useEffect(() => {
+    isMountedRef.current = true
+    const actionControllers = actionControllersRef.current
+    return () => {
+      isMountedRef.current = false
+      actionControllers.forEach((controller) => controller.abort())
+    }
+  }, [])
   if (!examId) return <ErrorState title="시험을 찾을 수 없습니다" description="시험 식별자가 없습니다." />
   if (exam === undefined) return <LoadingState message="시험을 불러오는 중입니다." />
   if (!exam) return <ErrorState title="시험을 불러오지 못했습니다" description={error ?? '접근 권한이나 시험 상태를 확인하세요.'} action={<ButtonLink to={classroomId ? classroomExamsPath(classroomId) : '/classrooms'}>시험 목록으로</ButtonLink>} />
 
   async function runAction(action: 'publish' | 'close' | 'delete') {
-    if (!examId || !exam || isWorking) return
+    if (!examId || !exam || actionControllersRef.current.has(scopeKey)) return
     const messages = { publish: '시험을 공개할까요?', close: '시험을 종료할까요?', delete: '시험 초안을 삭제할까요?' }
     if (!window.confirm(messages[action])) return
-    setIsWorking(true)
+    const requestScope = scopeKey
+    const actionExam = exam
+    const controller = new AbortController()
+    actionControllersRef.current.set(requestScope, controller)
+    setWorkingScope(requestScope)
     try {
-      if (action === 'delete') { await repository.delete(examId); show('시험을 삭제했습니다.', 'success'); navigate(classroomExamsPath(exam.classroomId)); return }
-      const updated = action === 'publish' ? await repository.publish(examId) : await repository.close(examId)
-      setExam(updated); show(action === 'publish' ? '시험을 공개했습니다.' : '시험을 종료했습니다.', 'success')
-    } catch (requestError) { show(getRequestErrorMessage(requestError), 'danger') } finally { setIsWorking(false) }
+      if (action === 'delete') {
+        await repository.delete(examId, controller.signal)
+        if (controller.signal.aborted || !isMountedRef.current) return
+        show('시험을 삭제했습니다.', 'success')
+        navigate(classroomExamsPath(actionExam.classroomId))
+        return
+      }
+      const updated = action === 'publish' ? await repository.publish(examId, controller.signal) : await repository.close(examId, controller.signal)
+      if (controller.signal.aborted || !isMountedRef.current) return
+      setExamState({ error: null, scopeKey: requestScope, value: updated })
+      show(action === 'publish' ? '시험을 공개했습니다.' : '시험을 종료했습니다.', 'success')
+    } catch (requestError) {
+      if (!controller.signal.aborted && isMountedRef.current) show(getRequestErrorMessage(requestError), 'danger')
+    } finally {
+      if (actionControllersRef.current.get(requestScope) === controller) actionControllersRef.current.delete(requestScope)
+      if (isMountedRef.current) setWorkingScope((current) => current === requestScope ? null : current)
+    }
+  }
+
+  function updateCurrentExam(updated: Exam) {
+    if (!isMountedRef.current) return
+    setExamState((current) => current.scopeKey === scopeKey ? { error: null, scopeKey, value: updated } : current)
   }
 
   return <PageContainer>
-    <PageHeader title={exam.title} titleAccessory={<ExamStatusBadge status={exam.status} />} actions={<>{!isInstructor && (learnerResultExamId === exam.id || exam.mySubmission?.status === 'GRADED') ? <Button onClick={() => window.print()} variant="secondary">결과 저장</Button> : null}<ButtonLink to={classroomExamsPath(exam.classroomId)} variant="secondary">목록</ButtonLink></>} />
-    {isInstructor ? <InstructorExamView exam={exam} isWorking={isWorking} onAction={(action) => void runAction(action)} onUpdated={setExam} repository={repository} /> : <LearnerExamView exam={exam} onResultReady={handleLearnerResultReady} repository={repository} />}
+    <PageHeader title={exam.title} titleAccessory={<ExamStatusBadge status={exam.status} />} actions={<>{!isInstructor && (learnerResultScope === scopeKey || exam.mySubmission?.status === 'GRADED') ? <Button onClick={() => window.print()} variant="secondary">결과 저장</Button> : null}<ButtonLink to={classroomExamsPath(exam.classroomId)} variant="secondary">목록</ButtonLink></>} />
+    {isInstructor ? <InstructorExamView key={scopeKey} exam={exam} isWorking={isWorking} onAction={(action) => void runAction(action)} onUpdated={updateCurrentExam} repository={repository} /> : <LearnerExamView key={scopeKey} exam={exam} onResultReady={handleLearnerResultReady} repository={repository} />}
   </PageContainer>
 }
 
 function InstructorExamView({ exam, isWorking, onAction, onUpdated, repository }: { exam: Exam; isWorking: boolean; onAction: (action: 'publish' | 'close' | 'delete') => void; onUpdated: (exam: Exam) => void; repository: ReturnType<typeof createExamsRepository> }) {
   const { apiRequest } = useAuth()
   const { show } = useToast(); const [isEditing, setIsEditing] = useState(false); const [isSaving, setIsSaving] = useState(false)
+  const isMountedRef = useRef(true)
+  const saveInFlightRef = useRef(false)
+  const regradeInFlightRef = useRef(false)
+  const generateInFlightRef = useRef(false)
   const [isAiDraftOpen, setIsAiDraftOpen] = useState(false)
   const [draftWasTruncated, setDraftWasTruncated] = useState(false)
   const [submissions, setSubmissions] = useState<InstructorSubmissionSummary[]>([]); const [submissionsError, setSubmissionsError] = useState<string | null>(null)
@@ -66,6 +127,10 @@ function InstructorExamView({ exam, isWorking, onAction, onUpdated, repository }
   const fetchSubmissions = useCallback((signal: AbortSignal) => repository.listSubmissions(exam.id, signal), [exam.id, repository])
   const handleSubmissionPollingError = useCallback((error: unknown) => setSubmissionsError(getRequestErrorMessage(error)), [])
   const handleSubmissionPollingDelay = useCallback(() => setSubmissionsError('자동 재채점이 약 90분 이상 지연되고 있습니다. 잠시 후 다시 확인하세요.'), [])
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
   useEffect(() => { if (exam.status === 'DRAFT') return; const controller = new AbortController(); fetchSubmissions(controller.signal).then((items) => { setSubmissions(items); setSubmissionsError(null) }).catch((error) => { if (!controller.signal.aborted) setSubmissionsError(getRequestErrorMessage(error)) }); return () => controller.abort() }, [exam.status, fetchSubmissions])
   useEffect(() => {
     if (exam.status === 'DRAFT') return
@@ -76,24 +141,47 @@ function InstructorExamView({ exam, isWorking, onAction, onUpdated, repository }
     return () => controller.abort()
   }, [classroomsRepository, exam.classroomId, exam.status])
   useAsyncJobPolling({ enabled: submissions.some(isInstructorSubmissionPending), fetchNext: fetchSubmissions, getDelayMs: getExamPollingDelay, isPending: hasPendingInstructorSubmission, maxDurationMs: 90 * 60_000, onDelayed: handleSubmissionPollingDelay, onError: handleSubmissionPollingError, onResult: setSubmissions })
-  async function save(event: FormEvent) { event.preventDefault(); if (!isExamDraftValid(draft) || isSaving) return; setIsSaving(true); try { onUpdated(await repository.update(exam.id, draft)); setIsEditing(false); show('시험 초안을 저장했습니다.', 'success') } catch (error) { show(getRequestErrorMessage(error), 'danger') } finally { setIsSaving(false) } }
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    if (!isExamDraftValid(draft) || saveInFlightRef.current) return
+    saveInFlightRef.current = true
+    setIsSaving(true)
+    try {
+      const updated = await repository.update(exam.id, draft)
+      if (!isMountedRef.current) return
+      onUpdated(updated)
+      setIsEditing(false)
+      show('시험 초안을 저장했습니다.', 'success')
+    } catch (error) {
+      if (isMountedRef.current) show(getRequestErrorMessage(error), 'danger')
+    } finally {
+      saveInFlightRef.current = false
+      if (isMountedRef.current) setIsSaving(false)
+    }
+  }
   async function regradeSubmission(submissionId: string) {
-    if (regradingSubmissionId) return
+    if (regradeInFlightRef.current) return
+    regradeInFlightRef.current = true
     setRegradingSubmissionId(submissionId)
     setSubmissionsError(null)
     try {
       const updated = await repository.regrade(exam.id, submissionId)
+      if (!isMountedRef.current) return
       setSubmissions((current) => current.map((submission) => submission.id === submissionId ? { ...submission, gradedAt: updated.gradedAt, normalizedScore: updated.normalizedScore, score: updated.score, status: updated.status } : submission))
       show('재채점을 요청했습니다. 결과를 자동으로 확인합니다.', 'success')
     } catch (error) {
-      setSubmissionsError(getRequestErrorMessage(error))
+      if (isMountedRef.current) setSubmissionsError(getRequestErrorMessage(error))
     } finally {
-      setRegradingSubmissionId(null)
+      regradeInFlightRef.current = false
+      if (isMountedRef.current) setRegradingSubmissionId(null)
     }
   }
   async function generateAiDraft(input: GenerateExamDraftInput) {
+    if (generateInFlightRef.current) return
+    generateInFlightRef.current = true
     try {
       const generated = await repository.generateDraftQuestions(exam.classroomId, exam.id, input)
+      if (!isMountedRef.current) return
       setDraft({
         ...toExamInput(exam),
         questions: generated.questions,
@@ -104,8 +192,10 @@ function InstructorExamView({ exam, isWorking, onAction, onUpdated, repository }
       setIsEditing(true)
       show(`${generated.questions.length}개 문항 초안을 생성했습니다.`, 'success')
     } catch (error) {
-      show(getRequestErrorMessage(error), 'danger')
+      if (isMountedRef.current) show(getRequestErrorMessage(error), 'danger')
       throw error
+    } finally {
+      generateInFlightRef.current = false
     }
   }
   return <>
