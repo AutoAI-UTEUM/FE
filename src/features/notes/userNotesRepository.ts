@@ -1,4 +1,4 @@
-import type { PagedResponse } from '../../shared/api'
+import { fetchAllPages, type PagedResponse } from '../../shared/api'
 import type { AuthenticatedRequest } from '../auth'
 
 /**
@@ -66,11 +66,13 @@ const PAGE_SIZE = 100
 export function createUserNotesRepository(request: AuthenticatedRequest) {
   return {
     async list(signal?: AbortSignal): Promise<UserNote[]> {
-      const { data } = await request<PagedResponse<UserNoteDto>>(
-        `/api/user-notes?page=0&size=${PAGE_SIZE}`,
-        { signal },
+      const items = await listAllPages<UserNoteDto>(
+        request,
+        '/api/user-notes',
+        (note) => note.id,
+        signal,
       )
-      return data.items.map(mapUserNote)
+      return items.map(mapUserNote)
     },
 
     async create(input: UserNoteInput): Promise<UserNote> {
@@ -99,11 +101,13 @@ export function createUserNotesRepository(request: AuthenticatedRequest) {
     },
 
     async listWrongAnswers(signal?: AbortSignal): Promise<WrongAnswerNote[]> {
-      const { data } = await request<PagedResponse<WrongAnswerNoteDto>>(
-        `/api/wrong-answer-notes?page=0&size=${PAGE_SIZE}`,
-        { signal },
+      const items = await listAllPages<WrongAnswerNoteDto>(
+        request,
+        '/api/wrong-answer-notes',
+        (note) => note.id,
+        signal,
       )
-      return data.items.map(mapWrongAnswerNote)
+      return items.map(mapWrongAnswerNote)
     },
 
     /** quizResultRef는 퀴즈 제출 응답의 `submissionId:questionId`다. 시험 제출은 범위 밖이다. */
@@ -145,6 +149,28 @@ export function createUserNotesRepository(request: AuthenticatedRequest) {
       return { failed: data.failed ?? [], imported: data.imported, skipped: data.skipped }
     },
   }
+}
+
+function listAllPages<T>(
+  request: AuthenticatedRequest,
+  path: string,
+  getKey: (item: T) => PropertyKey,
+  signal?: AbortSignal,
+): Promise<T[]> {
+  return fetchAllPages({
+    getKey,
+    loadPage: async (page) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        size: String(PAGE_SIZE),
+      })
+      const { data } = await request<PagedResponse<T>>(`${path}?${params}`, {
+        signal,
+      })
+      return data
+    },
+    signal,
+  })
 }
 
 function mapUserNote(value: UserNoteDto): UserNote {

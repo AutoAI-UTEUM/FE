@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -85,6 +85,65 @@ describe('learner collection pages', () => {
       const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
       return url.pathname === '/api/user-notes'
     })).toHaveLength(2)
+  })
+
+  it('aborts an in-flight manual note list when the owner-bound effect is disposed', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'user-notes')
+    let manualNotesRequested = false
+    let manualNotesSignal: AbortSignal | undefined
+    mockLearnerCollectionApi({
+      userNotesResponse: (signal) => {
+        manualNotesRequested = true
+        manualNotesSignal = signal
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const view = renderPage(<LearnerNotesPage />)
+
+    await waitFor(() => expect(manualNotesRequested).toBe(true))
+    expect(manualNotesSignal).toBeDefined()
+    expect(manualNotesSignal?.aborted).toBe(false)
+
+    view.unmount()
+
+    expect(manualNotesSignal?.aborted).toBe(true)
+  })
+
+  it('aborts an in-flight manual note retry when the owner-bound effect is disposed', async () => {
+    vi.stubEnv('VITE_API_CAPABILITIES', 'user-notes')
+    window.localStorage.setItem('edupilot:manual-notes:cache:1', JSON.stringify([
+      {
+        content: '# 캐시된 개인 노트',
+        createdAt: '2026-09-01T00:00:00Z',
+        id: 'cached-1',
+        updatedAt: '2026-09-01T00:00:00Z',
+      },
+    ]))
+    let requestCount = 0
+    let retrySignal: AbortSignal | undefined
+    mockLearnerCollectionApi({
+      userNotesResponse: (signal) => {
+        requestCount += 1
+        if (requestCount === 1) {
+          return new Response(JSON.stringify({
+            error: { code: 'SERVER_ERROR', message: '노트 서버 오류' },
+            success: false,
+          }), { headers: { 'Content-Type': 'application/json' }, status: 500 })
+        }
+        retrySignal = signal
+        return new Promise<Response>(() => undefined)
+      },
+    })
+    const view = renderPage(<LearnerNotesPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '서버 노트 다시 시도' }))
+    await waitFor(() => expect(requestCount).toBe(2))
+    expect(retrySignal).toBeDefined()
+    expect(retrySignal?.aborted).toBe(false)
+
+    view.unmount()
+
+    expect(retrySignal?.aborted).toBe(true)
   })
 
   it('opens manual note creation as a full page instead of a dialog', () => {
@@ -234,6 +293,7 @@ function mockLearnerCollectionApi(
     noteContent?: string
     noteContents?: string[]
     notesUnavailable?: boolean
+    userNotesResponse?: (signal: AbortSignal | undefined) => Promise<Response> | Response
     userNotesUnavailable?: boolean
   } = {},
 ) {
@@ -289,6 +349,11 @@ function mockLearnerCollectionApi(
     }
 
     if (url.pathname === '/api/user-notes') {
+      if (options.userNotesResponse) {
+        return options.userNotesResponse(
+          input instanceof Request ? input.signal : init?.signal ?? undefined,
+        )
+      }
       if (options.userNotesUnavailable) {
         return new Response(JSON.stringify({
           error: { code: 'SERVER_ERROR', message: '노트 서버 오류' },

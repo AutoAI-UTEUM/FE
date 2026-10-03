@@ -221,6 +221,116 @@ describe('createManualNotesStore — user-notes capability 켜짐', () => {
     await store.create({ content: '# 서버 노트', document: '{"blocks":1}' })
     expect((await store.list())[0].document).toBe('{"blocks":1}')
   })
+
+  it('101번째 서버 노트까지 조회하고 완성된 목록만 계정 캐시에 기록한다', async () => {
+    const makeNote = (id: number) => ({
+      content: `# 서버 노트 ${id}`,
+      createdAt: '2026-10-01T00:00:00Z',
+      id,
+      title: `서버 노트 ${id}`,
+      updatedAt: '2026-10-01T00:00:00Z',
+    })
+    const request = vi.fn(async (path: string) => {
+      const pageIndex = Number(new URL(path, 'https://example.test').searchParams.get('page'))
+      return {
+        data: {
+          items: pageIndex === 0
+            ? Array.from({ length: 100 }, (_, index) => makeNote(index + 1))
+            : [makeNote(101)],
+          page: pageIndex,
+          size: 100,
+          totalElements: 101,
+          totalPages: 2,
+        },
+        message: '정상',
+        success: true as const,
+      }
+    })
+    const store = createManualNotesStore(request as never, USER)
+
+    await expect(store.get('101')).resolves.toMatchObject({ id: '101' })
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(store.readLocal()).toHaveLength(101)
+    expect(store.readLocal().at(-1)?.id).toBe('101')
+  })
+
+  it('후속 페이지 실패 시 부분 목록으로 캐시를 덮거나 없는 노트로 판정하지 않는다', async () => {
+    const cached = localNote('cached', '# 기존 캐시')
+    window.localStorage.setItem(
+      'edupilot:manual-notes:cache:7',
+      JSON.stringify([cached]),
+    )
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      content: `# 서버 노트 ${index + 1}`,
+      createdAt: '2026-10-01T00:00:00Z',
+      id: index + 1,
+      title: `서버 노트 ${index + 1}`,
+      updatedAt: '2026-10-01T00:00:00Z',
+    }))
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        data: { items: firstPage, page: 0, size: 100, totalElements: 101, totalPages: 2 },
+      })
+      .mockRejectedValueOnce(new Error('second page failed'))
+    const store = createManualNotesStore(request as never, USER)
+
+    await expect(store.get('101')).rejects.toThrow('second page failed')
+    expect(store.readLocal()).toEqual([cached])
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(request.mock.calls.map(([path]) => path)).toEqual([
+      '/api/user-notes?page=0&size=100',
+      '/api/user-notes?page=1&size=100',
+    ])
+  })
+
+  it('owner 변경으로 abort된 이전 조회는 어느 계정 캐시도 갱신하지 않는다', async () => {
+    const controller = new AbortController()
+    const firstRequest = vi.fn(async () => {
+      controller.abort()
+      return {
+        data: {
+          items: Array.from({ length: 100 }, (_, index) => ({
+            content: `# 이전 계정 노트 ${index + 1}`,
+            createdAt: '2026-10-01T00:00:00Z',
+            id: index + 1,
+            title: `이전 계정 노트 ${index + 1}`,
+            updatedAt: '2026-10-01T00:00:00Z',
+          })),
+          page: 0,
+          size: 100,
+          totalElements: 101,
+          totalPages: 2,
+        },
+      }
+    })
+    const secondRequest = vi.fn().mockResolvedValue({
+      data: {
+        items: [{
+          content: '# 새 계정 노트',
+          createdAt: '2026-10-01T00:00:00Z',
+          id: 201,
+          title: '새 계정 노트',
+          updatedAt: '2026-10-01T00:00:00Z',
+        }],
+        page: 0,
+        size: 100,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+    const firstOwnerStore = createManualNotesStore(firstRequest as never, USER)
+    const secondOwnerStore = createManualNotesStore(secondRequest as never, USER + 1)
+
+    await expect(firstOwnerStore.list(controller.signal)).rejects.toThrow()
+    await expect(secondOwnerStore.list()).resolves.toEqual([
+      expect.objectContaining({ id: '201' }),
+    ])
+    expect(firstOwnerStore.readLocal()).toEqual([])
+    expect(secondOwnerStore.readLocal()).toEqual([
+      expect.objectContaining({ id: '201' }),
+    ])
+    expect(firstRequest).toHaveBeenCalledOnce()
+  })
 })
 
 describe('getNotePreview', () => {
