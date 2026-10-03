@@ -420,6 +420,29 @@ describe('ChatPanel', () => {
     )
   })
 
+  it('restores keyboard focus after an Enter-submitted turn finishes', async () => {
+    let resolveTurn!: (result: SessionTurnResult) => void
+    const repository = createRepository({
+      submitTurn: vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+        resolveTurn = resolve
+      })),
+    })
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
+
+    input.focus()
+    fireEvent.change(input, { target: { value: '초점 복원 확인' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(input).toBeDisabled())
+    input.blur()
+
+    await act(async () => {
+      resolveTurn({ messages: [], uiActions: [] })
+    })
+
+    await waitFor(() => expect(input).toHaveFocus())
+  })
+
   it('attaches page context without rendering an attachment status chip', async () => {
     const repository = createRepository()
     render(<ChatHarness currentPage={3} repository={repository} />)
