@@ -243,6 +243,227 @@ describe('useSessionChat stream readiness', () => {
     expect(result.current.isTurnPending).toBe(false)
   })
 
+  it('does not post when the stream becomes ready and closes before the turn starts', async () => {
+    const submitTurn = vi.fn()
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((sessionId, handlers) => {
+        handlers.onReady?.({ sessionId })
+        return Promise.resolve()
+      }),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('ready-then-eof')) })
+
+    await act(async () => {
+      await expect(turnPromise).rejects.toMatchObject({
+        code: 'STREAM_CLOSED_BEFORE_TURN',
+      })
+    })
+    expect(submitTurn).not.toHaveBeenCalled()
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('uses one final response when the stream closes mid-answer without completed', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    let closeStream: (() => void) | undefined
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
+    const finalAnswer = {
+      content: '중단 뒤 저장된 최종 답변',
+      createdAt: '2026-09-28T00:00:00Z',
+      id: 'answer-after-eof',
+      senderType: 'AI' as const,
+      status: 'COMPLETED' as const,
+    }
+    const submitTurn = vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+      resolveTurn = resolve
+    }))
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((sessionId, nextHandlers) => {
+        handlers = nextHandlers
+        nextHandlers.onReady?.({ sessionId })
+        return new Promise<void>((resolve) => { closeStream = resolve })
+      }),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('mid-eof')) })
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledOnce())
+    act(() => handlers?.onContentDelta?.('아직 완성되지 않은 답'))
+    await waitFor(() => expect(result.current.messages).toContainEqual(
+      expect.objectContaining({ content: '아직 완성되지 않은 답', status: 'streaming' }),
+    ))
+    act(() => closeStream?.())
+    await waitFor(() => expect(result.current.streamNotice).not.toBeNull())
+    act(() => resolveTurn?.({ messages: [finalAnswer], uiActions: [] }))
+    await act(async () => { await turnPromise })
+
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'answer-after-eof', content: '중단 뒤 저장된 최종 답변' }),
+    ])
+    expect(result.current.isTurnPending).toBe(false)
+    expect(result.current.streamNotice).toBeNull()
+  })
+
+  it('deduplicates repeated ready and completed terminal events without reposting', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
+    const finalResult: SessionTurnResult = {
+      messages: [{
+        content: '중복 완료 뒤 최종 답변',
+        createdAt: '2026-09-28T00:00:00Z',
+        id: 'duplicate-completed-answer',
+        senderType: 'AI',
+        status: 'COMPLETED',
+      }],
+      uiActions: [],
+    }
+    const submitTurn = vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+      resolveTurn = resolve
+    }))
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        nextHandlers.onReady?.({ sessionId })
+        nextHandlers.onReady?.({ sessionId })
+        return resolveWhenAborted(signal)
+      }),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('duplicate-terminal')) })
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledOnce())
+    act(() => {
+      handlers?.onContentDelta?.('중복 완료 전 임시 답변')
+      handlers?.onCompleted?.(undefined, finalResult)
+      handlers?.onCompleted?.(undefined, finalResult)
+      resolveTurn?.(finalResult)
+    })
+    await act(async () => { await turnPromise })
+
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({
+        content: '중복 완료 뒤 최종 답변',
+        id: 'duplicate-completed-answer',
+      }),
+    ])
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('reconciles the posted result after the stream closes while hidden and the tab returns', async () => {
+    let visibilityState: DocumentVisibilityState = 'visible'
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState)
+    let closeStream: (() => void) | undefined
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
+    const submitTurn = vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+      resolveTurn = resolve
+    }))
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((sessionId, nextHandlers, signal) => {
+        nextHandlers.onReady?.({ sessionId })
+        return new Promise<void>((resolve) => {
+          closeStream = resolve
+          signal.addEventListener('abort', resolve, { once: true })
+        })
+      }),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('hidden-round-trip')) })
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledOnce())
+    act(() => {
+      visibilityState = 'hidden'
+      document.dispatchEvent(new Event('visibilitychange'))
+      closeStream?.()
+    })
+    await waitFor(() => expect(result.current.streamNotice).not.toBeNull())
+    act(() => {
+      visibilityState = 'visible'
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    act(() => resolveTurn?.({
+      messages: [{
+        content: '복귀 후 최종 답변',
+        createdAt: '2026-09-28T00:00:00Z',
+        id: 'hidden-final',
+        senderType: 'AI',
+      }],
+      uiActions: [],
+    }))
+    await act(async () => { await turnPromise })
+
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'hidden-final', content: '복귀 후 최종 답변' }),
+    ])
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('cancels one posted turn without removing an existing completed response', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    const existingAnswer = {
+      content: '취소 전에 저장된 답변',
+      createdAt: '2026-09-27T00:00:00Z',
+      id: 'existing-answer',
+      senderType: 'AI' as const,
+      status: 'COMPLETED' as const,
+    }
+    const cancelTurn = vi.fn().mockResolvedValue(true)
+    const submitTurn = vi.fn().mockImplementation(
+      (_sessionId, _turn, signal?: AbortSignal) => new Promise<SessionTurnResult>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new ApiClientError({
+          code: 'REQUEST_ABORTED',
+          message: '취소됨',
+        })), { once: true })
+      }),
+    )
+    const repository = createRepository({
+      cancelTurn,
+      listMessages: vi.fn().mockResolvedValue([existingAnswer]),
+      stream: vi.fn().mockImplementation((sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        nextHandlers.onReady?.({ sessionId })
+        return resolveWhenAborted(signal)
+      }),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'existing-answer', content: '취소 전에 저장된 답변' }),
+    ]))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('cancel-after-post')) })
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledOnce())
+    act(() => handlers?.onContentDelta?.('취소될 임시 답변'))
+    await waitFor(() => expect(result.current.messages).toHaveLength(2))
+    await act(async () => {
+      expect(await result.current.cancelTurn()).toBe(true)
+      await turnPromise
+    })
+
+    expect(cancelTurn).toHaveBeenCalledOnce()
+    expect(submitTurn).toHaveBeenCalledOnce()
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'existing-answer', content: '취소 전에 저장된 답변' }),
+    ])
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
   it('ignores callbacks from an earlier attempt when retrying the same request id', async () => {
     const attempts: SessionStreamHandlers[] = []
     const submitTurn = vi.fn().mockResolvedValue(emptyTurnResult())

@@ -175,6 +175,33 @@ describe('ExamsPage creation entry', () => {
     expect(trigger).toHaveFocus()
   })
 
+  it('discards a cancelled Unicode draft and reopens a pristine composer', async () => {
+    mockExamLists([])
+    renderExamList('/classrooms/12/exams', 'INSTRUCTOR')
+    const trigger = await screen.findByRole('button', { name: '시험 만들기' })
+    fireEvent.click(trigger)
+
+    let dialog = screen.getByRole('dialog', { name: '시험 만들기' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '시험 제목' }), {
+      target: { value: '취소할 시험 – Ω' },
+    })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '질문' }), {
+      target: { value: '보존되면 안 되는 문항 β' },
+    })
+    fireEvent.change(within(dialog).getByRole('spinbutton', { name: '배점' }), {
+      target: { value: '17.5' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: '취소' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '시험 만들기' })).not.toBeInTheDocument())
+
+    fireEvent.click(trigger)
+    dialog = screen.getByRole('dialog', { name: '시험 만들기' })
+    expect(within(dialog).getByRole('textbox', { name: '시험 제목' })).toHaveValue('')
+    expect(within(dialog).getByRole('textbox', { name: '질문' })).toHaveValue('')
+    expect(within(dialog).getByRole('combobox', { name: '1번 문항 유형' })).toHaveValue('SHORT')
+    expect(within(dialog).getByRole('spinbutton', { name: '배점' })).toHaveValue(10)
+  })
+
   it('prevents every composer close action while creating an exam', async () => {
     vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
       () => ([{}] as unknown as DOMRectList),
