@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '../../shared/api'
 import type {
+  SessionStreamError,
   SessionStreamHandlers,
   SessionsRepository,
   SessionTurnResult,
@@ -185,7 +186,7 @@ describe('useSessionChat stream readiness', () => {
     }))
     expect(result.current.quizQuestionPreview).toHaveLength(1)
 
-    act(() => handlers?.onError?.('연결이 끊겼습니다.'))
+    act(() => handlers?.onError?.(streamError('연결이 끊겼습니다.')))
     expect(result.current.quizQuestionPreview).toEqual([])
 
     act(() => resolveTurn?.(emptyTurnResult()))
@@ -209,11 +210,11 @@ describe('useSessionChat stream readiness', () => {
     act(() => {
       turnPromise = result.current.submitTurn(turn('ready-error'))
     })
-    act(() => handlers?.onError?.('AI 응답 스트림이 중단되었습니다.'))
+    act(() => handlers?.onError?.(streamError('AI 응답 스트림이 중단되었습니다.')))
 
     await act(async () => {
       await expect(turnPromise).rejects.toMatchObject({
-        code: 'STREAM_ERROR_BEFORE_READY',
+        code: 'STREAM_ERROR',
       })
     })
     expect(submitTurn).not.toHaveBeenCalled()
@@ -413,8 +414,9 @@ describe('useSessionChat stream readiness', () => {
     expect(result.current.isTurnPending).toBe(false)
   })
 
-  it('cancels one posted turn without removing an existing completed response', async () => {
+  it('replaces a cancelled stream preview with one canonical partial answer without removing history', async () => {
     let handlers: SessionStreamHandlers | undefined
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
     const existingAnswer = {
       content: '취소 전에 저장된 답변',
       createdAt: '2026-09-27T00:00:00Z',
@@ -424,7 +426,8 @@ describe('useSessionChat stream readiness', () => {
     }
     const cancelTurn = vi.fn().mockResolvedValue(true)
     const submitTurn = vi.fn().mockImplementation(
-      (_sessionId, _turn, signal?: AbortSignal) => new Promise<SessionTurnResult>((_resolve, reject) => {
+      (_sessionId, _turn, signal?: AbortSignal) => new Promise<SessionTurnResult>((resolve, reject) => {
+        resolveTurn = resolve
         signal?.addEventListener('abort', () => reject(new ApiClientError({
           code: 'REQUEST_ABORTED',
           message: '취소됨',
@@ -453,15 +456,117 @@ describe('useSessionChat stream readiness', () => {
     await waitFor(() => expect(result.current.messages).toHaveLength(2))
     await act(async () => {
       expect(await result.current.cancelTurn()).toBe(true)
-      await turnPromise
     })
+    act(() => resolveTurn?.({
+      messages: [{
+        content: '취소 시점까지 저장된 답변',
+        createdAt: '2026-10-03T00:00:00Z',
+        id: 'cancelled-answer',
+        senderType: 'AI',
+        status: 'COMPLETED',
+      }],
+      uiActions: [],
+    }))
+    await act(async () => { await turnPromise })
 
     expect(cancelTurn).toHaveBeenCalledOnce()
     expect(submitTurn).toHaveBeenCalledOnce()
     expect(result.current.messages).toEqual([
       expect.objectContaining({ id: 'existing-answer', content: '취소 전에 저장된 답변' }),
+      expect.objectContaining({ id: 'cancelled-answer', content: '취소 시점까지 저장된 답변' }),
     ])
     expect(result.current.isTurnPending).toBe(false)
+  })
+
+  it('keeps the posted request alive until a delayed canonical partial answer is returned after cancellation', async () => {
+    let resolveTurn: ((result: SessionTurnResult) => void) | undefined
+    const partialAnswer = {
+      content: '취소 전에 생성된 부분 답변',
+      createdAt: '2026-10-03T00:00:00Z',
+      id: 'cancelled-partial-answer',
+      senderType: 'AI' as const,
+      status: 'COMPLETED' as const,
+    }
+    const submitTurn = vi.fn().mockImplementation(
+      (_sessionId, _turn, signal?: AbortSignal) => new Promise<SessionTurnResult>((resolve, reject) => {
+        resolveTurn = resolve
+        signal?.addEventListener('abort', () => reject(new ApiClientError({
+          code: 'REQUEST_ABORTED',
+          message: '요청이 중단되었습니다.',
+        })), { once: true })
+      }),
+    )
+    const repository = createRepository({
+      cancelTurn: vi.fn().mockResolvedValue(true),
+      stream: readyStream(),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('cancel-partial')) })
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledOnce())
+    await act(async () => {
+      expect(await result.current.cancelTurn()).toBe(true)
+    })
+    act(() => resolveTurn?.({ messages: [partialAnswer], uiActions: [] }))
+    await act(async () => { await turnPromise })
+
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({
+        content: '취소 전에 생성된 부분 답변',
+        id: 'cancelled-partial-answer',
+      }),
+    ])
+    expect(submitTurn).toHaveBeenCalledOnce()
+  })
+
+  it('surfaces an empty-content TURN_CANCELLED and reuses its request id only on manual retry', async () => {
+    let rejectTurn: ((error: ApiClientError) => void) | undefined
+    const submitTurn = vi.fn()
+      .mockImplementationOnce(
+        (_sessionId, _turn, signal?: AbortSignal) => new Promise<SessionTurnResult>((_resolve, reject) => {
+          rejectTurn = reject
+          signal?.addEventListener('abort', () => reject(new ApiClientError({
+            code: 'REQUEST_ABORTED',
+            message: '요청이 중단되었습니다.',
+          })), { once: true })
+        }),
+      )
+      .mockResolvedValueOnce(emptyTurnResult())
+    const repository = createRepository({
+      cancelTurn: vi.fn().mockResolvedValue(true),
+      stream: readyStream(),
+      submitTurn,
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+    const cancelledTurn = turn('cancel-empty')
+
+    let firstAttempt: Promise<SessionTurnResult> | undefined
+    act(() => { firstAttempt = result.current.submitTurn(cancelledTurn) })
+    await waitFor(() => expect(submitTurn).toHaveBeenCalledOnce())
+    const cancelledExpectation = expect(firstAttempt).rejects.toMatchObject({
+      code: 'TURN_CANCELLED',
+      status: 409,
+    })
+    await act(async () => {
+      expect(await result.current.cancelTurn()).toBe(true)
+      rejectTurn?.(new ApiClientError({
+        code: 'TURN_CANCELLED',
+        message: '답변 생성이 중단되었습니다.',
+        status: 409,
+      }))
+      await cancelledExpectation
+    })
+
+    expect(submitTurn).toHaveBeenCalledOnce()
+    await act(async () => {
+      await result.current.submitTurn(cancelledTurn)
+    })
+    expect(submitTurn).toHaveBeenCalledTimes(2)
+    expect(submitTurn.mock.calls[1]?.[1].requestId).toBe('cancel-empty')
   })
 
   it('ignores callbacks from an earlier attempt when retrying the same request id', async () => {
@@ -480,7 +585,7 @@ describe('useSessionChat stream readiness', () => {
 
     let firstPromise: Promise<SessionTurnResult> | undefined
     act(() => { firstPromise = result.current.submitTurn(sameTurn) })
-    act(() => attempts[0]?.onError?.('첫 연결 실패'))
+    act(() => attempts[0]?.onError?.(streamError('첫 연결 실패')))
     await act(async () => { await expect(firstPromise).rejects.toBeInstanceOf(Error) })
 
     let retryPromise: Promise<SessionTurnResult> | undefined
@@ -488,7 +593,7 @@ describe('useSessionChat stream readiness', () => {
     act(() => {
       attempts[0]?.onReady?.({ sessionId: '573' })
       attempts[0]?.onContentDelta?.('이전 연결의 늦은 본문')
-      attempts[0]?.onError?.('이전 연결의 늦은 오류')
+      attempts[0]?.onError?.(streamError('이전 연결의 늦은 오류'))
     })
     expect(submitTurn).not.toHaveBeenCalled()
     expect(result.current.messages).toEqual([])
@@ -584,6 +689,39 @@ describe('useSessionChat stream readiness', () => {
     expect(onResult).not.toHaveBeenCalled()
     expect(result.current.messages).toEqual([])
     expect(result.current.streamUiActions).toEqual([])
+  })
+
+  it('aborts an in-flight turn when the authenticated repository changes for the same session', async () => {
+    const firstRepository = createRepository({
+      stream: readyStream(),
+      submitTurn: vi.fn().mockImplementation(
+        (_sessionId, _turn, signal?: AbortSignal) => new Promise<SessionTurnResult>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new ApiClientError({
+            code: 'REQUEST_ABORTED',
+            message: '요청이 중단되었습니다.',
+          })), { once: true })
+        }),
+      ),
+    })
+    const replacementRepository = createRepository()
+    const { result, rerender } = renderHook(
+      ({ repository }) => useSessionChat(repository, '573'),
+      { initialProps: { repository: firstRepository } },
+    )
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let turnPromise: Promise<SessionTurnResult> | undefined
+    act(() => { turnPromise = result.current.submitTurn(turn('account-change')) })
+    await waitFor(() => expect(firstRepository.submitTurn).toHaveBeenCalledOnce())
+    const abortedExpectation = expect(turnPromise).rejects.toMatchObject({
+      code: 'REQUEST_ABORTED',
+    })
+    rerender({ repository: replacementRepository })
+    await act(async () => { await abortedExpectation })
+
+    expect(result.current.messages).toEqual([])
+    expect(result.current.isTurnPending).toBe(false)
+    expect(replacementRepository.submitTurn).not.toHaveBeenCalled()
   })
 
   it('recovers a stored quiz without a new AI message after NETWORK_ERROR', async () => {
@@ -757,6 +895,80 @@ describe('useSessionChat stream readiness', () => {
 })
 
 describe('useSessionChat existing-turn recovery', () => {
+  it('ends recovery on a structured terminal stream error instead of polling forever', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        return resolveWhenAborted(signal)
+      }),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion() })
+    const terminalExpectation = expect(waitPromise).rejects.toMatchObject({
+      code: 'AI_SERVICE_TIMEOUT',
+      message: 'AI 응답 시간이 초과되었습니다.',
+      traceId: 'trace-terminal',
+    })
+    act(() => handlers?.onError?.({
+      category: 'TIMEOUT',
+      code: 'AI_SERVICE_TIMEOUT',
+      message: 'AI 응답 시간이 초과되었습니다.',
+      retryable: true,
+      traceId: 'trace-terminal',
+    }))
+    await act(async () => { await terminalExpectation })
+
+    expect(result.current.isTurnPending).toBe(false)
+    expect(repository.submitTurn).not.toHaveBeenCalled()
+    expect(repository.listMessages).toHaveBeenCalledTimes(2)
+  })
+
+  it('applies only the first terminal event for an existing turn', async () => {
+    let handlers: SessionStreamHandlers | undefined
+    const onResult = vi.fn()
+    const completed = {
+      messages: [{
+        content: '정본 완료 답변',
+        createdAt: '2026-10-03T00:00:00Z',
+        id: 'terminal-once',
+        senderType: 'AI' as const,
+        status: 'COMPLETED' as const,
+      }],
+      uiActions: [],
+    }
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((_sessionId, nextHandlers, signal) => {
+        handlers = nextHandlers
+        return resolveWhenAborted(signal)
+      }),
+    })
+    const { result } = renderHook(() => useSessionChat(repository, '573'))
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+
+    let waitPromise: Promise<SessionTurnResult | undefined> | undefined
+    act(() => { waitPromise = result.current.waitForTurnCompletion(onResult) })
+    act(() => {
+      handlers?.onCompleted?.(undefined, completed)
+      handlers?.onError?.({
+        category: 'INTERNAL',
+        code: 'LATE_TERMINAL_ERROR',
+        message: '무시할 늦은 오류',
+        retryable: false,
+      })
+    })
+    await act(async () => { await waitPromise })
+
+    expect(onResult).toHaveBeenCalledExactlyOnceWith(completed)
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ id: 'terminal-once', content: '정본 완료 답변' }),
+    ])
+    expect(result.current.isTurnPending).toBe(false)
+  })
+
   it('recovers a newly saved quiz without an AI message or completed stream event', async () => {
     const onResult = vi.fn()
     const repository = createRepository({
@@ -1110,4 +1322,13 @@ function session(id: string, activeQuizId?: string) {
 
 function emptyTurnResult(): SessionTurnResult {
   return { messages: [], uiActions: [] }
+}
+
+function streamError(message: string): SessionStreamError {
+  return {
+    category: 'INTERNAL',
+    code: 'STREAM_ERROR',
+    message,
+    retryable: false,
+  }
 }
