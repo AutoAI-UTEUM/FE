@@ -5,6 +5,16 @@ export type QaRole = 'ADMIN' | 'INSTRUCTOR' | 'LEARNER'
 export type QaEnvironment = 'dev' | 'mock' | 'prod'
 
 export const qaEnvironment = (process.env.QA_ENV ?? 'mock') as QaEnvironment
+const qaApiCapabilities = new Set(
+  (process.env.QA_API_CAPABILITIES ?? 'reports,policy-consent')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+)
+
+export function hasQaApiCapability(capability: string): boolean {
+  return qaApiCapabilities.has(capability.toLowerCase())
+}
 
 export function credentialsFor(role: QaRole): { email: string; password: string } | null {
   if (qaEnvironment === 'mock') {

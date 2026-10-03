@@ -506,6 +506,8 @@ describe('instructor pages', () => {
     expect(classroomLink).toHaveClass('type-classroom-title')
     expect(classroomLink).not.toHaveClass('type-card-title')
     expect(screen.getByText('7QK4-MZ2A')).toHaveClass('type-invite-code-compact')
+    expect(classroomLink.parentElement?.querySelector('p')).toHaveClass('text-stone-500')
+    expect(screen.getByText('7QK4-MZ2A').previousElementSibling).toHaveClass('text-stone-500')
     expect(copyButton).toHaveClass('size-10')
     expect(regenerateButton).toHaveClass('size-10')
     expect(copyButton).not.toHaveClass('shadow-sm')

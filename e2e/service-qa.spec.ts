@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import {
   assertPageHealthy,
+  hasQaApiCapability,
   installProductionMutationGuard,
   loginAs,
   monitorPage,
@@ -33,7 +34,13 @@ test.describe('public and authentication', () => {
 
     await page.goto('/forgot-password')
     await waitForAppSettled(page)
-    await expect(page.getByRole('heading', { name: '비밀번호 찾기' })).toBeVisible()
+    if (hasQaApiCapability('password-reset')) {
+      await expect(page.getByRole('heading', { name: '비밀번호 찾기' })).toBeVisible()
+      await expect(page.getByRole('button', { name: '재설정 링크 보내기' })).toBeVisible()
+    } else {
+      await expect(page.getByRole('heading', { name: '현재 이용할 수 없습니다' })).toBeVisible()
+      await expect(page.getByRole('button', { name: '재설정 링크 보내기' })).toHaveCount(0)
+    }
     await assertPageHealthy(page, testInfo)
     monitor.assertClean()
   })

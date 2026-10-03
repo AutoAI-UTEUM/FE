@@ -437,7 +437,7 @@ function ClassroomCard({
           >
             {classroom.name}
           </Link>
-          <p className="mt-2 truncate type-caption text-stone-400">
+          <p className="mt-2 truncate type-caption text-stone-500">
             학습자 {classroom.learnerCount}명 · 자료{' '}
             {classroom.materialCount ?? 0}개
           </p>
@@ -454,7 +454,7 @@ function ClassroomCard({
       </div>
       <div className="mt-4 flex min-h-16 items-center gap-2 rounded-2xl border border-stone-100 bg-stone-50 px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <p className="type-caption text-stone-400">초대코드</p>
+          <p className="type-caption text-stone-500">초대코드</p>
           <strong className="mt-1 block truncate type-invite-code-compact text-stone-900">
             {isActive
               ? (classroom.inviteCode ?? '코드 확인')
