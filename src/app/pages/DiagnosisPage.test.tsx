@@ -113,4 +113,35 @@ describe('DiagnosisPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'OX' }))
     expect(await screen.findByText('학습 세션 화면')).toBeInTheDocument()
   })
+
+  it.each(['missing', 'null'] as const)(
+    'exits without a mutation when pending diagnosis restore is %s',
+    async (restoreState) => {
+      const mutations: string[] = []
+      installApiFixtureServer(async (request) => {
+        const url = new URL(request.url)
+        if (request.method !== 'GET') mutations.push(`${request.method} ${url.pathname}`)
+        if (request.method !== 'GET' || url.pathname !== '/api/sessions/100') {
+          return undefined
+        }
+
+        const session: Record<string, unknown> = {
+          currentPage: 1,
+          materialId: 10,
+          pageStatus: 'EXPLAINED',
+          sessionId: 100,
+          status: 'ACTIVE',
+          uiActions: [],
+          updatedAt: '2026-10-03T00:00:00Z',
+        }
+        if (restoreState === 'null') session.pendingDiagnosis = null
+        return apiSuccess(session)
+      })
+
+      renderDiagnosisPage()
+
+      expect(await screen.findByRole('link')).toHaveAttribute('href', '/sessions/100')
+      expect(mutations).toEqual([])
+    },
+  )
 })

@@ -234,7 +234,7 @@ function DiagnosisWorkspace() {
             />
           </label>
 
-          {error ? (
+          {error && !isSubmitted ? (
             <p className="mt-3 type-body font-medium text-rose-700" role="alert">
               {error}
             </p>
