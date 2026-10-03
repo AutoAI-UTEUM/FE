@@ -5,6 +5,7 @@ import type {
   SessionMessage,
   NoteDraft,
   SessionsRepository,
+  SessionStreamError,
   StreamQuizQuestion,
   SessionTurnRequest,
   SessionTurnResult,
@@ -135,7 +136,7 @@ export function useSessionChat(
     setIsTurnPending(false)
     setStreamNotice(null)
     setQuizQuestionPreview([])
-  }, [sessionId])
+  }, [repository, sessionId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -371,7 +372,7 @@ export function useSessionChat(
           sessionId,
           {
             onCompleted: (draft, result) => {
-              if (!isCurrentAttempt()) return
+              if (!isCurrentAttempt() || terminalReceived) return
               terminalReceived = true
               flushStreamContent()
               completedNoteDraft = draft
@@ -386,19 +387,18 @@ export function useSessionChat(
               setStreamNotice('답변을 실시간으로 받고 있습니다.')
               queueStreamContent(text)
             },
-            onError: (message) => {
-              if (!isCurrentAttempt()) return
+            onError: (streamError) => {
+              if (!isCurrentAttempt() || terminalReceived) return
+              terminalReceived = true
               setQuizQuestionPreview([])
               if (!readySettled) {
                 logSessionStreamEvent('terminal', attempt, sessionId, 'error_before_ready')
-                settleReady(new ApiClientError({
-                  code: 'STREAM_ERROR_BEFORE_READY',
-                  message,
-                }))
+                settleReady(toStreamTerminalError(streamError))
                 attempt.streamController.abort()
                 return
               }
-              setStreamNotice(message)
+              logSessionStreamEvent('terminal', attempt, sessionId, streamError.code)
+              setStreamNotice(streamError.message)
             },
             onReady: () => {
               if (!isCurrentAttempt() || readySettled) return
@@ -510,6 +510,7 @@ export function useSessionChat(
         setQuizQuestionPreview([])
         if (
           attempt.cancellationRequested
+          && !turnPostStarted
           && error instanceof ApiClientError
           && error.code === 'REQUEST_ABORTED'
         ) {
@@ -681,15 +682,7 @@ export function useSessionChat(
       }
       if (activeAttemptRef.current !== attempt) return false
       attempt.cancellationRequested = true
-      logSessionStreamEvent('stream_abort', attempt, sessionId, 'user_cancel')
-      attempt.pollController?.abort()
-      attempt.streamController.abort()
-      attempt.turnController.abort()
-      const streamingMessageId = streamingMessageIdRef.current
-      if (streamingMessageId) {
-        updateMessages((current) => current.filter((message) => message.id !== streamingMessageId))
-      }
-      streamingMessageIdRef.current = null
+      logSessionStreamEvent('cancel_requested', attempt, sessionId)
       return true
     } catch (error) {
       if (activeAttemptRef.current === attempt) {
@@ -697,7 +690,7 @@ export function useSessionChat(
       }
       throw error
     }
-  }, [repository, sessionId, updateMessages])
+  }, [repository, sessionId])
 
   const startNewConversation = useCallback(async () => {
     if (isTurnPending) return
@@ -758,21 +751,30 @@ export function useSessionChat(
           pollController.signal,
         )
     let resolveStreamCompleted: (() => void) | undefined
+    let rejectStreamCompleted: ((error: ApiClientError) => void) | undefined
     let completedStreamResult: SessionTurnResult | undefined
-    const streamCompleted = new Promise<void>((resolve) => {
+    let terminalReceived = false
+    const streamCompleted = new Promise<void>((resolve, reject) => {
       resolveStreamCompleted = resolve
+      rejectStreamCompleted = reject
     })
     logSessionStreamEvent('stream_open_start', attempt, sessionId, 'turn_recovery')
     const streamPromise = repository.stream(sessionId, {
       onCompleted: (draft, result) => {
-        if (!acceptsStreamEvents()) return
+        if (!acceptsStreamEvents() || terminalReceived) return
+        terminalReceived = true
         if (draft) setNoteDraft(draft)
         completedStreamResult = result
         logSessionStreamEvent('terminal', attempt, sessionId, 'completed')
         resolveStreamCompleted?.()
       },
-      onError: () => {
-        if (acceptsStreamEvents()) setStreamNotice(TURN_IN_PROGRESS_NOTICE)
+      onError: (streamError) => {
+        if (!acceptsStreamEvents() || terminalReceived) return
+        terminalReceived = true
+        const terminalError = toStreamTerminalError(streamError)
+        setStreamNotice(terminalError.message)
+        logSessionStreamEvent('terminal', attempt, sessionId, streamError.code)
+        rejectStreamCompleted?.(terminalError)
       },
       onReady: () => {
         if (acceptsStreamEvents()) {
@@ -1046,8 +1048,17 @@ function toStreamReadyError(error: unknown): ApiClientError {
   })
 }
 
+function toStreamTerminalError(error: SessionStreamError): ApiClientError {
+  return new ApiClientError({
+    cause: error,
+    code: error.code,
+    message: error.message,
+    traceId: error.traceId,
+  })
+}
+
 function logSessionStreamEvent(
-  event: 'ready_received' | 'stream_abort' | 'stream_open_start' | 'terminal' | 'turn_post_start',
+  event: 'cancel_requested' | 'ready_received' | 'stream_abort' | 'stream_open_start' | 'terminal' | 'turn_post_start',
   attempt: ActiveTurnAttempt,
   sessionId: string,
   reason?: string,

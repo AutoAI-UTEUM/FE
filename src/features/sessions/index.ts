@@ -17,6 +17,7 @@ export type {
 } from './sessionTypes'
 export {
   createSessionsRepository,
+  type SessionStreamError,
   type SessionStreamHandlers,
   type SessionsRepository,
   type SessionTurnRequest,

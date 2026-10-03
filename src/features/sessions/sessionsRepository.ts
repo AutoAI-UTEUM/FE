@@ -136,11 +136,19 @@ export interface SessionTurnRequest {
 export interface SessionStreamHandlers {
   onCompleted?: (noteDraft?: NoteDraft, result?: SessionTurnResult) => void
   onContentDelta?: (text: string) => void
-  onError?: (message: string) => void
+  onError?: (error: SessionStreamError) => void
   onReady?: (ready: SessionStreamReady) => void
   onQuizQuestion?: (question: StreamQuizQuestion) => void
   onStatus?: (message: string) => void
   onUiAction?: (action: UiAction) => void
+}
+
+export interface SessionStreamError {
+  category: string
+  code: string
+  message: string
+  retryable: boolean
+  traceId?: string
 }
 
 export interface SessionStreamReady {
@@ -588,11 +596,14 @@ function handleStreamMessage(
   }
 
   if (eventType === 'error') {
-    handlers.onError?.(
-      typeof payload.message === 'string'
-        ? payload.message
-        : '실시간 응답이 중단되었습니다.',
-    )
+    const traceId = firstString(payload.traceId)
+    handlers.onError?.({
+      category: firstString(payload.category) ?? 'INTERNAL',
+      code: firstString(payload.code) ?? 'STREAM_ERROR',
+      message: firstString(payload.message) ?? '실시간 응답이 중단되었습니다.',
+      retryable: typeof payload.retryable === 'boolean' ? payload.retryable : false,
+      ...(traceId ? { traceId } : {}),
+    })
   }
 }
 

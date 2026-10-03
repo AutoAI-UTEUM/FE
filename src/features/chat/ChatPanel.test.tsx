@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthenticatedRequest } from '../auth'
 import type { MaterialOverview } from '../materials'
 import type {
+  SessionStreamError,
   SessionStreamHandlers,
   SessionsRepository,
   SessionTurnResult,
@@ -318,7 +319,7 @@ describe('ChatPanel', () => {
 
     fireEvent.change(input, { target: { value: '복구 후 질문입니다.' } })
     fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
-    act(() => handlers?.onError?.('실시간 응답 연결에 실패했습니다.'))
+    act(() => handlers?.onError?.(streamError('실시간 응답 연결에 실패했습니다.')))
 
     expect(await screen.findByText('전송 실패')).toBeInTheDocument()
     expect(screen.getByText('복구 후 질문입니다.')).toBeInTheDocument()
@@ -583,8 +584,10 @@ describe('ChatPanel', () => {
 
   it('cancels a pending answer from the chat loading UI', async () => {
     const cancelTurn = vi.fn().mockResolvedValue(true)
+    let rejectTurn: ((error: ApiClientError) => void) | undefined
     const submitTurn = vi.fn().mockImplementation(
       (_sessionId, _turn, signal?: AbortSignal) => new Promise((_, reject) => {
+        rejectTurn = reject
         signal?.addEventListener('abort', () => reject(new ApiClientError({
           code: 'REQUEST_ABORTED',
           message: '요청이 취소되었습니다.',
@@ -601,8 +604,14 @@ describe('ChatPanel', () => {
 
     await waitFor(() => expect(cancelTurn).toHaveBeenCalledWith('100'))
     expect(await screen.findByText('답변 생성을 중단했습니다.')).toBeInTheDocument()
+    act(() => rejectTurn?.(new ApiClientError({
+      code: 'TURN_CANCELLED',
+      message: '답변 생성이 중단되었습니다.',
+      status: 409,
+    })))
     await waitFor(() => expect(input).toBeEnabled())
-    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument()
+    expect(submitTurn).toHaveBeenCalledOnce()
   })
 
   it('silently ignores a stop request after the answer has already completed', async () => {
@@ -1393,5 +1402,14 @@ function createRepository(
       uiActions: [],
     }),
     ...overrides,
+  }
+}
+
+function streamError(message: string): SessionStreamError {
+  return {
+    category: 'INTERNAL',
+    code: 'STREAM_ERROR',
+    message,
+    retryable: false,
   }
 }
