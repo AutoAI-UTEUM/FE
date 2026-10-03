@@ -174,6 +174,7 @@ export function ChatPanel({
   const hasConversationAction = Boolean(conversationAction)
   const logRef = useRef<HTMLDivElement | null>(null)
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const restoreQuestionFocusRef = useRef(false)
   const turnSubmissionLockRef = useRef(false)
   const noteDraftSaveInFlightRef = useRef(false)
   const noteDraftSaveAttemptRef = useRef(0)
@@ -242,12 +243,41 @@ export function ChatPanel({
       : 'hidden'
   }, [question])
 
+  useEffect(() => {
+    if (isTurnPending || !restoreQuestionFocusRef.current || tab !== 'chat') return
+    const input = questionInputRef.current
+    if (!input || input.disabled) return
+
+    const activeElement = document.activeElement
+    if (activeElement === input) {
+      restoreQuestionFocusRef.current = false
+      return
+    }
+    if (activeElement && activeElement !== document.body) {
+      restoreQuestionFocusRef.current = false
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      if (!restoreQuestionFocusRef.current) return
+      if (
+        !input.disabled
+        && document.activeElement === document.body
+      ) {
+        input.focus()
+      }
+      restoreQuestionFocusRef.current = false
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [isTurnPending, tab])
+
   async function sendQuestion(text: string) {
     const trimmedQuestion = text.trim()
     if (!trimmedQuestion) return
 
     if (chat.isTurnPending || turnSubmissionLockRef.current) return
     turnSubmissionLockRef.current = true
+    restoreQuestionFocusRef.current = document.activeElement === questionInputRef.current
 
     const requestId = createRequestId()
     const requestedPage = onMoveToPage
@@ -1047,7 +1077,7 @@ function PanelTab({
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         isActive
           ? 'border-brand-600 font-semibold text-brand-700'
-          : 'border-transparent font-medium text-stone-400 hover:text-stone-600',
+          : 'border-transparent font-medium text-stone-600 hover:text-stone-700',
       )}
       onClick={onSelect}
       role="tab"
@@ -1170,7 +1200,7 @@ const MessageBubble = memo(function MessageBubble({
         <div className="flex items-center justify-end gap-1">
           {message.status === 'failed' ? <span className="mr-1 type-caption font-semibold text-rose-700">전송 실패</span> : null}
           {onRetry ? <button className="mr-1 inline-flex items-center gap-1 type-caption font-semibold text-rose-700 hover:text-rose-800" onClick={() => onRetry(message)} type="button"><RotateCcw aria-hidden="true" size={12} />다시 시도</button> : null}
-          {time ? <span className="type-micro text-stone-400">{time}</span> : null}
+          {time ? <span className="type-micro text-stone-600">{time}</span> : null}
           <MessageActions messageLabel="내 질문" onCopy={() => onCopy(message.content)} onSaveNote={() => onSaveNote(message.content, message.pageNumber, message.id)} onShare={() => onShare(message.content)} />
         </div>
       </div>
@@ -1192,7 +1222,7 @@ const MessageBubble = memo(function MessageBubble({
         </div>
       </article>
       <div className="flex items-center gap-1">
-        {time ? <span className="type-micro text-stone-400">{time}</span> : null}
+        {time ? <span className="type-micro text-stone-600">{time}</span> : null}
         <MessageActions messageLabel="AI 답변" onCopy={() => onCopy(message.content)} onSaveNote={() => onSaveNote(message.content, message.pageNumber, message.id)} onShare={() => onShare(message.content)} />
       </div>
     </div>

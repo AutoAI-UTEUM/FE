@@ -15,9 +15,15 @@ import { useSessionChat } from './useSessionChat'
 
 afterEach(() => {
   cleanup()
+  document.body.removeAttribute('tabindex')
   window.localStorage.clear()
   vi.restoreAllMocks()
 })
+
+function focusDocumentBody() {
+  document.body.tabIndex = -1
+  document.body.focus()
+}
 
 function ChatHarness({
   conversationAction,
@@ -418,6 +424,70 @@ describe('ChatPanel', () => {
     expect(onTurnCompleted).toHaveBeenCalledWith(
       expect.objectContaining({ currentPage: 2, pageStatus: 'IN_PROGRESS' }),
     )
+  })
+
+  it('restores keyboard focus after an Enter-submitted turn finishes', async () => {
+    let resolveTurn!: (result: SessionTurnResult) => void
+    const repository = createRepository({
+      submitTurn: vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+        resolveTurn = resolve
+      })),
+    })
+    render(<ChatHarness repository={repository} />)
+    const input = await screen.findByLabelText('질문')
+
+    input.focus()
+    fireEvent.change(input, { target: { value: '초점 복원 확인' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(input).toBeDisabled())
+    focusDocumentBody()
+
+    await act(async () => {
+      resolveTurn({ messages: [], uiActions: [] })
+    })
+
+    await waitFor(() => expect(input).toHaveFocus())
+  })
+
+  it('does not steal focus when another control is focused before the restore frame', async () => {
+    let resolveTurn!: (result: SessionTurnResult) => void
+    const frameCallbacks: FrameRequestCallback[] = []
+    const repository = createRepository({
+      submitTurn: vi.fn().mockImplementation(() => new Promise<SessionTurnResult>((resolve) => {
+        resolveTurn = resolve
+      })),
+    })
+    render(
+      <ChatHarness
+        conversationAction={<button type="button">다른 작업</button>}
+        repository={repository}
+      />,
+    )
+    const input = await screen.findByLabelText('질문')
+
+    input.focus()
+    fireEvent.change(input, { target: { value: '초점 유지 확인' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(input).toBeDisabled())
+    focusDocumentBody()
+    expect(document.activeElement).toBe(document.body)
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frameCallbacks.push(callback)
+      return frameCallbacks.length
+    })
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined)
+
+    await act(async () => {
+      resolveTurn({ messages: [], uiActions: [] })
+    })
+    await waitFor(() => expect(frameCallbacks).toHaveLength(1))
+
+    const otherControl = screen.getByRole('button', { name: '다른 작업' })
+    otherControl.focus()
+    act(() => frameCallbacks[0](performance.now()))
+
+    expect(otherControl).toHaveFocus()
+    expect(input).not.toHaveFocus()
   })
 
   it('attaches page context without rendering an attachment status chip', async () => {

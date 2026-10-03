@@ -165,7 +165,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         '[&_strong]:font-bold',
         '[&_table]:my-3 [&_table]:min-w-full [&_table]:border-collapse [&_table]:bg-white [&_table]:type-caption dark:[&_table]:bg-stone-50 dark:[&_table]:text-stone-900',
         '[&_td]:border [&_td]:border-stone-200 [&_td]:px-2.5 [&_td]:py-2 dark:[&_td]:bg-stone-50 dark:[&_td]:text-stone-900',
-        '[&_th]:whitespace-nowrap [&_th]:border [&_th]:border-stone-200 [&_th]:bg-stone-50 [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:font-bold dark:[&_th]:bg-stone-100 dark:[&_th]:text-stone-950',
+        '[&_th]:whitespace-nowrap [&_th]:border [&_th]:border-stone-200 [&_th]:bg-stone-50 [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:!text-stone-700 [&_th]:font-bold dark:[&_th]:bg-stone-100 dark:[&_th]:!text-stone-950',
         '[&_ul]:list-disc [&_ul]:pl-5',
         className,
       )}
