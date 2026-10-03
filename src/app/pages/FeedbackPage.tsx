@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { useAuth } from '../../features/auth'
 import { createFeedbackRepository, type FeedbackCategory } from '../../features/feedback'
@@ -8,30 +8,58 @@ import { Button, PageContainer, PageHeader, Select, useToast } from '../../share
 
 export function FeedbackPage() {
   usePageTitle('피드백')
-  const { apiRequest } = useAuth()
+  const { apiRequest, user } = useAuth()
   const { show: showToast } = useToast()
-  const repository = useMemo(() => createFeedbackRepository(apiRequest), [apiRequest])
+  const accountId = user?.email ?? null
+  const repository = useMemo(() => {
+    void accountId
+    return createFeedbackRepository(apiRequest)
+  }, [accountId, apiRequest])
   const [category, setCategory] = useState<FeedbackCategory>('GENERAL')
   const [message, setMessage] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submittingRepository, setSubmittingRepository] = useState<typeof repository | null>(null)
+  const messageRevisionRef = useRef(0)
+  const submitLockRef = useRef<typeof repository | null>(null)
+  const operationScopeRef = useRef({ active: true, repository })
+  const isSubmitting = submittingRepository === repository
+
+  useLayoutEffect(() => {
+    const scope = { active: true, repository }
+    operationScopeRef.current = scope
+    return () => { scope.active = false }
+  }, [repository])
 
   async function submitFeedback(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!message.trim() || isSubmitting) return
+    const submittedDraft = message
+    const submittedMessage = submittedDraft.trim()
+    const submittedMessageRevision = messageRevisionRef.current
+    if (!submittedMessage || submitLockRef.current === repository) return
 
-    setIsSubmitting(true)
+    submitLockRef.current = repository
+    setSubmittingRepository(repository)
+    const scope = operationScopeRef.current
+    const isCurrentRequest = () => scope.active && operationScopeRef.current === scope
+
     try {
       await repository.create({
         category,
-        message: message.trim(),
-        pageUrl: window.location.href,
+        message: submittedMessage,
+        pageUrl: `${window.location.origin}${window.location.pathname}`,
       })
-      setMessage('')
+      if (!isCurrentRequest()) return
+      setMessage((currentMessage) => (
+        messageRevisionRef.current === submittedMessageRevision ? '' : currentMessage
+      ))
       showToast('피드백을 보냈습니다.', 'success')
     } catch (error) {
+      if (!isCurrentRequest()) return
       showToast(getRequestErrorMessage(error), 'danger')
     } finally {
-      setIsSubmitting(false)
+      if (isCurrentRequest()) {
+        if (submitLockRef.current === repository) submitLockRef.current = null
+        setSubmittingRepository((current) => current === repository ? null : current)
+      }
     }
   }
 
@@ -59,7 +87,10 @@ export function FeedbackPage() {
           <textarea
             className="mt-1.5 min-h-40 w-full resize-y rounded-lg border border-stone-300 px-3 py-2.5 type-body text-stone-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-100"
             maxLength={2000}
-            onChange={(event) => setMessage(event.target.value)}
+            onChange={(event) => {
+              messageRevisionRef.current += 1
+              setMessage(event.target.value)
+            }}
             placeholder="의견이나 문제 상황을 입력해 주세요."
             required
             value={message}
