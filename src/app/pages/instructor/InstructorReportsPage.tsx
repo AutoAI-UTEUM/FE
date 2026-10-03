@@ -83,6 +83,7 @@ function InstructorReportsPageContent({
   } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [errorState, setErrorState] = useState<{ message: string; scopeKey: string } | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const classroom = dataState?.scopeKey === scopeKey ? dataState.classroom : null
   const students = dataState?.scopeKey === scopeKey ? dataState.students : []
   const error = errorState?.scopeKey === scopeKey ? errorState.message : null
@@ -118,7 +119,7 @@ function InstructorReportsPageContent({
         }
       })
     return () => controller.abort()
-  }, [classroomId, classroomsRepository, repository, scopeKey])
+  }, [classroomId, classroomsRepository, reloadKey, repository, scopeKey])
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
   const visibleStudents = students.filter((student) => !normalizedQuery
     || student.name.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
@@ -132,7 +133,15 @@ function InstructorReportsPageContent({
       {classroom ? <ClassroomWorkspaceHeader actions={headerActions} activeTab="learning" classroom={classroom} /> : null}
       {!reportsEnabled ? <ReportsUnavailableState /> : null}
       {reportsEnabled && isLoading ? <LoadingState message="학습자 목록을 불러오는 중입니다." /> : null}
-      {reportsEnabled && error ? <ErrorState description={error} title="학습자 목록을 불러오지 못했습니다" /> : null}
+      {reportsEnabled && error ? <ErrorState
+        action={<Button onClick={() => {
+          setErrorState(null)
+          setDataState(null)
+          setReloadKey((value) => value + 1)
+        }} type="button" variant="secondary">다시 시도</Button>}
+        description={error}
+        title="학습자 목록을 불러오지 못했습니다"
+      /> : null}
       {reportsEnabled && !isLoading && !error && students.length === 0 ? <EmptyState description="승인된 학습자가 들어오면 학생별 리포트를 생성할 수 있습니다." title="리포트를 생성할 학습자가 없습니다" /> : null}
       {reportsEnabled && !isLoading && !error && students.length > 0 ? (
         <section aria-label="학습자 리포트 목록" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white">
