@@ -30,7 +30,7 @@ test.describe('UI-04/05 independent acceptance', () => {
     void page
     test.skip(qaEnvironment !== 'mock', 'synthetic content and failure injection run against mock only')
     test.skip(
-      !new Set(['chromium-1440', 'phone-360', 'phone-390', 'tablet-820-landscape', 'webkit-1440']).has(testInfo.project.name),
+      !new Set(['chromium-1440', 'phone-360', 'phone-390', 'tablet-800-landscape', 'tablet-820-landscape', 'webkit-1440']).has(testInfo.project.name),
       'representative desktop, phone, tablet, and alternate-engine projects only',
     )
   })

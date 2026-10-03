@@ -20,6 +20,7 @@
     "test:e2e:prod": "cross-env QA_ENV=prod playwright test",
     "test:e2e:visual": "cross-env QA_ENV=mock QA_FULL_MATRIX=1 playwright test --grep @visual",
     "test:performance:bundle": "node scripts/analyze-fe-performance.mjs",
+    "test:performance:ui": "cross-env QA_ENV=mock playwright test e2e/ui-performance-sampling.spec.ts --project chromium-1440 --workers=1",
     "test:qa:health": "node scripts/qa-health-probe.mjs",
     "test:qa:commercialization": "node scripts/prepare-commercialization-review.mjs",
     "test:qa:issues": "node scripts/report-qa-issues.mjs",

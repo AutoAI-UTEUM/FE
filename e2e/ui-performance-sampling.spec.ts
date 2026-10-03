@@ -10,6 +10,10 @@ const LONG_HISTORY_SAMPLE_COUNT = 5
 test('UI-06 records representative synthetic timings without an invented pass budget', async ({ browser, page }, testInfo) => {
   test.skip(qaEnvironment !== 'mock', 'repeatable performance sampling uses local synthetic fixtures')
   test.skip(testInfo.project.name !== 'chromium-1440', 'one stable Chromium baseline is sampled')
+  test.skip(
+    testInfo.config.workers !== 1,
+    'performance evidence requires an isolated worker; run npm run test:performance:ui',
+  )
   test.setTimeout(240_000)
 
   await loginAs(page, 'LEARNER')

@@ -259,10 +259,14 @@ export function ChatPanel({
     }
 
     const frame = window.requestAnimationFrame(() => {
-      if (!input.disabled && restoreQuestionFocusRef.current) {
+      if (!restoreQuestionFocusRef.current) return
+      if (
+        !input.disabled
+        && document.activeElement === document.body
+      ) {
         input.focus()
-        restoreQuestionFocusRef.current = false
       }
+      restoreQuestionFocusRef.current = false
     })
     return () => window.cancelAnimationFrame(frame)
   }, [isTurnPending, tab])
