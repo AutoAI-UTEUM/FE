@@ -1,10 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
 import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { ClassroomsPage } from './ClassroomsPage'
+
+beforeEach(() => {
+  vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
+    () => ([{}] as unknown as DOMRectList),
+  )
+})
 
 afterEach(() => {
   cleanup()
@@ -99,6 +105,61 @@ describe('ClassroomsPage', () => {
     expect(joinDialog).toBeInTheDocument()
     fireEvent.mouseDown(joinDialog)
     expect(screen.queryByRole('dialog', { name: '강의실 참여' })).not.toBeInTheDocument()
+  })
+
+  it('traps search focus and restores the search trigger after Escape', async () => {
+    renderPage()
+
+    const trigger = screen.getByRole('button', { name: '강의실 검색' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '강의실 검색' })
+    const input = within(dialog).getByRole('textbox', { name: '검색어' })
+    const close = within(dialog).getByRole('button', { name: '검색 닫기' })
+    expect(input).toHaveFocus()
+    fireEvent.change(input, { target: { value: '일치하지 않는 검색어' } })
+
+    close.focus()
+    fireEvent.keyDown(close, { key: 'Tab' })
+    expect(input).toHaveFocus()
+    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+    expect(close).toHaveFocus()
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '강의실 검색' })).not.toBeInTheDocument())
+    expect(trigger).toHaveFocus()
+  })
+
+  it('keeps the join dialog open and disables dismiss actions while a request is pending', async () => {
+    let resolveJoin!: (response: Response) => void
+    const pendingJoin = new Promise<Response>((resolve) => { resolveJoin = resolve })
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'POST' && url.pathname === '/api/classroom-join-requests') return pendingJoin
+      return undefined
+    })
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '강의실 참여' }))
+    const dialog = screen.getByRole('dialog', { name: '강의실 참여' })
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '초대 코드' }), {
+      target: { value: 'EDU-2026' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: '참여 요청' }))
+
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '요청 중' })).toBeDisabled())
+    expect(within(dialog).getByRole('button', { name: '참여 창 닫기' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: '취소' })).toBeDisabled()
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(dialog).toBeInTheDocument()
+
+    resolveJoin(apiSuccess({
+      requestId: 91,
+      requestedAt: '2026-10-02T00:00:00Z',
+      status: 'PENDING',
+    }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '강의실 참여' })).not.toBeInTheDocument())
   })
 
   it('changes the classroom sort order', () => {

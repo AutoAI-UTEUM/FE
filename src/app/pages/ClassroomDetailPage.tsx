@@ -15,7 +15,7 @@ import { createSessionsRepository } from '../../features/sessions'
 import { getRequestErrorMessage } from '../../shared/api'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { usePolling } from '../../shared/state'
-import { useElementWidth, useResponsiveViewport } from '../../shared/responsive'
+import { useElementWidth, useFocusScope, useResponsiveViewport } from '../../shared/responsive'
 import { Button, EmptyState, Select, useToast } from '../../shared/ui'
 import { examDetailPath, sessionDetailPath } from '../routes'
 import { ClassroomContentPanel, ClassroomContentRail } from './classroom/ClassroomContentView'
@@ -607,22 +607,27 @@ function UploadMaterialDialog({ initialFile, initialWeekNumber, isUploading, onC
   const [weekNumber, setWeekNumber] = useState(initialWeekNumber ?? orderedWeeks[0]?.weekNumber ?? 1)
   const [file, setFile] = useState<File | null>(initialFile ?? null)
   const [title, setTitle] = useState(initialFile?.name ?? '')
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const uploadInFlightRef = useRef(false)
   const fileError = file ? validateMaterialUpload(file) : null
   const titleError = validateMaterialTitle(title)
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
+  const close = () => {
+    if (!isUploading && !uploadInFlightRef.current) onClose()
+  }
+  useFocusScope(dialogRef, true, close)
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (file && !fileError && !titleError && await onUpload(file, title.trim(), weekNumber)) onClose()
+    if (!file || fileError || titleError || uploadInFlightRef.current) return
+    uploadInFlightRef.current = true
+    try {
+      if (await onUpload(file, title.trim(), weekNumber)) onClose()
+    } finally {
+      uploadInFlightRef.current = false
+    }
   }
   function selectFile(nextFile: File | null) {
     setFile(nextFile)
     setTitle(nextFile?.name ?? '')
   }
-  return <div aria-label="수업 생성" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 " onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">수업 생성</h2><button aria-label="수업 생성 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" onClick={onClose} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<Select className="mt-1 w-full" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</Select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} type="file" /></label>{fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}<label className="mt-4 block type-control font-semibold">수업 제목<input aria-invalid={Boolean(titleError)} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={MAX_MATERIAL_TITLE_LENGTH} onChange={(event) => setTitle(event.target.value)} placeholder="수업 제목을 입력하세요." value={title} /></label>{titleError && file ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{titleError}</p> : null}<div className="mt-5 flex justify-end gap-2"><Button onClick={onClose} variant="secondary">취소</Button><Button disabled={!file || Boolean(fileError) || Boolean(titleError) || isUploading} type="submit">{isUploading ? '생성 중' : '생성'}</Button></div></form></div>
+  return <div ref={dialogRef} aria-label="수업 생성" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }} role="dialog"><form className="w-full max-w-md rounded-lg bg-white p-5 " onSubmit={submit}><div className="flex items-center justify-between"><h2 className="type-dialog-title font-bold">수업 생성</h2><button aria-label="수업 생성 닫기" className="flex size-8 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100" disabled={isUploading} onClick={close} type="button"><X size={17} /></button></div><label className="mt-5 block type-control font-semibold">주차 선택<Select data-autofocus className="mt-1 w-full" onChange={(event) => setWeekNumber(Number(event.target.value))} value={weekNumber}>{orderedWeeks.map((week) => <option key={week.id} value={week.weekNumber}>{week.weekNumber}주차 · {week.title}</option>)}</Select></label><label className="mt-4 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 text-center"><Upload size={20} /><span className="mt-2 type-body font-semibold">{file?.name ?? 'PDF 파일 선택'}</span><input accept="application/pdf,.pdf" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} type="file" /></label>{fileError ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{fileError}</p> : null}<label className="mt-4 block type-control font-semibold">수업 제목<input aria-invalid={Boolean(titleError)} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" maxLength={MAX_MATERIAL_TITLE_LENGTH} onChange={(event) => setTitle(event.target.value)} placeholder="수업 제목을 입력하세요." value={title} /></label>{titleError && file ? <p className="mt-2 type-caption font-medium text-rose-700" role="alert">{titleError}</p> : null}<div className="mt-5 flex justify-end gap-2"><Button disabled={isUploading} onClick={close} variant="secondary">취소</Button><Button disabled={!file || Boolean(fileError) || Boolean(titleError) || isUploading} type="submit">{isUploading ? '생성 중' : '생성'}</Button></div></form></div>
 }

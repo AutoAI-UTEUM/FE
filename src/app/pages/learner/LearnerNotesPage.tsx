@@ -364,7 +364,7 @@ export function LearnerNotesPage() {
                 </div>
                 {group.session ? (
                     <ButtonLink
-                      className="!min-h-7 !gap-1 !rounded-md !px-2 !py-1 type-micro"
+                      className="!gap-1 !rounded-md !px-2 !py-1 type-micro"
                       size="sm"
                       to={sessionDetailPath(group.session.id)}
                       variant="secondary"
