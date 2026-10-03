@@ -45,7 +45,10 @@ test.describe('release learning acceptance with synthetic APIs', () => {
     await expect(priorCompletedResponse).toHaveCount(1)
     await page.locator('#chat-question').fill('현재 페이지의 핵심을 설명해 주세요.')
     await page.getByRole('button', { name: '질문 보내기' }).click()
-    await expect.poll(() => conversationItems.count()).toBe(itemCountBeforeQuestion + 1)
+    const finalAssistantResponse = conversationItems.nth(itemCountBeforeQuestion + 1)
+    await expect(conversationItems).toHaveCount(itemCountBeforeQuestion + 2)
+    await expect(finalAssistantResponse).toContainText('AI 답변')
+    await expect(finalAssistantResponse).toContainText('개념 정의와 적용 사례를 설명합니다.')
     await expect(page.locator('#chat-question')).toBeEnabled()
 
     expect(streamGets).toBe(1)
