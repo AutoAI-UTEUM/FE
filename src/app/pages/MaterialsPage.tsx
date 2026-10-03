@@ -46,6 +46,11 @@ import { materialViewerPath, sessionDetailPath } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
 export function MaterialsPage() {
+  const { user } = useAuth()
+  return <MaterialsPageContent key={user?.id ?? user?.email ?? 'signed-out'} />
+}
+
+function MaterialsPageContent() {
   usePageTitle('자료')
   const { show: showToast } = useToast()
   const { apiRequest } = useAuth()
