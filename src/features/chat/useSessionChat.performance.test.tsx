@@ -96,6 +96,7 @@ function createRepository(
     getById: vi.fn(),
     list: vi.fn(),
     listMessages: vi.fn().mockResolvedValue([]),
+    listQuizHistory: vi.fn(),
     listQuizzes: vi.fn(),
     movePage: vi.fn(),
     startNewConversation: vi.fn(),

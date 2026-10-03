@@ -72,7 +72,7 @@ function ReviewQuizCollection() {
           while (!signal.aborted && next < sessions.length) {
             const session = sessions[next++]
             try {
-              const quizzes = await repository.listQuizzes(session.id, signal)
+              const quizzes = await repository.listQuizHistory(session.id, signal)
               if (!signal.aborted) batches.push({ quizzes, session })
             } catch {
               if (!signal.aborted) failed.push(session)
@@ -169,13 +169,43 @@ function ReviewQuizCollection() {
 function flattenAndSortQuizzes(
   values: Array<{ quizzes: SessionQuizSummary[]; session: LearningSession }>,
 ): ReviewQuizItem[] {
-  return values
+  const ordered = values
     .flatMap(({ quizzes, session }) =>
       quizzes.map((quiz) => ({ quiz, session })),
     )
-    .sort((left, right) =>
-      (right.quiz.createdAt ?? '').localeCompare(left.quiz.createdAt ?? ''),
-    )
+    .sort(compareReviewQuizzes)
+  const quizIds = new Set<string>()
+  return ordered.filter(({ quiz }) => {
+    if (quizIds.has(quiz.quizId)) return false
+    quizIds.add(quiz.quizId)
+    return true
+  })
+}
+
+function compareReviewQuizzes(left: ReviewQuizItem, right: ReviewQuizItem): number {
+  const dateOrder = (right.quiz.createdAt ?? '').localeCompare(left.quiz.createdAt ?? '')
+  if (dateOrder !== 0) return dateOrder
+  const quizIdOrder = compareIdsDescending(left.quiz.quizId, right.quiz.quizId)
+  if (quizIdOrder !== 0) return quizIdOrder
+  return compareIdsDescending(left.session.id, right.session.id)
+}
+
+function compareIdsDescending(left: string, right: string): number {
+  const leftDigits = normalizeIntegerId(left)
+  const rightDigits = normalizeIntegerId(right)
+  if (leftDigits && rightDigits) {
+    if (leftDigits.length !== rightDigits.length) {
+      return rightDigits.length - leftDigits.length
+    }
+    const numericOrder = rightDigits.localeCompare(leftDigits)
+    if (numericOrder !== 0) return numericOrder
+  }
+  return right.localeCompare(left)
+}
+
+function normalizeIntegerId(value: string): string | undefined {
+  if (!/^\d+$/.test(value)) return undefined
+  return value.replace(/^0+(?=\d)/, '')
 }
 
 function getQuizStatus(quiz: SessionQuizSummary): string {

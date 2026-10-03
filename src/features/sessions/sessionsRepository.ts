@@ -97,6 +97,7 @@ interface SessionActionDto {
 interface SessionQuizDto {
   createdAt?: string
   maxScore?: number
+  page?: number
   passed?: boolean
   quizId: number | string
   quizType: string
@@ -106,9 +107,16 @@ interface SessionQuizDto {
 }
 
 interface SessionQuizListDto {
+  hasNext?: unknown
   items?: SessionQuizDto[]
+  page?: unknown
   quizzes?: SessionQuizDto[]
+  size?: unknown
+  totalElements?: unknown
+  totalPages?: unknown
 }
+
+const MAX_QUIZ_HISTORY_PAGES = 100
 
 export interface SessionTurnRequest {
   capabilities?: {
@@ -173,6 +181,10 @@ export interface SessionsRepository {
     signal?: AbortSignal,
   ) => Promise<SessionMessagePage>
   listQuizzes: (
+    sessionId: string,
+    signal?: AbortSignal,
+  ) => Promise<SessionQuizSummary[]>
+  listQuizHistory: (
     sessionId: string,
     signal?: AbortSignal,
   ) => Promise<SessionQuizSummary[]>
@@ -308,16 +320,41 @@ export function createSessionsRepository(
         `/api/sessions/${encodeURIComponent(sessionId)}/quizzes`,
         { signal },
       )
-      return (data.quizzes ?? data.items ?? []).map((quiz) => ({
-        createdAt: quiz.createdAt,
-        maxScore: quiz.maxScore,
-        passed: quiz.passed,
-        quizId: String(quiz.quizId),
-        quizType: quiz.quizType,
-        score: quiz.score,
-        submitted: quiz.submitted,
-        title: quiz.title,
-      }))
+      return mapQuizzes(data.quizzes ?? data.items ?? [])
+    },
+    async listQuizHistory(sessionId, signal) {
+      const basePath = `/api/sessions/${encodeURIComponent(sessionId)}/quizzes`
+      const quizzes = new Map<string, SessionQuizSummary>()
+      let expectedPage = 0
+      let expectedSize: number | undefined
+      let hasNext = true
+
+      while (hasNext) {
+        if (expectedPage >= MAX_QUIZ_HISTORY_PAGES) {
+          throw invalidQuizHistoryPage()
+        }
+        signal?.throwIfAborted()
+        const path = expectedPage === 0
+          ? basePath
+          : `${basePath}?page=${expectedPage}&size=${expectedSize}`
+        const { data } = await request<SessionQuizListDto>(path, { signal })
+        signal?.throwIfAborted()
+
+        const metadata = readQuizHistoryMetadata(data, expectedPage, expectedSize)
+        const pageQuizzes = metadata
+          ? data.quizzes as SessionQuizDto[]
+          : data.quizzes ?? data.items ?? []
+        for (const quiz of mapQuizzes(pageQuizzes)) {
+          if (!quizzes.has(quiz.quizId)) quizzes.set(quiz.quizId, quiz)
+        }
+
+        if (!metadata) return [...quizzes.values()]
+        expectedSize ??= metadata.size
+        hasNext = metadata.hasNext
+        expectedPage += 1
+      }
+
+      return [...quizzes.values()]
     },
     async startNewConversation(sessionId, signal) {
       const { data } = await request<{
@@ -393,6 +430,86 @@ export function createSessionsRepository(
       return mapTurnResult(data)
     },
   }
+}
+
+interface QuizHistoryMetadata {
+  hasNext: boolean
+  size: number
+}
+
+const QUIZ_HISTORY_METADATA_KEYS = [
+  'hasNext',
+  'page',
+  'size',
+  'totalElements',
+  'totalPages',
+] as const
+
+function readQuizHistoryMetadata(
+  data: SessionQuizListDto,
+  expectedPage: number,
+  expectedSize?: number,
+): QuizHistoryMetadata | undefined {
+  const metadataPresence = QUIZ_HISTORY_METADATA_KEYS.map((key) =>
+    Object.prototype.hasOwnProperty.call(data, key),
+  )
+  if (metadataPresence.every((present) => !present)) return undefined
+  if (metadataPresence.some((present) => !present)) throw invalidQuizHistoryPage()
+
+  const { hasNext, page, size, totalElements, totalPages } = data
+  const validNumbers =
+    Number.isSafeInteger(page) &&
+    page === expectedPage &&
+    Number.isSafeInteger(size) &&
+    (size as number) >= 1 &&
+    (size as number) <= 100 &&
+    (expectedSize === undefined || size === expectedSize) &&
+    Number.isSafeInteger(totalElements) &&
+    (totalElements as number) >= 0 &&
+    Number.isSafeInteger(totalPages) &&
+    (totalPages as number) >= 0
+  if (!validNumbers || typeof hasNext !== 'boolean' || !Array.isArray(data.quizzes)) {
+    throw invalidQuizHistoryPage()
+  }
+
+  const numericPage = page as number
+  const numericSize = size as number
+  const numericTotalElements = totalElements as number
+  const numericTotalPages = totalPages as number
+  const calculatedTotalPages = numericTotalElements === 0
+    ? 0
+    : Math.ceil(numericTotalElements / numericSize)
+  const isExcessPage = numericPage >= numericTotalPages
+  const expectedHasNext = numericPage + 1 < numericTotalPages
+  const validBounds =
+    numericTotalPages === calculatedTotalPages &&
+    data.quizzes.length <= numericSize &&
+    (!isExcessPage || data.quizzes.length === 0) &&
+    hasNext === expectedHasNext
+  if (!validBounds) throw invalidQuizHistoryPage()
+
+  return { hasNext, size: numericSize }
+}
+
+function mapQuizzes(quizzes: SessionQuizDto[]): SessionQuizSummary[] {
+  return quizzes.map((quiz) => ({
+    createdAt: quiz.createdAt,
+    maxScore: quiz.maxScore,
+    ...(quiz.page === undefined ? {} : { page: quiz.page }),
+    passed: quiz.passed,
+    quizId: String(quiz.quizId),
+    quizType: quiz.quizType,
+    score: quiz.score,
+    submitted: quiz.submitted,
+    title: quiz.title,
+  }))
+}
+
+function invalidQuizHistoryPage() {
+  return new ApiClientError({
+    code: 'INVALID_QUIZ_HISTORY_PAGE',
+    message: '과거 퀴즈를 불러오지 못했습니다. 다시 시도해 주세요.',
+  })
 }
 
 function handleStreamMessage(
