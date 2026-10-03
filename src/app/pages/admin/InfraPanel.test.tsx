@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -85,6 +85,12 @@ function points(first: number, second: number) {
     { t: '2026-09-01T00:00:00Z', v: first },
     { t: '2026-09-01T01:00:00Z', v: second },
   ]
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => { resolve = next })
+  return { promise, resolve }
 }
 
 function createRepository(overrides: Partial<AdminRepository> = {}) {
@@ -286,6 +292,112 @@ describe('InfraPanel', () => {
     expect(await screen.findByText(/관리자 권한이 변경되었어요/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '다시 로그인' })).toBeInTheDocument()
     expect(await screen.findByTitle('42.75$')).toBeInTheDocument()
+  })
+
+  it('clears metrics from the previous selection while the next request is pending', async () => {
+    const nextMetrics = deferred<InfraMetrics>()
+    const getInfraMetrics = vi.fn()
+      .mockResolvedValueOnce(metrics)
+      .mockReturnValueOnce(nextMetrics.promise)
+    renderPanel(createRepository({ getInfraMetrics }))
+
+    expect(await screen.findByText('82.4')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('환경'), { target: { value: 'dev' } })
+    await waitFor(() => expect(getInfraMetrics).toHaveBeenCalledTimes(2))
+
+    expect(screen.queryByText('82.4')).not.toBeInTheDocument()
+
+    nextMetrics.resolve({
+      ...metrics,
+      env: 'dev',
+      latest: { ...metrics.latest!, cpu: 21.2 },
+      series: { ...metrics.series!, cpu: points(18, 21.2) },
+    })
+    expect(await screen.findByText('21.2')).toBeInTheDocument()
+  })
+
+  it('ignores a late metrics response owned by an aborted selection', async () => {
+    const firstMetrics = deferred<InfraMetrics>()
+    const nextMetrics = deferred<InfraMetrics>()
+    const getInfraMetrics = vi.fn()
+      .mockReturnValueOnce(firstMetrics.promise)
+      .mockReturnValueOnce(nextMetrics.promise)
+    renderPanel(createRepository({ getInfraMetrics }))
+
+    await waitFor(() => expect(getInfraMetrics).toHaveBeenCalledTimes(1))
+    fireEvent.change(screen.getByLabelText('조회 기간'), { target: { value: '6h' } })
+    await waitFor(() => expect(getInfraMetrics).toHaveBeenCalledTimes(2))
+
+    await act(async () => { firstMetrics.resolve(metrics) })
+    expect(screen.queryByText('82.4')).not.toBeInTheDocument()
+
+    nextMetrics.resolve({
+      ...metrics,
+      range: '6h',
+      latest: { ...metrics.latest!, cpu: 31.6 },
+      series: { ...metrics.series!, cpu: points(28, 31.6) },
+    })
+    expect(await screen.findByText('31.6')).toBeInTheDocument()
+  })
+
+  it('keeps an unavailable AWS month-to-date cost unknown instead of showing zero', async () => {
+    renderPanel(createRepository({
+      getInfraCost: vi.fn().mockResolvedValue({ ...cost, monthToDate: undefined }),
+    }))
+
+    const awsMetric = (await screen.findByText('AWS 비용', { selector: 'p' })).parentElement
+    expect(awsMetric).not.toBeNull()
+    expect(within(awsMetric!).getByTitle('-')).toBeInTheDocument()
+    expect(within(awsMetric!).queryByText('0.00')).not.toBeInTheDocument()
+  })
+
+  it('distinguishes known zero xAI daily cost from an unknown cost in a mixed response', async () => {
+    const yesterday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    const dayBefore = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 48 * 60 * 60 * 1000))
+    renderPanel(createRepository({
+      getAiUsageSummary: vi.fn().mockResolvedValue({
+        daily: [
+          { date: dayBefore, costUsd: '0', callCount: 2, successCount: 2, failCount: 0, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 },
+          { date: yesterday, costUsd: null, callCount: 3, successCount: 3, failCount: 0, inputTokens: 10, outputTokens: 20, reasoningTokens: 0 },
+        ],
+        features: [],
+      }),
+    }))
+
+    const chart = await screen.findByRole('img', { name: 'xAI 주간 비용 그래프' })
+    const knownZero = chart.querySelector(`[data-chart-date="${dayBefore}"]`)
+    const unknown = chart.querySelector(`[data-chart-date="${yesterday}"]`)
+    expect(knownZero).toHaveAttribute('aria-label', `${dayBefore}: $0.00`)
+    expect(knownZero?.querySelector('.bg-violet-200')).toBeInTheDocument()
+    expect(unknown).toHaveAttribute('aria-label', `${yesterday}: 비용 미확인`)
+    expect(unknown?.querySelector('.border-dashed')).toBeInTheDocument()
+    expect(chart).toHaveAccessibleDescription(`${yesterday}: 비용 미확인`)
+  })
+
+  it('shows AWS cost and xAI usage failures in the panel header', async () => {
+    renderPanel(createRepository({
+      getInfraCost: vi.fn().mockRejectedValue(new Error('AWS 비용 조회 실패')),
+      getAiUsageSummary: vi.fn().mockRejectedValue(new Error('xAI 호출 조회 실패')),
+    }))
+
+    expect(await screen.findByText('AWS 비용 조회 실패')).toBeInTheDocument()
+    expect(await screen.findByText('xAI 호출 조회 실패')).toBeInTheDocument()
+  })
+
+  it('traps focus in the detail drawer and restores it to the opener', async () => {
+    renderPanel()
+    const opener = screen.getByRole('button', { name: 'AWS 비용 상세 보기' })
+    opener.focus()
+    fireEvent.click(opener)
+
+    const closeButton = screen.getByRole('button', { name: '상세 패널 닫기' })
+    expect(closeButton).toHaveFocus()
+    screen.getByLabelText('환경').focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(closeButton).toHaveFocus()
+
+    fireEvent.click(closeButton)
+    expect(opener).toHaveFocus()
   })
 
   it('reloads only metrics for filters without showing a manual refresh button', async () => {
