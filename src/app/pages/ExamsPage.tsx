@@ -29,13 +29,25 @@ export function ExamsPage() {
   const classroomsRepository = useMemo(() => createClassroomsRepository(apiRequest), [apiRequest])
   const examsRepository = useMemo(() => createExamsRepository(apiRequest), [apiRequest])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
-  const [classroomsLoaded, setClassroomsLoaded] = useState(false)
+  const [classroomsLoadKey, setClassroomsLoadKey] = useState<string | null>(null)
+  const [classroomsReloadToken, setClassroomsReloadToken] = useState(0)
   const [classroomId, setClassroomId] = useState(routeClassroomId)
   const [exams, setExams] = useState<ExamSummary[]>([])
+  const [failedClassroomIds, setFailedClassroomIds] = useState<string[]>([])
   const [status, setStatus] = useState<ExamStatus | ''>('')
   const [reloadToken, setReloadToken] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const retryFailedOnlyRef = useRef(false)
+  const retryClassroomIdsRef = useRef<string[]>([])
+  const retryRequestedRef = useRef(false)
+  const accountKey = `${user?.id ?? user?.email ?? 'anonymous'}:${user?.role ?? ''}`
+  const loadKey = `${accountKey}:${routeClassroomId || 'global'}`
+  const discoveryIdentity = useMemo(
+    () => ({ classroomsReloadToken, classroomsRepository, loadKey }),
+    [classroomsReloadToken, classroomsRepository, loadKey],
+  )
+  const [activeDiscoveryIdentity, setActiveDiscoveryIdentity] = useState(discoveryIdentity)
   const requestedWeek = Number(searchParams.get('weekNumber'))
   const initialWeekNumber = Number.isInteger(requestedWeek) && requestedWeek > 0 ? requestedWeek : undefined
   const [isComposerOpen, setIsComposerOpen] = useState(isInstructor && searchParams.get('create') === '1')
@@ -46,41 +58,85 @@ export function ExamsPage() {
     [classrooms],
   )
 
+  if (activeDiscoveryIdentity !== discoveryIdentity) {
+    setActiveDiscoveryIdentity(discoveryIdentity)
+    setClassrooms([])
+    setClassroomsLoadKey(null)
+    setClassroomId(routeClassroomId)
+    setExams([])
+    setFailedClassroomIds([])
+    setError(null)
+    setIsLoading(true)
+  }
+
   useEffect(() => {
     const controller = new AbortController()
+    retryFailedOnlyRef.current = false
+    retryClassroomIdsRef.current = []
     classroomsRepository.list('', controller.signal)
       .then((items) => {
+        if (controller.signal.aborted) return
         setClassrooms(items)
         setClassroomId(isGlobalRoute ? '' : items.some((item) => item.id === routeClassroomId) ? routeClassroomId : items[0]?.id || '')
+        setClassroomsLoadKey(loadKey)
         if (items.length === 0) setIsLoading(false)
       })
       .catch((requestError) => { if (!controller.signal.aborted) { setError(getRequestErrorMessage(requestError)); setIsLoading(false) } })
-      .finally(() => { if (!controller.signal.aborted) setClassroomsLoaded(true) })
+      .finally(() => { if (!controller.signal.aborted) retryRequestedRef.current = false })
     return () => controller.abort()
-  }, [classroomsRepository, isGlobalRoute, routeClassroomId])
+  }, [classroomsRepository, discoveryIdentity, isGlobalRoute, loadKey, routeClassroomId])
 
   useEffect(() => { if (classroomId) rememberClassroomId(classroomId) }, [classroomId])
 
   useEffect(() => {
-    if (!classroomsLoaded) return
+    if (classroomsLoadKey !== loadKey) return
     if (!isGlobalRoute && !classroomId) return
     const controller = new AbortController()
-    const request = isGlobalRoute
-      ? Promise.all(classrooms.map((classroom) => examsRepository.list(classroom.id, status || undefined, controller.signal)))
-        .then((itemsByClassroom) => itemsByClassroom.flat())
-      : examsRepository.list(classroomId, status || undefined, controller.signal)
+    const failedOnly = isGlobalRoute && retryFailedOnlyRef.current
+    const targetClassrooms = isGlobalRoute
+      ? classrooms.filter((classroom) => !failedOnly || retryClassroomIdsRef.current.includes(classroom.id))
+      : classrooms.filter((classroom) => classroom.id === classroomId)
+    const request = Promise.all(targetClassrooms.map(async (classroom) => {
+      try {
+        const items = await examsRepository.list(classroom.id, status || undefined, controller.signal)
+        return { classroom, items, status: 'fulfilled' as const }
+      } catch (reason) {
+        return { classroom, reason, status: 'rejected' as const }
+      }
+    }))
     request
-      .then((items) => {
+      .then((results) => {
         if (controller.signal.aborted) return
-        setExams(sortExamsByRecent(items))
-        setError(null)
+        const fulfilled = results.filter((result) => result.status === 'fulfilled')
+        const rejected = results.filter((result) => result.status === 'rejected')
+        const nextItems = fulfilled.flatMap((result) => result.items)
+        const targetIds = new Set(targetClassrooms.map((classroom) => classroom.id))
+        setExams((current) => sortExamsByRecent(failedOnly
+          ? [...current.filter((exam) => !targetIds.has(exam.classroomId)), ...nextItems]
+          : nextItems))
+        setFailedClassroomIds(rejected.map((result) => result.classroom.id))
+        setError(rejected.length > 0
+          ? isGlobalRoute
+            ? getGlobalExamError(rejected, classrooms.length)
+            : getRequestErrorMessage(rejected[0].reason)
+          : null)
       })
-      .catch((requestError) => { if (!controller.signal.aborted) setError(getRequestErrorMessage(requestError)) })
-      .finally(() => { if (!controller.signal.aborted) setIsLoading(false) })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          retryFailedOnlyRef.current = false
+          retryClassroomIdsRef.current = []
+          retryRequestedRef.current = false
+          setIsLoading(false)
+        }
+      })
     return () => controller.abort()
-  }, [classroomId, classrooms, classroomsLoaded, examsRepository, isGlobalRoute, reloadToken, status])
+  }, [classroomId, classrooms, classroomsLoadKey, examsRepository, isGlobalRoute, loadKey, reloadToken, status])
 
   function selectStatus(nextStatus: ExamStatus | '') {
+    retryFailedOnlyRef.current = false
+    retryClassroomIdsRef.current = []
+    setExams([])
+    setFailedClassroomIds([])
     beginListLoad()
     if (nextStatus === status) {
       setReloadToken((current) => current + 1)
@@ -90,7 +146,15 @@ export function ExamsPage() {
   }
 
   function retryList() {
+    if (isLoading || retryRequestedRef.current) return
+    retryRequestedRef.current = true
     beginListLoad()
+    if (classroomsLoadKey !== loadKey) {
+      setClassroomsReloadToken((current) => current + 1)
+      return
+    }
+    retryFailedOnlyRef.current = isGlobalRoute && failedClassroomIds.length > 0
+    retryClassroomIdsRef.current = failedClassroomIds
     setReloadToken((current) => current + 1)
   }
 
@@ -163,6 +227,17 @@ function LearnerExamStatus({ exam }: { exam: ExamSummary }) {
 
 function sortExamsByRecent(items: ExamSummary[]): ExamSummary[] {
   return [...items].sort((left, right) => getExamTimestamp(right) - getExamTimestamp(left))
+}
+
+function getGlobalExamError(
+  failures: Array<{ classroom: Classroom; reason: unknown; status: 'rejected' }>,
+  requestedClassroomCount: number,
+): string {
+  const classroomNames = failures.map((failure) => failure.classroom.name).join(', ')
+  const preservedMessage = failures.length < requestedClassroomCount
+    ? ' 성공한 강의실의 시험은 계속 표시합니다.'
+    : ''
+  return `${classroomNames} 강의실의 시험 목록을 불러오지 못했습니다.${preservedMessage} ${getRequestErrorMessage(failures[0].reason)}`
 }
 
 function getExamTimestamp(exam: ExamSummary): number {
