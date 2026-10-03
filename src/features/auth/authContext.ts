@@ -38,6 +38,10 @@ export type AuthenticatedRawRequest = (
   options?: RawApiRequestOptions,
 ) => Promise<Response>
 
+export type SignupResult =
+  | { status: 'account-created' }
+  | { status: 'authenticated' }
+
 export interface AuthContextValue {
   apiRequest: AuthenticatedRequest
   rawApiRequest: AuthenticatedRawRequest
@@ -55,7 +59,10 @@ export interface AuthContextValue {
   pendingGoogleIdToken: string | null
   prepareGoogleSignup: (idToken: string) => void
   setExamInProgress: (isInProgress: boolean) => void
-  signup: (values: SignupFormValues) => Promise<void>
+  signup: (
+    values: SignupFormValues,
+    signal?: AbortSignal,
+  ) => Promise<SignupResult>
   user: AuthUser | null
   updateUser: (user: AuthUser) => void
   withdraw: (password: string) => Promise<void>

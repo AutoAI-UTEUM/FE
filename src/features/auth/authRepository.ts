@@ -34,7 +34,10 @@ export interface AuthRepository {
   ) => Promise<boolean>
   getMe: (accessToken: string, signal?: AbortSignal) => Promise<AuthUser>
   loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthSessionResult>
-  login: (values: LoginFormValues) => Promise<AuthSessionResult>
+  login: (
+    values: LoginFormValues,
+    signal?: AbortSignal,
+  ) => Promise<AuthSessionResult>
   logout: () => Promise<void>
   recordSessionActivity: (
     accessToken: string,
@@ -47,7 +50,7 @@ export interface AuthRepository {
     signal?: AbortSignal,
   ) => Promise<string>
   refresh: (signal?: AbortSignal) => Promise<AccessGrant>
-  signup: (values: SignupFormValues) => Promise<void>
+  signup: (values: SignupFormValues, signal?: AbortSignal) => Promise<void>
 }
 
 interface LoginResponseDto {
@@ -111,7 +114,7 @@ const repository: AuthRepository = {
     return mapUser(data)
   },
 
-  async login(values) {
+  async login(values, signal) {
     try {
       const { data } = await apiRequest<LoginResponseDto>('/api/auth/login', {
         body: {
@@ -119,6 +122,7 @@ const repository: AuthRepository = {
           password: values.password,
         },
         method: 'POST',
+        signal,
       })
 
       return {
@@ -196,7 +200,7 @@ const repository: AuthRepository = {
     return mapAccessGrant(data)
   },
 
-  async signup(values) {
+  async signup(values, signal) {
     try {
       await apiRequest<UserResponseDto>('/api/auth/signup', {
         body: {
@@ -208,6 +212,7 @@ const repository: AuthRepository = {
           role: values.role,
         },
         method: 'POST',
+        signal,
       })
     } catch (error) {
       throw mapRemoteAuthError(error, 'signup')
