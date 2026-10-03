@@ -21,6 +21,7 @@ export type AuthCoordinatorMessage =
       userId?: number
     }
   | {
+      cause?: 'refresh' | 'session-start'
       grant: AccessGrant
       receivedAt: number
       revision: number
@@ -49,6 +50,13 @@ type NavigatorWithLocks = Navigator & {
 }
 
 const FALLBACK_SETTLE_MS = 75
+
+export class AuthRefreshSupersededError extends Error {
+  constructor() {
+    super('The authentication session changed while the token was refreshing.')
+    this.name = 'AuthRefreshSupersededError'
+  }
+}
 
 export class AuthRefreshCoordinator {
   private readonly channel: BroadcastChannel | null
@@ -84,6 +92,7 @@ export class AuthRefreshCoordinator {
       revision: number,
       receivedAt: number,
     ) => void,
+    isStillCurrent: () => boolean = () => true,
   ): Promise<AccessGrant> {
     if (this.refreshPromise) return this.refreshPromise
 
@@ -92,6 +101,7 @@ export class AuthRefreshCoordinator {
       if (this.channel) {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
       }
+      if (!isStillCurrent()) throw new AuthRefreshSupersededError()
       const current = this.options.getSnapshot()
       if (
         current.grant &&
@@ -102,10 +112,20 @@ export class AuthRefreshCoordinator {
       }
 
       const grant = await performRefresh()
+      if (!isStillCurrent()) throw new AuthRefreshSupersededError()
+      const latest = this.options.getSnapshot()
+      if (
+        latest.grant &&
+        (latest.revision > current.revision ||
+          latest.grantReceivedAt > current.grantReceivedAt)
+      ) {
+        return latest.grant
+      }
       const receivedAt = Date.now()
       const revision = Math.max(current.revision, started.revision) + 1
       applyGrant(grant, revision, receivedAt)
       this.publish({
+        cause: 'refresh',
         grant,
         receivedAt,
         revision,
