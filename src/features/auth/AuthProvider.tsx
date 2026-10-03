@@ -20,6 +20,7 @@ import {
 } from './authContext'
 import {
   AuthRefreshCoordinator,
+  AuthRefreshSupersededError,
   type AuthCoordinatorMessage,
   type AuthCoordinatorSnapshot,
 } from './AuthRefreshCoordinator'
@@ -58,6 +59,7 @@ interface PendingGrant {
   grant: AccessGrant
   receivedAt: number
   revision: number
+  userId?: number
 }
 
 interface AuthRecoveryState {
@@ -96,6 +98,7 @@ export function AuthProvider({
   const [pendingGoogleIdToken, setPendingGoogleIdToken] = useState<string | null>(
     null,
   )
+  const [identityReplacementSequence, setIdentityReplacementSequence] = useState(0)
   const sessionRef = useRef(session)
   const sessionRevisionRef = useRef(0)
   // Grant/activity revisions can advance harmlessly in another tab. Only a
@@ -157,6 +160,7 @@ export function AuthProvider({
       pendingGrantRef.current = null
       activityPromiseRef.current = null
       setSession(null)
+      setIsInitializing(false)
       setLogoutReason(reason)
       setIsIdleWarningOpen(false)
       setAuthRecovery(null)
@@ -201,11 +205,63 @@ export function AuthProvider({
   const handleCoordinatorMessage = useCallback(
     (message: AuthCoordinatorMessage) => {
       const current = sessionRef.current
+      const currentUserId = current?.user.id ?? pendingGrantRef.current?.userId
       if (
-        current?.user.id !== undefined &&
-        message.userId !== undefined &&
-        current.user.id !== message.userId
+        message.type === 'REFRESH_SUCCEEDED' &&
+        currentUserId !== undefined &&
+        message.userId === undefined
       ) {
+        // A bootstrap refresh has not verified which account owns its grant.
+        // Never bind it to an established or pending identity in this tab.
+        return
+      }
+      const isDifferentUser =
+        currentUserId !== undefined &&
+        message.userId !== undefined &&
+        currentUserId !== message.userId
+      if (isDifferentUser) {
+        if (
+          message.type === 'REFRESH_SUCCEEDED' &&
+          message.cause !== 'refresh' &&
+          message.cause !== 'session-start'
+        ) {
+          // Older tabs do not identify whether a grant came from login or a
+          // refresh. Do not trust that grant, but hide the stale identity.
+          clearSession('session-expired', false)
+          return
+        }
+        if (
+          message.type === 'REFRESH_SUCCEEDED' &&
+          message.cause === 'session-start'
+        ) {
+          const currentReceivedAt =
+            current?.grantReceivedAt ??
+            pendingGrantRef.current?.receivedAt ??
+            0
+          const isNewer =
+            message.revision > sessionRevisionRef.current ||
+            message.receivedAt > currentReceivedAt
+          if (isNewer) {
+            sessionRevisionRef.current = Math.max(
+              sessionRevisionRef.current,
+              message.revision,
+            )
+            sessionTransitionRef.current += 1
+            pendingGrantRef.current = {
+              grant: message.grant,
+              receivedAt: message.receivedAt,
+              revision: message.revision,
+              userId: message.userId,
+            }
+            sessionRef.current = null
+            setSession(null)
+            setLogoutReason(null)
+            setIsIdleWarningOpen(false)
+            setAuthRecovery(null)
+            setIsInitializing(true)
+            setIdentityReplacementSequence((sequence) => sequence + 1)
+          }
+        }
         return
       }
 
@@ -226,6 +282,18 @@ export function AuthProvider({
       }
 
       if (message.type === 'REFRESH_SUCCEEDED') {
+        const pendingUserId = pendingGrantRef.current?.userId
+        if (
+          !sessionRef.current &&
+          pendingUserId !== undefined &&
+          message.userId !== undefined &&
+          pendingUserId !== message.userId &&
+          message.cause !== 'session-start'
+        ) {
+          // Keep an accepted account switch bound to its expected identity.
+          // A late refresh from the account being replaced must not overwrite it.
+          return
+        }
         const currentReceivedAt =
           sessionRef.current?.grantReceivedAt ??
           pendingGrantRef.current?.receivedAt ??
@@ -234,6 +302,27 @@ export function AuthProvider({
           message.revision > sessionRevisionRef.current ||
           message.receivedAt > currentReceivedAt
         ) {
+          if (!sessionRef.current) {
+            // A broadcast can arrive just after the bootstrap request settles.
+            // Verify the broadcast grant explicitly instead of leaving it as an
+            // unconsumed pending grant after initialization has already ended.
+            sessionRevisionRef.current = Math.max(
+              sessionRevisionRef.current,
+              message.revision,
+            )
+            sessionTransitionRef.current += 1
+            pendingGrantRef.current = {
+              grant: message.grant,
+              receivedAt: message.receivedAt,
+              revision: message.revision,
+              userId: message.userId,
+            }
+            setLogoutReason(null)
+            setAuthRecovery(null)
+            setIsInitializing(true)
+            setIdentityReplacementSequence((sequence) => sequence + 1)
+            return
+          }
           applyGrant(message.grant, message.revision, message.receivedAt)
         }
         return
@@ -265,6 +354,11 @@ export function AuthProvider({
 
   const renewAccessToken = useCallback(
     async (silentTerminal = false): Promise<AccessGrant | null> => {
+      const refreshTransition = sessionTransitionRef.current
+      const refreshUserId = sessionRef.current?.user.id
+      const isRefreshSessionCurrent = () =>
+        sessionTransitionRef.current === refreshTransition &&
+        sessionRef.current?.user.id === refreshUserId
       const performRefresh = async () => {
         const controller = new AbortController()
         const timeoutId = window.setTimeout(
@@ -281,14 +375,20 @@ export function AuthProvider({
       try {
         const coordinator = coordinatorRef.current
         const grant = coordinator
-          ? await coordinator.refresh(performRefresh, applyGrant)
+          ? await coordinator.refresh(
+              performRefresh,
+              applyGrant,
+              isRefreshSessionCurrent,
+            )
           : await performRefresh()
 
         if (!coordinator) {
+          if (!isRefreshSessionCurrent()) return null
           applyGrant(grant, sessionRevisionRef.current + 1, Date.now())
         }
         return grant
       } catch (error) {
+        if (error instanceof AuthRefreshSupersededError) return null
         const terminalReason = getTerminalLogoutReason(error)
         if (terminalReason) {
           if (!silentTerminal || sessionRef.current) {
@@ -336,6 +436,7 @@ export function AuthProvider({
       setAuthRecovery(null)
       setSession(nextSession)
       coordinatorRef.current?.publish({
+        cause: 'session-start',
         grant: effectiveGrant,
         receivedAt: effectiveReceivedAt,
         revision,
@@ -347,13 +448,66 @@ export function AuthProvider({
   )
 
   useEffect(() => {
+    if (identityReplacementSequence === 0) return
+    const pending = pendingGrantRef.current
+    if (!pending) return
+
+    const controller = new AbortController()
+    const sessionTransition = sessionTransitionRef.current
+    const timeoutId = window.setTimeout(() => {
+      if (sessionTransition === sessionTransitionRef.current) {
+        clearSession('session-expired', false)
+      }
+      controller.abort()
+    }, AUTH_RESTORE_TIMEOUT_MS)
+    void repository.getMe(pending.grant.accessToken, controller.signal)
+      .then((user) => {
+        const latest = pendingGrantRef.current
+        if (
+          controller.signal.aborted ||
+          sessionTransition !== sessionTransitionRef.current ||
+          latest?.grant.accessToken !== pending.grant.accessToken
+        ) {
+          return
+        }
+        if (pending.userId !== undefined && user.id !== pending.userId) {
+          clearSession('session-expired', false)
+          return
+        }
+        beginSession(pending.grant, user, pending.receivedAt)
+      })
+      .catch(() => {
+        if (
+          !controller.signal.aborted &&
+          sessionTransition === sessionTransitionRef.current
+        ) {
+          clearSession('session-expired', false)
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId)
+        if (!controller.signal.aborted) setIsInitializing(false)
+      })
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [
+    beginSession,
+    clearSession,
+    identityReplacementSequence,
+    repository,
+  ])
+
+  useEffect(() => {
     if (hasExplicitInitialUser) return
 
     const controller = new AbortController()
     let isActive = true
     const timeoutId = window.setTimeout(() => {
       controller.abort()
-      if (isActive) setIsInitializing(false)
+      if (isActive && !pendingGrantRef.current) setIsInitializing(false)
     }, AUTH_RESTORE_TIMEOUT_MS)
 
     const sessionTransition = sessionTransitionRef.current
@@ -402,7 +556,9 @@ export function AuthProvider({
       })
       .finally(() => {
         window.clearTimeout(timeoutId)
-        if (isActive) setIsInitializing(false)
+        if (isActive && !pendingGrantRef.current) {
+          setIsInitializing(false)
+        }
       })
 
     return () => {
@@ -687,7 +843,13 @@ export function AuthProvider({
 
   const authenticatedRequest = useCallback<AuthContextValue['apiRequest']>(
     async (path, options = {}) => {
-      const accessToken = sessionRef.current?.accessToken
+      const requestSession = sessionRef.current
+      const requestTransition = sessionTransitionRef.current
+      const requestUserId = requestSession?.user.id
+      const accessToken = requestSession?.accessToken
+      const isRequestSessionCurrent = () =>
+        sessionTransitionRef.current === requestTransition &&
+        sessionRef.current?.user.id === requestUserId
       if (!accessToken) {
         clearSession('session-expired')
         throw createAuthRequiredError()
@@ -696,6 +858,7 @@ export function AuthProvider({
       try {
         return await requestApi(path, { ...options, accessToken })
       } catch (error) {
+        if (!isRequestSessionCurrent()) throw error
         const directReason = getTerminalLogoutReason(error)
         if (directReason) {
           clearSession(directReason)
@@ -706,14 +869,18 @@ export function AuthProvider({
         }
 
         const grant = await renewAccessToken()
-        if (!grant) throw error
+        if (!grant || !isRequestSessionCurrent()) throw error
         try {
+          if (!isRequestSessionCurrent()) throw error
           return await requestApi(path, {
             ...options,
             accessToken: grant.accessToken,
           })
         } catch (retryError) {
-          if (isUnauthorizedOrInactive(retryError)) {
+          if (
+            isRequestSessionCurrent() &&
+            isUnauthorizedOrInactive(retryError)
+          ) {
             clearSession(
               getTerminalLogoutReason(retryError) ?? 'session-expired',
             )
@@ -729,7 +896,13 @@ export function AuthProvider({
     AuthContextValue['rawApiRequest']
   >(
     async (path, options = {}) => {
-      const accessToken = sessionRef.current?.accessToken
+      const requestSession = sessionRef.current
+      const requestTransition = sessionTransitionRef.current
+      const requestUserId = requestSession?.user.id
+      const accessToken = requestSession?.accessToken
+      const isRequestSessionCurrent = () =>
+        sessionTransitionRef.current === requestTransition &&
+        sessionRef.current?.user.id === requestUserId
       if (!accessToken) {
         clearSession('session-expired')
         throw createAuthRequiredError()
@@ -738,6 +911,7 @@ export function AuthProvider({
       try {
         return await requestRawApi(path, { ...options, accessToken })
       } catch (error) {
+        if (!isRequestSessionCurrent()) throw error
         const directReason = getTerminalLogoutReason(error)
         if (directReason) {
           clearSession(directReason)
@@ -748,14 +922,18 @@ export function AuthProvider({
         }
 
         const grant = await renewAccessToken()
-        if (!grant) throw error
+        if (!grant || !isRequestSessionCurrent()) throw error
         try {
+          if (!isRequestSessionCurrent()) throw error
           return await requestRawApi(path, {
             ...options,
             accessToken: grant.accessToken,
           })
         } catch (retryError) {
-          if (isUnauthorizedOrInactive(retryError)) {
+          if (
+            isRequestSessionCurrent() &&
+            isUnauthorizedOrInactive(retryError)
+          ) {
             clearSession(
               getTerminalLogoutReason(retryError) ?? 'session-expired',
             )

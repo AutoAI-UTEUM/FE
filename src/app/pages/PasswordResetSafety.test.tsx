@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ResetPasswordPage } from './AuthCapabilityPages'
 import { ForgotPasswordPage } from './ForgotPasswordPage'
+import { ApiClientError } from '../../shared/api'
 
 const repository = vi.hoisted(() => ({
   confirmPasswordReset: vi.fn(),
@@ -127,6 +128,40 @@ describe('reset token and request lifecycle', () => {
     fireEvent.submit(form)
     await screen.findByRole('heading', { name: '비밀번호 변경 완료' })
     expect(repository.confirmPasswordReset).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['expired-token', 'reused-token'])('rejects an expired or reused credential without consuming another token: %s', async (token) => {
+    repository.confirmPasswordReset.mockRejectedValueOnce(new ApiClientError({
+      code: 'RESET_TOKEN_INVALID',
+      message: 'Synthetic invalid reset credential',
+      status: 400,
+    }))
+    renderPage(`/reset-password?token=${token}`)
+    fillPasswords()
+    fireEvent.submit(document.querySelector('#reset-password')?.closest('form') as HTMLFormElement)
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(repository.confirmPasswordReset).toHaveBeenCalledExactlyOnceWith(token, 'new-password-1', expect.any(AbortSignal))
+    expect(document.querySelector('#reset-password')).toHaveValue('new-password-1')
+    expect(document.querySelector('#reset-password')?.closest('form')?.querySelector('button[type="submit"]')).toBeEnabled()
+  })
+
+  it('preserves the form after a 500 response and allows one explicit retry', async () => {
+    repository.confirmPasswordReset.mockRejectedValueOnce(new ApiClientError({
+      code: 'INTERNAL_ERROR',
+      message: 'Synthetic server failure',
+      status: 500,
+    }))
+    renderPage('/reset-password?token=server-error-token')
+    fillPasswords()
+    const form = document.querySelector('#reset-password')?.closest('form') as HTMLFormElement
+    fireEvent.submit(form)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Synthetic server failure')
+    expect(document.querySelector('#reset-password')).toHaveValue('new-password-1')
+    expect(form.querySelector('button[type="submit"]')).toBeEnabled()
+    fireEvent.submit(form)
+    await waitFor(() => expect(repository.confirmPasswordReset).toHaveBeenCalledTimes(2))
   })
 
   it('does not acquire the submission guard for an invalid password', async () => {

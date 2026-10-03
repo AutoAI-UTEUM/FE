@@ -67,6 +67,8 @@ export function MaterialsPage() {
   )
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const mutationControllerRef = useRef<AbortController | null>(null)
+  const uploadControllerRef = useRef<AbortController | null>(null)
+  const uploadAttemptRef = useRef(0)
   const deleteInFlightRef = useRef(false)
   const uploadInFlightRef = useRef(false)
   const readyCount = useMemo(
@@ -77,10 +79,15 @@ export function MaterialsPage() {
   useEffect(() => {
     const controller = new AbortController()
     mutationControllerRef.current = controller
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      uploadAttemptRef.current += 1
+      uploadControllerRef.current?.abort()
+    }
   }, [repository])
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    if (uploadInFlightRef.current) return
     const file = event.target.files?.[0] ?? null
     acceptFile(file)
     event.target.value = ''
@@ -89,6 +96,7 @@ export function MaterialsPage() {
   async function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setIsDropActive(false)
+    if (uploadInFlightRef.current) return
     acceptFile(event.dataTransfer.files?.[0] ?? null)
   }
 
@@ -118,8 +126,11 @@ export function MaterialsPage() {
     setUploadError(validationError)
     if (validationError || !selectedFile) return
 
-    const signal = mutationControllerRef.current?.signal
-    if (!signal || signal.aborted) return
+    const controller = new AbortController()
+    const signal = controller.signal
+    const attempt = uploadAttemptRef.current + 1
+    uploadAttemptRef.current = attempt
+    uploadControllerRef.current = controller
     uploadInFlightRef.current = true
     setIsUploading(true)
     try {
@@ -127,18 +138,35 @@ export function MaterialsPage() {
         signal,
         title: materialTitle.trim(),
       })
-      if (signal.aborted) return
+      if (signal.aborted || uploadAttemptRef.current !== attempt) return
       list.uploaded(nextMaterial)
       setSelectedFile(null)
       setSelectedFileName(null)
       setMaterialTitle('')
       showToast('업로드를 시작했습니다. 처리 상태를 확인하세요.', 'success')
     } catch (error) {
-      if (!signal.aborted) setUploadError(getRequestErrorMessage(error))
+      if (!signal.aborted && uploadAttemptRef.current === attempt) {
+        setUploadError(getRequestErrorMessage(error))
+      }
     } finally {
-      uploadInFlightRef.current = false
-      if (!signal.aborted) setIsUploading(false)
+      if (uploadAttemptRef.current === attempt) {
+        uploadControllerRef.current = null
+        uploadInFlightRef.current = false
+        setIsUploading(false)
+      }
     }
+  }
+
+  function cancelUpload() {
+    if (!uploadInFlightRef.current) return
+    uploadAttemptRef.current += 1
+    uploadControllerRef.current?.abort()
+    uploadControllerRef.current = null
+    uploadInFlightRef.current = false
+    setIsUploading(false)
+    setUploadError(
+      '브라우저의 업로드 요청을 중단했습니다. 서버 처리 여부는 목록을 새로고침해 확인하세요.',
+    )
   }
 
   async function handleDelete(material: StudyMaterial) {
@@ -221,7 +249,7 @@ export function MaterialsPage() {
           onDragLeave={() => setIsDropActive(false)}
           onDragOver={(event) => {
             event.preventDefault()
-            setIsDropActive(true)
+            if (!uploadInFlightRef.current) setIsDropActive(true)
           }}
           onDrop={handleDrop}
         >
@@ -229,6 +257,7 @@ export function MaterialsPage() {
             aria-label="PDF 파일"
             accept="application/pdf,.pdf"
             className="sr-only"
+            disabled={isUploading}
             id="material-upload"
             onChange={handleFileChange}
             ref={fileInputRef}
@@ -277,14 +306,20 @@ export function MaterialsPage() {
               value={materialTitle}
             />
           </label>
-          <Button
-            className="shrink-0"
-            disabled={!selectedFile || Boolean(validateMaterialTitle(materialTitle)) || isUploading}
-            type="submit"
-          >
-            <Upload aria-hidden="true" size={15} />
-            {isUploading ? '업로드 중' : '업로드'}
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            {isUploading ? (
+              <Button onClick={cancelUpload} type="button" variant="secondary">
+                업로드 취소
+              </Button>
+            ) : null}
+            <Button
+              disabled={!selectedFile || Boolean(validateMaterialTitle(materialTitle)) || isUploading}
+              type="submit"
+            >
+              <Upload aria-hidden="true" size={15} />
+              {isUploading ? '업로드 중' : '업로드'}
+            </Button>
+          </div>
         </div>
 
         {uploadError ? (

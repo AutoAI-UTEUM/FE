@@ -180,6 +180,17 @@ describe('shared ui', () => {
     expect(screen.getByText('세부 내용').tagName).toBe('STRONG')
   })
 
+  it('does not activate malicious markdown links or raw HTML', () => {
+    const { container } = render(
+      <MarkdownContent content={'[unsafe](javascript:alert(1))\n\n<img src=x onerror="alert(2)"><script>alert(3)</script>'} />,
+    )
+
+    expect(screen.getByText('unsafe').closest('a')).not.toHaveAttribute('href', expect.stringContaining('javascript:'))
+    expect(container.querySelector('img')).not.toBeInTheDocument()
+    expect(container.querySelector('script')).not.toBeInTheDocument()
+    expect(container.querySelector('[onerror]')).not.toBeInTheDocument()
+  })
+
   it('renders strong emphasis when AI wraps Korean text and quotes together', () => {
     render(<MarkdownContent content={'최적화는 **“제약 안에서 목적 함수를 찾는 수학 용어”**입니다.'} />)
 

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -220,6 +221,18 @@ describe('MaterialsPage', () => {
     )
   })
 
+  it('rejects an empty PDF before submission', () => {
+    renderMaterialsPage()
+
+    fireEvent.change(screen.getByLabelText('PDF 파일'), {
+      target: { files: [new File([], 'empty.pdf', { type: 'application/pdf' })] },
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '빈 PDF 파일은 업로드할 수 없습니다.',
+    )
+  })
+
   it(
     'uses the full file name as the editable default title',
     async () => {
@@ -319,6 +332,14 @@ describe('MaterialsPage', () => {
     fireEvent.submit(form!)
 
     await waitFor(() => expect(uploadCalls).toBe(1))
+    const replacement = new File(['pdf'], 'replacement.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText('PDF 파일'), {
+      target: { files: [replacement] },
+    })
+    fireEvent.drop(screen.getByLabelText('PDF 업로드 드롭 영역'), {
+      dataTransfer: { files: [replacement] },
+    })
+    expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('lecture')
     resolveUpload(apiSuccess({
       createdAt: '2026-08-12T00:00:00Z',
       materialId: 99,
@@ -326,6 +347,51 @@ describe('MaterialsPage', () => {
       title: 'lecture',
     }))
     expect(await screen.findByRole('heading', { name: 'lecture' })).toBeInTheDocument()
+  })
+
+  it('aborts a pending browser upload and ignores a late completion', async () => {
+    let uploadSignal: AbortSignal | undefined
+    let resolveUpload!: (response: Response) => void
+    const pendingUpload = new Promise<Response>((resolve) => {
+      resolveUpload = resolve
+    })
+    installMaterialsFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'POST' && url.pathname === '/api/materials') {
+        uploadSignal = request.signal
+        return pendingUpload
+      }
+      return undefined
+    })
+    renderMaterialsPage()
+    await screen.findByText('시험 대비 요약.pdf')
+
+    fireEvent.change(screen.getByLabelText('PDF 파일'), {
+      target: {
+        files: [new File(['pdf'], 'cancelled.pdf', { type: 'application/pdf' })],
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '업로드' }))
+
+    const cancelButton = await screen.findByRole('button', { name: '업로드 취소' })
+    fireEvent.click(cancelButton)
+
+    expect(uploadSignal?.aborted).toBe(true)
+    expect(screen.getByRole('button', { name: '업로드' })).toBeEnabled()
+    expect(screen.getByRole('textbox', { name: '자료 제목' })).toHaveValue('cancelled.pdf')
+
+    await act(async () => {
+      resolveUpload(apiSuccess({
+        createdAt: '2026-08-12T00:00:00Z',
+        materialId: 100,
+        processingStatus: 'PROCESSING',
+        title: 'late upload',
+      }))
+      await pendingUpload
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'late upload' })).not.toBeInTheDocument()
+    })
   })
 })
 

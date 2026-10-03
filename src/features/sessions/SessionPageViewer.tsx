@@ -55,6 +55,7 @@ export function SessionPageViewer({
   const [isOutlineVisible, setIsOutlineVisible] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const [documentRetryKey, setDocumentRetryKey] = useState(0)
   const { isMobileWeb } = useResponsiveViewport()
   const moreRef = useRef<HTMLDivElement>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
@@ -341,8 +342,15 @@ export function SessionPageViewer({
       {file ? (
         <Document
           className={viewerGridClassName}
-          error={<DocumentState isError message="PDF 문서를 열지 못했습니다." />}
+          error={(
+            <DocumentState
+              isError
+              message="PDF 문서를 열지 못했습니다."
+              onRetry={() => setDocumentRetryKey((current) => current + 1)}
+            />
+          )}
           file={file}
+          key={documentRetryKey}
           loading={<DocumentState message="PDF 문서를 준비하는 중입니다." />}
           onLoadSuccess={(document) => {
             // 시작 페이지와 역할에 상관없이 같은 문서는 같은 크기로 표시한다.
@@ -415,6 +423,7 @@ export function SessionPageViewer({
                   ? 'PDF 원본을 불러오는 중입니다.'
                   : (fileError ?? 'PDF 원본을 표시할 수 없습니다.')
               }
+              onRetry={file === null ? () => window.location.reload() : undefined}
             />
             <PageNavigation
               currentPage={currentPage}
@@ -551,16 +560,18 @@ function LazyPageThumbnail({ pageNumber }: { pageNumber: number }) {
   )
 }
 
-function DocumentState({
+export function DocumentState({
   isError = false,
   message,
+  onRetry,
 }: {
   isError?: boolean
   message: string
+  onRetry?: () => void
 }) {
   return (
     <div className="col-span-full flex min-h-0 items-center justify-center bg-white p-6">
-      <ViewerState isError={isError} message={message} />
+      <ViewerState isError={isError} message={message} onRetry={onRetry} />
     </div>
   )
 }
@@ -568,21 +579,32 @@ function DocumentState({
 function ViewerState({
   isError = false,
   message,
+  onRetry,
 }: {
   isError?: boolean
   message: string
+  onRetry?: () => void
 }) {
   return (
     <div
       className={cx(
-        'flex h-full max-h-[36rem] min-h-64 w-full max-w-md items-center justify-center rounded-sm border bg-white px-6 text-center type-body ',
+        'flex h-full max-h-[36rem] min-h-64 w-full max-w-md flex-col items-center justify-center gap-3 rounded-sm border bg-white px-6 text-center type-body ',
         isError
           ? 'border-rose-200 text-rose-700'
           : 'border-stone-200 text-stone-500',
       )}
       role={isError ? 'alert' : 'status'}
     >
-      {message}
+      <span>{message}</span>
+      {onRetry ? (
+        <button
+          className="min-h-9 rounded-lg border border-stone-300 bg-white px-3.5 py-2 type-body font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          onClick={onRetry}
+          type="button"
+        >
+          다시 시도
+        </button>
+      ) : null}
     </div>
   )
 }
