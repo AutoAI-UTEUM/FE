@@ -30,7 +30,7 @@ test.describe('UI-04/05 independent acceptance', () => {
     void page
     test.skip(qaEnvironment !== 'mock', 'synthetic content and failure injection run against mock only')
     test.skip(
-      !new Set(['chromium-1440', 'phone-360', 'phone-390', 'tablet-800-landscape', 'tablet-820-landscape', 'webkit-1440']).has(testInfo.project.name),
+      !new Set(['chromium-1440', 'phone-360', 'phone-390', 'tablet-768-portrait', 'tablet-800-landscape', 'tablet-820-landscape', 'webkit-1440']).has(testInfo.project.name),
       'representative desktop, phone, tablet, and alternate-engine projects only',
     )
   })
@@ -82,22 +82,20 @@ test.describe('UI-04/05 independent acceptance', () => {
     await expect(learningPanel.locator('table')).toBeVisible()
     await expect(learningPanel.locator('pre')).toContainText('const verified = true')
     await expect(learningPanel.getByRole('link', { name: '긴 URL' })).toBeVisible()
-    if (testInfo.project.name === 'chromium-1440') {
-      const scan = await new AxeBuilder({ page })
-        .include('[aria-label="AI 학습 패널"]')
-        .withTags(['wcag2a', 'wcag2aa'])
-        .analyze()
-      const serious = scan.violations.filter((violation) => (
-        violation.impact === 'critical' || violation.impact === 'serious'
-      ))
-      if (serious.length > 0) {
-        await testInfo.attach('learning-panel-accessibility-violations.json', {
-          body: Buffer.from(JSON.stringify(serious, null, 2)),
-          contentType: 'application/json',
-        })
-      }
-      expect.soft(serious, 'learning panel serious or critical axe violations').toEqual([])
+    const scan = await new AxeBuilder({ page })
+      .include('[aria-label="AI 학습 패널"]')
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze()
+    const serious = scan.violations.filter((violation) => (
+      violation.impact === 'critical' || violation.impact === 'serious'
+    ))
+    if (serious.length > 0) {
+      await testInfo.attach('learning-panel-accessibility-violations.json', {
+        body: Buffer.from(JSON.stringify(serious, null, 2)),
+        contentType: 'application/json',
+      })
     }
+    expect.soft(serious, 'learning panel serious or critical axe violations').toEqual([])
 
     const question = learningPanel.locator('#chat-question')
     await tabTo(page, question)

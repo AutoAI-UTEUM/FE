@@ -94,10 +94,16 @@ for (const role of ['LEARNER', 'INSTRUCTOR', 'ADMIN'] as const) {
             ))
             expect.soft(pageOverflow, 'Admin updates must not create page-level vertical scrolling').toBeLessThanOrEqual(2)
             await expect(page.getByRole('combobox', { name: '개발 파트' })).toBeVisible()
-            await expect(
-              page.getByRole('navigation', { name: '주요 메뉴' })
-                .getByRole('link', { name: '업데이트' }),
-            ).toHaveAttribute('aria-current', 'page')
+            const primaryUpdateLink = page.getByRole('navigation', { name: '주요 메뉴' })
+              .getByRole('link', { name: '업데이트' })
+            if (await primaryUpdateLink.count()) {
+              await expect(primaryUpdateLink).toHaveAttribute('aria-current', 'page')
+            } else {
+              await expect(
+                page.getByRole('navigation', { name: '하단 주요 메뉴' })
+                  .getByRole('button', { name: '프로필 메뉴' }),
+              ).toHaveAttribute('aria-current', 'page')
+            }
           }
         })
       }
