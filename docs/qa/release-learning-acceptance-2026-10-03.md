@@ -2,8 +2,8 @@
 
 - Date: 2026-10-03 (UTC)
 - Independent worktree: `validate/learn-quiz-exam-qa-acceptance`
-- Candidate: `e76808a` (PR #204 merged locally with `develop`)
-- Develop base: `e578dbe6ba2c286021b34d6b6e27e131531b5324`
+- Candidate: `55fc252` (PR #204 merged locally with `develop`)
+- Develop base: `8a6c64f653c52502b56600a0d41fda90a806e518`
 - Safety: synthetic local API/SSE only; no AI provider call, real exam submission, persistent product-data mutation, or real credential use
 - Scope note: the repository and its local history contain no `QuizEditor` component. The current authoring surface is `ExamEditor`; `QuizEditor`-specific and unknown backend contracts are marked `NOTRUN`.
 
@@ -20,7 +20,7 @@ The repository does not contain the source ticket text for the supplied IDs. The
 | LEARN-06: synthetic hidden-state ordering and `TURN_IN_PROGRESS` recovery | PASS | component/unit | A stream closed after synthetic `document.visibilityState = hidden` ordering is reconciled from the posted result with one POST; conflict recovery polls without reposting. This does not claim a browser lifecycle-specific `visibilitychange` handler. |
 | LEARN-08: fast page 1→2→3 and stale/cancel boundaries | PASS | Chromium + component | Chromium sends one final PATCH `{pageNumber:3}`; cancellation removes only its temporary stream, preserves an older completed response, and never reposts; stale navigation/unmount results are ignored |
 | LEARN-08: browser back preserves prior response and avoids repost | PASS | Chromium | Client-side move to classrooms and Chromium back restore the prior response while turn POST remains exactly one |
-| LEARN-08: browser back preserves unsent question draft | NOTRUN | separate workstream | The defect and fix are covered by PR #207's dedicated Chromium evidence; this PR contains no durable reproduction artifact and does not claim one. |
+| LEARN-08: browser back preserves unsent question draft | PASS | Chromium on merged base | PR #207 is included in the develop base; `e2e/chat-draft.local.spec.ts` verifies back restoration, session/owner isolation, and submit clearing with synthetic APIs. |
 | QUIZ-01: progressive question stream and persisted restore | PASS | component/unit | Streamed questions retain answers; saved quiz restores without AI message or `completed` |
 | QUIZ-04: learner answer/result states | PASS | component/unit | Empty answer validation, O/X fallback, duplicate-submit lock, review answer/verdict/score/explanation restoration |
 | EXAM-01: current editor contract | PASS | component/unit | Empty/Unicode-only required text, meaningful Unicode, MCQ/OX/SHORT/ESSAY transitions, four MCQ options, fractional points totalling 10, cancel/reopen reset |
@@ -65,12 +65,12 @@ New independent evidence:
 | `npm run build` | PASS | production build completed; existing large-chunk warnings only |
 | Targeted unit/component | PASS | 13 files / 198 tests |
 | Targeted Chromium mock | PASS | 1 test / Chromium 1440 |
-| Full `npm run test:run` (CI env, single worker) | FAIL (base-confirmed) | Candidate `e76808a` on develop `e578dbe`: 92 files passed, 1 failed; 787 tests passed, 1 failed. `AuthProvider.multitab.test.tsx` fails with the known stale `shared-token` call; PR #206 contains the isolated fix and must land before this candidate is refreshed and rerun. |
+| Full `npm run test:run` (CI env) | PASS | Candidate `55fc252` on develop `8a6c64f`: 94 files passed; 837 tests passed. PR #206's auth race fixes and PR #207's material/note/draft fixes are included in the base. |
 | Existing full mock smoke | FAIL (baseline/out of scope) | WCAG contrast failures (`#8a94a6` on white/light backgrounds) and a 28px touch target; not changed because they are outside the delegated feature/file scope |
 
 ## Review and disposition
 
-- The separately reported unsent chat draft loss is owned and evidenced by PR #207; this PR neither reproduces nor fixes it.
+- The separately reported unsent chat draft loss was fixed and evidenced by merged PR #207; this PR's develop base includes that result.
 - Product implementation files were not changed.
 - `InstructorExamSubmissionPage*`, `SessionDetailPage.tsx`, `QuizPage.tsx`, and `DiagnosisPage.tsx` were not modified.
-- Draft PR #204 remains test-only. Merge remains parent-coordinated; the local full-suite failure is independently reproduced on clean develop and is not caused by this branch.
+- PR #204 remains test-only. The refreshed candidate is green on the merged PR #206/#207 develop base and remains parent-coordinated for merge.
