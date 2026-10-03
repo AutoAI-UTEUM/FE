@@ -3,7 +3,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MutableRefObject } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -29,11 +29,30 @@ export function InstructorClassroomEditPage() {
   const { classroomId = '' } = useParams()
   const { user } = useAuth()
   const accountScope = user?.id ?? user?.email ?? 'anonymous'
+  const accountScopeRef = useRef(accountScope)
+  useLayoutEffect(() => {
+    accountScopeRef.current = accountScope
+  }, [accountScope, accountScopeRef])
   // Each route owns its state and pending work, including direct/legacy mounts.
-  return <InstructorClassroomEditPageScope classroomId={classroomId} key={`${accountScope}:${classroomId}`} />
+  return (
+    <InstructorClassroomEditPageScope
+      accountScope={accountScope}
+      accountScopeRef={accountScopeRef}
+      classroomId={classroomId}
+      key={`${accountScope}:${classroomId}`}
+    />
+  )
 }
 
-function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string }) {
+function InstructorClassroomEditPageScope({
+  accountScope,
+  accountScopeRef,
+  classroomId,
+}: {
+  accountScope: string | number
+  accountScopeRef: MutableRefObject<string | number>
+  classroomId: string
+}) {
   const activeRef = useRef(false)
   const completeLockRef = useRef(false)
   const deleteLockRef = useRef(false)
@@ -189,6 +208,7 @@ function InstructorClassroomEditPageScope({ classroomId }: { classroomId: string
           setClassroom((current) => current?.id === classroomId ? updatedClassroom : current)
         }
       }
+      if (accountScopeRef.current !== accountScope) return
       const changedWeeks = weeks.filter((week) => {
         const nextTitle = submittedWeekTitles[week.weekNumber] ?? ''
         return nextTitle && nextTitle !== week.title

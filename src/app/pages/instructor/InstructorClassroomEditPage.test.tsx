@@ -514,6 +514,40 @@ describe('InstructorClassroomEditPage', () => {
     expect(screen.queryByText('OLD-ACCOUNT')).not.toBeInTheDocument()
   })
 
+  it('does not start old-account week updates after a pending classroom save crosses an account change', async () => {
+    const classroomSave = deferred<Response>()
+    let account = 'old'
+    let weekPatchCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const { method, pathname } = requestDetails(input, init)
+      if (pathname === '/api/classrooms/12' && method === 'PATCH') return classroomSave.promise
+      if (pathname === '/api/classrooms/12/weeks/1' && method === 'PATCH') {
+        weekPatchCalls += 1
+        return success(createWeeks(1)[0])
+      }
+      if (pathname === '/api/classrooms/12') {
+        return success({ ...classroomFixture, name: account === 'old' ? '자료구조' : '새 계정 강의실' })
+      }
+      if (pathname === '/api/classrooms/12/weeks') return success({ items: createWeeks(1) })
+      if (pathname === '/api/classrooms/12/invite-code') return success({ inviteCode: account === 'old' ? 'OLD-CODE' : 'NEW-CODE' })
+      return new Response(null, { status: 404 })
+    })
+    renderEditor(<AccountSwitchButton onSwitch={() => { account = 'new' }} />)
+
+    fireEvent.change(await screen.findByDisplayValue('자료구조'), { target: { value: '이전 계정 수정' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '1주차 이름' }), { target: { value: '이전 계정 주차 수정' } })
+    fireEvent.submit(document.getElementById('classroom-edit-form') as HTMLFormElement)
+    fireEvent.click(screen.getByRole('button', { name: '계정 전환' }))
+    expect(await screen.findByDisplayValue('새 계정 강의실')).toBeInTheDocument()
+
+    await act(async () => {
+      classroomSave.resolve(success({ ...classroomFixture, name: '이전 계정 수정' }))
+      await classroomSave.promise
+    })
+    expect(weekPatchCalls).toBe(0)
+    expect(screen.getByDisplayValue('새 계정 강의실')).toBeInTheDocument()
+  })
+
   it('keeps delete confirmation on failure, locks duplicates, clears on cancel, and ignores a late success in another account scope', async () => {
     const deleteRequest = deferred<Response>()
     let deleteCalls = 0
