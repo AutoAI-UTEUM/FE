@@ -188,7 +188,11 @@ function AddItemButtons({ disabled, onAdd }: { disabled: boolean; onAdd: (kind: 
   ] as const
 
   return <div aria-label="새 항목 유형" className="mobile-horizontal-scroll flex flex-wrap items-center gap-2 sm:ml-auto mobile-phone:flex-nowrap mobile-phone:overflow-x-auto" role="group">
-    {items.map(([kind, Icon, label], index) => <Button className="h-9 min-h-9 shrink-0" disabled={disabled} key={kind} onClick={() => onAdd(kind)} size="sm" variant={index === 0 ? 'primary' : 'secondary'}><Icon size={14} />{label}</Button>)}
+    {items.map(([kind, Icon, label], index) => <Button className="h-9 min-h-9 shrink-0" disabled={disabled} key={kind} onClick={(event) => {
+      // Safari does not focus buttons on click, so preserve dialog return focus explicitly.
+      event.currentTarget.focus({ preventScroll: true })
+      onAdd(kind)
+    }} size="sm" variant={index === 0 ? 'primary' : 'secondary'}><Icon size={14} />{label}</Button>)}
   </div>
 }
 

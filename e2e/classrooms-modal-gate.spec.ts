@@ -6,7 +6,6 @@ test.describe('learner classroom modal release gate', () => {
 
     await page.goto('/classrooms')
     const opener = page.getByRole('button', { name: '강의실 검색', exact: true })
-    await opener.focus()
     await opener.click()
 
     const dialog = page.getByRole('dialog', { name: '강의실 검색' })
@@ -47,7 +46,6 @@ test.describe('learner classroom modal release gate', () => {
 
     await page.goto('/classrooms')
     const opener = page.getByRole('button', { name: '강의실 참여', exact: true })
-    await opener.focus()
     await opener.click()
 
     const dialog = page.getByRole('dialog', { name: '강의실 참여' })
@@ -110,7 +108,6 @@ test.describe('learner classroom modal release gate', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Synthetic classroom' })).toBeVisible()
 
     const lessonTrigger = page.getByRole('button', { name: '수업 생성', exact: true })
-    await lessonTrigger.focus()
     await lessonTrigger.click()
     const lessonDialog = page.getByRole('dialog', { name: '수업 생성' })
     const weekSelect = lessonDialog.getByRole('combobox', { name: '주차 선택' })
