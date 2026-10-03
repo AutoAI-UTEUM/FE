@@ -96,6 +96,7 @@ export interface StreamQuizQuestion {
 export interface SessionQuizSummary {
   createdAt?: string
   maxScore?: number
+  page?: number
   passed?: boolean
   quizId: string
   quizType: string
