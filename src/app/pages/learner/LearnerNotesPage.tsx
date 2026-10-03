@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronDown, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../../../features/auth'
@@ -88,6 +88,7 @@ export function LearnerNotesPage() {
   )
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const manualNotesOwnerControllerRef = useRef<AbortController | null>(null)
 
   async function load() {
     setIsLoading(true)
@@ -113,20 +114,31 @@ export function LearnerNotesPage() {
    * 이관 호출 자체가 실패하면 아직 로컬에만 있는 노트를 서버 목록으로 덮지 않는다.
    */
   async function syncManualNotes() {
+    const ownerController = manualNotesOwnerControllerRef.current
+    if (!ownerController) return
+    const isCurrentOwner = () =>
+      manualNotesOwnerControllerRef.current === ownerController
+      && !ownerController.signal.aborted
+
     setImportError(null)
     setManualNotesError(null)
     try {
       const result = await manualNotesStore.migrate()
+      if (!isCurrentOwner()) return
       setImportFailures(result?.failed ?? [])
     } catch (requestError) {
+      if (!isCurrentOwner()) return
       setManualNotes(manualNotesStore.readLocal())
       setImportError(getRequestErrorMessage(requestError))
       return
     }
     try {
-      setManualNotes(await manualNotesStore.list())
+      const notes = await manualNotesStore.list(ownerController.signal)
+      if (!isCurrentOwner()) return
+      setManualNotes(notes)
       setIsShowingManualCache(false)
     } catch (requestError) {
+      if (!isCurrentOwner()) return
       setManualNotes(manualNotesStore.readLocal())
       setManualNotesError(getRequestErrorMessage(requestError))
       setIsShowingManualCache(true)
@@ -161,6 +173,8 @@ export function LearnerNotesPage() {
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    manualNotesOwnerControllerRef.current = controller
     void (async () => {
       try {
         const result = await manualNotesStore.migrate()
@@ -173,7 +187,7 @@ export function LearnerNotesPage() {
         return
       }
       try {
-        const notes = await manualNotesStore.list()
+        const notes = await manualNotesStore.list(controller.signal)
         if (!cancelled) {
           setManualNotes(notes)
           setIsShowingManualCache(false)
@@ -188,6 +202,10 @@ export function LearnerNotesPage() {
     })()
     return () => {
       cancelled = true
+      controller.abort()
+      if (manualNotesOwnerControllerRef.current === controller) {
+        manualNotesOwnerControllerRef.current = null
+      }
     }
   }, [manualNotesStore])
 
