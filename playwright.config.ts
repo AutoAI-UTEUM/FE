@@ -2,6 +2,10 @@ import { defineConfig, devices, type Project } from '@playwright/test'
 
 const qaEnvironment = process.env.QA_ENV ?? 'mock'
 const fullMatrix = process.env.QA_FULL_MATRIX === '1'
+const qaApiCapabilities = process.env.QA_API_CAPABILITIES ?? (qaEnvironment === 'dev'
+  ? 'reports,password-reset,exam-attempt-drafts,exam-learner-regrade,policy-consent'
+  : 'reports,policy-consent')
+process.env.QA_API_CAPABILITIES = qaApiCapabilities
 const artifactRoot = `qa-artifacts/${qaEnvironment}`
 const baseURL = qaEnvironment === 'prod'
   ? 'https://www.uteum.com'
@@ -61,11 +65,11 @@ export default defineConfig({
   },
   webServer: qaEnvironment === 'mock'
     ? {
-        command: 'npm run build:qa && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4173 --strictPort',
+        command: 'npm run build && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4173 --strictPort',
         env: {
           ...process.env,
           VITE_API_BASE_URL: '/api',
-          VITE_API_CAPABILITIES: 'reports,password-reset,oauth,schedule,analytics',
+          VITE_API_CAPABILITIES: qaApiCapabilities,
           VITE_DEV_PROXY_TARGET: 'mock',
         },
         reuseExistingServer: false,

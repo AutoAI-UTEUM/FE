@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
 
-import { loginAs, qaEnvironment, waitForAppSettled } from './qa-helpers'
+import { hasQaApiCapability, loginAs, qaEnvironment, waitForAppSettled } from './qa-helpers'
 
 interface PerformanceSnapshot {
   cls: number
@@ -59,7 +59,7 @@ test.describe('frontend performance', () => {
       const lcpBudget = isMobile ? 4_000 : 2_500
       if (cold.lcpMs > 0) expect.soft(cold.lcpMs, 'median cold LCP budget').toBeLessThanOrEqual(lcpBudget)
       expect.soft(cold.cls, 'median cold CLS budget').toBeLessThanOrEqual(0.1)
-      expect.soft(cold.interactionMs ?? 0, 'forgot-password interaction budget').toBeLessThanOrEqual(200)
+      expect.soft(cold.interactionMs ?? 0, 'password recovery route interaction budget').toBeLessThanOrEqual(200)
       expect.soft(cold.longTaskDurationMs, 'long task total should remain bounded').toBeLessThanOrEqual(1_000)
       expect.soft(cold.duplicateGets, 'login must not issue duplicate GET requests').toEqual([])
     }
@@ -70,6 +70,8 @@ test.describe('frontend performance', () => {
     test.setTimeout(120_000)
     const loggedIn = await loginAs(page, 'LEARNER')
     test.skip(!loggedIn, `${qaEnvironment} learner QA credentials are not configured`)
+    await waitForAppSettled(page)
+    await page.waitForLoadState('networkidle')
 
     const requests: Array<{ method: string; url: string }> = []
     page.on('request', (request) => {
@@ -144,7 +146,11 @@ async function measureLogin(
   await page.waitForTimeout(500)
   const interactionStartedAt = performance.now()
   await page.getByRole('link', { name: '비밀번호 찾기' }).click()
-  await page.getByRole('heading', { name: '비밀번호 찾기' }).waitFor({ state: 'visible' })
+  await page.getByRole('heading', {
+    name: hasQaApiCapability('password-reset')
+      ? '비밀번호 찾기'
+      : '현재 이용할 수 없습니다',
+  }).waitFor({ state: 'visible' })
   const interactionMs = Math.round((performance.now() - interactionStartedAt) * 10) / 10
 
   const metrics = await page.evaluate(() => {

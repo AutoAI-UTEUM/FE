@@ -31,6 +31,8 @@ test.describe('shared authenticated palette', () => {
           const sidebar = element.querySelector(':scope > aside')!
           const main = element.querySelector(':scope > main')!
           return {
+            layoutWidth: document.body.getBoundingClientRect().width,
+            shellWidth: element.getBoundingClientRect().width,
             sidebarWidth: sidebar.getBoundingClientRect().width,
             contentInset: getComputedStyle(main).paddingLeft,
             contentWidth: main.firstElementChild?.getBoundingClientRect().width,
@@ -38,9 +40,10 @@ test.describe('shared authenticated palette', () => {
         })
         const viewportWidth = page.viewportSize()!.width
         const inset = Math.min(40, Math.max(16, viewportWidth * 0.03))
+        expect(shell.shellWidth).toBeCloseTo(shell.layoutWidth, 1)
         expect(shell.sidebarWidth).toBe(232)
         expect(parseFloat(shell.contentInset)).toBeCloseTo(inset, 1)
-        expect(shell.contentWidth).toBeCloseTo(viewportWidth - 232 - inset * 2, 1)
+        expect(shell.contentWidth).toBeCloseTo(shell.shellWidth - 232 - inset * 2, 1)
       }
       await expect(page.locator('[data-app-shell="true"] > aside a[aria-label$="홈"] > span').first()).toContainText('으')
       if (role !== 'ADMIN') {
