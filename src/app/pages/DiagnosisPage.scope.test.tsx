@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CorrectionMessage, PendingDiagnosis } from '../../features/diagnosis'
+import { ApiClientError } from '../../shared/api'
 import { DiagnosisPage } from './DiagnosisPage'
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +48,11 @@ function Harness() {
       <Route path="/sessions/:sessionId" element={<p>Session destination</p>} />
       <Route path="/outside" element={<p>Outside</p>} />
     </Routes>
+  </MemoryRouter>
+}
+function MissingParamsHarness() {
+  return <MemoryRouter initialEntries={['/sessions/100/diagnosis']}>
+    <DiagnosisPage />
   </MemoryRouter>
 }
 async function submitDraft() {
@@ -225,5 +231,79 @@ describe('DiagnosisPage scope isolation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'OX' }))
     expect(await screen.findByText('Session destination')).toBeInTheDocument()
     expect(mocks.submitTurn).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the submitted answer and correction when a retest has no active quiz and retries once', async () => {
+    mocks.submitTurn.mockResolvedValueOnce({ activeQuizId: undefined })
+    render(<Harness />)
+    await submitDraft()
+    await screen.findByRole('heading', { name: 'Correction A' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'OX' }))
+
+    expect(await screen.findByRole('alert')).not.toBeEmptyDOMElement()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getByRole('heading', { name: 'Correction A' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toHaveValue('My diagnosis answer')
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'OX' })).toBeEnabled()
+    expect(mocks.submitTurn).toHaveBeenCalledTimes(1)
+    expect(mocks.submitTurn).toHaveBeenNthCalledWith(
+      1,
+      '100',
+      expect.objectContaining({
+        eventType: 'QUIZ_TYPE_SELECTED',
+        payload: { quizType: 'OX' },
+        requestId: expect.any(String),
+      }),
+      expect.any(AbortSignal),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'OX' }))
+
+    expect(await screen.findByText('Session destination')).toBeInTheDocument()
+    expect(mocks.submitTurn).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { code: 'RETEST_CONFLICT', message: 'Retest conflict', status: 409 },
+    { code: 'RATE_LIMITED', message: 'Retest rate limited', status: 429 },
+    { code: 'SERVICE_UNAVAILABLE', message: 'Retest unavailable', status: 503 },
+  ])('preserves the correction and retries after the $status retest contract', async ({ code, message, status }) => {
+    mocks.submitTurn.mockRejectedValueOnce(new ApiClientError({ code, message, status }))
+    render(<Harness />)
+    await submitDraft()
+    await screen.findByRole('heading', { name: 'Correction A' })
+
+    fireEvent.click(screen.getByRole('button', { name: '객관식' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('heading', { name: 'Correction A' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toHaveValue('My diagnosis answer')
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '객관식' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '객관식' }))
+
+    expect(await screen.findByText('Session destination')).toBeInTheDocument()
+    expect(mocks.submitTurn).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers a non-mutating session exit when restore returns null', async () => {
+    mocks.restore.mockResolvedValueOnce(null)
+    render(<Harness />)
+
+    expect(await screen.findByRole('link')).toHaveAttribute('href', '/sessions/100')
+    expect(mocks.submitAnswer).not.toHaveBeenCalled()
+    expect(mocks.submitTurn).not.toHaveBeenCalled()
+  })
+
+  it('offers a non-mutating classroom exit when route identifiers are missing', async () => {
+    render(<MissingParamsHarness />)
+
+    expect(await screen.findByRole('link')).toHaveAttribute('href', '/classrooms')
+    expect(mocks.restore).not.toHaveBeenCalled()
+    expect(mocks.submitAnswer).not.toHaveBeenCalled()
+    expect(mocks.submitTurn).not.toHaveBeenCalled()
   })
 })
