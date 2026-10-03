@@ -75,6 +75,114 @@ function renderLogin(path: LoginEntry = '/login') {
 }
 
 describe('LoginPage', () => {
+  it('locks duplicate password submissions and ignores Google credentials while password login is pending', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    const passwordGate = deferred<void>()
+    let passwordCalls = 0
+    let googleCalls = 0
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/api/auth/login')) {
+        passwordCalls += 1
+        await passwordGate.promise
+      }
+      if (String(input).endsWith('/api/auth/google')) googleCalls += 1
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderLogin()
+
+    fireEvent.change(document.querySelector('#login-email') as HTMLInputElement, {
+      target: { value: 'learner@example.com' },
+    })
+    fireEvent.change(document.querySelector('#login-password') as HTMLInputElement, {
+      target: { value: 'password-123' },
+    })
+    const form = document.querySelector('#login-email')?.closest('form') as HTMLFormElement
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    await vi.waitFor(() => expect(passwordCalls).toBe(1))
+    expect(document.querySelector('.google-signin-button')?.parentElement).toHaveAttribute('aria-disabled', 'true')
+    await vi.waitFor(() => expect(document.querySelector('.google-signin-button button')).not.toBeNull())
+    fireEvent.click(document.querySelector('.google-signin-button button') as HTMLButtonElement)
+    expect(googleCalls).toBe(0)
+
+    passwordGate.resolve()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="current-location"]') ?? document.body).toBeInTheDocument())
+  })
+
+  it('ignores password submission while Google authentication is pending', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    const googleGate = deferred<void>()
+    let passwordCalls = 0
+    let googleCalls = 0
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/api/auth/google')) {
+        googleCalls += 1
+        await googleGate.promise
+      }
+      if (String(input).endsWith('/api/auth/login')) passwordCalls += 1
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderLogin()
+    await vi.waitFor(() => expect(document.querySelector('.google-signin-button button')).not.toBeNull())
+
+    fireEvent.click(document.querySelector('.google-signin-button button') as HTMLButtonElement)
+    await vi.waitFor(() => expect(googleCalls).toBe(1))
+    fireEvent.change(document.querySelector('#login-email') as HTMLInputElement, {
+      target: { value: 'learner@example.com' },
+    })
+    fireEvent.change(document.querySelector('#login-password') as HTMLInputElement, {
+      target: { value: 'password-123' },
+    })
+    fireEvent.submit(document.querySelector('#login-email')?.closest('form') as HTMLFormElement)
+
+    expect(passwordCalls).toBe(0)
+    googleGate.resolve()
+  })
+
+  it.each([
+    { code: 'VALIDATION_FAILED', details: [{ field: 'password', reason: 'Synthetic validation failure' }], expectedField: 'password', status: 400 },
+    { code: 'INVALID_CREDENTIALS', details: [], expectedField: 'email', status: 401 },
+    { code: 'ACCOUNT_SUSPENDED', details: [], expectedField: null, status: 409 },
+    { code: 'LOGIN_RATE_LIMITED', details: [], expectedField: null, status: 429 },
+  ])('preserves login input and exposes a retryable error for HTTP $status', async ({ code, details, expectedField, status }) => {
+    let loginCalls = 0
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/api/auth/login')) {
+        loginCalls += 1
+        return new Response(JSON.stringify({
+          error: { code, details, message: 'Raw synthetic server message' },
+          success: false,
+        }), {
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '120' },
+          status,
+        })
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderLogin()
+    const email = document.querySelector('#login-email') as HTMLInputElement
+    const password = document.querySelector('#login-password') as HTMLInputElement
+    fireEvent.change(email, { target: { value: 'learner@example.com' } })
+    fireEvent.change(password, { target: { value: 'password-123' } })
+    const form = email.closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+
+    await vi.waitFor(() => expect(loginCalls).toBe(1))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(email).toHaveValue('learner@example.com')
+    expect(password).toHaveValue('password-123')
+    expect(form.querySelector('button[type="submit"]')).toBeEnabled()
+    if (expectedField) {
+      expect(document.querySelector(`#login-${expectedField}`)).toHaveAttribute('aria-invalid', 'true')
+    }
+  })
+
   it('toggles the local login password visibility', () => {
     renderLogin()
 
@@ -476,4 +584,12 @@ function apiFailure(code: string, status: number): Response {
     headers: { 'Content-Type': 'application/json' },
     status,
   })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
 }

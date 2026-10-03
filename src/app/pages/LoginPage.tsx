@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
@@ -45,6 +45,7 @@ export function LoginPage() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
+  const activeAuthAttemptRef = useRef<'google' | 'password' | null>(null)
   const isSessionExpired = searchParams.get('reason') === 'session-expired'
   const isIdleExpired = searchParams.get('reason') === 'idle'
   const isAbsoluteExpired = searchParams.get('reason') === 'absolute-expired'
@@ -67,10 +68,12 @@ export function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (activeAuthAttemptRef.current) return
     const nextErrors = validateLoginForm(values)
     setErrors(nextErrors)
     if (hasFormErrors(nextErrors)) return
 
+    activeAuthAttemptRef.current = 'password'
     setIsSubmitting(true)
     setServerError(null)
     try {
@@ -84,7 +87,10 @@ export function LoginPage() {
           getLoginErrorMessage(error) ?? '로그인 요청을 처리하지 못했습니다.',
         )
     } finally {
-      setIsSubmitting(false)
+      if (activeAuthAttemptRef.current === 'password') {
+        activeAuthAttemptRef.current = null
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -95,6 +101,8 @@ export function LoginPage() {
   }
 
   async function handleGoogleCredential(idToken: string) {
+    if (activeAuthAttemptRef.current) return
+    activeAuthAttemptRef.current = 'google'
     setIsGoogleSubmitting(true)
     setGoogleError(null)
 
@@ -126,7 +134,10 @@ export function LoginPage() {
           'Google 로그인 요청을 처리하지 못했습니다.',
       )
     } finally {
-      setIsGoogleSubmitting(false)
+      if (activeAuthAttemptRef.current === 'google') {
+        activeAuthAttemptRef.current = null
+        setIsGoogleSubmitting(false)
+      }
     }
   }
 
@@ -191,7 +202,7 @@ export function LoginPage() {
         </div>
         <Button
           className="mt-6 h-11 w-full"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isGoogleSubmitting}
           type="submit"
         >
           {isSubmitting ? '로그인 중' : '로그인'}
@@ -205,7 +216,7 @@ export function LoginPage() {
       ) : null}
       <div className="mt-3">
         <GoogleSignInButton
-          disabled={isGoogleSubmitting}
+          disabled={isSubmitting || isGoogleSubmitting}
           onCredential={(idToken) => void handleGoogleCredential(idToken)}
         />
         {isGoogleSubmitting ? (

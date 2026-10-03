@@ -5,6 +5,7 @@ import '@fontsource-variable/noto-sans-kr'
 
 import { App } from './app/App'
 import { AppErrorBoundary } from './app/AppErrorBoundary'
+import { reportRenderError } from './app/renderErrorReporter'
 import './index.css'
 import { registerStaleAssetRecovery } from './shared/runtime/staleAssetRecovery'
 
@@ -16,7 +17,10 @@ if (!rootElement) {
   throw new Error('루트 엘리먼트 #root를 찾을 수 없습니다.')
 }
 
-createRoot(rootElement).render(
+createRoot(rootElement, {
+  onCaughtError: reportRenderError,
+  onUncaughtError: reportRenderError,
+}).render(
   <StrictMode>
     <AppErrorBoundary>
       <App />

@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
 
 import { SERVICE_NAME } from '../shared/config/brand'
+import { reportRenderError } from './renderErrorReporter'
 
 interface AppErrorBoundaryProps {
   children: ReactNode
@@ -23,7 +24,7 @@ export class AppErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Application render failed.', error, errorInfo)
+    reportRenderError(error, errorInfo)
   }
 
   private handleReload = () => {

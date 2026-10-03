@@ -12,6 +12,42 @@ afterEach(() => {
 })
 
 describe('AdminPage', () => {
+  it('confirms once and locks repeated password resets while the request is pending', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const resetGate = deferred<Response>()
+    let resetCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      if (url.pathname === '/api/admin/users/7/password-reset' && init?.method === 'POST') {
+        resetCalls += 1
+        return resetGate.promise
+      }
+      if (url.pathname === '/api/admin/users/7') {
+        return success({ affiliation: 'Test school', authProvider: 'LOCAL', consentedAt: null, createdAt: '2026-09-01T00:00:00Z', email: 'member@example.com', id: 7, name: 'Member', role: 'LEARNER', status: 'ACTIVE' })
+      }
+      if (url.pathname === '/api/admin/users') {
+        return success({ items: [{ authProvider: 'LOCAL', createdAt: '2026-09-01T00:00:00Z', email: 'member@example.com', id: 7, lastActiveAt: new Date().toISOString(), name: 'Member', role: 'LEARNER', status: 'ACTIVE' }], page: 0, size: 17, totalElements: 1, totalPages: 1 })
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    render(<ResponsiveViewportProvider><TestAuthProvider><MemoryRouter><AdminPage /></MemoryRouter></TestAuthProvider></ResponsiveViewportProvider>)
+    await waitFor(() => expect(document.querySelector('tbody button[aria-expanded]')).not.toBeNull())
+    fireEvent.click(document.querySelector('tbody button[aria-expanded]') as HTMLButtonElement)
+    await waitFor(() => expect(document.querySelector('button svg.lucide-key-round')).not.toBeNull())
+    const resetButton = document.querySelector('button svg.lucide-key-round')?.closest('button') as HTMLButtonElement
+
+    fireEvent.click(resetButton)
+    fireEvent.click(resetButton)
+
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(resetCalls).toBe(1)
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
+
+    resetGate.resolve(success({ message: 'Use it once.', temporaryPassword: 'Synthetic-Only-1234' }))
+    expect(await screen.findByText('Synthetic-Only-1234')).toBeInTheDocument()
+  })
+
   it('sorts every member column in both directions across fetched pages', async () => {
     const members = [
       { id: 2, name: '나', email: 'z@example.com', role: 'LEARNER', status: 'DELETED', lastActiveAt: '2026-09-20T00:00:00Z' },
@@ -255,4 +291,12 @@ function success(data: unknown) {
     headers: { 'Content-Type': 'application/json' },
     status: 200,
   })
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
 }
