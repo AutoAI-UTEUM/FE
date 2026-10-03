@@ -656,18 +656,20 @@ export function AppLayout() {
           ) : null}
         </button>
       ) : null}
-      <Link
-        className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-        onClick={() => {
-          setIsMenuOpen(false)
-          setIsNotificationsOpen(false)
-        }}
-        role="menuitem"
-        to={profileUpdatesRoute}
-      >
-        <CalendarDays aria-hidden="true" size={15} />
-        업데이트
-      </Link>
+      {!hasBottomNav || !overflowNavigation.some((item) => item.to === profileUpdatesRoute) ? (
+        <Link
+          className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          onClick={() => {
+            setIsMenuOpen(false)
+            setIsNotificationsOpen(false)
+          }}
+          role="menuitem"
+          to={profileUpdatesRoute}
+        >
+          <CalendarDays aria-hidden="true" size={15} />
+          업데이트
+        </Link>
+      ) : null}
       <Link
         className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
         onClick={() => {
@@ -1043,6 +1045,11 @@ export function AppLayout() {
             )
           })}
           <button
+            aria-current={
+              hasActiveOverflowNavigation || isProfileRoute
+                ? 'page'
+                : undefined
+            }
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
             aria-label="프로필 메뉴"

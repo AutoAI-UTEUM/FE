@@ -137,6 +137,34 @@ describe('AppRoutes', () => {
     expect(screen.queryByRole('dialog', { name: '설정' })).not.toBeInTheDocument()
   })
 
+  it('announces an active admin overflow destination from mobile navigation', async () => {
+    vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
+      isMobileWeb: true,
+      isPhone: true,
+      isTablet: false,
+      mode: 'phone',
+      viewportWidth: 390,
+      visibleHeight: 844,
+      visibleTop: 0,
+    })
+
+    renderRoute('/admin?tab=updates', {
+      email: 'admin@example.com',
+      name: '관리자',
+      role: 'ADMIN',
+    })
+
+    const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
+    const profileTrigger = within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' })
+    expect(profileTrigger).toHaveAttribute('aria-current', 'page')
+
+    fireEvent.click(profileTrigger)
+    const updateItems = within(bottomNavigation).getAllByRole('menuitem', { name: '업데이트' })
+    expect(updateItems).toHaveLength(1)
+    expect(updateItems[0]).toHaveAttribute('href', '/admin?tab=updates')
+    expect(updateItems[0]).toHaveAttribute('aria-current', 'page')
+  })
+
   it('shows the Uteum brand and personalized learning message on the login screen', async () => {
     renderRoute('/login', null)
 
