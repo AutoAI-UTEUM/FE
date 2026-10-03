@@ -268,6 +268,43 @@ describe('MaterialsPage account scope', () => {
     expect(bListCalls).toBe(2)
   })
 
+  it('ignores a late successful A list after B has loaded', async () => {
+    const aList = deferred<Response>()
+    let aListSignal: AbortSignal | undefined
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'POST' && url.pathname === '/api/auth/login') {
+        return loginAsBResponse()
+      }
+      if (request.method === 'GET' && url.pathname === '/api/materials') {
+        if (authorization(request) !== 'Bearer b-access-token') {
+          aListSignal = request.signal
+          return aList.promise
+        }
+        return apiSuccess(materialPage([material(55, 'B-current.pdf')]))
+      }
+      return undefined
+    })
+    renderAccountSwitch()
+    await waitFor(() => expect(aListSignal).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to B' }))
+    expect(
+      await screen.findByRole('heading', { name: 'B-current.pdf' }),
+    ).toBeInTheDocument()
+    expect(aListSignal?.aborted).toBe(true)
+
+    await act(async () => {
+      aList.resolve(apiSuccess(materialPage([material(54, 'A-late.pdf')])))
+    })
+    expect(
+      screen.queryByRole('heading', { name: 'A-late.pdf' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'B-current.pdf' }),
+    ).toBeInTheDocument()
+  })
+
   it.each([false, true])(
     'aborts a late A upload and unlocks a fresh B upload (changing request: %s)',
     async (changingRequestIdentity) => {
