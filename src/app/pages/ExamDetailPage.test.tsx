@@ -1,8 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 
-import { AuthProvider } from '../../features/auth'
+import { AuthProvider, useAuth } from '../../features/auth'
 import { ToastProvider } from '../../shared/ui'
 import { ExamDetailPage } from './ExamDetailPage'
 
@@ -116,6 +116,246 @@ describe('ExamDetailPage AI draft', () => {
     expect(answerLinks[0]).toHaveAttribute('href', '/classrooms/30/exams/10/submissions/300')
     expect(await screen.findAllByText('미제출 학습자')).not.toHaveLength(0)
     expect(screen.getAllByText('미제출')).not.toHaveLength(0)
+  })
+})
+
+describe('ExamDetailPage instructor scope isolation', () => {
+  it('keeps a denied B exam scoped when the aborted A GET resolves late', async () => {
+    const examA = deferred<Response>()
+    const examB = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return examA.promise
+      if (request.method === 'GET' && url.pathname === '/api/exams/20') return examB.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open exam B' }))
+    await act(async () => { examB.resolve(apiFailure('ACCESS_DENIED', 403, 'Exam B denied')) })
+    expect(await screen.findByText('Exam B denied')).toBeInTheDocument()
+
+    await act(async () => { examA.resolve(success(instructorExamFixture(10, 'Exam A'))) })
+    expect(screen.getByText('Exam B denied')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Exam A' })).not.toBeInTheDocument()
+  })
+
+  it('does not carry an unsaved instructor draft from exam A into exam B', async () => {
+    const examB = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20') return examB.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const details = (await screen.findByText('Description A')).closest('section')
+    expect(details).not.toBeNull()
+    fireEvent.click(within(details!).getAllByRole('button')[1])
+    fireEvent.change(screen.getByDisplayValue('Exam A'), { target: { value: 'Unsaved exam A' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open exam B' }))
+    expect(screen.queryByDisplayValue('Unsaved exam A')).not.toBeInTheDocument()
+    await act(async () => { examB.resolve(success(instructorExamFixture(20, 'Exam B'))) })
+    expect(await screen.findByRole('heading', { name: 'Exam B' })).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Unsaved exam A')).not.toBeInTheDocument()
+  })
+
+  it('clears exam A submissions while exam B submissions are pending', async () => {
+    const examBSubmissions = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A', 'PUBLISHED'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20') return success(instructorExamFixture(20, 'Exam B', 'PUBLISHED'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions') return success(paged([instructorSubmissionFixture('Student A')]))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20/submissions') return examBSubmissions.promise
+      if (request.method === 'GET' && url.pathname === '/api/classrooms/30/students') return success(paged([]))
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+    expect((await screen.findAllByText('Student A')).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open exam B' }))
+    expect(await screen.findByRole('heading', { name: 'Exam B' })).toBeInTheDocument()
+    expect(screen.queryAllByText('Student A')).toHaveLength(0)
+
+    await act(async () => { examBSubmissions.resolve(success(paged([instructorSubmissionFixture('Student B')]))) })
+    expect((await screen.findAllByText('Student B')).length).toBeGreaterThan(0)
+  })
+
+  it('ignores a late exam A save after exam B has loaded', async () => {
+    const saveA = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20') return success(instructorExamFixture(20, 'Exam B'))
+      if (request.method === 'PATCH' && url.pathname === '/api/exams/10') return saveA.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const details = (await screen.findByText('Description A')).closest('section')
+    fireEvent.click(within(details!).getAllByRole('button')[1])
+    fireEvent.change(screen.getByDisplayValue('Exam A'), { target: { value: 'Saved exam A' } })
+    fireEvent.submit(screen.getByDisplayValue('Saved exam A').closest('form')!)
+    await waitFor(() => expect(requestCount('PATCH', '/api/exams/10')).toBe(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open exam B' }))
+    expect(await screen.findByRole('heading', { name: 'Exam B' })).toBeInTheDocument()
+    await act(async () => { saveA.resolve(success(instructorExamFixture(10, 'Saved exam A'))) })
+    expect(screen.getByRole('heading', { name: 'Exam B' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Saved exam A' })).not.toBeInTheDocument()
+  })
+
+  it('does not apply a late exam A regrade to exam B submissions', async () => {
+    const regradeA = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A', 'PUBLISHED'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20') return success(instructorExamFixture(20, 'Exam B', 'PUBLISHED'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions') return success(paged([instructorSubmissionFixture('Student A')]))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20/submissions') return success(paged([instructorSubmissionFixture('Student B')]))
+      if (request.method === 'GET' && url.pathname === '/api/classrooms/30/students') return success(paged([]))
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/submissions/300/regrade') return regradeA.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const studentARow = (await screen.findAllByText('Student A'))[0].closest('tr')
+    fireEvent.click(within(studentARow!).getByRole('button'))
+    await waitFor(() => expect(requestCount('POST', '/api/exams/10/submissions/300/regrade')).toBe(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open exam B' }))
+    const studentBRow = (await screen.findAllByText('Student B'))[0].closest('tr')
+    expect(within(studentBRow!).getByRole('button')).toBeEnabled()
+    await act(async () => { regradeA.resolve(success({ ...failedSubmissionFixture, gradedAt: '2026-10-03T01:00:00Z', maxScore: 10, normalizedScore: 100, score: 10, status: 'GRADED' })) })
+    expect(within(studentBRow!).getByRole('button')).toBeEnabled()
+  })
+
+  it('does not let an account A publish result replace account B or start B follow-up requests', async () => {
+    const publishA = deferred<Response>()
+    let examGets = 0
+    const publishSignals: AbortSignal[] = []
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') {
+        examGets += 1
+        return success(instructorExamFixture(10, examGets === 1 ? 'Account A exam' : 'Account B exam'))
+      }
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/publish') {
+        publishSignals.push(request.signal)
+        return publishA.promise
+      }
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const details = (await screen.findByText('Description A')).closest('section')
+    fireEvent.click(within(details!).getAllByRole('button')[2])
+    fireEvent.click(screen.getByRole('button', { name: 'Switch account' }))
+    expect(await screen.findByRole('heading', { name: 'Account B exam' })).toBeInTheDocument()
+    expect(publishSignals[0]?.aborted).toBe(true)
+
+    await act(async () => { publishA.resolve(success(instructorExamFixture(10, 'Account A published', 'PUBLISHED'))) })
+    expect(screen.getByRole('heading', { name: 'Account B exam' })).toBeInTheDocument()
+    expect(requestCount('GET', '/api/exams/10/submissions')).toBe(0)
+  })
+
+  it.each([
+    ['close', 'PUBLISHED', 0, 'POST', '/api/exams/10/close'],
+    ['delete', 'DRAFT', 3, 'DELETE', '/api/exams/10'],
+  ])('ignores a late exam A %s result after exam B has loaded', async (_action, status, buttonIndex, method, actionPath) => {
+    const actionA = deferred<Response>()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A', status))
+      if (request.method === 'GET' && url.pathname === '/api/exams/20') return success(instructorExamFixture(20, 'Exam B'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions') return success(paged([]))
+      if (request.method === 'GET' && url.pathname === '/api/classrooms/30/students') return success(paged([]))
+      if (request.method === method && url.pathname === actionPath) return actionA.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const details = (await screen.findByText('Description A')).closest('section')
+    fireEvent.click(within(details!).getAllByRole('button')[buttonIndex])
+    await waitFor(() => expect(requestCount(method, actionPath)).toBe(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Open exam B' }))
+    expect(await screen.findByRole('heading', { name: 'Exam B' })).toBeInTheDocument()
+
+    await act(async () => {
+      actionA.resolve(method === 'DELETE' ? success(null) : success(instructorExamFixture(10, 'Exam A closed', 'CLOSED')))
+    })
+    expect(screen.getByRole('heading', { name: 'Exam B' })).toBeInTheDocument()
+  })
+
+  it('coalesces publish clicks fired in the same tick', async () => {
+    const publish = deferred<Response>()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A'))
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/publish') return publish.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const details = (await screen.findByText('Description A')).closest('section')
+    const publishButton = within(details!).getAllByRole('button')[2]
+    act(() => { publishButton.click(); publishButton.click() })
+    expect(requestCount('POST', '/api/exams/10/publish')).toBe(1)
+    await act(async () => { publish.resolve(success(instructorExamFixture(10, 'Exam A', 'PUBLISHED'))) })
+  })
+
+  it('coalesces instructor saves fired in the same tick', async () => {
+    const save = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A'))
+      if (request.method === 'PATCH' && url.pathname === '/api/exams/10') return save.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const details = (await screen.findByText('Description A')).closest('section')
+    fireEvent.click(within(details!).getAllByRole('button')[1])
+    const form = screen.getByDisplayValue('Exam A').closest('form')!
+    act(() => { fireEvent.submit(form); fireEvent.submit(form) })
+    expect(requestCount('PATCH', '/api/exams/10')).toBe(1)
+    await act(async () => { save.resolve(success(instructorExamFixture(10, 'Exam A'))) })
+  })
+
+  it('coalesces instructor regrades fired in the same tick', async () => {
+    const regrade = deferred<Response>()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/exams/10') return success(instructorExamFixture(10, 'Exam A', 'PUBLISHED'))
+      if (request.method === 'GET' && url.pathname === '/api/exams/10/submissions') return success(paged([instructorSubmissionFixture('Student A')]))
+      if (request.method === 'GET' && url.pathname === '/api/classrooms/30/students') return success(paged([]))
+      if (request.method === 'POST' && url.pathname === '/api/exams/10/submissions/300/regrade') return regrade.promise
+      return new Response(null, { status: 404 })
+    })
+    renderInstructorScope()
+
+    const studentRow = (await screen.findAllByText('Student A'))[0].closest('tr')!
+    const regradeButton = within(studentRow).getByRole('button')
+    act(() => { regradeButton.click(); regradeButton.click() })
+    expect(requestCount('POST', '/api/exams/10/submissions/300/regrade')).toBe(1)
+    await act(async () => { regrade.resolve(success({ ...failedSubmissionFixture, status: 'SUBMITTED' })) })
   })
 })
 
@@ -565,6 +805,79 @@ function renderLearnerExam() {
       </AuthProvider>
     </MemoryRouter>,
   )
+}
+
+function renderInstructorScope() {
+  return render(
+    <MemoryRouter initialEntries={['/classrooms/30/exams/10']}>
+      <AuthProvider initialUser={{ email: 'instructor-a@example.com', id: 7, name: 'Instructor A', role: 'INSTRUCTOR' }}>
+        <ToastProvider>
+          <InstructorScopeHarness />
+        </ToastProvider>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+}
+
+function InstructorScopeHarness() {
+  const navigate = useNavigate()
+  const { updateUser } = useAuth()
+  return <>
+    <button onClick={() => navigate('/classrooms/30/exams/20')} type="button">Open exam B</button>
+    <button onClick={() => updateUser({ email: 'instructor-b@example.com', id: 8, name: 'Instructor B', role: 'INSTRUCTOR' })} type="button">Switch account</button>
+    <Routes><Route element={<ExamDetailPage />} path="/classrooms/:classroomId/exams/:examId" /></Routes>
+  </>
+}
+
+function instructorExamFixture(examId: number, title: string, status = 'DRAFT') {
+  return {
+    allowRetake: false,
+    classroomId: 30,
+    description: examId === 10 ? 'Description A' : 'Description B',
+    examId,
+    questionCount: 1,
+    questions: [{ maxScore: 10, questionId: `q-${examId}`, questionText: `Question ${examId}`, questionType: 'SHORT', referenceAnswer: 'Answer' }],
+    status,
+    title,
+    totalScore: 10,
+    weekNumber: 4,
+  }
+}
+
+function instructorSubmissionFixture(userName: string) {
+  return {
+    attemptCount: 1,
+    attemptNo: 1,
+    maxScore: null,
+    normalizedScore: null,
+    score: null,
+    status: 'GRADING_FAILED',
+    submissionId: 300,
+    submittedAt: '2026-10-03T00:00:00Z',
+    userId: 9,
+    userName,
+  }
+}
+
+function paged(items: unknown[]) {
+  return { items, page: 0, size: 100, totalElements: items.length, totalPages: items.length > 0 ? 1 : 0 }
+}
+
+function requestCount(method: string, path: string) {
+  return vi.mocked(globalThis.fetch).mock.calls.filter(([input, init]) => {
+    const request = new Request(input, init)
+    return request.method === method && new URL(request.url).pathname === path
+  }).length
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
 }
 
 const examFixture = {
