@@ -2,7 +2,7 @@
 
 - Date: 2026-10-03 (UTC)
 - Independent worktree: `validate/learn-quiz-exam-qa-acceptance`
-- Candidate: `55fc252` (PR #204 merged locally with `develop`)
+- Validated code/test candidate: `cbbd72e` (PR #204 merged locally with `develop`; the following commit only refreshes this evidence line)
 - Develop base: `8a6c64f653c52502b56600a0d41fda90a806e518`
 - Safety: synthetic local API/SSE only; no AI provider call, real exam submission, persistent product-data mutation, or real credential use
 - Scope note: the repository and its local history contain no `QuizEditor` component. The current authoring surface is `ExamEditor`; `QuizEditor`-specific and unknown backend contracts are marked `NOTRUN`.
@@ -65,7 +65,7 @@ New independent evidence:
 | `npm run build` | PASS | production build completed; existing large-chunk warnings only |
 | Targeted unit/component | PASS | 13 files / 198 tests |
 | Targeted Chromium mock | PASS | 1 test / Chromium 1440 |
-| Full `npm run test:run` (CI env) | PASS | Candidate `55fc252` on develop `8a6c64f`: 94 files passed; 837 tests passed. PR #206's auth race fixes and PR #207's material/note/draft fixes are included in the base. |
+| Full `npm run test:run` (CI env) | PASS | Candidate `cbbd72e` on develop `8a6c64f`: 94 files passed; 837 tests passed. PR #206's auth race fixes and PR #207's material/note/draft fixes are included in the base. |
 | Existing full mock smoke | FAIL (baseline/out of scope) | WCAG contrast failures (`#8a94a6` on white/light backgrounds) and a 28px touch target; not changed because they are outside the delegated feature/file scope |
 
 ## Review and disposition
