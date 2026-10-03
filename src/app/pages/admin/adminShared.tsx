@@ -58,7 +58,7 @@ export function AdminPanelHeading({ aside, id, title }: { aside?: ReactNode; id?
   return (
     <div className="flex shrink-0 flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
-        <p aria-hidden="true" className="flex items-center gap-1.5 type-caption text-stone-400">
+        <p aria-hidden="true" className="flex items-center gap-1.5 type-caption text-stone-600">
           <span>관리자</span>
           <span className="text-stone-300">/</span>
           <span className="font-medium text-stone-600">{title}</span>
@@ -151,7 +151,7 @@ export function AdminMetricStrip({ ariaLabel, inlineGraph = false, items }: { ar
                   </span>
                 </>
               ) : null}
-              <span className="truncate type-micro text-stone-400">
+              <span className="truncate type-micro text-stone-500">
                 {item.delta?.note ?? item.detail ?? (item.value === '-' ? '데이터 없음' : '현재 조회 값')}
               </span>
             </div>
