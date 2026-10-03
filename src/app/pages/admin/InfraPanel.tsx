@@ -1,5 +1,5 @@
 import { ArrowUpRight, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 import type {
   AdminRepository,
@@ -48,26 +48,31 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
   const [xai, setXai] = useState<LoadState<AdminXaiOverview>>(emptyState)
   const [xaiUsage, setXaiUsage] = useState<LoadState<AiUsageSummary>>(emptyState)
   const [activeDrawer, setActiveDrawer] = useState<'aws' | 'xai' | null>(null)
-
-  useEffect(() => {
-    if (!activeDrawer) return
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveDrawer(null) }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [activeDrawer])
+  const [drawerTrigger, setDrawerTrigger] = useState<HTMLButtonElement | null>(null)
+  const closeDrawer = useCallback(() => setActiveDrawer(null), [])
+  const openDrawer = useCallback((type: 'aws' | 'xai', trigger: HTMLButtonElement) => {
+    setDrawerTrigger(trigger)
+    setActiveDrawer(type)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
+    let ownsRequest = true
     repository.getInfraMetrics({ env, range }, controller.signal)
       .then((data) => {
-        setMetrics({ data, error: null, loading: false, receivedAt: new Date().toISOString() })
+        if (ownsRequest && !controller.signal.aborted) {
+          setMetrics({ data, error: null, loading: false, receivedAt: new Date().toISOString() })
+        }
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
+        if (ownsRequest && !controller.signal.aborted) {
           setMetrics((current) => ({ ...current, error: toAdminError(error), loading: false }))
         }
       })
-    return () => controller.abort()
+    return () => {
+      ownsRequest = false
+      controller.abort()
+    }
   }, [env, range, repository])
 
   useEffect(() => {
@@ -119,10 +124,10 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto">
-      <AdminPanelHeading aside={[metrics.error, app.error, xai.error].filter((error): error is AdminErrorInfo => error !== null).map((error, index) => <div className="overflow-hidden rounded-xl border border-rose-100" key={index}><AdminErrorMessage error={error} /></div>)} title="인프라" />
+      <AdminPanelHeading aside={[metrics.error, cost.error, app.error, xai.error, xaiUsage.error].filter((error): error is AdminErrorInfo => error !== null).map((error, index) => <div className="overflow-hidden rounded-xl border border-rose-100" key={index}><AdminErrorMessage error={error} /></div>)} title="인프라" />
       <PageToolbar>
         <Select aria-label="환경" className="min-w-36" onChange={(event) => {
-          setMetrics((current) => ({ ...current, error: null, loading: true }))
+          setMetrics(emptyState())
           setEnv(event.target.value as InfraEnv)
         }} value={env}><option value="prod">운영</option><option value="dev">개발</option></Select>
         <label className="flex items-center gap-2 type-caption font-medium text-stone-500">
@@ -131,7 +136,7 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
             aria-label="조회 기간"
             className="min-w-36"
             onChange={(event) => {
-              setMetrics((current) => ({ ...current, error: null, loading: true }))
+              setMetrics(emptyState())
               setRange(event.target.value as InfraRange)
             }}
             value={range}
@@ -147,9 +152,9 @@ export function InfraPanel({ repository }: { repository: AdminRepository }) {
       <InfraSummary cost={cost} metrics={metrics} range={range} xai={xai} xaiUsage={xaiUsage} />
       <div className="grid min-h-[650px] gap-4 xl:flex-1 xl:grid-cols-2">
         <ApplicationOverview app={app} />
-        <WeeklyCosts cost={cost} onOpen={setActiveDrawer} xai={xai} xaiUsage={xaiUsage} />
+        <WeeklyCosts cost={cost} onOpen={openDrawer} xai={xai} xaiUsage={xaiUsage} />
       </div>
-      {activeDrawer ? <InfraDetailsDrawer cost={cost} onClose={() => setActiveDrawer(null)} repository={repository} type={activeDrawer} xai={xai} /> : null}
+      {activeDrawer ? <InfraDetailsDrawer cost={cost} onClose={closeDrawer} repository={repository} returnFocusTo={drawerTrigger} type={activeDrawer} xai={xai} /> : null}
     </div>
   )
 }
@@ -170,7 +175,7 @@ function InfraSummary({ cost, metrics, range, xai, xaiUsage }: { cost: LoadState
           { danger: (metricData?.latest?.mem ?? 0) > 85, label: '메모리', series: trend(metricData?.series?.mem) ?? sample(metricData?.latest?.mem), seriesTrend: pointTrend(metricData?.series?.mem), value: metricData?.latest?.mem == null ? '-' : metricData.latest.mem.toFixed(1), unit: metricData?.latest?.mem == null ? undefined : '%', delta: range === '24h' ? deltaFromAverage(metricData?.latest?.mem, metricData?.series?.mem) : undefined, detail: range === '24h' ? '24시간 평균' : '' },
           { danger: (metricData?.latest?.disk ?? 0) > 80, label: '디스크', series: trend(metricData?.series?.disk) ?? sample(metricData?.latest?.disk), seriesTrend: pointTrend(metricData?.series?.disk), value: metricData?.latest?.disk == null ? '-' : metricData.latest.disk.toFixed(1), unit: metricData?.latest?.disk == null ? undefined : '%', delta: range === '24h' ? deltaFromAverage(metricData?.latest?.disk, metricData?.series?.disk) : undefined, detail: range === '24h' ? '24시간 평균' : '' },
           { label: 'AI 사용 비용', series: xaiCalls.length ? xaiCalls : sample(xaiCost == null ? null : Number(xaiCost)), seriesLabel: xaiCalls.length ? '최근 7일 AI 호출 수 추이' : '이번 달 AI 비용 현재 값', ...moneyParts(xaiCost == null ? null : Number(xaiCost), 'USD'), detail: '지난달 대비' },
-          { label: 'AWS 비용', series: costData?.daily?.length ? costData.daily.map((day) => day.total) : sample(costData?.monthToDate?.total), ...moneyParts(costData?.available ? costData.monthToDate?.total ?? 0 : null, costData?.currency ?? 'USD'), detail: '지난달 대비' },
+          { label: 'AWS 비용', series: costData?.daily?.length ? costData.daily.map((day) => day.total) : sample(costData?.monthToDate?.total), ...moneyParts(costData?.available ? costData.monthToDate?.total ?? null : null, costData?.currency ?? 'USD'), detail: '지난달 대비' },
         ]}
       />
     </section>
@@ -226,19 +231,19 @@ function ApplicationOverview({ app }: { app: LoadState<InfraApp> }) {
   )
 }
 
-function WeeklyCosts({ cost, onOpen, xai, xaiUsage }: { cost: LoadState<InfraCost>; onOpen: (type: 'aws' | 'xai') => void; xai: LoadState<AdminXaiOverview>; xaiUsage: LoadState<AiUsageSummary> }) {
+function WeeklyCosts({ cost, onOpen, xai, xaiUsage }: { cost: LoadState<InfraCost>; onOpen: (type: 'aws' | 'xai', trigger: HTMLButtonElement) => void; xai: LoadState<AdminXaiOverview>; xaiUsage: LoadState<AiUsageSummary> }) {
   const daily = completeLastSevenDays(cost.data?.daily ?? [])
   const awsTotal = daily.reduce((sum, day) => sum + (day.item?.total ?? 0), 0)
   const hasAwsDailyData = daily.some((day) => day.item !== null)
   return (
     <section aria-label="주간 비용" className="flex min-h-[650px] min-w-0 flex-col rounded-3xl border border-stone-200 bg-white p-5">
       <div className="flex min-h-[290px] flex-1 flex-col pb-5">
-        <div className="flex items-center justify-between gap-3"><h2 className="type-section-title font-bold text-stone-950">AWS 주간 비용</h2><button aria-label="AWS 비용 상세 보기" className="inline-flex size-8 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={() => onOpen('aws')} type="button"><ArrowUpRight aria-hidden="true" size={15} /></button></div>
+        <div className="flex items-center justify-between gap-3"><h2 className="type-section-title font-bold text-stone-950">AWS 주간 비용</h2><button aria-label="AWS 비용 상세 보기" className="inline-flex size-8 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={(event) => onOpen('aws', event.currentTarget)} type="button"><ArrowUpRight aria-hidden="true" size={15} /></button></div>
         <p className="mt-3 type-metric-compact font-semibold text-stone-950">{cost.data?.available && hasAwsDailyData ? formatMoney(awsTotal, cost.data.currency ?? 'USD') : '-'}</p>
         <WeeklyBarChart currency={cost.data?.currency ?? 'USD'} daily={cost.data?.available ? daily : completeLastSevenDays([])} />
       </div>
       <div className="flex min-h-[290px] flex-1 flex-col border-t border-stone-100 pt-5">
-        <div className="flex items-center justify-between gap-3"><h2 className="type-section-title font-bold text-stone-950">xAI 주간 비용</h2><button aria-label="xAI 상세 보기" className="inline-flex size-8 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={() => onOpen('xai')} type="button"><ArrowUpRight aria-hidden="true" size={15} /></button></div>
+        <div className="flex items-center justify-between gap-3"><h2 className="type-section-title font-bold text-stone-950">xAI 주간 비용</h2><button aria-label="xAI 상세 보기" className="inline-flex size-8 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={(event) => onOpen('xai', event.currentTarget)} type="button"><ArrowUpRight aria-hidden="true" size={15} /></button></div>
         <p aria-label="이번 달 xAI 비용" className="mt-3 type-metric-compact font-semibold text-stone-950">{xai.data?.available && xai.data.currentMonthCostUsd != null ? formatMoney(Number(xai.data.currentMonthCostUsd), 'USD') : '-'}</p>
         <WeeklyCallsChart daily={xaiUsage.data?.daily ?? []} />
       </div>
@@ -248,25 +253,36 @@ function WeeklyCosts({ cost, onOpen, xai, xaiUsage }: { cost: LoadState<InfraCos
 
 function WeeklyCallsChart({ daily }: { daily: AiUsageSummary['daily'] }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const unknownCostsDescriptionId = useId()
   const items = completeLastSevenDays(daily)
-  const hasDailyCosts = items.some((day) => day.item?.costUsd != null && Number.isFinite(Number(day.item.costUsd)))
-  const valueFor = (day: typeof items[number]) => hasDailyCosts ? Number(day.item?.costUsd ?? 0) : day.item?.callCount ?? 0
-  const maximum = Math.max(1, ...items.map(valueFor))
-  const highlightedDate = items.some((day) => day.date === selectedDate && valueFor(day) > 0)
+  const hasDailyCosts = items.some((day) => parseDailyCost(day.item?.costUsd) !== null)
+  const valueFor = (day: typeof items[number]) => day.item == null ? null : hasDailyCosts ? parseDailyCost(day.item.costUsd) : day.item.callCount
+  const maximum = Math.max(1, ...items.map((day) => valueFor(day) ?? 0))
+  const reportedUnknownCostDates = hasDailyCosts
+    ? items.filter((day) => day.item != null && parseDailyCost(day.item.costUsd) === null).map((day) => day.date)
+    : []
+  const highlightedDate = items.some((day) => day.date === selectedDate && (valueFor(day) ?? 0) > 0)
     ? selectedDate
-    : [...items].sort((left, right) => valueFor(right) - valueFor(left))[0]?.date
-  return <div aria-label={hasDailyCosts ? 'xAI 주간 비용 그래프' : 'xAI 최근 7일 호출 그래프'} className="mt-auto flex items-end gap-2 pt-4" role="img">{items.map((day) => {
+    : [...items].sort((left, right) => (valueFor(right) ?? 0) - (valueFor(left) ?? 0))[0]?.date
+  return <><div aria-describedby={reportedUnknownCostDates.length ? unknownCostsDescriptionId : undefined} aria-label={hasDailyCosts ? 'xAI 주간 비용 그래프' : 'xAI 최근 7일 호출 그래프'} className="mt-auto flex items-end gap-2 pt-4" role="img">{items.map((day) => {
     const amount = valueFor(day)
-    const selected = amount > 0 && day.date === highlightedDate
-    const description = hasDailyCosts ? formatMoney(amount, 'USD') : `${formatCount(amount)}건`
-    return <div aria-label={amount > 0 ? `${day.date}: ${description}` : undefined} className="flex min-w-0 flex-1 flex-col items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-violet-700" data-chart-date={day.date} key={day.date} onFocus={() => { if (amount > 0) setSelectedDate(day.date) }} onMouseEnter={() => { if (amount > 0) setSelectedDate(day.date) }} tabIndex={amount > 0 ? 0 : undefined}>
+    const selected = (amount ?? 0) > 0 && day.date === highlightedDate
+    const description = amount == null ? null : hasDailyCosts ? formatMoney(amount, 'USD') : `${formatCount(amount)}건`
+    const accessibleLabel = amount == null ? `${day.date}: ${hasDailyCosts ? '비용' : '호출 수'} 미확인` : `${day.date}: ${description}`
+    return <div aria-label={accessibleLabel} className="flex min-w-0 flex-1 flex-col items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-violet-700" data-chart-date={day.date} key={day.date} onFocus={() => { if ((amount ?? 0) > 0) setSelectedDate(day.date) }} onMouseEnter={() => { if ((amount ?? 0) > 0) setSelectedDate(day.date) }} tabIndex={(amount ?? 0) > 0 ? 0 : undefined}>
       <div className="flex h-36 w-full flex-col justify-end">
-        {selected && hasDailyCosts ? <span className="mb-2 self-center whitespace-nowrap rounded-full bg-[#1B2436] px-2.5 py-1 type-micro font-bold text-white">{formatBarMoney(amount, 'USD')}</span> : null}
-        {amount > 0 ? <div className={`w-full rounded-xl ${selected ? 'bg-violet-700' : 'bg-violet-300'}`} style={{ height: `${Math.max(8, (amount / maximum) * 106)}px` }} title={`${day.date}: ${description}`} /> : <div className="h-1 w-full rounded-full bg-violet-200" />}
+        {selected && hasDailyCosts && amount != null ? <span className="mb-2 self-center whitespace-nowrap rounded-full bg-[#1B2436] px-2.5 py-1 type-micro font-bold text-white">{formatBarMoney(amount, 'USD')}</span> : null}
+        {amount == null ? <div aria-hidden="true" className="h-1 w-full border-t-2 border-dashed border-stone-300" /> : amount > 0 ? <div className={`w-full rounded-xl ${selected ? 'bg-violet-700' : 'bg-violet-300'}`} style={{ height: `${Math.max(8, (amount / maximum) * 106)}px` }} title={`${day.date}: ${description}`} /> : <div className="h-1 w-full rounded-full bg-violet-200" />}
       </div>
-      <span className={`type-micro type-graph-label ${amount > 0 ? 'text-stone-500' : 'text-stone-300'}`}>{formatMonthDay(day.date)}</span>
+      <span className={`type-micro type-graph-label ${amount != null ? 'text-stone-500' : 'text-stone-300'}`}>{formatMonthDay(day.date)}</span>
     </div>
-  })}</div>
+  })}</div>{reportedUnknownCostDates.length ? <span className="sr-only" id={unknownCostsDescriptionId}>{reportedUnknownCostDates.map((date) => `${date}: 비용 미확인`).join(', ')}</span> : null}</>
+}
+
+function parseDailyCost(value: string | null | undefined) {
+  if (value == null || value.trim() === '') return null
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : null
 }
 
 function WeeklyBarChart({ currency, daily }: { currency: string; daily: Array<{ date: string; item: { total: number } | null }> }) {
@@ -299,16 +315,52 @@ function completeLastSevenDays<T extends { date: string }>(items: T[]) {
   })
 }
 
-function InfraDetailsDrawer({ cost, onClose, repository, type, xai }: { cost: LoadState<InfraCost>; onClose: () => void; repository: AdminRepository; type: 'aws' | 'xai'; xai: LoadState<AdminXaiOverview> }) {
+function InfraDetailsDrawer({ cost, onClose, repository, returnFocusTo, type, xai }: { cost: LoadState<InfraCost>; onClose: () => void; repository: AdminRepository; returnFocusTo: HTMLButtonElement | null; type: 'aws' | 'xai'; xai: LoadState<AdminXaiOverview> }) {
+  const drawerRef = useRef<HTMLDivElement>(null)
   const daily = [...(cost.data?.daily ?? [])].sort((a, b) => a.date.localeCompare(b.date)).slice(-7)
   const today = localDate(new Date())
   const period = type === 'xai'
     ? `${formatMonthDay(shiftIsoDate(today, -6))} – ${formatMonthDay(today)}`
     : daily.length ? `${formatMonthDay(daily[0].date)} – ${formatMonthDay(daily[daily.length - 1].date)}` : '최근 7일'
+  useEffect(() => {
+    const drawer = drawerRef.current
+    if (!drawer) return
+    const focusable = () => Array.from(drawer.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+    focusable()[0]?.focus()
+    const keepFocusInside = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const elements = focusable()
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      if (!first || !last) {
+        event.preventDefault()
+        drawer.focus()
+      } else if (!drawer.contains(document.activeElement)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', keepFocusInside)
+    return () => {
+      document.removeEventListener('keydown', keepFocusInside)
+      if (returnFocusTo?.isConnected) returnFocusTo.focus()
+    }
+  }, [onClose, returnFocusTo])
   return <div aria-labelledby="infra-drawer-title" aria-modal="true" className="fixed inset-0 z-[90] flex justify-end bg-[#172033]/35" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }} role="dialog">
-    <div className="flex h-full w-full max-w-[640px] flex-col bg-white ">
+    <div className="flex h-full w-full max-w-[640px] flex-col bg-white " ref={drawerRef} tabIndex={-1}>
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-100 px-7 py-6">
-        <div><h2 className="type-section-title font-bold text-stone-950" id="infra-drawer-title">{type === 'aws' ? 'AWS 사용량 · 비용' : 'xAI 사용량 · 호출'}</h2><p className="mt-1 type-caption text-stone-400">{period} 주간 기준</p></div>
+        <div><h2 className="type-section-title font-bold text-stone-950" id="infra-drawer-title">{type === 'aws' ? 'AWS 사용량 · 비용' : 'xAI 사용량 · 호출'}</h2><p className="mt-1 type-caption text-stone-500">{period} 주간 기준</p></div>
         <button aria-label="상세 패널 닫기" autoFocus className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:bg-stone-50" onClick={onClose} type="button"><X aria-hidden="true" size={18} /></button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">{type === 'aws' ? <AwsDrawerBody cost={cost} daily={daily} /> : <XaiDrawerBody repository={repository} xai={xai} />}</div>
@@ -330,8 +382,8 @@ function AwsDrawerBody({ cost, daily }: { cost: LoadState<InfraCost>; daily: Arr
   return <>
     <DrawerMetrics items={[{ label: '이번 달 AWS 비용', value: data?.available && data.monthToDate ? formatMoney(data.monthToDate.total, currency) : '-' }, { label: '주간 합계', value: data?.available && daily.length ? formatMoney(weeklyTotal, currency) : '-' }, { label: '최다 지출 서비스', value: services[0] ? shortServiceName(services[0].service) : '-' }]} />
     <h3 className="mt-7 type-section-title font-bold text-stone-950">서비스별 비용</h3>
-    {!data?.available || services.length === 0 ? <PanelMessage message="서비스별 AWS 비용 데이터가 없습니다." /> : <div className="mt-7 flex h-64 items-end gap-2.5" role="img" aria-label="AWS 서비스별 비용 그래프">{services.slice(0, 7).map((service) => <div className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2" key={service.service}><strong className="type-micro font-semibold text-stone-800">{formatMoney(service.amount, currency)}</strong><div className="w-full rounded-t-xl bg-[#1B2436]" style={{ height: `${Math.max(4, (service.amount / maxService) * 176)}px` }} title={service.service} /><span className="w-full truncate text-center type-micro font-semibold text-stone-500" title={service.service}>{shortServiceName(service.service)}</span><span className="type-micro text-stone-400">{serviceTotal > 0 ? `${Math.round((service.amount / serviceTotal) * 100)}%` : '-'}</span></div>)}</div>}
-    {data?.note ? <p className="mt-8 type-caption text-stone-400">{data.note}</p> : null}
+    {!data?.available || services.length === 0 ? <PanelMessage message="서비스별 AWS 비용 데이터가 없습니다." /> : <div className="mt-7 flex h-64 items-end gap-2.5" role="img" aria-label="AWS 서비스별 비용 그래프">{services.slice(0, 7).map((service) => <div className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2" key={service.service}><strong className="type-micro font-semibold text-stone-800">{formatMoney(service.amount, currency)}</strong><div className="w-full rounded-t-xl bg-[#1B2436]" style={{ height: `${Math.max(4, (service.amount / maxService) * 176)}px` }} title={service.service} /><span className="w-full truncate text-center type-micro font-semibold text-stone-500" title={service.service}>{shortServiceName(service.service)}</span><span className="type-micro text-stone-500">{serviceTotal > 0 ? `${Math.round((service.amount / serviceTotal) * 100)}%` : '-'}</span></div>)}</div>}
+    {data?.note ? <p className="mt-8 type-caption text-stone-500">{data.note}</p> : null}
   </>
 }
 
