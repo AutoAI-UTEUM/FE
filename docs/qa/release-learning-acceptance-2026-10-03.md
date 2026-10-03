@@ -36,8 +36,8 @@ The repository does not contain the source ticket text for the supplied IDs. The
 
 - rapid page moves produced exactly one `PATCH /api/sessions/100/page` with page 3;
 - the learning turn used one synthetic SSE GET and one turn POST;
-- the chat gained exactly one user item and one final AI item, whose role label and complete fixture content were asserted, then unlocked the input;
-- client-side navigation to classrooms and Chromium back retained the pre-existing response and did not repost;
+- the submitted user question and the completed AI fixture response were each absent before submit, then each appeared exactly once; the AI role label and complete fixture content were asserted before the input unlocked;
+- client-side navigation to classrooms and Chromium back retained both the pre-existing response and the newly completed turn without reposting;
 - all non-`127.0.0.1` requests were blocked and the observed external-origin list was empty.
 
 Final result: **1 passed**.

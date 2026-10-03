@@ -40,15 +40,19 @@ test.describe('release learning acceptance with synthetic APIs', () => {
     await expect.poll(() => pageMoves).toEqual([3])
 
     const conversationItems = page.getByRole('log').locator('article')
-    const itemCountBeforeQuestion = await conversationItems.count()
     const priorCompletedResponse = conversationItems.filter({ hasText: '핵심 정리' })
+    const submittedQuestion = conversationItems.filter({ hasText: '현재 페이지의 핵심을 설명해 주세요.' })
+    const finalAssistantResponse = conversationItems.filter({
+      hasText: '개념 정의와 적용 사례를 분리해서 정리해 보세요.',
+    })
     await expect(priorCompletedResponse).toHaveCount(1)
+    await expect(submittedQuestion).toHaveCount(0)
+    await expect(finalAssistantResponse).toHaveCount(0)
     await page.locator('#chat-question').fill('현재 페이지의 핵심을 설명해 주세요.')
     await page.getByRole('button', { name: '질문 보내기' }).click()
-    const finalAssistantResponse = conversationItems.nth(itemCountBeforeQuestion + 1)
-    await expect(conversationItems).toHaveCount(itemCountBeforeQuestion + 2)
+    await expect(submittedQuestion).toHaveCount(1)
+    await expect(finalAssistantResponse).toHaveCount(1)
     await expect(finalAssistantResponse).toContainText('AI 답변')
-    await expect(finalAssistantResponse).toContainText('개념 정의와 적용 사례를 설명합니다.')
     await expect(page.locator('#chat-question')).toBeEnabled()
 
     expect(streamGets).toBe(1)
@@ -60,6 +64,8 @@ test.describe('release learning acceptance with synthetic APIs', () => {
     await page.goBack()
     await expect(page).toHaveURL(/\/sessions\/100$/)
     await expect(priorCompletedResponse).toHaveCount(1)
+    await expect(submittedQuestion).toHaveCount(1)
+    await expect(finalAssistantResponse).toHaveCount(1)
     expect(turnPosts).toBe(1)
     expect(externalRequests).toEqual([])
   })
