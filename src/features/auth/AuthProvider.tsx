@@ -15,6 +15,7 @@ import {
 import {
   AuthContext,
   type AuthContextValue,
+  type SignupResult,
   type AuthUser,
   type LogoutReason,
 } from './authContext'
@@ -815,10 +816,34 @@ export function AuthProvider({
   )
 
   const signup = useCallback(
-    async (values: SignupFormValues) => {
-      await repository.signup(values)
-      const result = await repository.login(values)
+    async (
+      values: SignupFormValues,
+      signal?: AbortSignal,
+    ): Promise<SignupResult> => {
+      const signupTransition = sessionTransitionRef.current
+      await repository.signup(values, signal)
+      if (
+        signal?.aborted ||
+        sessionTransitionRef.current !== signupTransition
+      ) {
+        return { status: 'account-created' }
+      }
+
+      let result
+      try {
+        result = await repository.login(values, signal)
+      } catch {
+        return { status: 'account-created' }
+      }
+
+      if (
+        signal?.aborted ||
+        sessionTransitionRef.current !== signupTransition
+      ) {
+        return { status: 'account-created' }
+      }
       beginSession(result, result.user)
+      return { status: 'authenticated' }
     },
     [beginSession, repository],
   )

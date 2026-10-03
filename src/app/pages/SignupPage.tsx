@@ -86,6 +86,8 @@ export function SignupPage() {
   const [errors, setErrors] = useState<SignupFormErrors>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [signupCompletedWithoutLogin, setSignupCompletedWithoutLogin] =
+    useState(false)
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [confirmPasswordError, setConfirmPasswordError] = useState<
@@ -98,6 +100,7 @@ export function SignupPage() {
   const [googleSignupStopped, setGoogleSignupStopped] = useState(false)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const emailAvailabilitySupportedRef = useRef(true)
+  const activeSignupAttemptRef = useRef<AbortController | null>(null)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
@@ -150,8 +153,17 @@ export function SignupPage() {
     values.email,
   ])
 
+  useEffect(
+    () => () => {
+      activeSignupAttemptRef.current?.abort()
+      activeSignupAttemptRef.current = null
+    },
+    [],
+  )
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (activeSignupAttemptRef.current) return
     const nextErrors = validateSignupForm(values)
     const nextConfirmPasswordError = !confirmPassword
       ? '비밀번호를 한 번 더 입력하세요.'
@@ -171,17 +183,44 @@ export function SignupPage() {
       return
     }
 
+    const controller = new AbortController()
+    activeSignupAttemptRef.current = controller
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await signup(values)
-      navigate(routes.classrooms, { replace: true })
+      const result = await signup(values, controller.signal)
+      if (activeSignupAttemptRef.current !== controller) return
+      if (result.status === 'authenticated') {
+        navigate(routes.classrooms, { replace: true })
+      } else if (result.status === 'account-created') {
+        setValues((current) => ({ ...current, password: '' }))
+        setConfirmPassword('')
+        setSignupCompletedWithoutLogin(true)
+      }
     } catch (error) {
+      if (
+        controller.signal.aborted ||
+        activeSignupAttemptRef.current !== controller
+      ) {
+        return
+      }
       const formErrors = mapAuthErrorToFormErrors(error)
       if (formErrors) setErrors(formErrors as SignupFormErrors)
       else setServerError('회원가입 요청을 처리하지 못했습니다.')
     } finally {
-      setIsSubmitting(false)
+      if (activeSignupAttemptRef.current === controller) {
+        activeSignupAttemptRef.current = null
+        setIsSubmitting(false)
+      }
+    }
+  }
+
+  function cancelSignupAttempt() {
+    const activeAttempt = activeSignupAttemptRef.current
+    activeAttempt?.abort()
+    if (activeAttempt) {
+      setValues((current) => ({ ...current, password: '' }))
+      setConfirmPassword('')
     }
   }
 
@@ -254,6 +293,26 @@ export function SignupPage() {
   const selectedRoleLabel =
     values.role === 'INSTRUCTOR' ? '강의자' : '학습자'
   const passwordStrength = getPasswordStrength(values.password)
+
+  if (signupCompletedWithoutLogin) {
+    return (
+      <div>
+        <h1 className="type-page-title font-bold text-stone-900">
+          회원가입이 완료되었습니다
+        </h1>
+        <p className="mt-4 type-body text-stone-600">
+          계정은 생성되었지만 자동 로그인하지 못했습니다. 로그인 화면에서 다시
+          로그인해 주세요.
+        </p>
+        <Link
+          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-brand-700 px-4 type-control font-semibold text-white hover:bg-brand-800"
+          to={routes.login}
+        >
+          로그인하러 가기
+        </Link>
+      </div>
+    )
+  }
 
   if (googleSignupStopped) {
     return (
@@ -695,6 +754,7 @@ export function SignupPage() {
           <Button
             className="h-11 shrink-0 px-5"
             onClick={() => {
+              cancelSignupAttempt()
               setEmailAvailability('idle')
               setStep('role')
             }}
