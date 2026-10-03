@@ -178,6 +178,36 @@ describe('AppLayout notification reconciliation', () => {
     expect(screen.queryByText('Read then delete')).not.toBeInTheDocument()
   })
 
+  it('restores unread state when delete fails after superseding an in-flight read', async () => {
+    const item = notification('read-then-delete-fails', 'Read then delete fails')
+    let readSignal: AbortSignal | undefined
+    let deleteCalls = 0
+    const apiRequest = vi.fn((path: string, options?: { method?: string; signal?: AbortSignal }) => {
+      if (isNotificationList(path)) return Promise.resolve(listSuccess([item]))
+      if (options?.method === 'PATCH') {
+        readSignal = options.signal
+        return rejectWhenAborted(options.signal)
+      }
+      if (options?.method === 'DELETE') {
+        deleteCalls += 1
+        return Promise.reject(new Error('delete failed'))
+      }
+      return Promise.reject(new Error(`Unexpected request: ${options?.method ?? 'GET'} ${path}`))
+    }) as unknown as AuthenticatedRequest
+
+    renderLayout(apiRequest)
+    const panel = await openNotifications(1)
+    fireEvent.click(within(panel).getAllByRole('button')[0])
+    await waitFor(() => expect(readSignal).toBeDefined())
+    fireEvent.click(screen.getByLabelText(/Read then delete fails/))
+
+    await waitFor(() => expect(deleteCalls).toBe(1))
+    expect(readSignal?.aborted).toBe(true)
+    expect(await screen.findByText('Read then delete fails')).toBeInTheDocument()
+    await waitFor(() => expect(notificationTrigger()).toHaveAttribute('aria-label', expect.stringContaining('1')))
+    expect(unreadIndicator('Read then delete fails')).toBeInTheDocument()
+  })
+
   it('rolls back an opened notification when both read and recovery reload fail', async () => {
     const item = notification('open-failed', 'Open failure')
     let listCalls = 0

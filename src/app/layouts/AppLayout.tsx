@@ -474,10 +474,13 @@ export function AppLayout() {
       || pendingNotificationDeletesRef.current.has(notificationId)
     ) return
     const deletedIndex = notifications.findIndex((item) => item.id === notificationId)
-    const deletedNotification = notifications[deletedIndex]
-    if (!deletedNotification) return
+    const optimisticDeletedNotification = notifications[deletedIndex]
+    if (!optimisticDeletedNotification) return
     const token = Symbol(notificationId)
     const pendingReadToken = pendingNotificationReadsRef.current.get(notificationId)
+    const deletedNotification = pendingReadToken
+      ? { ...optimisticDeletedNotification, readAt: undefined }
+      : optimisticDeletedNotification
     if (pendingReadToken) {
       pendingNotificationControllersRef.current.get(pendingReadToken)?.abort()
       pendingNotificationControllersRef.current.delete(pendingReadToken)
