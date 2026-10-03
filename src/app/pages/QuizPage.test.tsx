@@ -1,10 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TestAuthProvider } from '../../test/TestAuthProvider'
 import { installApiFixtureServer } from '../../test/apiFixtureServer'
+import { AuthContext, type AuthContextValue } from '../../features/auth/authContext'
+import type { AuthenticatedRequest } from '../../features/auth'
 import type { PublicQuizQuestion } from '../../features/quiz'
+import { ApiClientError } from '../../shared/api'
 import { QuizPage, QuizWorkspace } from './QuizPage'
 
 beforeEach(() => {
@@ -27,6 +30,87 @@ function renderQuizPage(path = '/quizzes/50') {
       </MemoryRouter>
     </TestAuthProvider>,
   )
+}
+
+function QuizRouteSwitcher() {
+  const navigate = useNavigate()
+
+  return (
+    <>
+      <button onClick={() => navigate('/quizzes/51')} type="button">
+        다른 퀴즈 열기
+      </button>
+      <Routes>
+        <Route path="/quizzes/:quizId" element={<QuizPage />} />
+      </Routes>
+    </>
+  )
+}
+
+function renderSwitchableQuizPage() {
+  return render(
+    <TestAuthProvider>
+      <MemoryRouter initialEntries={['/quizzes/50']}>
+        <QuizRouteSwitcher />
+      </MemoryRouter>
+    </TestAuthProvider>,
+  )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, reject, resolve }
+}
+
+function createAuthValue(userId: number, apiRequest: AuthenticatedRequest): AuthContextValue {
+  return {
+    apiRequest,
+    rawApiRequest: vi.fn(),
+    checkEmailAvailability: vi.fn(),
+    clearGoogleSignup: vi.fn(),
+    isAuthenticated: true,
+    isInitializing: false,
+    login: vi.fn(),
+    loginWithGoogle: vi.fn(),
+    logout: vi.fn(),
+    logoutReason: null,
+    pendingGoogleIdToken: null,
+    prepareGoogleSignup: vi.fn(),
+    setExamInProgress: vi.fn(),
+    signup: vi.fn(),
+    updateUser: vi.fn(),
+    user: {
+      email: `learner-${userId}@example.com`,
+      id: userId,
+      name: `learner-${userId}`,
+      role: 'LEARNER',
+    },
+    withdraw: vi.fn(),
+  }
+}
+
+function quizEnvelope(questionText: string) {
+  return {
+    data: {
+      questions: [{
+        options: [{ optionId: 'shared-choice', text: '공유 보기' }],
+        questionId: 'shared-question',
+        questionText,
+      }],
+      quizId: 70,
+      quizType: 'MCQ',
+      sessionId: 100,
+      submitted: false,
+      title: '계정별 퀴즈',
+    },
+    message: '',
+    success: true as const,
+  }
 }
 
 async function answerAllQuestions() {
@@ -89,6 +173,50 @@ describe('QuizPage', () => {
     expect(input).toHaveValue(answer)
   })
 
+  it('preserves a streamed answer when the server quiz identity arrives', async () => {
+    const streamedQuestion: PublicQuizQuestion = {
+      choices: [
+        { id: 'mcq-a', label: '개념의 정의를 먼저 확인한다.' },
+        { id: 'mcq-b', label: '본문 전체를 암기한다.' },
+      ],
+      id: 'question-mcq',
+      kind: 'MCQ',
+      prompt: '새 개념을 학습할 때 가장 먼저 확인할 정보는 무엇인가요?',
+    }
+    const view = render(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace
+            embedded
+            expectedQuestionCount={2}
+            materialId="10"
+            progressiveQuestions={[streamedQuestion]}
+          />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    fireEvent.click(screen.getByLabelText('개념의 정의를 먼저 확인한다.'))
+    expect(screen.getByLabelText('개념의 정의를 먼저 확인한다.')).toBeChecked()
+
+    view.rerender(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace
+            embedded
+            expectedQuestionCount={2}
+            materialId="10"
+            progressiveQuestions={[streamedQuestion]}
+            quizId="50"
+          />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    await waitFor(() => expect(screen.queryByText('문항을 저장하고 있습니다.')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('개념의 정의를 먼저 확인한다.')).toBeChecked()
+  })
+
   it('allows O or X to be selected when the API omits options', async () => {
     renderQuizPage('/quizzes/51')
 
@@ -124,6 +252,238 @@ describe('QuizPage', () => {
     expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '제출 완료' })).not.toBeInTheDocument()
     expect(screen.getByText('문항 1 / 2')).toBeInTheDocument()
+  })
+
+  it('locks same-tick duplicate submission before React commits pending state', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    const pendingSubmission = deferred<void>()
+    let submissionCount = 0
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'POST' && new URL(request.url).pathname === '/api/quizzes/50/submit') {
+        submissionCount += 1
+        await pendingSubmission.promise
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderQuizPage()
+
+    await answerAllQuestions()
+    const form = screen.getByRole('button', { name: '제출' }).closest('form')
+    expect(form).not.toBeNull()
+    act(() => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    expect(submissionCount).toBe(1)
+    pendingSubmission.resolve()
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+  })
+
+  it('preserves answers after a failed submission and retries explicitly', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    let submissionCount = 0
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'POST' && new URL(request.url).pathname === '/api/quizzes/50/submit') {
+        submissionCount += 1
+        if (submissionCount === 1) return apiFailure('INTERNAL_SERVER_ERROR', 500)
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderQuizPage()
+
+    await answerAllQuestions()
+    fireEvent.click(screen.getByRole('button', { name: '제출' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('자료를 찾을 수 없습니다.')
+    expect(screen.getByLabelText('이해가 낮은 페이지를 다시 읽는다.')).toBeChecked()
+    expect(screen.getByRole('button', { name: '제출' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '이전 문항' }))
+    expect(screen.getByLabelText('개념의 정의를 먼저 확인한다.')).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: '다음 문항' }))
+    fireEvent.click(screen.getByRole('button', { name: '제출' }))
+
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+    expect(submissionCount).toBe(2)
+  })
+
+  it('resets submitted answers and result when a standalone route changes quiz', async () => {
+    renderSwitchableQuizPage()
+
+    await answerAllQuestions()
+    fireEvent.click(screen.getByRole('button', { name: '제출' }))
+    expect(await screen.findByText('점수 48 / 100 · 보완 필요')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '다른 퀴즈 열기' }))
+
+    expect(await screen.findByText('현재 설명은 참입니까?')).toBeInTheDocument()
+    expect(screen.getByLabelText('O')).toBeEnabled()
+    expect(screen.getByLabelText('O')).not.toBeChecked()
+    expect(screen.queryByText('점수 48 / 100 · 보완 필요')).not.toBeInTheDocument()
+  })
+
+  it('resets embedded access denial when its quiz identity changes', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'GET' && new URL(request.url).pathname === '/api/quizzes/50') {
+        return apiFailure('MATERIAL_NOT_FOUND', 404)
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    const view = render(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace embedded quizId="50" />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+    expect(await screen.findByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).toBeInTheDocument()
+
+    view.rerender(
+      <TestAuthProvider>
+        <MemoryRouter>
+          <QuizWorkspace embedded quizId="51" />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+
+    expect(await screen.findByText('현재 설명은 참입니까?')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('O')).toBeEnabled()
+  })
+
+  it('resets answers when the account owner changes on the same quiz route', async () => {
+    const requestA = vi.fn(async () => quizEnvelope('A 계정 문항')) as unknown as AuthenticatedRequest
+    const requestB = vi.fn(async () => quizEnvelope('B 계정 문항')) as unknown as AuthenticatedRequest
+    const view = render(
+      <AuthContext.Provider value={createAuthValue(1, requestA)}>
+        <MemoryRouter>
+          <QuizWorkspace embedded materialId="10" quizId="70" />
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    expect(await screen.findByText('A 계정 문항')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('공유 보기'))
+    expect(screen.getByLabelText('공유 보기')).toBeChecked()
+
+    view.rerender(
+      <AuthContext.Provider value={createAuthValue(2, requestB)}>
+        <MemoryRouter>
+          <QuizWorkspace embedded materialId="10" quizId="70" />
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    expect(await screen.findByText('B 계정 문항')).toBeInTheDocument()
+    expect(screen.getByLabelText('공유 보기')).not.toBeChecked()
+    expect(requestA).toHaveBeenCalledTimes(1)
+    expect(requestB).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reissue account A loading work through account B after an identity change', async () => {
+    const pendingAccountA = deferred<ReturnType<typeof quizEnvelope>>()
+    const requestA = vi.fn(() => pendingAccountA.promise) as unknown as AuthenticatedRequest
+    const requestB = vi.fn(async () => quizEnvelope('B 계정 문항')) as unknown as AuthenticatedRequest
+    const view = render(
+      <AuthContext.Provider value={createAuthValue(1, requestA)}>
+        <MemoryRouter>
+          <QuizWorkspace embedded materialId="10" quizId="70" />
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+    await waitFor(() => expect(requestA).toHaveBeenCalledTimes(1))
+
+    view.rerender(
+      <AuthContext.Provider value={createAuthValue(2, requestB)}>
+        <MemoryRouter>
+          <QuizWorkspace embedded materialId="10" quizId="70" />
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+    expect(await screen.findByText('B 계정 문항')).toBeInTheDocument()
+
+    await act(async () => {
+      pendingAccountA.reject(new ApiClientError({
+        code: 'MATERIAL_NOT_FOUND',
+        message: 'A 계정 자료 접근이 만료되었습니다.',
+        status: 404,
+      }))
+      await pendingAccountA.promise.catch(() => undefined)
+    })
+
+    expect(screen.getByText('B 계정 문항')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).not.toBeInTheDocument()
+    expect(requestA).toHaveBeenCalledTimes(1)
+    expect(requestB).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a late denial from quiz A after quiz B succeeds', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    const quizA = deferred<Response>()
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'GET' && new URL(request.url).pathname === '/api/quizzes/50') {
+        return quizA.promise
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderSwitchableQuizPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '다른 퀴즈 열기' }))
+    expect(await screen.findByText('현재 설명은 참입니까?')).toBeInTheDocument()
+
+    await act(async () => {
+      quizA.resolve(apiFailure('MATERIAL_NOT_FOUND', 404))
+      await quizA.promise
+    })
+
+    expect(screen.getByText('현재 설명은 참입니까?')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '퀴즈 결과를 표시할 수 없습니다.' })).not.toBeInTheDocument()
+  })
+
+  it('ignores a late success from quiz A after quiz B succeeds', async () => {
+    const fixtureFetch = vi.mocked(globalThis.fetch).getMockImplementation()
+    const quizA = deferred<Response>()
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === 'GET' && new URL(request.url).pathname === '/api/quizzes/50') {
+        return quizA.promise
+      }
+      if (!fixtureFetch) throw new Error('API fixture fetch is not installed.')
+      return fixtureFetch(input, init)
+    })
+    renderSwitchableQuizPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '다른 퀴즈 열기' }))
+    expect(await screen.findByText('현재 설명은 참입니까?')).toBeInTheDocument()
+
+    await act(async () => {
+      quizA.resolve(new Response(JSON.stringify({
+        data: {
+          questions: [{ options: [{ optionId: 'a', text: '이전 보기' }], questionId: 'old', questionText: '이전 퀴즈 문항' }],
+          quizId: 50,
+          quizType: 'MCQ',
+          sessionId: 100,
+          submitted: false,
+          title: '이전 퀴즈',
+        },
+        message: '',
+        success: true,
+      }), { headers: { 'Content-Type': 'application/json' }, status: 200 }))
+      await quizA.promise
+    })
+
+    expect(screen.getByText('현재 설명은 참입니까?')).toBeInTheDocument()
+    expect(screen.queryByText('이전 퀴즈 문항')).not.toBeInTheDocument()
   })
 
   it('clears quiz state and actions when submission access is revoked', async () => {

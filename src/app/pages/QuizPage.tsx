@@ -2,6 +2,7 @@ import { CircleCheckBig, CircleHelp, CircleX, ChevronLeft, ChevronRight, LoaderC
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,7 +15,7 @@ import {
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { useAuth } from '../../features/auth'
+import { useAuth, type AuthenticatedRequest } from '../../features/auth'
 import { DocumentChatPanel } from '../../features/documentChat'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import {
@@ -66,6 +67,33 @@ interface QuizWorkspaceProps {
 }
 
 export function QuizWorkspace({
+  quizId: quizIdProp,
+  ...props
+}: QuizWorkspaceProps) {
+  const { quizId: routeQuizId } = useParams()
+  const quizId = quizIdProp ?? routeQuizId
+  const { apiRequest, user } = useAuth()
+  const accountIdentity = user?.id === undefined
+    ? `email:${user?.email ?? 'anonymous'}`
+    : `id:${user.id}`
+
+  return (
+    <QuizWorkspaceState
+      {...props}
+      apiRequest={apiRequest}
+      key={`${accountIdentity}:quiz-workspace`}
+      quizId={quizId}
+    />
+  )
+}
+
+interface QuizWorkspaceStateProps extends Omit<QuizWorkspaceProps, 'quizId'> {
+  apiRequest: AuthenticatedRequest
+  quizId?: string
+}
+
+function QuizWorkspaceState({
+  apiRequest,
   embedded = false,
   expectedQuestionCount,
   materialId: materialIdProp,
@@ -73,15 +101,12 @@ export function QuizWorkspace({
   onQuizLoaded,
   onSubmitted,
   progressiveQuestions = [],
-  quizId: quizIdProp,
+  quizId,
   reviewSummary,
   showReviewChat = true,
-}: QuizWorkspaceProps) {
+}: QuizWorkspaceStateProps) {
   usePageTitle(embedded ? '학습 공간' : '퀴즈')
-  const { quizId: routeQuizId } = useParams()
-  const quizId = quizIdProp ?? routeQuizId
   const navigate = useNavigate()
-  const { apiRequest } = useAuth()
   const repository = useMemo(
     () => createQuizRepository(apiRequest),
     [apiRequest],
@@ -115,6 +140,10 @@ export function QuizWorkspace({
   const onQuizLoadedRef = useRef(onQuizLoaded)
   const accessRevisionRef = useRef(0)
   const submitControllerRef = useRef<AbortController | null>(null)
+  const previousQuizScopeRef = useRef({
+    hadProgressiveQuestions: progressiveQuestions.length > 0,
+    quizId,
+  })
   const questions = quiz?.questions ?? progressiveQuestions
   const question = questions[currentQuestionIndex] ?? questions[0]
   const isGenerating = !quiz && progressiveQuestions.length > 0
@@ -136,6 +165,35 @@ export function QuizWorkspace({
   const currentFeedback = result?.feedback.find(
     (candidate) => candidate.questionId === question?.id,
   )
+
+  useLayoutEffect(() => {
+    const previousScope = previousQuizScopeRef.current
+    previousQuizScopeRef.current = {
+      hadProgressiveQuestions: progressiveQuestions.length > 0,
+      quizId,
+    }
+    if (previousScope.quizId === quizId) return
+    if (
+      previousScope.quizId === undefined &&
+      quizId !== undefined &&
+      (previousScope.hadProgressiveQuestions || progressiveQuestions.length > 0)
+    ) {
+      return
+    }
+
+    accessRevisionRef.current += 1
+    submitControllerRef.current?.abort()
+    submitControllerRef.current = null
+    setAccessDenied(false)
+    setQuiz(undefined)
+    setResult(null)
+    setAnswers({})
+    setIsSubmitted(false)
+    setIsSubmitting(false)
+    setCurrentQuestionIndex(0)
+    setSessionMaterial(undefined)
+    setError(null)
+  }, [progressiveQuestions.length, quizId])
 
   const denyQuizAccess = useCallback(() => {
     accessRevisionRef.current += 1
@@ -208,10 +266,11 @@ export function QuizWorkspace({
         }
       })
       .catch((requestError: unknown) => {
+        if (controller.signal.aborted || requestRevision !== accessRevisionRef.current) return
         if (isQuizMaterialAccessDenied(requestError)) {
           controller.abort()
           denyQuizAccess()
-        } else if (!controller.signal.aborted && requestRevision === accessRevisionRef.current) {
+        } else {
           setQuiz(null)
           setError(getRequestErrorMessage(requestError))
         }
@@ -251,7 +310,7 @@ export function QuizWorkspace({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!quiz || isSubmitting) return
+    if (!quiz || isSubmitting || submitControllerRef.current) return
     const firstInvalidQuestion = questions.find(
       (candidate) => validateQuizAnswer(candidate, answers) !== null,
     )
@@ -267,7 +326,6 @@ export function QuizWorkspace({
 
     setIsSubmitting(true)
     const controller = new AbortController()
-    submitControllerRef.current?.abort()
     submitControllerRef.current = controller
     const requestRevision = accessRevisionRef.current
     try {
@@ -279,9 +337,10 @@ export function QuizWorkspace({
       setError(null)
       onSubmitted?.(nextResult)
     } catch (requestError) {
+      if (controller.signal.aborted || requestRevision !== accessRevisionRef.current) return
       if (isQuizMaterialAccessDenied(requestError)) {
         denyQuizAccess()
-      } else if (!controller.signal.aborted && requestRevision === accessRevisionRef.current) {
+      } else {
         setError(getRequestErrorMessage(requestError))
       }
     } finally {
