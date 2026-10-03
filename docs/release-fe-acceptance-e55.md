@@ -1,56 +1,53 @@
 # FE release acceptance — develop e578dbe (includes e55bb9c2)
 
-## Scope and isolation
+## Scope and evidence semantics
 
-- Worktree: `task-10`, branch `validate/release-fe-auth-security-e55`
-- Base: `e578dbe6ba2c` (`origin/develop`; includes required `e55bb9c2e63fdf`)
-- All authentication, administration, password-reset, and authorization requests were intercepted by Vitest fetch mocks or Playwright route mocks. No real account, credential, email, security-setting mutation, permission grant, deletion, merge, or deployment was used.
-- Settings preferences were not changed.
-- The ID mapping below follows the scenarios delegated for this verification; it does not redefine the release criteria.
-- A separate agent completed the final diff review after the failure-first fixes and found no remaining blocking, High, or Medium issue.
+- Branch: `validate/release-fe-auth-security-e55`; original base `e578dbe6ba2c`.
+- Authentication, administration, password-reset, and authorization traffic used synthetic Vitest or Playwright mocks. No real account, credential, email, security-setting mutation, permission grant, or deletion was used.
+- Settings preferences and feature flags were not changed.
+- `PASS-SCENARIO` means only the named FE scenario passed. It does not claim that every acceptance condition under the canonical requirement ID passed.
+- `UNMAPPED-SUPPORT` is supporting hardening that does not establish a canonical requirement.
+- `NOTRUN-REQUIREMENT` means the canonical requirement needs unavailable backend, gateway, or live-service evidence.
 
-## Acceptance matrix
+## Canonical acceptance matrix
 
-| ID | Status | Verified behavior | Evidence |
+| Canonical ID / evidence label | Status | Verified behavior | Evidence |
 | --- | --- | --- | --- |
-| AUTH-02 | PASS | Password login 400/401/409/429 errors preserve the entered email/password, issue one request, expose the expected field/server feedback, and permit an explicit retry. | `src/app/pages/LoginPage.test.tsx` — status matrix and input-preservation test; final full Vitest run. |
-| AUTH-03 | PASS | Repeated password submits are locked; Google credentials are ignored while password auth is pending; password submit is ignored while Google auth is pending. | `src/app/pages/LoginPage.test.tsx` — `locks duplicate password submissions...` and `ignores password submission while Google authentication is pending`. These tests failed before the `LoginPage` lock and pass after it. |
-| AUTH-04 | PASS | Cross-tab logout wins over delayed identity responses; a lower-revision logout still clears an older tab; both tabs restore safely around delayed `getMe`. | `src/features/auth/AuthProvider.multitab.test.tsx` (expanded suite 8/8; the seven-test race suite also passed 10 repeated runs = 70/70); `e2e/auth-multitab.spec.ts` (3 viewports, 9/9); delayed phone restore repeated 5/5. |
-| AUTH-05 | PASS | Reset links cover valid completion, expired/reused token errors, 500 retry, duplicate confirmation, token replacement, URL token scrubbing, Back/Forward, unmount, and late responses. | `src/app/pages/PasswordResetSafety.test.tsx`; final full Vitest run. No real mail or password was used. |
-| AUTH-06 | PASS | A replacement grant is re-identified before session commit. Explicit `session-start` and `refresh` messages prevent late old-account refreshes both before and after the switch from restoring the old account. A legacy different-user message clears the visible identity without trusting its grant. | `src/features/auth/AuthProvider.multitab.test.tsx` — replacement-account, rejected-old-token, before/after late-refresh, and legacy-message tests; mock Playwright matrix. |
-| ADMIN-01 | PASS | 401 ends/re-authenticates the session; 403 admin denial guides re-login; 403/404 scoped report denial does not revive late data from the previous scope. | `src/features/auth/AuthProvider.test.tsx`; `src/app/App.test.tsx`; `src/app/pages/instructor/InstructorReportsPage.test.tsx` 403/404 matrix. |
-| ADMIN-07 | PASS | Admin temporary-password reset asks for confirmation once and accepts only one reset request while pending, including repeated clicks. | `src/app/pages/admin/AdminPage.test.tsx` — pending repeated-confirm test. It failed before the request guard and passes after it. Only synthetic responses were used. |
-| DATA-07 | PASS | Identity/scope changes clear or isolate data from the prior owner; late prior-owner responses remain hidden. | `src/app/pages/instructor/InstructorReportsPage.test.tsx` — authenticated-owner change and 403/404 late-response tests; `src/app/pages/instructor/InstructorCalendarPage.test.tsx`; `src/features/calendar/calendarEvents.test.tsx`. |
-| SEC-01 | PASS | Access grants remain in memory; terminal 401/logout clears the session; delayed identity results cannot restore it. | `src/app/App.test.tsx` — DEC-004 memory-only test; `src/features/auth/AuthProvider.test.tsx`; multitab unit/E2E tests. |
-| SEC-02 | PASS | Sensitive or external return targets are rejected; reset-token query parameters are scrubbed while unrelated query/hash/router state is preserved; Back/Forward cannot reuse credentials. | `src/features/auth/authReturnTarget.test.ts`; `src/app/pages/PasswordResetSafety.test.tsx`. |
-| SEC-03 | PASS | `javascript:` Markdown links are not activated and raw HTML/script/event-handler content is not rendered. | `src/shared/ui/ui.test.tsx` — `does not activate malicious markdown links or raw HTML`. |
-| SEC-05 | PASS | Neither the application boundary nor React 19's root caught/uncaught error callbacks pass a token-bearing Error message/name to `console.error`; only constant error type plus component stack are logged. | `src/app/AppErrorBoundary.test.tsx`; `src/main.tsx` root callbacks. Failure-first covered both message and mutable `Error.name`, and the final test inspects all console calls. |
-| SEC-07 | PASS | Read-only dependency and tracked-source secret checks found no vulnerability or candidate secret file. | `npm audit --audit-level=low`: 0 vulnerabilities; filename-only tracked-source pattern scan: 0 candidate files and 0 tracked non-example `.env` files. |
-| OPS-04 | PASS | QA production build succeeds with the repository's mock capability configuration; no live API target was used. | `npm run build:qa`; Playwright `QA_ENV=mock`. Existing bundle-size warning remains non-blocking. |
-| QA-01 | PASS | Full CI-configured unit/integration suite, type checking, lint, build, and auth browser matrix pass. | Final standalone Vitest: 92 files / 794 tests; `tsc -b`; warning-free `eslint .`; QA build; Playwright 9/9. |
+| AUTH-02 | PASS-SCENARIO | Password login 400/401/409/429 responses retain input, issue one request, expose expected feedback, and allow explicit retry. Repeated password submits are locked. | `src/app/pages/LoginPage.test.tsx` status/input-preservation and duplicate-submit tests. |
+| AUTH-06 | PASS-SCENARIO | Google credentials are ignored while password authentication is pending, and password submit is ignored while Google authentication is pending. | `src/app/pages/LoginPage.test.tsx` cross-provider pending-attempt tests. No real OAuth was used. |
+| AUTH-03 | PASS-SCENARIO | Cross-tab logout wins over delayed identity work; lower-revision logout clears an older tab; tabs restore safely around delayed `getMe`. | `src/features/auth/AuthProvider.multitab.test.tsx`; `e2e/auth-multitab.spec.ts`. |
+| AUTH-04 | PASS-SCENARIO | Reset links cover successful completion, expired/reused tokens, 500 retry, duplicate confirmation, token replacement, URL scrubbing, Back/Forward, unmount, and late responses. | `src/app/pages/PasswordResetSafety.test.tsx`. No real email or password was used. |
+| Auth account-transition hardening | UNMAPPED-SUPPORT | Replacement grants are re-identified before commit. Request retry and refresh application are bound to the starting session transition/owner, so an old-account refresh cannot be applied, broadcast, or used to resend an original request after account change/logout. | `src/features/auth/AuthProvider.multitab.test.tsx`: JSON/raw, signal/no-signal, delayed-refresh, logout, and concurrent-refresh tests; mock browser matrix. |
+| ADMIN-01 | PASS-SCENARIO | 401 ends/re-authenticates a session; 403 admin denial guides re-login; scoped 403/404 report denial cannot revive previous-scope data. | `src/features/auth/AuthProvider.test.tsx`; `src/app/App.test.tsx`; `src/app/pages/instructor/InstructorReportsPage.test.tsx`. |
+| ADMIN-07 | PASS-SCENARIO | Temporary-password reset confirms once and permits only one request while pending. | `src/app/pages/admin/AdminPage.test.tsx`; synthetic responses only. |
+| DATA-07 | PASS-SCENARIO | Identity/scope changes isolate prior-owner data and hide late prior-owner responses. | Instructor reports/calendar tests and `src/features/calendar/calendarEvents.test.tsx`. |
+| SEC-01 | NOTRUN-REQUIREMENT | Canonical API isolation acceptance was not established by these FE tests. Memory-only access-grant handling is supporting client hardening only. | Real service/gateway isolation was outside the synthetic-only scope. Supporting FE evidence exists in App/AuthProvider unit and multitab tests. |
+| SEC-02 | NOTRUN-REQUIREMENT | Canonical rate-limit acceptance was not established by these FE tests. Safe return-target and reset-token URL handling are supporting client hardening only. | Real rate-limit enforcement was outside the synthetic-only scope. Supporting FE evidence: `authReturnTarget.test.ts`, `PasswordResetSafety.test.tsx`. |
+| SEC-05 | PASS-SCENARIO | `javascript:` Markdown links are not activated and raw HTML/script/event-handler content is not rendered. | `src/shared/ui/ui.test.tsx` malicious Markdown/HTML test. |
+| Redacted error reporting | UNMAPPED-SUPPORT | Application and React root error handlers do not forward token-bearing `Error` message/name values to `console.error`. | `src/app/AppErrorBoundary.test.tsx`; `src/main.tsx` root callbacks. |
+| SEC-07 | PASS-SCENARIO | Read-only dependency and tracked-source filename checks found no vulnerability or candidate secret file in the recorded verification. | `npm audit --audit-level=low`; tracked-source filename scan. This is not a host-level deep security scan. |
+| OPS-04 | PASS-SCENARIO | QA production build succeeds against mock/local capability configuration without a live API target. | `npm run build:qa`; mock Playwright. Existing large-chunk warning remains non-blocking. |
+| QA-01 | PASS-SCENARIO | Repository lint, type checking, full unit/integration tests, build, and mock auth-browser matrix pass on the final branch head. | Final command results recorded on the PR/CI checks. |
 
-## Failure-first defects and minimal fixes
+## Failure-first fixes
 
-1. `LoginPage` allowed two password requests and allowed Google/password overlap before React committed pending state. Added a synchronous per-page auth-attempt guard and disabled both entry points during either attempt.
-2. Admin password reset allowed repeated confirmations and requests while the first request was pending. Added a synchronous request guard and exposed the pending region with `aria-busy`.
-3. `AppErrorBoundary` and React 19's default root caught-error handler could log raw render errors, including mutable message/name values. The root now installs a shared redacted reporter that logs only a constant type and component stack.
-4. `AuthProvider` could commit an old account or leave a replacement grant unverified depending on BroadcastChannel delivery order. A newer replacement grant now clears prior identity immediately and is verified before session commit. Bootstrap initialization remains owned by the outstanding grant verification, preventing a transient redirect to login.
-5. A late refresh from the previous account could overwrite a pending or completed account switch. Coordinator messages now distinguish `session-start` from `refresh`, bind pending grants to the expected user, and reject late different-user refreshes. Legacy messages without the discriminator clear stale identity without applying the untrusted grant.
-6. The multiviewport auth E2E logout helper selected hidden/duplicate responsive menus. It now scopes the action to the active accessible navigation region; this is test-only.
-
-## Test stability observation
-
-- The first full run after rebasing onto `e578dbe` completed 793/794: one existing `ExamDetailPage` test queried the submit button while asynchronous attempt initialization still displayed `응시 준비 중`. The same test passed twice in isolation and the complete standalone suite then passed 794/794. No product or test change was made for this non-reproduced timing observation, and it is not hidden as a clean first-pass result.
+1. `LoginPage` allowed duplicate password requests and Google/password overlap before pending state committed. A synchronous per-page attempt guard now locks both entry points.
+2. Admin password reset allowed repeated confirmations while the first request was pending. A synchronous request guard and `aria-busy` pending region were added.
+3. Application/root error reporting could expose mutable error names/messages. The shared reporter logs only a constant type and component stack.
+4. Account replacement could commit or trust a stale grant depending on BroadcastChannel order. Replacement identity is now verified before session commit.
+5. Authenticated JSON/raw requests capture their starting session transition/owner and fail closed if it changes before refresh/retry.
+6. Refresh coordination validates the starting transition after lock settlement and after the network refresh; a superseded result is neither applied nor broadcast.
+7. The multiviewport auth E2E logout helper now scopes actions to the active accessible navigation region.
 
 ## Explicitly not run
 
 | Item | Status | Reason |
 | --- | --- | --- |
-| Real login, Google OAuth, mail delivery, credential/password change | NOTRUN | Explicitly prohibited; all flows used synthetic values and mocks. |
-| Live authorization changes or security-setting changes | NOTRUN | Explicitly prohibited. |
-| Permanent deletion | NOTRUN | Explicitly prohibited; no permanent-delete action was invoked. |
-| Merge to `develop` or dev deployment | NOTRUN | Reserved for parent coordination and deployment approval. |
-| Host-level deep security scanner | NOTRUN | The security-scan skill's host scanner/resources were unavailable in this execution environment. Read-only `npm audit` and tracked-source pattern checks were completed instead; this limitation is not represented as a deep-scan pass. |
+| Canonical SEC-01 API isolation | NOTRUN-REQUIREMENT | Requires backend/gateway or live environment evidence not represented by client memory handling. |
+| Canonical SEC-02 rate limiting | NOTRUN-REQUIREMENT | Requires backend/gateway enforcement evidence; no real rate-limit service was exercised. |
+| Real login, Google OAuth, mail delivery, credential/password change | NOTRUN | Prohibited; all flows used synthetic identities and mocks. |
+| Live authorization/security-setting changes or permanent deletion | NOTRUN | Prohibited. |
+| Host-level deep security scanner | NOTRUN | Scanner resources were unavailable; read-only dependency/source checks are not represented as a deep-scan pass. |
 
 ## Verification commands
 
@@ -60,5 +57,4 @@ npm run typecheck
 npm run lint
 npm run build:qa
 npm run test:e2e:mock -- e2e/auth-multitab.spec.ts
-npm audit --audit-level=low
 ```

@@ -3,7 +3,10 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthProvider } from './AuthProvider'
-import { AUTH_SESSION_CHANNEL_NAME } from './AuthRefreshCoordinator'
+import {
+  AUTH_SESSION_CHANNEL_NAME,
+  type AuthCoordinatorMessage,
+} from './AuthRefreshCoordinator'
 import type { AuthUser } from './authContext'
 import type { AccessGrant } from './authRepository'
 import { useAuth } from './useAuth'
@@ -28,6 +31,7 @@ class TestBroadcastChannel extends NativeBroadcastChannel {
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')
   // Real asynchronous BroadcastChannel delivery; the normal provider suite disables it.
   vi.stubGlobal('BroadcastChannel', TestBroadcastChannel)
   repository.refresh.mockResolvedValue(grant())
@@ -53,6 +57,7 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, 'locks')
   vi.resetAllMocks()
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 describe('AuthProvider with asynchronous BroadcastChannel', () => {
@@ -236,6 +241,276 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
       expect.any(AbortSignal),
     )
   })
+
+  it.each([
+    ['JSON request without a signal', 'json', false],
+    ['JSON request with a signal', 'json', true],
+    ['raw request without a signal', 'raw', false],
+    ['raw request with a signal', 'raw', true],
+  ] as const)(
+    'does not retry an account A POST with account B credentials: %s',
+    async (_label, requestKind, withSignal) => {
+      const nextUser = { ...user, id: 2, name: 'Other learner' }
+      repository.getMe.mockImplementation((accessToken: string) =>
+        Promise.resolve(
+          accessToken === 'new-account-token' ? nextUser : user,
+        ),
+      )
+      const active = renderHook(useAuth, { wrapper: AuthProvider })
+      await waitFor(() => expect(active.result.current.user).toEqual(user))
+
+      const firstResponse = deferred<Response>()
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementationOnce(() => firstResponse.promise)
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ data: {}, message: 'ok', success: true }),
+            { status: 200 },
+          ),
+        )
+      const controller = new AbortController()
+      const signal = withSignal ? controller.signal : undefined
+      const request =
+        requestKind === 'json'
+          ? active.result.current.apiRequest('/api/cross-account', {
+              body: { owner: 'account-a' },
+              method: 'POST',
+              signal,
+            })
+          : active.result.current.rawApiRequest('/api/cross-account', {
+              body: JSON.stringify({ owner: 'account-a' }),
+              method: 'POST',
+              signal,
+            })
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+      const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+      channels.push(sender)
+      const delivered = nextBroadcast()
+      sender.postMessage({
+        type: 'REFRESH_SUCCEEDED',
+        cause: 'session-start',
+        grant: { ...grant(), accessToken: 'new-account-token' },
+        receivedAt: Date.now() + 1,
+        revision: 3,
+        userId: 2,
+      })
+      await delivered
+      await waitFor(() => expect(active.result.current.user).toEqual(nextUser))
+
+      firstResponse.resolve(expiredResponse())
+
+      await expect(request).rejects.toMatchObject({ code: 'TOKEN_EXPIRED' })
+      expect(fetchMock).toHaveBeenCalledOnce()
+      expect(repository.refresh).toHaveBeenCalledOnce()
+      const firstHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+      expect(firstHeaders.get('Authorization')).toBe('Bearer shared-token')
+    },
+  )
+
+  it('keeps same-account concurrent refreshes deduplicated and retries each request once', async () => {
+    repository.refresh
+      .mockResolvedValueOnce(grant())
+      .mockResolvedValueOnce({ ...grant(), accessToken: 'renewed-token' })
+    const active = renderHook(useAuth, { wrapper: AuthProvider })
+    await waitFor(() => expect(active.result.current.user).toEqual(user))
+
+    const callsByPath = new Map<string, number>()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      const count = (callsByPath.get(url) ?? 0) + 1
+      callsByPath.set(url, count)
+      if (count === 1) return Promise.resolve(expiredResponse())
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: {}, message: 'ok', success: true }),
+          { status: 200 },
+        ),
+      )
+    })
+    const controller = new AbortController()
+
+    const [jsonResult, rawResult] = await Promise.all([
+      active.result.current.apiRequest('/api/same-account-json', {
+        body: { value: 1 },
+        method: 'POST',
+      }),
+      active.result.current.rawApiRequest('/api/same-account-raw', {
+        body: JSON.stringify({ value: 2 }),
+        method: 'POST',
+        signal: controller.signal,
+      }),
+    ])
+
+    expect(jsonResult).toMatchObject({ success: true })
+    expect(rawResult.status).toBe(200)
+    expect(repository.refresh).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    for (const url of [
+      'http://localhost:8080/api/same-account-json',
+      'http://localhost:8080/api/same-account-raw',
+    ]) {
+      expect(callsByPath.get(url)).toBe(2)
+    }
+    for (const [, init] of fetchMock.mock.calls.slice(2)) {
+      const headers = new Headers(init?.headers)
+      expect(headers.get('Authorization')).toBe('Bearer renewed-token')
+    }
+  })
+
+  it('does not refresh or retry an in-flight request after logout', async () => {
+    const active = renderHook(useAuth, { wrapper: AuthProvider })
+    await waitFor(() => expect(active.result.current.user).toEqual(user))
+
+    const firstResponse = deferred<Response>()
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(() => firstResponse.promise)
+    const request = active.result.current.apiRequest('/api/logout-race', {
+      body: { value: 1 },
+      method: 'POST',
+    })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+
+    await act(() => active.result.current.logout())
+    firstResponse.resolve(expiredResponse())
+
+    await expect(request).rejects.toMatchObject({ code: 'TOKEN_EXPIRED' })
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(repository.refresh).toHaveBeenCalledOnce()
+    expect(active.result.current.isAuthenticated).toBe(false)
+    expect(active.result.current.logoutReason).toBe('manual')
+  })
+
+  it.each(['json', 'raw'] as const)(
+    'does not apply or publish an account A refresh that resolves after an account B switch: %s',
+    async (requestKind) => {
+      const lateRefresh = deferred<AccessGrant>()
+      repository.refresh
+        .mockResolvedValueOnce(grant())
+        .mockImplementationOnce(() => lateRefresh.promise)
+      const nextUser = { ...user, id: 2, name: 'Other learner' }
+      repository.getMe.mockImplementation((accessToken: string) =>
+        Promise.resolve(
+          accessToken === 'new-account-token' ? nextUser : user,
+        ),
+      )
+      const active = renderHook(useAuth, { wrapper: AuthProvider })
+      await waitFor(() => expect(active.result.current.user).toEqual(user))
+
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(expiredResponse())
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ data: {}, message: 'ok', success: true }),
+            { status: 200 },
+          ),
+        )
+      const request =
+        requestKind === 'json'
+          ? active.result.current.apiRequest('/api/late-refresh', {
+              body: { owner: 'account-a' },
+              method: 'POST',
+            })
+          : active.result.current.rawApiRequest('/api/late-refresh', {
+              body: JSON.stringify({ owner: 'account-a' }),
+              method: 'POST',
+            })
+      await waitFor(() => expect(repository.refresh).toHaveBeenCalledTimes(2))
+
+      const observed: AuthCoordinatorMessage[] = []
+      const observer = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+      observer.onmessage = (event) => {
+        observed.push(event.data as AuthCoordinatorMessage)
+      }
+      channels.push(observer)
+      const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+      channels.push(sender)
+      const delivered = nextBroadcast()
+      sender.postMessage({
+        type: 'REFRESH_SUCCEEDED',
+        cause: 'session-start',
+        grant: { ...grant(), accessToken: 'new-account-token' },
+        receivedAt: Date.now() + 1,
+        revision: 3,
+        userId: 2,
+      })
+      await delivered
+      await waitFor(() => expect(active.result.current.user).toEqual(nextUser))
+
+      lateRefresh.resolve({ ...grant(), accessToken: 'late-account-a-token' })
+      await expect(request).rejects.toMatchObject({ code: 'TOKEN_EXPIRED' })
+      await new Promise((resolve) => setTimeout(resolve, 25))
+
+      await active.result.current.apiRequest('/api/account-b-follow-up', {
+        method: 'POST',
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      const followUpHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers)
+      expect(followUpHeaders.get('Authorization')).toBe(
+        'Bearer new-account-token',
+      )
+      expect(
+        observed.filter(
+          (message) =>
+            message.type === 'REFRESH_SUCCEEDED' &&
+            message.grant.accessToken === 'late-account-a-token',
+        ),
+      ).toHaveLength(0)
+    },
+  )
+
+  it('does not apply or publish a refresh that resolves after a logout broadcast', async () => {
+    const lateRefresh = deferred<AccessGrant>()
+    repository.refresh
+      .mockResolvedValueOnce(grant())
+      .mockImplementationOnce(() => lateRefresh.promise)
+    const active = renderHook(useAuth, { wrapper: AuthProvider })
+    await waitFor(() => expect(active.result.current.user).toEqual(user))
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(expiredResponse())
+    const request = active.result.current.apiRequest('/api/logout-refresh-race', {
+      body: { owner: 'account-a' },
+      method: 'POST',
+    })
+    await waitFor(() => expect(repository.refresh).toHaveBeenCalledTimes(2))
+
+    const observed: AuthCoordinatorMessage[] = []
+    const observer = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    observer.onmessage = (event) => {
+      observed.push(event.data as AuthCoordinatorMessage)
+    }
+    channels.push(observer)
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+    const delivered = nextBroadcast()
+    sender.postMessage({
+      reason: 'manual',
+      revision: 3,
+      type: 'SESSION_ENDED',
+      userId: 1,
+    })
+    await delivered
+    await waitFor(() => expect(active.result.current.isAuthenticated).toBe(false))
+
+    lateRefresh.resolve({ ...grant(), accessToken: 'late-after-logout-token' })
+    await expect(request).rejects.toMatchObject({ code: 'TOKEN_EXPIRED' })
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(active.result.current.isAuthenticated).toBe(false)
+    expect(
+      observed.filter(
+        (message) =>
+          message.type === 'REFRESH_SUCCEEDED' &&
+          message.grant.accessToken === 'late-after-logout-token',
+      ),
+    ).toHaveLength(0)
+  })
 })
 
 function nextBroadcast() {
@@ -262,4 +537,18 @@ function grant(): AccessGrant {
     idleExpiresAt: new Date(Date.now() + 7_200_000).toISOString(),
     idleTimeoutSeconds: 7200,
   } }
+}
+
+function expiredResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: 'TOKEN_EXPIRED',
+        details: [],
+        message: 'Token expired.',
+      },
+      success: false,
+    }),
+    { status: 401 },
+  )
 }

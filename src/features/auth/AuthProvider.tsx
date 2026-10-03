@@ -20,6 +20,7 @@ import {
 } from './authContext'
 import {
   AuthRefreshCoordinator,
+  AuthRefreshSupersededError,
   type AuthCoordinatorMessage,
   type AuthCoordinatorSnapshot,
 } from './AuthRefreshCoordinator'
@@ -339,6 +340,11 @@ export function AuthProvider({
 
   const renewAccessToken = useCallback(
     async (silentTerminal = false): Promise<AccessGrant | null> => {
+      const refreshTransition = sessionTransitionRef.current
+      const refreshUserId = sessionRef.current?.user.id
+      const isRefreshSessionCurrent = () =>
+        sessionTransitionRef.current === refreshTransition &&
+        sessionRef.current?.user.id === refreshUserId
       const performRefresh = async () => {
         const controller = new AbortController()
         const timeoutId = window.setTimeout(
@@ -355,14 +361,20 @@ export function AuthProvider({
       try {
         const coordinator = coordinatorRef.current
         const grant = coordinator
-          ? await coordinator.refresh(performRefresh, applyGrant)
+          ? await coordinator.refresh(
+              performRefresh,
+              applyGrant,
+              isRefreshSessionCurrent,
+            )
           : await performRefresh()
 
         if (!coordinator) {
+          if (!isRefreshSessionCurrent()) return null
           applyGrant(grant, sessionRevisionRef.current + 1, Date.now())
         }
         return grant
       } catch (error) {
+        if (error instanceof AuthRefreshSupersededError) return null
         const terminalReason = getTerminalLogoutReason(error)
         if (terminalReason) {
           if (!silentTerminal || sessionRef.current) {
@@ -807,7 +819,13 @@ export function AuthProvider({
 
   const authenticatedRequest = useCallback<AuthContextValue['apiRequest']>(
     async (path, options = {}) => {
-      const accessToken = sessionRef.current?.accessToken
+      const requestSession = sessionRef.current
+      const requestTransition = sessionTransitionRef.current
+      const requestUserId = requestSession?.user.id
+      const accessToken = requestSession?.accessToken
+      const isRequestSessionCurrent = () =>
+        sessionTransitionRef.current === requestTransition &&
+        sessionRef.current?.user.id === requestUserId
       if (!accessToken) {
         clearSession('session-expired')
         throw createAuthRequiredError()
@@ -816,6 +834,7 @@ export function AuthProvider({
       try {
         return await requestApi(path, { ...options, accessToken })
       } catch (error) {
+        if (!isRequestSessionCurrent()) throw error
         const directReason = getTerminalLogoutReason(error)
         if (directReason) {
           clearSession(directReason)
@@ -826,14 +845,18 @@ export function AuthProvider({
         }
 
         const grant = await renewAccessToken()
-        if (!grant) throw error
+        if (!grant || !isRequestSessionCurrent()) throw error
         try {
+          if (!isRequestSessionCurrent()) throw error
           return await requestApi(path, {
             ...options,
             accessToken: grant.accessToken,
           })
         } catch (retryError) {
-          if (isUnauthorizedOrInactive(retryError)) {
+          if (
+            isRequestSessionCurrent() &&
+            isUnauthorizedOrInactive(retryError)
+          ) {
             clearSession(
               getTerminalLogoutReason(retryError) ?? 'session-expired',
             )
@@ -849,7 +872,13 @@ export function AuthProvider({
     AuthContextValue['rawApiRequest']
   >(
     async (path, options = {}) => {
-      const accessToken = sessionRef.current?.accessToken
+      const requestSession = sessionRef.current
+      const requestTransition = sessionTransitionRef.current
+      const requestUserId = requestSession?.user.id
+      const accessToken = requestSession?.accessToken
+      const isRequestSessionCurrent = () =>
+        sessionTransitionRef.current === requestTransition &&
+        sessionRef.current?.user.id === requestUserId
       if (!accessToken) {
         clearSession('session-expired')
         throw createAuthRequiredError()
@@ -858,6 +887,7 @@ export function AuthProvider({
       try {
         return await requestRawApi(path, { ...options, accessToken })
       } catch (error) {
+        if (!isRequestSessionCurrent()) throw error
         const directReason = getTerminalLogoutReason(error)
         if (directReason) {
           clearSession(directReason)
@@ -868,14 +898,18 @@ export function AuthProvider({
         }
 
         const grant = await renewAccessToken()
-        if (!grant) throw error
+        if (!grant || !isRequestSessionCurrent()) throw error
         try {
+          if (!isRequestSessionCurrent()) throw error
           return await requestRawApi(path, {
             ...options,
             accessToken: grant.accessToken,
           })
         } catch (retryError) {
-          if (isUnauthorizedOrInactive(retryError)) {
+          if (
+            isRequestSessionCurrent() &&
+            isUnauthorizedOrInactive(retryError)
+          ) {
             clearSession(
               getTerminalLogoutReason(retryError) ?? 'session-expired',
             )
