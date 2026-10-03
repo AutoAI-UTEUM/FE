@@ -1,8 +1,8 @@
-# FE release acceptance — develop e578dbe (includes e55bb9c2)
+# FE release acceptance — develop de2854e (includes e55bb9c2)
 
 ## Scope and evidence semantics
 
-- Branch: `validate/release-fe-auth-security-e55`; original base `e578dbe6ba2c`.
+- Branch: `validate/release-fe-auth-security-e55`; validation base `de2854ee0162a51bf7e3f9880fe0bbc7dab3943c`.
 - Authentication, administration, password-reset, and authorization traffic used synthetic Vitest or Playwright mocks. No real account, credential, email, security-setting mutation, permission grant, or deletion was used.
 - Settings preferences and feature flags were not changed.
 - `PASS-SCENARIO` means only the named FE scenario passed. It does not claim that every acceptance condition under the canonical requirement ID passed.
@@ -13,11 +13,11 @@
 
 | Canonical ID / evidence label | Status | Verified behavior | Evidence |
 | --- | --- | --- | --- |
-| AUTH-02 | PASS-SCENARIO | Password login 400/401/409/429 responses retain input, issue one request, expose expected feedback, and allow explicit retry. Repeated password submits are locked. | `src/app/pages/LoginPage.test.tsx` status/input-preservation and duplicate-submit tests. |
+| AUTH-02 | PASS-SCENARIO | Password login 400/401/409/429 responses retain input, issue one request, expose expected feedback, and re-enable the submit control for a retry. Repeated password submits are locked. A second retry request is not asserted by this scenario. | `src/app/pages/LoginPage.test.tsx` status/input-preservation and duplicate-submit tests. |
 | AUTH-06 | PASS-SCENARIO | Google credentials are ignored while password authentication is pending, and password submit is ignored while Google authentication is pending. | `src/app/pages/LoginPage.test.tsx` cross-provider pending-attempt tests. No real OAuth was used. |
 | AUTH-03 | PASS-SCENARIO | Cross-tab logout wins over delayed identity work; lower-revision logout clears an older tab; tabs restore safely around delayed `getMe`. | `src/features/auth/AuthProvider.multitab.test.tsx`; `e2e/auth-multitab.spec.ts`. |
 | AUTH-04 | PASS-SCENARIO | Reset links cover successful completion, expired/reused tokens, 500 retry, duplicate confirmation, token replacement, URL scrubbing, Back/Forward, unmount, and late responses. | `src/app/pages/PasswordResetSafety.test.tsx`. No real email or password was used. |
-| Auth account-transition hardening | UNMAPPED-SUPPORT | Replacement grants are re-identified before commit. Request retry and refresh application are bound to the starting session transition/owner, so an old-account refresh cannot be applied, broadcast, or used to resend an original request after account change/logout. | `src/features/auth/AuthProvider.multitab.test.tsx`: JSON/raw, signal/no-signal, delayed-refresh, logout, and concurrent-refresh tests; mock browser matrix. |
+| Auth account-transition hardening | UNMAPPED-SUPPORT | Replacement grants are re-identified before commit. Request retry and refresh application are bound to the starting session transition/owner. Known stale-owner and unidentified grants are rejected for established/pending identities; a superseded local refresh is not applied or broadcast and cannot resend the original request after account change/logout. Replacement identity lookup times out fail-closed. | `src/features/auth/AuthProvider.multitab.test.tsx`: JSON/raw, signal/no-signal, unidentified-grant, pending-owner logout, replacement-timeout, delayed-refresh, logout, and concurrent-refresh tests; mock browser matrix. |
 | ADMIN-01 | PASS-SCENARIO | 401 ends/re-authenticates a session; 403 admin denial guides re-login; scoped 403/404 report denial cannot revive previous-scope data. | `src/features/auth/AuthProvider.test.tsx`; `src/app/App.test.tsx`; `src/app/pages/instructor/InstructorReportsPage.test.tsx`. |
 | ADMIN-07 | PASS-SCENARIO | Temporary-password reset confirms once and permits only one request while pending. | `src/app/pages/admin/AdminPage.test.tsx`; synthetic responses only. |
 | DATA-07 | PASS-SCENARIO | Identity/scope changes isolate prior-owner data and hide late prior-owner responses. | Instructor reports/calendar tests and `src/features/calendar/calendarEvents.test.tsx`. |
@@ -38,6 +38,10 @@
 5. Authenticated JSON/raw requests capture their starting session transition/owner and fail closed if it changes before refresh/retry.
 6. Refresh coordination validates the starting transition after lock settlement and after the network refresh; a superseded result is neither applied nor broadcast.
 7. The multiviewport auth E2E logout helper now scopes actions to the active accessible navigation region.
+8. An unidentified bootstrap refresh broadcast could be attached to an established different-user session. Established and pending identities now reject unidentified grants while anonymous bootstrap deduplication remains intact.
+9. A previous account's late logout could clear a pending verified account replacement. Coordinator ownership checks now include the pending user ID.
+10. Replacement identity lookup could remain pending indefinitely. It now aborts and fails closed after `AUTH_RESTORE_TIMEOUT_MS`.
+11. A newer account switch arriving during pending identity replacement could dereference a missing current session. Freshness comparison now uses the current or pending grant timestamp, and consecutive B→C replacement is covered asynchronously.
 
 ## Explicitly not run
 

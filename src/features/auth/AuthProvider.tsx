@@ -205,10 +205,20 @@ export function AuthProvider({
   const handleCoordinatorMessage = useCallback(
     (message: AuthCoordinatorMessage) => {
       const current = sessionRef.current
+      const currentUserId = current?.user.id ?? pendingGrantRef.current?.userId
+      if (
+        message.type === 'REFRESH_SUCCEEDED' &&
+        currentUserId !== undefined &&
+        message.userId === undefined
+      ) {
+        // A bootstrap refresh has not verified which account owns its grant.
+        // Never bind it to an established or pending identity in this tab.
+        return
+      }
       const isDifferentUser =
-        current?.user.id !== undefined &&
+        currentUserId !== undefined &&
         message.userId !== undefined &&
-        current.user.id !== message.userId
+        currentUserId !== message.userId
       if (isDifferentUser) {
         if (
           message.type === 'REFRESH_SUCCEEDED' &&
@@ -224,9 +234,13 @@ export function AuthProvider({
           message.type === 'REFRESH_SUCCEEDED' &&
           message.cause === 'session-start'
         ) {
+          const currentReceivedAt =
+            current?.grantReceivedAt ??
+            pendingGrantRef.current?.receivedAt ??
+            0
           const isNewer =
             message.revision > sessionRevisionRef.current ||
-            message.receivedAt > current.grantReceivedAt
+            message.receivedAt > currentReceivedAt
           if (isNewer) {
             sessionRevisionRef.current = Math.max(
               sessionRevisionRef.current,
@@ -440,6 +454,12 @@ export function AuthProvider({
 
     const controller = new AbortController()
     const sessionTransition = sessionTransitionRef.current
+    const timeoutId = window.setTimeout(() => {
+      if (sessionTransition === sessionTransitionRef.current) {
+        clearSession('session-expired', false)
+      }
+      controller.abort()
+    }, AUTH_RESTORE_TIMEOUT_MS)
     void repository.getMe(pending.grant.accessToken, controller.signal)
       .then((user) => {
         const latest = pendingGrantRef.current
@@ -465,10 +485,14 @@ export function AuthProvider({
         }
       })
       .finally(() => {
+        window.clearTimeout(timeoutId)
         if (!controller.signal.aborted) setIsInitializing(false)
       })
 
-    return () => controller.abort()
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, [
     beginSession,
     clearSession,

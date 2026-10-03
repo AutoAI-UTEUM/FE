@@ -2,7 +2,7 @@ import { BroadcastChannel as NativeBroadcastChannel, threadId } from 'node:worke
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AuthProvider } from './AuthProvider'
+import { AUTH_RESTORE_TIMEOUT_MS, AuthProvider } from './AuthProvider'
 import {
   AUTH_SESSION_CHANNEL_NAME,
   type AuthCoordinatorMessage,
@@ -176,6 +176,35 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
     )
   })
 
+  it('does not apply an unidentified refresh grant to an established session', async () => {
+    const activeUser = { ...user, id: 2, name: 'Other learner' }
+    const active = renderHook(useAuth, {
+      wrapper: ({ children }) => <AuthProvider initialUser={activeUser}>{children}</AuthProvider>,
+    })
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+    const delivered = nextBroadcast()
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'refresh',
+      grant: { ...grant(), accessToken: 'unidentified-old-account-token' },
+      receivedAt: Date.now() + 1,
+      revision: 3,
+    })
+    await delivered
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: {}, message: 'ok', success: true })),
+    )
+    await active.result.current.apiRequest('/api/account-b-follow-up')
+
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers)
+    expect(headers.get('Authorization')).toBe('Bearer test-access-token')
+    expect(active.result.current.user).toEqual(activeUser)
+  })
+
   it('does not let a late previous-account refresh replace a pending account switch', async () => {
     const replacementUser = deferred<AuthUser>()
     const nextUser = { ...user, id: 2, name: '다른 학습자' }
@@ -240,6 +269,130 @@ describe('AuthProvider with asynchronous BroadcastChannel', () => {
       'late-old-after-switch-token',
       expect.any(AbortSignal),
     )
+  })
+
+  it('does not let a previous-account logout cancel a pending account switch', async () => {
+    const replacementUser = deferred<AuthUser>()
+    const nextUser = { ...user, id: 2, name: 'Other learner' }
+    repository.getMe.mockImplementation((accessToken: string) => {
+      if (accessToken === 'new-account-token') return replacementUser.promise
+      return Promise.resolve(user)
+    })
+    const active = renderHook(useAuth, {
+      wrapper: ({ children }) => <AuthProvider initialUser={user}>{children}</AuthProvider>,
+    })
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+    const delivered = nextBroadcast()
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'session-start',
+      grant: { ...grant(), accessToken: 'new-account-token' },
+      receivedAt: Date.now() + 1,
+      revision: 3,
+      userId: 2,
+    })
+    await delivered
+    await waitFor(() => expect(repository.getMe).toHaveBeenCalledWith(
+      'new-account-token',
+      expect.any(AbortSignal),
+    ))
+
+    sender.postMessage({
+      reason: 'manual',
+      revision: 4,
+      type: 'SESSION_ENDED',
+      userId: 1,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    await act(async () => { replacementUser.resolve(nextUser) })
+
+    await waitFor(() => expect(active.result.current.user).toEqual(nextUser))
+    expect(active.result.current.isAuthenticated).toBe(true)
+  })
+
+  it('accepts a newer account switch while a replacement identity is pending', async () => {
+    const pendingSecondUser = deferred<AuthUser>()
+    const thirdUser = { ...user, id: 3, name: 'Third learner' }
+    repository.getMe.mockImplementation((accessToken: string) => {
+      if (accessToken === 'second-account-token') return pendingSecondUser.promise
+      if (accessToken === 'third-account-token') return Promise.resolve(thirdUser)
+      return Promise.resolve(user)
+    })
+    const active = renderHook(useAuth, {
+      wrapper: ({ children }) => <AuthProvider initialUser={user}>{children}</AuthProvider>,
+    })
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'session-start',
+      grant: { ...grant(), accessToken: 'second-account-token' },
+      receivedAt: Date.now() + 1,
+      revision: 3,
+      userId: 2,
+    })
+    await waitFor(() => expect(repository.getMe).toHaveBeenCalledWith(
+      'second-account-token',
+      expect.any(AbortSignal),
+    ))
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'session-start',
+      grant: { ...grant(), accessToken: 'third-account-token' },
+      receivedAt: Date.now() + 2,
+      revision: 4,
+      userId: 3,
+    })
+
+    await waitFor(() => expect(active.result.current.user).toEqual(thirdUser))
+    await act(async () => { pendingSecondUser.resolve({ ...user, id: 2 }) })
+    expect(active.result.current.user).toEqual(thirdUser)
+  })
+
+  it('ends initialization when replacement identity lookup times out', async () => {
+    const replacementUser = deferred<AuthUser>()
+    repository.getMe.mockImplementation((accessToken: string) => {
+      if (accessToken === 'new-account-token') return replacementUser.promise
+      return Promise.resolve(user)
+    })
+    let restoreTimeout: (() => void) | null = null
+    const active = renderHook(useAuth, {
+      wrapper: ({ children }) => <AuthProvider initialUser={user}>{children}</AuthProvider>,
+    })
+    const sender = new TestBroadcastChannel(AUTH_SESSION_CHANNEL_NAME)
+    channels.push(sender)
+    vi.spyOn(window, 'setTimeout').mockImplementationOnce((handler, timeout) => {
+      expect(timeout).toBe(AUTH_RESTORE_TIMEOUT_MS)
+      if (typeof handler === 'function') restoreTimeout = handler
+      return 999 as never
+    })
+    const delivered = nextBroadcast()
+
+    sender.postMessage({
+      type: 'REFRESH_SUCCEEDED',
+      cause: 'session-start',
+      grant: { ...grant(), accessToken: 'new-account-token' },
+      receivedAt: Date.now() + 1,
+      revision: 3,
+      userId: 2,
+    })
+    await delivered
+    await waitFor(() => expect(repository.getMe).toHaveBeenCalledWith(
+      'new-account-token',
+      expect.any(AbortSignal),
+    ))
+    expect(active.result.current.isInitializing).toBe(true)
+    expect(restoreTimeout).not.toBeNull()
+
+    await act(async () => { restoreTimeout?.(); await Promise.resolve() })
+
+    await waitFor(() => expect(active.result.current.isInitializing).toBe(false))
+    expect(active.result.current.isAuthenticated).toBe(false)
+    expect(active.result.current.logoutReason).toBe('session-expired')
   })
 
   it.each([
