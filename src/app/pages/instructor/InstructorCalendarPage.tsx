@@ -30,7 +30,7 @@ import { getRequestErrorMessage } from '../../../shared/api'
 import { usePageTitle } from '../../../shared/lib/usePageTitle'
 import { cx } from '../../../shared/lib/cx'
 import { Button, PageContainer, PageHeader, PageToolbar, Select, useToast } from '../../../shared/ui'
-import { useElementWidth, useResponsiveViewport } from '../../../shared/responsive'
+import { useElementWidth, useFocusScope, useResponsiveViewport } from '../../../shared/responsive'
 
 type CalendarView = 'list' | 'month' | 'week'
 
@@ -724,40 +724,62 @@ function ScheduleComposer({
   onSubmit: (input: CreateCalendarEventInput) => Promise<void>
 }) {
   const [title, setTitle] = useState(initialEvent?.title ?? '')
-  const [startsAt, setStartsAt] = useState(() => initialEvent ? toDateTimeLocal(new Date(initialEvent.startsAt)) : toDateTimeLocal(initialDate))
-  const [endsAt, setEndsAt] = useState(() => initialEvent ? toDateTimeLocal(new Date(initialEvent.endsAt)) : toDateTimeLocal(new Date(initialDate.getTime() + 60 * 60 * 1000)))
+  const [startsAt, setStartsAt] = useState(() => initialEvent
+    ? toScheduleInputValue(new Date(initialEvent.startsAt), initialEvent.hasTime)
+    : toDateTimeLocal(initialDate))
+  const [endsAt, setEndsAt] = useState(() => initialEvent
+    ? toScheduleInputValue(new Date(initialEvent.endsAt), initialEvent.hasTime)
+    : toDateTimeLocal(new Date(initialDate.getTime() + 60 * 60 * 1000)))
   const [hasDuration, setHasDuration] = useState(() => Boolean(initialEvent && initialEvent.endsAt !== initialEvent.startsAt))
   const [hasTime, setHasTime] = useState(initialEvent?.hasTime ?? true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const isMounted = useRef(true)
+  const submitInFlight = useRef(false)
+  const close = () => { if (!submitInFlight.current) onClose() }
+  useFocusScope(dialogRef, true, close)
+  useEffect(() => {
+    isMounted.current = true
+    return () => { isMounted.current = false }
+  }, [])
+  const missingEndError = hasDuration && !endsAt
   const rangeError = hasDuration && startsAt && endsAt && endsAt < startsAt
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!title.trim() || !startsAt) return
-    if (rangeError) return
+    if (!title.trim() || !startsAt || missingEndError || rangeError || submitInFlight.current) return
     const parsedDate = new Date(hasTime ? startsAt : `${startsAt}T00:00:00`)
     if (Number.isNaN(parsedDate.getTime())) return
     const parsedEnd = hasDuration
       ? new Date(hasTime ? endsAt : `${endsAt}T23:59:59`)
       : undefined
+    if (parsedEnd && Number.isNaN(parsedEnd.getTime())) return
+    submitInFlight.current = true
     setIsSubmitting(true)
-    await onSubmit({
-      endsAt: parsedEnd?.toISOString() ?? parsedDate.toISOString(),
-      hasTime,
-      startsAt: parsedDate.toISOString(),
-      title: title.trim(),
-    }).finally(() => setIsSubmitting(false))
+    try {
+      await onSubmit({
+        endsAt: parsedEnd?.toISOString() ?? parsedDate.toISOString(),
+        hasTime,
+        startsAt: parsedDate.toISOString(),
+        title: title.trim(),
+      })
+    } finally {
+      submitInFlight.current = false
+      if (isMounted.current) setIsSubmitting(false)
+    }
   }
 
   return (
     <div
+      ref={dialogRef}
       aria-labelledby="schedule-composer-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isSubmitting) onClose()
+        if (event.target === event.currentTarget) close()
       }}
       role="dialog"
+      tabIndex={-1}
     >
       <form
         className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 "
@@ -770,7 +792,8 @@ function ScheduleComposer({
           <button
             aria-label="일정 추가 닫기"
             className="flex size-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            onClick={onClose}
+            disabled={isSubmitting}
+            onClick={close}
             type="button"
           >
             <X aria-hidden="true" size={16} />
@@ -780,7 +803,7 @@ function ScheduleComposer({
         <label className="mt-5 block type-control font-semibold text-stone-800">
           일정 이름
           <input
-            autoFocus
+            data-autofocus
             className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3.5 type-body outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
             onChange={(event) => setTitle(event.target.value)}
             placeholder="일정 이름을 입력하세요"
@@ -799,18 +822,20 @@ function ScheduleComposer({
             <input
               className="mt-1 h-11 w-full rounded-lg border border-stone-300 bg-white px-3 type-body outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
               onChange={(event) => setStartsAt(event.target.value)}
+              required
               type={hasTime ? 'datetime-local' : 'date'}
               value={startsAt}
             />
           </label>
-          {hasDuration ? <label className="type-control font-semibold text-stone-800">종료{hasTime ? ' 날짜와 시간' : '일'}<input aria-invalid={Boolean(rangeError)} className={cx('mt-1 h-11 w-full rounded-lg border bg-white px-3 type-body outline-none focus:ring-2', rangeError ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100' : 'border-stone-300 focus:border-brand-600 focus:ring-brand-100')} min={startsAt || undefined} onChange={(event) => setEndsAt(event.target.value)} type={hasTime ? 'datetime-local' : 'date'} value={endsAt} /></label> : null}
+          {hasDuration ? <label className="type-control font-semibold text-stone-800">종료{hasTime ? ' 날짜와 시간' : '일'}<input aria-invalid={Boolean(missingEndError || rangeError)} className={cx('mt-1 h-11 w-full rounded-lg border bg-white px-3 type-body outline-none focus:ring-2', missingEndError || rangeError ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100' : 'border-stone-300 focus:border-brand-600 focus:ring-brand-100')} min={startsAt || undefined} onChange={(event) => setEndsAt(event.target.value)} required type={hasTime ? 'datetime-local' : 'date'} value={endsAt} /></label> : null}
         </div>
         {rangeError ? <p className="mt-2 type-caption font-medium text-rose-600">종료 시각은 시작 시각보다 빠를 수 없습니다.</p> : null}
+        {missingEndError ? <p className="mt-2 type-caption font-medium text-rose-600">종료 날짜를 입력해 주세요.</p> : null}
         <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={onClose} variant="ghost">
+          <Button disabled={isSubmitting} onClick={close} variant="ghost">
             취소
           </Button>
-          <Button disabled={!title.trim() || !startsAt || Boolean(rangeError) || isSubmitting} type="submit">
+          <Button disabled={!title.trim() || !startsAt || Boolean(missingEndError || rangeError) || isSubmitting} type="submit">
             {isSubmitting ? '저장 중' : initialEvent ? '변경 저장' : '추가'}
           </Button>
         </div>
@@ -858,15 +883,40 @@ function ScheduleDetailDialog({
   onEdit?: () => void
   onRemove?: () => Promise<void>
 }) {
+  const [isRemoving, setIsRemoving] = useState(false)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const isMounted = useRef(true)
+  const removeInFlight = useRef(false)
+  const close = () => { if (!removeInFlight.current) onClose() }
+  useFocusScope(dialogRef, true, close)
+  useEffect(() => {
+    isMounted.current = true
+    return () => { isMounted.current = false }
+  }, [])
+
+  async function remove() {
+    if (!onRemove || removeInFlight.current) return
+    removeInFlight.current = true
+    setIsRemoving(true)
+    try {
+      await onRemove()
+    } finally {
+      removeInFlight.current = false
+      if (isMounted.current) setIsRemoving(false)
+    }
+  }
+
   return (
     <div
+      ref={dialogRef}
       aria-labelledby="schedule-detail-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4"
       onMouseDown={(mouseEvent) => {
-        if (mouseEvent.target === mouseEvent.currentTarget) onClose()
+        if (mouseEvent.target === mouseEvent.currentTarget) close()
       }}
       role="dialog"
+      tabIndex={-1}
     >
       <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-5 ">
         <div className="flex items-start justify-between gap-4">
@@ -884,7 +934,8 @@ function ScheduleDetailDialog({
           <button
             aria-label="일정 상세 닫기"
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-            onClick={onClose}
+            disabled={isRemoving}
+            onClick={close}
             type="button"
           >
             <X aria-hidden="true" size={16} />
@@ -898,13 +949,14 @@ function ScheduleDetailDialog({
             <p className="type-caption text-stone-400">강의실 일정은 주차 또는 공지에서 관리합니다.</p>
           ) : (
           <>
-          {onEdit ? <Button onClick={onEdit} variant="secondary">일정 수정</Button> : null}
+          {onEdit ? <Button disabled={isRemoving} onClick={onEdit} variant="secondary">일정 수정</Button> : null}
           <Button
             className="border-rose-700 bg-rose-700 hover:bg-rose-800"
-            onClick={() => void onRemove()}
+            disabled={isRemoving}
+            onClick={() => void remove()}
           >
             <Trash2 aria-hidden="true" size={14} />
-            일정 삭제
+            {isRemoving ? '삭제 중' : '일정 삭제'}
           </Button>
           </>
           )}
@@ -974,6 +1026,11 @@ function toDateTimeLocal(date: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
+function toScheduleInputValue(date: Date, hasTime: boolean): string {
+  const value = toDateTimeLocal(date)
+  return hasTime ? value : value.slice(0, 10)
+}
+
 function formatCalendarDate(date: Date): string {
   return new Intl.DateTimeFormat('ko-KR', {
     day: 'numeric',
@@ -1015,15 +1072,17 @@ function eventIntersectsMonth(event: CalendarEvent, cursor: Date): boolean {
 
 function formatEventRange(event: CalendarEvent): string {
   const start = new Date(event.startsAt)
+  const hasDistinctEnd = Boolean(event.endsAt)
+    && new Date(event.endsAt).getTime() !== start.getTime()
   const dateFormatter = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' })
   if (event.hasTime === false) {
     const startLabel = dateFormatter.format(start)
-    return event.endsAt
+    return hasDistinctEnd
       ? `${startLabel} - ${dateFormatter.format(new Date(event.endsAt))} · 종일`
       : `${startLabel} · 종일`
   }
   const startLabel = formatScheduleDateTime(event.startsAt)
-  return event.endsAt
+  return hasDistinctEnd
     ? `${startLabel} - ${formatScheduleDateTime(event.endsAt)}`
     : startLabel
 }
