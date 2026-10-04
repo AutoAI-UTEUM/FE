@@ -27,6 +27,7 @@ export interface ResponsiveViewportValue {
 interface ViewportSnapshot {
   coarsePointer: boolean
   anyCoarsePointer?: boolean
+  maxTouchPoints?: number
   portraitOrientation?: boolean
   screenHeight: number
   screenWidth: number
@@ -51,13 +52,15 @@ export function getResponsiveViewportMode({
   coarsePointer,
   anyCoarsePointer,
   portraitOrientation,
+  maxTouchPoints,
   screenHeight,
   screenWidth,
 }: ViewportSnapshot): ResponsiveViewportMode {
   const shortEdge = Math.min(screenWidth, screenHeight)
   const longEdge = Math.max(screenWidth, screenHeight)
 
-  if (!(coarsePointer || anyCoarsePointer) || longEdge > MAX_MOBILE_LONG_EDGE) return 'desktop'
+  const hasTouchPointer = coarsePointer || (anyCoarsePointer && maxTouchPoints !== 0)
+  if (!hasTouchPointer || longEdge > MAX_MOBILE_LONG_EDGE) return 'desktop'
   if (shortEdge <= MAX_PHONE_SHORT_EDGE) return 'phone'
   const isPortrait = portraitOrientation ?? screenHeight >= screenWidth
   return isPortrait ? 'tablet-portrait' : 'tablet-landscape'
@@ -75,6 +78,7 @@ function readViewportMode(): ResponsiveViewportMode {
   return getResponsiveViewportMode({
     coarsePointer: window.matchMedia?.('(pointer: coarse)').matches ?? false,
     anyCoarsePointer: window.matchMedia?.('(any-pointer: coarse)').matches ?? false,
+    maxTouchPoints: window.navigator.maxTouchPoints,
     // Some desktop tablet emulators report a stale orientation type. Physical
     // screen dimensions remain independent of the keyboard and split-window width.
     portraitOrientation: screenWidth === screenHeight

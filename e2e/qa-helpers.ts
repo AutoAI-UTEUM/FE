@@ -51,6 +51,8 @@ export async function loginAs(page: Page, role: QaRole): Promise<boolean> {
   await page.locator('#login-password').fill(credentials.password)
   await page.getByRole('button', { name: '로그인', exact: true }).click()
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/)
+  await expect(page.locator('[data-app-shell="true"]')).toBeVisible()
+  await page.evaluate(async () => { await document.fonts.ready })
   if (qaEnvironment === 'mock') {
     await page.unroute('**/api/auth/refresh')
     await page.route('**/api/users/me', async (route) => {
@@ -72,6 +74,7 @@ export async function waitForAppSettled(page: Page) {
   const loading = page.getByText('페이지를 불러오는 중입니다.', { exact: true })
   await loading.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined)
   await expect(loading, 'application bootstrap must finish').toBeHidden()
+  await page.evaluate(async () => { await document.fonts.ready })
   await page.waitForTimeout(250)
 }
 

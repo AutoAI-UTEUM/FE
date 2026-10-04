@@ -27,8 +27,16 @@ test.describe('release learning acceptance with synthetic APIs', () => {
       if (
         request.method() === 'GET'
         && url.pathname === '/api/sessions/100/messages'
-        && canonicalMessages.length > 0
       ) {
+        if (canonicalMessages.length === 0) {
+          const response = await route.fetch()
+          const envelope = await response.json() as {
+            data?: { items?: Array<typeof canonicalMessages[number]> }
+          }
+          canonicalMessages.push(...(envelope.data?.items ?? []))
+          await route.fulfill({ json: envelope, status: response.status() })
+          return
+        }
         await route.fulfill({
           json: success({ hasMore: false, items: canonicalMessages, nextCursor: null }),
         })

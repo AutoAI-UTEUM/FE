@@ -188,8 +188,8 @@ function accessGrant() {
     accessToken: 'synthetic-token',
     expiresIn: 3600,
     session: {
-      absoluteExpiresAt: '2026-10-04T00:00:00.000Z',
-      idleExpiresAt: '2026-10-03T03:00:00.000Z',
+      absoluteExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      idleExpiresAt: new Date(Date.now() + 7_200_000).toISOString(),
       idleTimeoutSeconds: 7200,
     },
     tokenType: 'Bearer',
