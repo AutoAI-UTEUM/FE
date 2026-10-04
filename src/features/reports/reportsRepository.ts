@@ -284,7 +284,7 @@ function mapReport(
       ...item,
       label: item.label ?? item.publicLabel ?? item.sourceType,
     })),
-    failureMessage: value.failureMessage ?? value.failureCode,
+    failureMessage: value.failureMessage ?? getReportFailureMessage(value.failureCode),
     improvements: mapStatements(value.improvements ?? summary?.improvements),
     misconceptionCandidates: mapStatements(value.misconceptionCandidates ?? summary?.misconceptionCandidates),
     overallScore: value.overallScore ?? null,
@@ -295,6 +295,18 @@ function mapReport(
     strengths: mapStatements(value.strengths ?? summary?.strengths),
     studentId: value.studentId === undefined ? fallback.studentId ?? '' : String(value.studentId),
   }
+}
+
+function getReportFailureMessage(failureCode?: string): string | undefined {
+  if (!failureCode) return undefined
+  const messages: Record<string, string> = {
+    AI_POLICY_REJECTED: '요청한 데이터로 리포트를 생성하지 못했습니다. 입력 범위를 확인해 주세요.',
+    AI_QUOTA_EXCEEDED: '오늘의 AI 사용 한도를 초과했습니다. 나중에 다시 시도해 주세요.',
+    AI_RESPONSE_INVALID: '리포트 생성 결과를 처리하지 못했습니다. 다시 생성해 주세요.',
+    AI_SERVICE_TIMEOUT: '리포트 생성 시간이 초과되었습니다. 다시 시도해 주세요.',
+    AI_SERVICE_UNAVAILABLE: 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+  }
+  return messages[failureCode] ?? '리포트 생성에 실패했습니다. 다시 시도해 주세요.'
 }
 
 function mapCriterion(value: ReportCriterionDto): ReportCriterion {

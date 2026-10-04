@@ -203,6 +203,85 @@ test.describe('UI-04/05 independent acceptance', () => {
     expect(studentRequests).toBeGreaterThanOrEqual(3)
   })
 
+  test('failed report keeps history, hides the internal code, and starts one retry job', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-1440', 'report failure recovery is sampled on desktop Chromium')
+    await loginAs(page, 'INSTRUCTOR')
+    let createRequests = 0
+    let createdRequestId = ''
+
+    await page.route('**/api/classrooms/12/students/31/reports', async (route) => {
+      if (route.request().method() === 'POST') {
+        createRequests += 1
+        createdRequestId = (route.request().postDataJSON() as { requestId: string }).requestId
+        await route.fulfill({
+          body: JSON.stringify({
+            data: { pollAfterSeconds: 5, reportId: 'job-retry', status: 'PENDING' },
+            message: 'ok',
+            success: true,
+          }),
+          contentType: 'application/json',
+          status: 202,
+        })
+        return
+      }
+      await route.fulfill({
+        body: JSON.stringify({
+          data: {
+            activeGeneration: { pollAfterSeconds: 1, reportId: 'job-failed', status: 'PROCESSING' },
+            items: [{
+              createdAt: '2026-10-01T00:00:00Z',
+              overallScore: 82,
+              overallStage: 'GOOD',
+              reportId: 'report-existing',
+              version: 3,
+            }],
+          },
+          message: 'ok',
+          success: true,
+        }),
+        contentType: 'application/json',
+        status: 200,
+      })
+    })
+    await page.route('**/api/classrooms/12/weeks**', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({ data: { items: [] }, message: 'ok', success: true }),
+        contentType: 'application/json',
+        status: 200,
+      })
+    })
+    await page.route('**/api/reports/job-failed', async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({
+          data: {
+            failureCode: 'AI_RESPONSE_INVALID',
+            fallback: {
+              dataQuality: { progressDataAvailable: true },
+              metrics: { sessionCount: 2 },
+            },
+            reportId: 'job-failed',
+            status: 'FAILED',
+          },
+          message: 'ok',
+          success: true,
+        }),
+        contentType: 'application/json',
+        status: 200,
+      })
+    })
+
+    await page.goto('/classrooms/12/students/31/reports')
+    await expect(page.getByRole('heading', { name: '리포트를 생성하지 못했습니다' })).toBeVisible()
+    await expect(page.getByText('리포트 생성 결과를 처리하지 못했습니다. 다시 생성해 주세요.')).toBeVisible()
+    await expect(page.getByText('AI_RESPONSE_INVALID')).toHaveCount(0)
+    await expect(page.locator('a[href="/classrooms/12/students/31/reports/report-existing"]')).toBeVisible()
+
+    await page.getByRole('button', { name: '다시 생성' }).click()
+    await expect.poll(() => createRequests).toBe(1)
+    expect(createdRequestId).not.toBe('')
+    await expect(page.getByRole('button', { name: '리포트 생성 중' })).toBeDisabled()
+  })
+
   test('feedback preserves input after an error and supports keyboard resubmission', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-1440', 'feedback state-transition acceptance is sampled on desktop Chromium')
     await loginAs(page, 'LEARNER')

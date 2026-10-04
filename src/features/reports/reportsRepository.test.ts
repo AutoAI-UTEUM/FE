@@ -97,6 +97,36 @@ describe('reports repository', () => {
     expect(request).toHaveBeenCalledWith('/api/classrooms/12/students/31/reports', { signal: undefined })
   })
 
+  it.each([
+    ['AI_RESPONSE_INVALID', '리포트 생성 결과를 처리하지 못했습니다. 다시 생성해 주세요.'],
+    ['AI_SERVICE_UNAVAILABLE', 'AI 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.'],
+    ['UNRECOGNIZED_FAILURE', '리포트 생성에 실패했습니다. 다시 시도해 주세요.'],
+  ])('maps failed report code %s to a safe user-facing message', async (failureCode, expectedMessage) => {
+    const request = vi.fn().mockResolvedValue({
+      data: {
+        failureCode,
+        fallback: {
+          dataQuality: { progressDataAvailable: true },
+          metrics: { sessionCount: 2 },
+        },
+        reportId: 'report-failed',
+        status: 'FAILED',
+      },
+    })
+    const repository = createReportsRepository(request as AuthenticatedRequest)
+
+    const report = await repository.getReport('report-failed')
+
+    expect(report).toEqual(expect.objectContaining({
+      criterionResults: [],
+      failureMessage: expectedMessage,
+      overallScore: null,
+      reportId: 'report-failed',
+      status: 'FAILED',
+    }))
+    expect(report.failureMessage).not.toContain(failureCode)
+  })
+
   it('maps report criteria field names in both directions', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce({ data: { items: [{ active: true, allowedSources: ['SESSION'], builtin: true, criterionId: null, criterionKey: 'engagement', description: '참여도', minEvidence: 2, name: '학습 참여', rubric: { summary: '활동을 평가' }, version: 'v1', weight: 1 }] } })
