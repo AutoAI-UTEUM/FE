@@ -321,6 +321,79 @@ describe('instructor report route scope and polling recovery', () => {
     expect(statusRequests).toBeGreaterThan(0)
   })
 
+  it('keeps the previous completed report and starts one new job after a public failed response', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let createRequests = 0
+    const createdRequestIds: string[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const method = input instanceof Request ? input.method : (init?.method ?? 'GET')
+
+      if (method === 'GET' && url.pathname.endsWith('/reports')) {
+        return success({
+          activeGeneration: null,
+          items: [{
+            createdAt: '2026-10-01T00:00:00Z',
+            overallScore: 82,
+            overallStage: 'GOOD',
+            reportId: 'report-existing',
+            version: 3,
+          }],
+        })
+      }
+      if (method === 'GET' && url.pathname.endsWith('/weeks')) return success({ items: [] })
+      if (method === 'GET' && url.pathname === '/api/reports/job-failed') {
+        return success({
+          failureCode: 'AI_RESPONSE_INVALID',
+          fallback: {
+            dataQuality: { progressDataAvailable: true },
+            metrics: { sessionCount: 2 },
+          },
+          reportId: 'job-failed',
+          status: 'FAILED',
+        })
+      }
+      if (method === 'POST' && url.pathname.endsWith('/reports')) {
+        createRequests += 1
+        const body = JSON.parse(String(input instanceof Request ? await input.text() : init?.body)) as {
+          requestId: string
+        }
+        createdRequestIds.push(body.requestId)
+        return success({
+          generationId: `generation-${createRequests}`,
+          pollAfterSeconds: createRequests === 1 ? 1 : 5,
+          reportId: createRequests === 1 ? 'job-failed' : 'job-retry',
+          status: 'PENDING',
+        }, 202)
+      }
+      return new Response(null, { status: 404 })
+    })
+
+    renderReportRoutes('/classrooms/12/students/9/reports')
+
+    fireEvent.click(await screen.findByRole('button', { name: '새 리포트 생성' }))
+    await waitFor(() => expect(createRequests).toBe(1))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000)
+    })
+
+    expect(screen.getByRole('heading', { name: '리포트를 생성하지 못했습니다' })).toBeInTheDocument()
+    expect(screen.getByText('리포트 생성 결과를 처리하지 못했습니다. 다시 생성해 주세요.')).toBeInTheDocument()
+    expect(screen.queryByText('AI_RESPONSE_INVALID')).not.toBeInTheDocument()
+    expect(document.querySelector('a[href="/classrooms/12/students/9/reports/report-existing"]')).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 생성' }))
+    await waitFor(() => expect(createRequests).toBe(2))
+    const pendingButton = screen.getByRole('button', { name: '리포트 생성 중' })
+    fireEvent.click(pendingButton)
+
+    expect(createdRequestIds).toHaveLength(2)
+    expect(createdRequestIds[0]).not.toBe(createdRequestIds[1])
+    expect(createRequests).toBe(2)
+    expect(pendingButton).toBeDisabled()
+  })
+
   it('retries the same job after a transient 500 and navigates once when it completes', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let statusRequests = 0
