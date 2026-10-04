@@ -580,7 +580,9 @@ describe('ExamDetailPage learner submission', () => {
 
     const answer = await screen.findByPlaceholderText('답안을 입력하세요')
     fireEvent.change(answer, { target: { value: '\u3000\u202f' } })
-    fireEvent.click(screen.getByRole('button', { name: '시험 제출' }))
+    const submit = await screen.findByRole('button', { name: '시험 제출' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    fireEvent.click(submit)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('답안을 확인해 주세요.')
     expect(answer).toHaveValue('\u3000\u202f')

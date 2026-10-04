@@ -20,7 +20,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   Link,
   Outlet,
@@ -86,7 +86,6 @@ export function AppLayout() {
   const tabletUsesRail = mode === 'tablet-landscape' && viewportWidth < 1024
   const isTabletRail = tabletUsesRail && !tabletMenuOpen
   const tabletNavigationRef = useRef<HTMLElement>(null)
-  useFocusScope(tabletNavigationRef, tabletUsesRail && tabletMenuOpen, () => setTabletMenuPath(null))
   const isProfileRoute =
     location.pathname === routes.feedback ||
     location.pathname === routes.settings ||
@@ -103,9 +102,21 @@ export function AppLayout() {
   const menuContainerRef = useRef<HTMLDivElement | null>(null)
   const mobileMenuContainerRef = useRef<HTMLDivElement | null>(null)
   const bottomMenuContainerRef = useRef<HTMLElement | null>(null)
+  const profileMenuRef = useRef<HTMLDivElement | null>(null)
+  const profileTriggerRef = useRef<HTMLButtonElement | null>(null)
   const primaryNavigationRef = useRef<HTMLElement | null>(null)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
+  const notificationPanelRef = useRef<HTMLDivElement | null>(null)
+  const notificationTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  useFocusScope(tabletNavigationRef, tabletUsesRail && tabletMenuOpen, () => {
+    if (isNotificationsOpen) {
+      setIsNotificationsOpen(false)
+      notificationTriggerRef.current?.focus({ preventScroll: true })
+    } else {
+      setTabletMenuPath(null)
+    }
+  })
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0)
   const notificationOwnerKey = user
     ? `${user.id ?? user.email}:${user.email}:${user.role ?? ''}`
@@ -164,6 +175,7 @@ export function AppLayout() {
   )
   const usesBottomNavigationLayout = isPhone || isTabletPortrait
   const hasBottomNav = usesBottomNavigationLayout && !isStudyWorkspace
+  const usesDesktopProfile = !isMobileWeb && viewportWidth >= 1024
   const hasActiveOverflowNavigation = overflowNavigation.some((item) =>
     isNavigationItemActive(item, location.pathname, location.search, isAdmin),
   )
@@ -250,6 +262,8 @@ export function AppLayout() {
   useEffect(() => {
     if (!isMenuOpen) return
 
+    profileMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true })
+
     const closeOnOutsidePress = (event: PointerEvent) => {
       const target = event.target as Node
       if (
@@ -261,19 +275,29 @@ export function AppLayout() {
       }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsMenuOpen(false)
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false)
+        profileTriggerRef.current?.focus({ preventScroll: true })
+      }
     }
+    const closeOnHistory = () => setIsMenuOpen(false)
 
     document.addEventListener('pointerdown', closeOnOutsidePress)
     document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('popstate', closeOnHistory)
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsidePress)
       document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('popstate', closeOnHistory)
     }
   }, [isMenuOpen])
 
   useEffect(() => {
     if (!isNotificationsOpen) return
+
+    const panel = notificationPanelRef.current
+    const firstControl = panel?.querySelector<HTMLElement>('button:not(:disabled)')
+    ;(firstControl ?? panel)?.focus({ preventScroll: true })
 
     const closeOnOutsidePress = (event: PointerEvent) => {
       const target = event.target as Node
@@ -285,14 +309,21 @@ export function AppLayout() {
       }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsNotificationsOpen(false)
+      if (event.key === 'Escape') {
+        setIsNotificationsOpen(false)
+        const trigger = notificationTriggerRef.current
+        ;(trigger?.isConnected ? trigger : profileTriggerRef.current)?.focus({ preventScroll: true })
+      }
     }
+    const closeOnHistory = () => setIsNotificationsOpen(false)
 
     document.addEventListener('pointerdown', closeOnOutsidePress)
     document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('popstate', closeOnHistory)
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsidePress)
       document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('popstate', closeOnHistory)
     }
   }, [isNotificationsOpen])
 
@@ -543,7 +574,8 @@ export function AppLayout() {
               : 'h-11 w-full gap-2.5 px-3 type-control font-medium'
             : 'size-7 justify-center mobile-web:size-11',
         )}
-        onClick={() => {
+        onClick={(event) => {
+          notificationTriggerRef.current = event.currentTarget
           if (!isNotificationsOpen) {
             setIsLoadingNotifications(true)
             setNotificationReloadKey((key) => key + 1)
@@ -567,8 +599,9 @@ export function AppLayout() {
           </span>
         ) : null}
       </button>
-      {isNotificationsOpen ? (
+      {isNotificationsOpen && !isTabletPortrait ? (
         <NotificationPanel
+          panelRef={notificationPanelRef}
           error={notificationsError}
           isCollapsed={isCollapsed}
           isLoading={areNotificationsLoading}
@@ -587,7 +620,8 @@ export function AppLayout() {
 
   const profileMenu = (
     <div
-      className="w-full rounded-xl border border-stone-200 bg-white p-1.5 dark:bg-stone-50"
+      className="max-h-[calc(var(--visible-height,100dvh)-5.25rem-env(safe-area-inset-bottom))] w-full overflow-y-auto overscroll-contain rounded-xl border border-stone-200 bg-white p-1.5 dark:bg-stone-50"
+      ref={profileMenuRef}
       role="menu"
     >
       {hasBottomNav ? (
@@ -638,7 +672,8 @@ export function AppLayout() {
       {isTabletPortrait && !isAdmin ? (
         <button
           className="flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-          onClick={() => {
+          onClick={(event) => {
+            notificationTriggerRef.current = event.currentTarget
             setIsMenuOpen(false)
             setIsLoadingNotifications(true)
             setNotificationReloadKey((key) => key + 1)
@@ -870,11 +905,10 @@ export function AppLayout() {
         </div>
 
         {/* 폰에서는 프로필이 하단 바 최우측으로 내려가므로 상단에서는 감춘다. */}
-        <div
+        {!hasBottomNav && !usesDesktopProfile ? <div
           className={cx(
             'relative ml-2 shrink-0 lg:hidden mobile-web:!block',
             isTablet && cx('mt-auto ml-0 flex', isTabletRail ? 'justify-center' : 'w-full'),
-            hasBottomNav && '!hidden',
           )}
           ref={mobileMenuContainerRef}
         >
@@ -907,11 +941,15 @@ export function AppLayout() {
           ) : (
             <>
               <button
+                ref={profileTriggerRef}
                 aria-expanded={isMenuOpen}
                 aria-haspopup="menu"
                 aria-label="프로필 메뉴"
                 className="flex size-9 items-center justify-center rounded-full bg-stone-200 type-caption font-semibold text-stone-600 hover:bg-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 mobile-web:size-11"
-                onClick={() => setIsMenuOpen((open) => !open)}
+                onClick={() => {
+              setIsNotificationsOpen(false)
+              setIsMenuOpen((open) => !open)
+            }}
                 type="button"
               >
                 <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-9 type-caption" name={user?.name} />
@@ -923,13 +961,14 @@ export function AppLayout() {
               ) : null}
             </>
           )}
-        </div>
+        </div> : null}
 
-        <div
+        {usesDesktopProfile ? <div
           className="relative hidden lg:mt-auto lg:flex lg:items-center lg:gap-1 lg:border-t lg:border-stone-100 lg:pt-3 mobile-web:!hidden"
           ref={menuContainerRef}
         >
           <button
+            ref={profileTriggerRef}
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
             aria-label="프로필 메뉴"
@@ -937,7 +976,10 @@ export function AppLayout() {
               'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-t border-transparent p-1.5 text-left hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
               isCollapsed && 'justify-center p-1',
             )}
-            onClick={() => setIsMenuOpen((open) => !open)}
+            onClick={() => {
+                  setIsNotificationsOpen(false)
+                  setIsMenuOpen((open) => !open)
+                }}
             type="button"
           >
             <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-7 type-micro" name={user?.name} />
@@ -962,7 +1004,7 @@ export function AppLayout() {
               {profileMenu}
             </div>
           ) : null}
-        </div>
+        </div> : null}
       </aside>
 
       {/*
@@ -1045,6 +1087,7 @@ export function AppLayout() {
             )
           })}
           <button
+            ref={profileTriggerRef}
             aria-current={
               hasActiveOverflowNavigation || isProfileRoute
                 ? 'page'
@@ -1077,6 +1120,7 @@ export function AppLayout() {
           ) : null}
           {isTabletPortrait && !isAdmin && isNotificationsOpen ? (
             <NotificationPanel
+              panelRef={notificationPanelRef}
               error={notificationsError}
               isCollapsed={false}
               isLoading={areNotificationsLoading}
@@ -1132,6 +1176,7 @@ function NotificationPanel({
   onOpen,
   onRetry,
   placement = 'header',
+  panelRef,
 }: {
   error: string | null
   isCollapsed: boolean
@@ -1142,6 +1187,7 @@ function NotificationPanel({
   onOpen: (notification: AppNotification) => void
   onRetry: () => void
   placement?: 'footer' | 'header'
+  panelRef: RefObject<HTMLDivElement | null>
 }) {
   const hasUnreadNotifications = notifications.some(
     (notification) => !notification.readAt,
@@ -1151,7 +1197,7 @@ function NotificationPanel({
     <div
       aria-label="알림"
       className={cx(
-        'isolate absolute z-[60] w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-stone-200 bg-white  ring-1 ring-stone-950/5 dark:bg-[#26272c]',
+        'app-notification-panel isolate absolute z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-stone-200 bg-white ring-1 ring-stone-950/5 dark:bg-[#26272c]',
         placement === 'footer'
           ? 'right-0 bottom-[calc(100%+8px)]'
           : 'top-[calc(100%+8px)] right-0',
@@ -1160,8 +1206,10 @@ function NotificationPanel({
           : 'lg:right-auto lg:left-0'),
       )}
       role="dialog"
+      ref={panelRef}
+      tabIndex={-1}
     >
-      <div className="flex h-12 items-center justify-between border-b border-stone-100 px-4">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-stone-100 px-4">
         <h2 className="type-body font-bold text-stone-900">알림</h2>
         <button
           className="inline-flex h-7 items-center gap-1 rounded-md px-2 type-micro font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-800 disabled:cursor-default disabled:opacity-40"
@@ -1189,7 +1237,7 @@ function NotificationPanel({
           </button>
         </div>
       ) : notifications.length > 0 ? (
-        <div className="max-h-80 overflow-y-auto py-1.5">
+        <div className="min-h-0 max-h-80 overflow-y-auto overscroll-contain py-1.5">
           {error ? (
             <div
               className="flex items-center justify-between gap-3 px-4 py-2 type-micro font-medium text-rose-700"

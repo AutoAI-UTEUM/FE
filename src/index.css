@@ -34,6 +34,26 @@ html[data-responsive-mode='phone'] .study-session-content {
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* Keep the phone notification popup inside the visible viewport, independent of
+ * the bell's position beside the brand. Its list scrolls within these bounds. */
+html[data-responsive-mode='phone'] .app-notification-panel {
+  position: fixed;
+  inset: calc(var(--visible-top, 0px) + 4rem + env(safe-area-inset-top)) 1rem auto 1rem;
+  width: auto;
+  max-width: none;
+  max-height: calc(var(--visible-height, 100dvh) - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+@media (width < 64rem) {
+  html[data-responsive-mode='desktop'] .app-notification-panel {
+    position: fixed;
+    inset: calc(var(--visible-top, 0px) + 4rem) 1rem auto 1rem;
+    width: auto;
+    max-width: none;
+    max-height: calc(var(--visible-height, 100dvh) - 5rem);
+  }
+}
+
 html[data-responsive-mode='tablet-portrait'] .study-session-content {
   grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
   grid-template-rows: minmax(0, 1fr);
