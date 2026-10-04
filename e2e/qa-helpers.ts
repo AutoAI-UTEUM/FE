@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, type Page, type TestInfo } from '@playwright/test'
+import { expect, type Page, type Response, type TestInfo } from '@playwright/test'
 
 export type QaRole = 'ADMIN' | 'INSTRUCTOR' | 'LEARNER'
 export type QaEnvironment = 'dev' | 'mock' | 'prod'
@@ -31,6 +31,7 @@ export async function loginAs(page: Page, role: QaRole): Promise<boolean> {
   const credentials = credentialsFor(role)
   if (!credentials) return false
 
+  let signedOutRefresh: Promise<Response> | undefined
   if (qaEnvironment === 'mock') {
     await page.route('**/api/auth/refresh', async (route) => {
       await route.fulfill({
@@ -39,9 +40,13 @@ export async function loginAs(page: Page, role: QaRole): Promise<boolean> {
         status: 401,
       })
     })
+    signedOutRefresh = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/auth/refresh' && response.status() === 401
+    ))
   }
 
   await page.goto('/login')
+  await signedOutRefresh
   await page.getByLabel('이메일').fill(credentials.email)
   await page.locator('#login-password').fill(credentials.password)
   await page.getByRole('button', { name: '로그인', exact: true }).click()
