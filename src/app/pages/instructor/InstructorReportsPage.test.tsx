@@ -324,7 +324,7 @@ describe('instructor report route scope and polling recovery', () => {
   it('keeps the previous completed report and starts one new job after a public failed response', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let createRequests = 0
-    let createdRequestId = ''
+    const createdRequestIds: string[] = []
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
@@ -332,7 +332,7 @@ describe('instructor report route scope and polling recovery', () => {
 
       if (method === 'GET' && url.pathname.endsWith('/reports')) {
         return success({
-          activeGeneration: { pollAfterSeconds: 1, reportId: 'job-failed', status: 'PROCESSING' },
+          activeGeneration: null,
           items: [{
             createdAt: '2026-10-01T00:00:00Z',
             overallScore: 82,
@@ -359,11 +359,11 @@ describe('instructor report route scope and polling recovery', () => {
         const body = JSON.parse(String(input instanceof Request ? await input.text() : init?.body)) as {
           requestId: string
         }
-        createdRequestId = body.requestId
+        createdRequestIds.push(body.requestId)
         return success({
-          generationId: 'generation-retry',
-          pollAfterSeconds: 5,
-          reportId: 'job-retry',
+          generationId: `generation-${createRequests}`,
+          pollAfterSeconds: createRequests === 1 ? 1 : 5,
+          reportId: createRequests === 1 ? 'job-failed' : 'job-retry',
           status: 'PENDING',
         }, 202)
       }
@@ -372,7 +372,8 @@ describe('instructor report route scope and polling recovery', () => {
 
     renderReportRoutes('/classrooms/12/students/9/reports')
 
-    expect(await screen.findByRole('button', { name: '리포트 생성 중' })).toBeDisabled()
+    fireEvent.click(await screen.findByRole('button', { name: '새 리포트 생성' }))
+    await waitFor(() => expect(createRequests).toBe(1))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000)
     })
@@ -383,9 +384,14 @@ describe('instructor report route scope and polling recovery', () => {
     expect(document.querySelector('a[href="/classrooms/12/students/9/reports/report-existing"]')).not.toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '다시 생성' }))
-    await waitFor(() => expect(createRequests).toBe(1))
-    expect(createdRequestId).not.toBe('')
-    expect(screen.getByRole('button', { name: '리포트 생성 중' })).toBeDisabled()
+    await waitFor(() => expect(createRequests).toBe(2))
+    const pendingButton = screen.getByRole('button', { name: '리포트 생성 중' })
+    fireEvent.click(pendingButton)
+
+    expect(createdRequestIds).toHaveLength(2)
+    expect(createdRequestIds[0]).not.toBe(createdRequestIds[1])
+    expect(createRequests).toBe(2)
+    expect(pendingButton).toBeDisabled()
   })
 
   it('retries the same job after a transient 500 and navigates once when it completes', async () => {

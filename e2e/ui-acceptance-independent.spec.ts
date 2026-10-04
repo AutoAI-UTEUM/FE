@@ -207,15 +207,19 @@ test.describe('UI-04/05 independent acceptance', () => {
     test.skip(testInfo.project.name !== 'chromium-1440', 'report failure recovery is sampled on desktop Chromium')
     await loginAs(page, 'INSTRUCTOR')
     let createRequests = 0
-    let createdRequestId = ''
+    const createdRequestIds: string[] = []
 
     await page.route('**/api/classrooms/12/students/31/reports', async (route) => {
       if (route.request().method() === 'POST') {
         createRequests += 1
-        createdRequestId = (route.request().postDataJSON() as { requestId: string }).requestId
+        createdRequestIds.push((route.request().postDataJSON() as { requestId: string }).requestId)
         await route.fulfill({
           body: JSON.stringify({
-            data: { pollAfterSeconds: 5, reportId: 'job-retry', status: 'PENDING' },
+            data: {
+              pollAfterSeconds: createRequests === 1 ? 1 : 5,
+              reportId: createRequests === 1 ? 'job-failed' : 'job-retry',
+              status: 'PENDING',
+            },
             message: 'ok',
             success: true,
           }),
@@ -227,7 +231,7 @@ test.describe('UI-04/05 independent acceptance', () => {
       await route.fulfill({
         body: JSON.stringify({
           data: {
-            activeGeneration: { pollAfterSeconds: 1, reportId: 'job-failed', status: 'PROCESSING' },
+            activeGeneration: null,
             items: [{
               createdAt: '2026-10-01T00:00:00Z',
               overallScore: 82,
@@ -271,15 +275,23 @@ test.describe('UI-04/05 independent acceptance', () => {
     })
 
     await page.goto('/classrooms/12/students/31/reports')
+    await page.getByRole('button', { name: '새 리포트 생성' }).click()
     await expect(page.getByRole('heading', { name: '리포트를 생성하지 못했습니다' })).toBeVisible()
     await expect(page.getByText('리포트 생성 결과를 처리하지 못했습니다. 다시 생성해 주세요.')).toBeVisible()
     await expect(page.getByText('AI_RESPONSE_INVALID')).toHaveCount(0)
     await expect(page.locator('a[href="/classrooms/12/students/31/reports/report-existing"]')).toBeVisible()
 
     await page.getByRole('button', { name: '다시 생성' }).click()
-    await expect.poll(() => createRequests).toBe(1)
-    expect(createdRequestId).not.toBe('')
-    await expect(page.getByRole('button', { name: '리포트 생성 중' })).toBeDisabled()
+    await expect.poll(() => createRequests).toBe(2)
+    const pendingButton = page.getByRole('button', { name: '리포트 생성 중' })
+    await expect(pendingButton).toBeDisabled()
+    await pendingButton.evaluate((button) => {
+      button.click()
+      button.click()
+    })
+    expect(createdRequestIds).toHaveLength(2)
+    expect(createdRequestIds[0]).not.toBe(createdRequestIds[1])
+    expect(createRequests).toBe(2)
   })
 
   test('feedback preserves input after an error and supports keyboard resubmission', async ({ page }, testInfo) => {
