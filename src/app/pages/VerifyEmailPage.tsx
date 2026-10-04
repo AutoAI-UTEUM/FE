@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
-import { clearEmailLinkToken, readEmailLinkToken } from '../../features/auth/emailLinkToken'
+import { clearEmailLinkToken, readEmailLinkIssue, readEmailLinkToken } from '../../features/auth/emailLinkToken'
 import { confirmEmailVerification, requestEmailVerification } from '../../features/auth/emailVerificationRepository'
 import { hasEmailVerificationSupport, isLaunchAuthReady } from '../../features/auth/launchAuthContract'
 import { ApiClientError } from '../../shared/api'
@@ -14,16 +14,36 @@ export function VerifyEmailPage() {
   const navigate = useNavigate()
   const tokenRef = useRef(readEmailLinkToken())
   const [hasToken, setHasToken] = useState(() => Boolean(readEmailLinkToken()))
+  const [linkIssue, setLinkIssue] = useState(readEmailLinkIssue)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const activeRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(false)
   const ready = isLaunchAuthReady()
   const refresh = auth.refreshCurrentUser
+  const discardPending = useCallback(() => {
+    tokenRef.current = null
+    clearEmailLinkToken()
+    activeRef.current?.abort()
+    activeRef.current = null
+    setBusy(false)
+    setHasToken(false)
+  }, [])
 
-  useEffect(() => {
-    if (location.search || location.hash) navigate(routes.verifyEmail, { replace: true, state: null })
-  }, [location.search, location.hash, navigate])
+  useLayoutEffect(() => {
+    if (location.search || location.hash) {
+      // Replacing an SPA link cancels the old action and rejects its late result.
+      activeRef.current?.abort()
+      activeRef.current = null
+      tokenRef.current = ready ? readEmailLinkToken() : null
+      setHasToken(Boolean(tokenRef.current))
+      setLinkIssue(readEmailLinkIssue())
+      if (!ready) clearEmailLinkToken()
+      setBusy(false)
+      setMessage('')
+      navigate(routes.verifyEmail, { replace: true, state: null })
+    }
+  }, [location.search, location.hash, navigate, ready])
 
   useEffect(() => {
     mountedRef.current = true
@@ -31,7 +51,9 @@ export function VerifyEmailPage() {
       tokenRef.current = null
       clearEmailLinkToken()
     }
+    window.addEventListener('pagehide', discardPending)
     return () => {
+      window.removeEventListener('pagehide', discardPending)
       mountedRef.current = false
       activeRef.current?.abort()
       queueMicrotask(() => {
@@ -41,7 +63,7 @@ export function VerifyEmailPage() {
         }
       })
     }
-  }, [ready])
+  }, [ready, discardPending])
 
   useEffect(() => {
     if (!ready || !auth.isAuthenticated || !refresh) return
@@ -104,6 +126,9 @@ export function VerifyEmailPage() {
 
   const supported = auth.user && hasEmailVerificationSupport(auth.user)
   return <div className="space-y-4">
+    {ready && !hasToken && !linkIssue && !message ? <p>확인할 링크가 없습니다. 이메일의 최신 링크를 다시 열거나 로그인 후 확인 이메일을 다시 요청해 주세요.</p> : null}
+    {linkIssue === 'obsolete-query' ? <p role="status">이전 형식의 이메일 링크는 사용할 수 없습니다. 로그인 후 확인 이메일을 다시 요청해 주세요.</p>
+      : linkIssue === 'invalid-fragment' ? <p role="status">이메일 링크 형식이 올바르지 않습니다. 로그인 후 확인 이메일을 다시 요청해 주세요.</p> : null}
     <h1 className="type-page-title font-bold">이메일 확인</h1>
     <p>메일 링크를 여는 것만으로 확인되지 않습니다. 아래 버튼으로 확인해 주세요.</p>
     {!ready ? <p role="status">이메일 확인 기능을 준비 중입니다. 사용 가능 안내 후 새 링크를 열어 주세요.</p> : <>
@@ -120,9 +145,9 @@ export function VerifyEmailPage() {
     </>}
     {message ? <p role="status">{message}</p> : null}
     <div className="flex flex-wrap gap-4">
-      <Link to={routes.login}>로그인</Link>
-      {auth.isAuthenticated ? <Link to={routes.settings}>계정 관리</Link> : null}
-      {auth.user && auth.user.emailVerificationRequired !== true ? <Link to={routes.classrooms}>강의실</Link> : null}
+      <Link to={routes.login} onClick={discardPending}>로그인</Link>
+      {auth.isAuthenticated ? <Link to={routes.settings} onClick={discardPending}>계정 관리</Link> : null}
+      {auth.user && auth.user.emailVerificationRequired !== true ? <Link to={routes.classrooms} onClick={discardPending}>강의실</Link> : null}
     </div>
   </div>
 }

@@ -10,14 +10,19 @@
         let pathname
         try { pathname = decodeURIComponent(window.location.pathname) } catch { return }
         if (pathname.toLowerCase().replace(/\/+$/, '') !== '/verify-email') return
+        window.__uteumEmailLink?.clear()
         const meta = document.createElement('meta')
         meta.name = 'referrer'
         meta.content = 'no-referrer'
         document.head.append(meta)
-        const tokens = new URLSearchParams(window.location.search).getAll('token')
-        let token = tokens.length === 1 && /^[A-Za-z0-9_-]{43}$/.test(tokens[0]) ? tokens[0] : null
+        // Query links have already reached the server. Never consume them,
+        // even when a valid fragment is also present; require a newly issued link.
+        const obsoleteQuery = new URLSearchParams(window.location.search).has('token')
+        const match = /^#token=([A-Za-z0-9_-]{43})$/.exec(window.location.hash)
+        let token = !obsoleteQuery && match ? match[1] : null
+        const issue = obsoleteQuery ? 'obsolete-query' : window.location.hash && !match ? 'invalid-fragment' : null
         window.history.replaceState(null, '', '/verify-email')
-        window.__uteumEmailLink = { read: () => token, clear: () => { token = null } }
+        window.__uteumEmailLink = { read: () => token, issue, clear: () => { token = null } }
         window.addEventListener('pagehide', () => { token = null }, { once: true })
       })()
     </script>
