@@ -13,6 +13,41 @@ permissions:
   contents: read
 
 jobs:
+  launch-auth-contract:
+    name: launch-auth-contract (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - mode: default-off
+            readiness: ''
+          - mode: synthetic-ready
+            readiness: be-auth-ee69e425-v1
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Synthetic local browser contract acceptance
+        env:
+          QA_ENV: mock
+          QA_AUTH_CONTRACT_READINESS: ${{ matrix.readiness }}
+        run: npx playwright test --config playwright.launch-auth.config.ts
+      - name: Upload contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-auth-contract-${{ matrix.mode }}
+          path: qa-artifacts/launch-auth/
+          retention-days: 7
+
   quality:
     name: frontend-ci
     runs-on: ubuntu-latest

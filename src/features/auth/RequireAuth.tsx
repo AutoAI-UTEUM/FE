@@ -4,9 +4,10 @@ import { routes } from '../../app/routes'
 import { RouteLoadingScreen } from '../../shared/ui'
 import { createAuthReturnState } from './authReturnTarget'
 import { useAuth } from './useAuth'
+import { requiresEmailVerification } from './launchAuthContract'
 
 export function RequireAuth() {
-  const { isAuthenticated, isInitializing, logoutReason } = useAuth()
+  const { isAuthenticated, isInitializing, logoutReason, user } = useAuth()
   const location = useLocation()
 
   if (isInitializing) {
@@ -36,6 +37,11 @@ export function RequireAuth() {
         }
       />
     )
+  }
+
+  if (requiresEmailVerification(user) &&
+      ![routes.settings, routes.feedback, routes.updates].some((path) => location.pathname === path)) {
+    return <Navigate to={routes.verifyEmail} replace />
   }
 
   return <Outlet />
