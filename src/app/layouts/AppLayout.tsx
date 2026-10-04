@@ -12,6 +12,7 @@ import {
   List,
   LogOut,
   MessageSquareText,
+  MoreHorizontal,
   NotebookPen,
   PanelLeft,
   ServerCog,
@@ -53,13 +54,14 @@ import {
 } from '../routes'
 
 /*
- * `inBottomNav`는 모바일 하단 바에 우선 노출할 메뉴를 고른다.
- * 하단 바는 최우측 프로필까지 네 칸이므로 내비는 3개까지만 올리고,
- * 나머지는 프로필 메뉴 위쪽에 모은다.
+ * Bottom navigation exposes three core routes and More.
+ * Bottom-only order/labels preserve the primary desktop navigation.
  */
 interface NavigationItem {
   icon: LucideIcon
   inBottomNav?: boolean
+  bottomNavOrder?: number
+  bottomNavLabel?: string
   label: string
   to: string
 }
@@ -71,8 +73,6 @@ const learnerNavigation: NavigationItem[] = [
   { icon: ClipboardCheck, inBottomNav: true, label: '복습 퀴즈', to: routes.reviewQuizzes },
   { icon: FileCheck2, label: '시험', to: routes.exams },
 ]
-
-const BOTTOM_NAV_WIDE_MIN_WIDTH = 420
 
 export function AppLayout() {
   const { apiRequest, logout, rawApiRequest, user } = useAuth()
@@ -166,10 +166,10 @@ export function AppLayout() {
       ? instructorNavigation
       : learnerNavigation, [isAdmin, isInstructor])
   const homeRoute = isAdmin ? routes.admin : routes.classrooms
-  const bottomNavigationLimit = viewportWidth < BOTTOM_NAV_WIDE_MIN_WIDTH ? 2 : 3
   const bottomNavigation = primaryNavigation
     .filter((item) => item.inBottomNav)
-    .slice(0, bottomNavigationLimit)
+    .sort((left, right) => (left.bottomNavOrder ?? 0) - (right.bottomNavOrder ?? 0))
+    .slice(0, 3)
   const overflowNavigation = primaryNavigation.filter(
     (item) => !bottomNavigation.includes(item),
   )
@@ -626,8 +626,13 @@ export function AppLayout() {
     >
       {hasBottomNav ? (
         <div className="border-b border-stone-100 px-2.5 py-2.5">
-          <p className="truncate type-control font-semibold text-stone-900">{user?.name}</p>
-          <p className="mt-0.5 type-micro text-stone-400">{roleLabel}</p>
+          <div className="flex items-center gap-2.5">
+            <ProfileAvatar avatarUrl={profileAvatarUrl} className="size-8 shrink-0 type-caption" name={user?.name} />
+            <div className="min-w-0">
+              <p className="truncate type-control font-semibold text-stone-900">{user?.name}</p>
+              <p className="mt-0.5 type-micro text-stone-400">{roleLabel}</p>
+            </div>
+          </div>
         </div>
       ) : null}
       {/* 하단 바 네 칸에 자리가 없어 빠진 메뉴. 레일·사이드바가 보이는 곳에서는 중복이다. */}
@@ -671,6 +676,7 @@ export function AppLayout() {
       ) : null}
       {isTabletPortrait && !isAdmin ? (
         <button
+          aria-label={`알림, 불러온 알림 중 미읽음 ${unreadNotificationCount}개`}
           className="flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 type-control font-medium text-stone-700 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
           onClick={(event) => {
             notificationTriggerRef.current = event.currentTarget
@@ -685,7 +691,7 @@ export function AppLayout() {
           <Bell aria-hidden="true" size={15} />
           알림
           {unreadNotificationCount > 0 ? (
-            <span className="ml-auto min-w-5 rounded-full bg-brand-600 px-1.5 text-center type-micro font-bold leading-5 text-white">
+            <span aria-hidden="true" className="ml-auto min-w-5 rounded-full bg-brand-600 px-1.5 text-center type-micro font-bold leading-5 text-white">
               {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
             </span>
           ) : null}
@@ -806,6 +812,7 @@ export function AppLayout() {
           <div
             className={cx(
               'flex items-center justify-between gap-2',
+              isPhone && !isStudyWorkspace && 'w-full',
               isTabletRail && 'flex-col gap-3',
               !isTablet && isCollapsed && 'lg:flex-col lg:gap-3 mobile-phone:!flex-row mobile-phone:!gap-2',
             )}
@@ -1055,6 +1062,7 @@ export function AppLayout() {
           ref={bottomMenuContainerRef}
         >
           {bottomNavigation.map((item) => {
+            const label = item.bottomNavLabel ?? item.label
             const isItemActive = isNavigationItemActive(
               item,
               location.pathname,
@@ -1065,6 +1073,9 @@ export function AppLayout() {
             return (
               <Link
                 aria-current={isItemActive ? 'page' : undefined}
+                aria-label={item.to === routes.entranceRequests && pendingJoinRequestCount > 0
+                  ? `${label}, 대기 요청 ${pendingJoinRequestCount}개`
+                  : undefined}
                 className={bottomNavLinkClassName(isItemActive)}
                 key={item.label}
                 onClick={() => {
@@ -1074,10 +1085,10 @@ export function AppLayout() {
                 to={item.to}
               >
                 <item.icon aria-hidden="true" size={20} />
-                <span>{item.label}</span>
-                {item.label === '입장 요청' && pendingJoinRequestCount > 0 ? (
+                <span>{label}</span>
+                {item.to === routes.entranceRequests && pendingJoinRequestCount > 0 ? (
                   <span
-                    aria-label={`${pendingJoinRequestCount}개의 대기 요청`}
+                    aria-hidden="true"
                     className="absolute top-1.5 right-[calc(50%-1.25rem)] min-w-4 rounded-full bg-brand-600 px-1 text-center type-micro font-bold leading-4 text-white"
                   >
                     {pendingJoinRequestCount > 99 ? '99+' : pendingJoinRequestCount}
@@ -1095,7 +1106,9 @@ export function AppLayout() {
             }
             aria-expanded={isMenuOpen}
             aria-haspopup="menu"
-            aria-label="프로필 메뉴"
+            aria-label={isTabletPortrait && unreadNotificationCount > 0
+              ? `더보기 메뉴, 불러온 알림 중 미읽음 ${unreadNotificationCount}개`
+              : '더보기 메뉴'}
             className={bottomNavLinkClassName(
               isMenuOpen || hasActiveOverflowNavigation || isProfileRoute,
             )}
@@ -1105,12 +1118,16 @@ export function AppLayout() {
             }}
             type="button"
           >
-            <ProfileAvatar
-              avatarUrl={profileAvatarUrl}
-              className="size-5 type-compact-action"
-              name={user?.name}
-            />
-            <span>프로필</span>
+            <MoreHorizontal aria-hidden="true" size={20} />
+            <span>더보기</span>
+            {isTabletPortrait && !isAdmin && unreadNotificationCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute top-1.5 right-[calc(50%-1.25rem)] min-w-4 rounded-full bg-brand-600 px-1 text-center type-micro font-bold leading-4 text-white"
+              >
+                {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+              </span>
+            ) : null}
           </button>
           {/* 메뉴는 sticky한 nav를 기준으로 위쪽으로 펼쳐진다. */}
           {isMenuOpen ? (
@@ -1386,8 +1403,8 @@ function isNavigationItemActive(
 
 const instructorNavigation: NavigationItem[] = [
   { icon: LayoutGrid, inBottomNav: true, label: '강의실', to: routes.classrooms },
-  { icon: CalendarDays, inBottomNav: true, label: '캘린더', to: routes.calendar },
-  { icon: UserPlus, inBottomNav: true, label: '입장 요청', to: routes.entranceRequests },
+  { icon: CalendarDays, inBottomNav: true, bottomNavOrder: 2, label: '캘린더', to: routes.calendar },
+  { icon: UserPlus, inBottomNav: true, bottomNavOrder: 1, bottomNavLabel: '가입 요청', label: '입장 요청', to: routes.entranceRequests },
 ]
 
 /* 폰 하단 탭. 52px 높이로 44px 최소 터치 영역을 넘기고, 네 칸이 정확히 같은 폭으로 나뉜다. */

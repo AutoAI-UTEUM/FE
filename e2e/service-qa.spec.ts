@@ -101,7 +101,7 @@ for (const role of ['LEARNER', 'INSTRUCTOR', 'ADMIN'] as const) {
             } else {
               await expect(
                 page.getByRole('navigation', { name: '하단 주요 메뉴' })
-                  .getByRole('button', { name: '프로필 메뉴' }),
+                  .getByRole('button', { name: /^더보기 메뉴/ }),
               ).toHaveAttribute('aria-current', 'page')
             }
           }
