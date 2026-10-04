@@ -1,0 +1,607 @@
+{
+  "createdAt": "2026-10-04T15:21:01.599Z",
+  "baseline": "7f63d823a7013a7793e77a961da960304eaddc3a",
+  "pr": "https://github.com/AutoAI-UTEUM/FE/pull/233",
+  "browserVersion": "153.0.8010.12",
+  "playwrightVersion": "1.63.0",
+  "baseURL": "http://127.0.0.1:5187",
+  "environment": {
+    "VITE_API_BASE_URL": "/api",
+    "VITE_API_CAPABILITIES": "reports,policy-consent",
+    "VITE_DEV_PROXY_TARGET": "mock"
+  },
+  "sourceChanges": [],
+  "screenshots": 89,
+  "missingReportLinks": [],
+  "displayEvidence": {
+    "class": "relative ml-2 shrink-0 lg:hidden mobile-web:!block !hidden",
+    "computedDisplay": "block",
+    "matchingRules": [
+      {
+        "selector": ".\\!hidden",
+        "display": "none",
+        "important": "important"
+      },
+      {
+        "selector": ".mobile-web\\:\\!block:where(.mobile-web, .mobile-web *)",
+        "display": "block",
+        "important": "important"
+      }
+    ]
+  },
+  "commands": [
+    "git clone --no-hardlinks --no-checkout <existing-local-FE> FE",
+    "git checkout --detach 7f63d823a7013a7793e77a961da960304eaddc3a",
+    "node node_modules/vite/bin/vite.js build --configLoader runner",
+    "node node_modules/vite/bin/vite.js preview --configLoader runner --host 127.0.0.1 --port 5187 --strictPort",
+    "node navigation-audit.mjs",
+    "node navigation-followup.mjs",
+    "node study-scroll-audit.mjs"
+  ],
+  "files": [
+    {
+      "path": "evidence/css-display.json",
+      "bytes": 379,
+      "modifiedAt": "2026-10-04T15:20:59.726Z",
+      "sha256": "2339a5fc2a91d1dfa6202b794777d84d14e5096919f58bb5f2383e1568dbd301"
+    },
+    {
+      "path": "evidence/desktop-instructor-classroom-detail.png",
+      "bytes": 77597,
+      "modifiedAt": "2026-10-04T15:11:04.673Z",
+      "sha256": "19bcbb93c1288cb313518382da16e6dba534d37676e9b20b23644432b0c3cea4"
+    },
+    {
+      "path": "evidence/desktop-instructor-classrooms.png",
+      "bytes": 37716,
+      "modifiedAt": "2026-10-04T15:11:01.697Z",
+      "sha256": "0cfed0714e690ca9b859813f8ed479a146c5057cd35e7924d5a6aec8e61a1976"
+    },
+    {
+      "path": "evidence/desktop-instructor-notifications.png",
+      "bytes": 35217,
+      "modifiedAt": "2026-10-04T15:11:03.667Z",
+      "sha256": "62218e267b03c3b2e0f12cf02d9c26391205d4d8f18f2bd04671a9ba432c7c4a"
+    },
+    {
+      "path": "evidence/desktop-instructor-profile.png",
+      "bytes": 43118,
+      "modifiedAt": "2026-10-04T15:11:02.238Z",
+      "sha256": "6ab5342828fbe3ed5119fe5cbf72633be15a726e1b7c0c99eaabd23ace023b83"
+    },
+    {
+      "path": "evidence/desktop-learner-classroom-detail.png",
+      "bytes": 63488,
+      "modifiedAt": "2026-10-04T15:10:58.961Z",
+      "sha256": "63feb6908ea80c5596f254cc3573d08ca5764738eb2863568208c9583606e396"
+    },
+    {
+      "path": "evidence/desktop-learner-classrooms.png",
+      "bytes": 34874,
+      "modifiedAt": "2026-10-04T15:10:56.375Z",
+      "sha256": "5ec3882bef9713459205704d68e9a1ee99df93cf636637afc394bb3b2ba1cb6e"
+    },
+    {
+      "path": "evidence/desktop-learner-notifications.png",
+      "bytes": 32506,
+      "modifiedAt": "2026-10-04T15:10:58.330Z",
+      "sha256": "fd692b7695c7891820a59ee1fbf081827bf22eb6c52bf27e318d71617abbc944"
+    },
+    {
+      "path": "evidence/desktop-learner-profile.png",
+      "bytes": 40197,
+      "modifiedAt": "2026-10-04T15:10:56.912Z",
+      "sha256": "c7c777ce9792de1de0b25e574dc31cac290c11d8727ca11822bee47c621a63a1"
+    },
+    {
+      "path": "evidence/desktop-learner-study-learning.png",
+      "bytes": 60670,
+      "modifiedAt": "2026-10-04T15:12:37.813Z",
+      "sha256": "f1bec2859f4a0e127da7592f283eb469baf948ad0e446e10c70bb8c10538357a"
+    },
+    {
+      "path": "evidence/desktop-learner-study-profile.png",
+      "bytes": 65863,
+      "modifiedAt": "2026-10-04T15:11:00.513Z",
+      "sha256": "0feaaa4333c6eb74ee409a345cd0892ea8eb95f300f22307fe004b59e1cd03af"
+    },
+    {
+      "path": "evidence/desktop-learner-study.png",
+      "bytes": 60308,
+      "modifiedAt": "2026-10-04T15:10:59.963Z",
+      "sha256": "2acce002bc0134d78484d2b08b1358dcf4ff062c0c94480dd44d1f9a230a6345"
+    },
+    {
+      "path": "evidence/desktop-learner-unread-home.png",
+      "bytes": 35188,
+      "modifiedAt": "2026-10-04T15:12:35.980Z",
+      "sha256": "467cbd3805bd8d9409b4e07f50b51198301aa9156b3d1de2fb040aa3c8bebb76"
+    },
+    {
+      "path": "evidence/desktop-learner-unread-panel.png",
+      "bytes": 38195,
+      "modifiedAt": "2026-10-04T15:12:36.464Z",
+      "sha256": "bb418f59244f8cffb27821fbc42764ff913bcd78e072a37b08a9a91295fe4a68"
+    },
+    {
+      "path": "evidence/followup.json",
+      "bytes": 232857,
+      "modifiedAt": "2026-10-04T15:12:37.822Z",
+      "sha256": "ca974d2a0197a5b250954138f0ccb47130ff9c83612660349d4bff49b9d68c98"
+    },
+    {
+      "path": "evidence/observations.json",
+      "bytes": 484335,
+      "modifiedAt": "2026-10-04T15:11:13.418Z",
+      "sha256": "cd60e37b5fb72289479c006d83623c59feecd2c7252bf4f10d35f5a0107c0bba"
+    },
+    {
+      "path": "evidence/phone-landscape-instructor-classroom-detail.png",
+      "bytes": 24475,
+      "modifiedAt": "2026-10-04T15:10:40.308Z",
+      "sha256": "91287243e3a5c4274b6deda3710a3e909b2470627fa5b77d65bc0e8fc4dcb9fe"
+    },
+    {
+      "path": "evidence/phone-landscape-instructor-classrooms.png",
+      "bytes": 26794,
+      "modifiedAt": "2026-10-04T15:10:38.150Z",
+      "sha256": "9a4e495df04ed7824401a10a7b5a1c36b8cf5393effe2e312a726e42e3bdb9b2"
+    },
+    {
+      "path": "evidence/phone-landscape-instructor-notifications.png",
+      "bytes": 23568,
+      "modifiedAt": "2026-10-04T15:10:39.661Z",
+      "sha256": "05deb3e08be220323c3bfa1eab2bd64882bdb34ef6e6457953a25186dc49343a"
+    },
+    {
+      "path": "evidence/phone-landscape-instructor-profile.png",
+      "bytes": 30127,
+      "modifiedAt": "2026-10-04T15:10:38.679Z",
+      "sha256": "14855d3c15b95a8411fc235248756252378057fba48f9a0d3db49ab48a231732"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-classroom-detail.png",
+      "bytes": 19025,
+      "modifiedAt": "2026-10-04T15:10:35.464Z",
+      "sha256": "7e6c47f8ab8a34490d9263bee3fd186a6120810b41c9063c7aecede036f23d19"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-classrooms.png",
+      "bytes": 23470,
+      "modifiedAt": "2026-10-04T15:10:32.601Z",
+      "sha256": "99b61f73304f4f98b35ba910cb5291330afe5d6beedfef69987479c0d1d58d96"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-notifications.png",
+      "bytes": 20264,
+      "modifiedAt": "2026-10-04T15:10:34.561Z",
+      "sha256": "af5c296852d155643b4f407be2f5e89222e5434b577d423d6c5b0551f681db4e"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-overflow-destination.png",
+      "bytes": 16826,
+      "modifiedAt": "2026-10-04T15:10:33.634Z",
+      "sha256": "e8081f1fdde1188d2baed2f598dabf3c613ec7b9927d65ea95fbc7de7f3c7842"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-profile.png",
+      "bytes": 26164,
+      "modifiedAt": "2026-10-04T15:10:33.113Z",
+      "sha256": "a5d80c87bf127e4b6332a2183be7e447269a70f051bb742ddbbe9a0fd5814986"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-study-learning.png",
+      "bytes": 23682,
+      "modifiedAt": "2026-10-04T15:12:25.308Z",
+      "sha256": "695e47a3bd52ae34f206bb41048b2134602bfe8c90306a299e31b19b528496df"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-study-profile.png",
+      "bytes": 15499,
+      "modifiedAt": "2026-10-04T15:10:36.930Z",
+      "sha256": "13249006b1be9be519bc32de52a7330b76b69702f7ab322bc2731741106efb7b"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-study-return.png",
+      "bytes": 23470,
+      "modifiedAt": "2026-10-04T15:14:22.172Z",
+      "sha256": "99b61f73304f4f98b35ba910cb5291330afe5d6beedfef69987479c0d1d58d96"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-study-scrolled.png",
+      "bytes": 22035,
+      "modifiedAt": "2026-10-04T15:14:21.690Z",
+      "sha256": "94e12865d807cccf698f55b5d6533fa5156b64d04d2618d6d1bd5d8f8189afa1"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-study.png",
+      "bytes": 11470,
+      "modifiedAt": "2026-10-04T15:10:36.380Z",
+      "sha256": "fd45f0dd7c13b41520af1af5f8962c3ae76ba001c3a92c7c1a149e66405feaa5"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-unread-home.png",
+      "bytes": 23865,
+      "modifiedAt": "2026-10-04T15:12:23.501Z",
+      "sha256": "c6a6d1631cd9047ac1d97a8c42debe58fc51ba82a7163e01443b7f12d2af0569"
+    },
+    {
+      "path": "evidence/phone-landscape-learner-unread-panel.png",
+      "bytes": 20412,
+      "modifiedAt": "2026-10-04T15:12:23.979Z",
+      "sha256": "ef6bddfa2f634264acf206673f495602933c0762b6ecb8ae91a942247ec8fdaf"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-classroom-detail.png",
+      "bytes": 45571,
+      "modifiedAt": "2026-10-04T15:10:31.449Z",
+      "sha256": "7107454cc7010cda48a2cd1ad79ef6f9c3ba848b3a422705ad19aff7ac87f019"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-classrooms.png",
+      "bytes": 28003,
+      "modifiedAt": "2026-10-04T15:10:28.543Z",
+      "sha256": "6d5569a8715a31b5e5612d22a789b2245abb8747e9816ebc244cca72bdaedfed"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-entrance-destination.png",
+      "bytes": 29706,
+      "modifiedAt": "2026-10-04T15:12:27.409Z",
+      "sha256": "a7bdcf9992525cdaad713f3026cc930c73ffb492682c32f46714d299f432f4c9"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-header-trigger.png",
+      "bytes": 38478,
+      "modifiedAt": "2026-10-04T15:12:26.928Z",
+      "sha256": "5bef9e07937aa5756a697db1f6443dfcf7b99a897d5f2be3491ea45761ef47cd"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-notifications.png",
+      "bytes": 24659,
+      "modifiedAt": "2026-10-04T15:10:30.060Z",
+      "sha256": "44851dbf1d1cb74f1ff3524cd4186c864345446dec2e4e42134d2893cfed55cb"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-profile.png",
+      "bytes": 38096,
+      "modifiedAt": "2026-10-04T15:10:29.080Z",
+      "sha256": "d4997d03a470b8e47fea53337c45245ae698972e7b37a15cba92800ecbf0ed9d"
+    },
+    {
+      "path": "evidence/phone-portrait-instructor-unread-home.png",
+      "bytes": 28384,
+      "modifiedAt": "2026-10-04T15:12:26.459Z",
+      "sha256": "f5b9d5b17fae3b0669f4918195cddd1906f25f4864287baa64fa3df681d67653"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-classroom-detail.png",
+      "bytes": 42189,
+      "modifiedAt": "2026-10-04T15:10:25.845Z",
+      "sha256": "11ac1e806d8295be1513d55b5683480994cad476c35a356285027e22289d6cc5"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-classrooms.png",
+      "bytes": 24431,
+      "modifiedAt": "2026-10-04T15:10:22.947Z",
+      "sha256": "859f5a35a885b0397eb35c54a436f8e562bab1e26d20f922dbf1c934c8129078"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-notifications.png",
+      "bytes": 20282,
+      "modifiedAt": "2026-10-04T15:10:24.932Z",
+      "sha256": "b425d2298b92b5eb1ce2ec4d96b890a3739575835ad2267b81a9c1ee863babf0"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-overflow-destination.png",
+      "bytes": 28372,
+      "modifiedAt": "2026-10-04T15:10:23.999Z",
+      "sha256": "db08534b4095c84dc77810e3ded2741068bcb46be6ec3d7e84f5dcfdc80071cd"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-profile.png",
+      "bytes": 35179,
+      "modifiedAt": "2026-10-04T15:10:23.493Z",
+      "sha256": "33dbfa6998e378a45bd6f84aa201de2b6baccf7b63085043fbbe2d5eb1dbb5fa"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-study-learning.png",
+      "bytes": 44652,
+      "modifiedAt": "2026-10-04T15:12:22.411Z",
+      "sha256": "9eb16a3ab6bea595a179c4e19249fd77e07f3343e5e72773a5185f9d30bfb1c1"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-study-profile.png",
+      "bytes": 14682,
+      "modifiedAt": "2026-10-04T15:10:27.310Z",
+      "sha256": "bbbae50f44559316430f9ebd21fb2fc4afd8755a96fc1e218564a63c9ad7ea10"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-study-return-with-context.png",
+      "bytes": 42189,
+      "modifiedAt": "2026-10-04T15:21:01.517Z",
+      "sha256": "11ac1e806d8295be1513d55b5683480994cad476c35a356285027e22289d6cc5"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-study.png",
+      "bytes": 10752,
+      "modifiedAt": "2026-10-04T15:10:26.794Z",
+      "sha256": "f52ea1e7dba61319ce1d3604cf66b3c246668e068e4ae67a77906c2aef835c6e"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-unread-home.png",
+      "bytes": 24823,
+      "modifiedAt": "2026-10-04T15:12:20.599Z",
+      "sha256": "54ea81769ea0ee33357cb455c3355ae4d12ce9dda86c9890860936d31c1f80a8"
+    },
+    {
+      "path": "evidence/phone-portrait-learner-unread-panel.png",
+      "bytes": 21164,
+      "modifiedAt": "2026-10-04T15:12:21.080Z",
+      "sha256": "d6aa3e754990aa603259f6dd49e4defde4d4b49ac6489862282171fe142d9709"
+    },
+    {
+      "path": "evidence/phone-wide-instructor-classroom-detail.png",
+      "bytes": 51592,
+      "modifiedAt": "2026-10-04T15:11:13.405Z",
+      "sha256": "490262b375eef71fd5653f236f991de4848f20cd747f941e1071e7597609344d"
+    },
+    {
+      "path": "evidence/phone-wide-instructor-classrooms.png",
+      "bytes": 29910,
+      "modifiedAt": "2026-10-04T15:11:11.168Z",
+      "sha256": "81cf452d24c6b371a4f56efdf5b0069cfe50c51cf24aa907b3af8de4ca74453b"
+    },
+    {
+      "path": "evidence/phone-wide-instructor-notifications.png",
+      "bytes": 26573,
+      "modifiedAt": "2026-10-04T15:11:12.722Z",
+      "sha256": "2e148b75969111610d1dcf0d7d59bc151163c6edb20903d377d3dd2fff37e8be"
+    },
+    {
+      "path": "evidence/phone-wide-instructor-profile.png",
+      "bytes": 37905,
+      "modifiedAt": "2026-10-04T15:11:11.702Z",
+      "sha256": "6fc0ca43aaa0df276d5944bbbd2ea6366ad80dc1bb7a136f4af91ee1e8eb0209"
+    },
+    {
+      "path": "evidence/phone-wide-learner-classroom-detail.png",
+      "bytes": 48363,
+      "modifiedAt": "2026-10-04T15:11:08.430Z",
+      "sha256": "e7e703c99727b77bcb3174baa72203b125a47de64f30710036dc15d379c05b50"
+    },
+    {
+      "path": "evidence/phone-wide-learner-classrooms.png",
+      "bytes": 25552,
+      "modifiedAt": "2026-10-04T15:11:05.814Z",
+      "sha256": "fbd5abc0d0de2660059aefcb9dce46fa6fe050120c622874b650d4ffb6846799"
+    },
+    {
+      "path": "evidence/phone-wide-learner-notifications.png",
+      "bytes": 21369,
+      "modifiedAt": "2026-10-04T15:11:07.829Z",
+      "sha256": "69ed32bd204cbd1c9947fd13744b7c41e8d1ea43cbf54a02cceddd391e9e79f0"
+    },
+    {
+      "path": "evidence/phone-wide-learner-overflow-destination.png",
+      "bytes": 31821,
+      "modifiedAt": "2026-10-04T15:11:06.877Z",
+      "sha256": "318a85a9818b98285d77988b7a127525bf657752b4717a1e052199336b67a8fa"
+    },
+    {
+      "path": "evidence/phone-wide-learner-profile.png",
+      "bytes": 37308,
+      "modifiedAt": "2026-10-04T15:11:06.348Z",
+      "sha256": "4145ddf244b0a449107c6ba0cdcb507d8a220a06a23152e2d9b7964edfe0a994"
+    },
+    {
+      "path": "evidence/phone-wide-learner-study-profile.png",
+      "bytes": 14846,
+      "modifiedAt": "2026-10-04T15:11:09.945Z",
+      "sha256": "3a437893656535b7bbcd49633f24619fc9961ac3f6aaa08254373d4ae60c71ad"
+    },
+    {
+      "path": "evidence/phone-wide-learner-study.png",
+      "bytes": 10804,
+      "modifiedAt": "2026-10-04T15:11:09.426Z",
+      "sha256": "915a0327c5cadbfd4827f2b63b43c7652ce27d1398c840af45592ce27c8e9a40"
+    },
+    {
+      "path": "evidence/return-context.json",
+      "bytes": 259,
+      "modifiedAt": "2026-10-04T15:21:01.518Z",
+      "sha256": "26a3c3919b8cafb102afd8536d91bbb270d3799cb3ab61ca80f516ec2acc7bf8"
+    },
+    {
+      "path": "evidence/study-scroll.json",
+      "bytes": 2021,
+      "modifiedAt": "2026-10-04T15:14:27.207Z",
+      "sha256": "52270cc4f17acfbdd2ea78e1cc806b6aa28a8b477e532d5f4bc5816c216aed40"
+    },
+    {
+      "path": "evidence/tablet-landscape-instructor-classroom-detail.png",
+      "bytes": 57633,
+      "modifiedAt": "2026-10-04T15:10:55.211Z",
+      "sha256": "0b29aefa6379c5998a51699b5e07f794479a5da4e80e8ac79f7a1bd06ad98ad7"
+    },
+    {
+      "path": "evidence/tablet-landscape-instructor-classrooms.png",
+      "bytes": 32954,
+      "modifiedAt": "2026-10-04T15:10:53.619Z",
+      "sha256": "f7a9783314fbc8ca645d2d2a141e48065902a0703488dbe2d7519f3ad9afdb79"
+    },
+    {
+      "path": "evidence/tablet-landscape-instructor-notifications.png",
+      "bytes": 38582,
+      "modifiedAt": "2026-10-04T15:10:54.600Z",
+      "sha256": "f9157cd4256cf84044a93cc7dee80873cc00ba24cc1340c9211b25f7fe6e26ca"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-classroom-detail.png",
+      "bytes": 50182,
+      "modifiedAt": "2026-10-04T15:10:51.427Z",
+      "sha256": "f2ae9a2c61d520865e3a530812f0f4febf7dcdd0df63902e6600c200a045b128"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-classrooms.png",
+      "bytes": 30566,
+      "modifiedAt": "2026-10-04T15:10:49.886Z",
+      "sha256": "44fe7b01f08bc6e711e140cdc6bccf7ec9cadbc83b0b8a5ea7066b1e3ec62c7c"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-notifications.png",
+      "bytes": 36290,
+      "modifiedAt": "2026-10-04T15:10:50.836Z",
+      "sha256": "34b72510e7be3b4ee7b8415e2a7f3d5a1e1cf55925e29f6fc1c7670c408a56f3"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-settings-destination.png",
+      "bytes": 38945,
+      "modifiedAt": "2026-10-04T15:12:33.419Z",
+      "sha256": "933318b8fb144cfc1b08702a7b82b04c7f79b3c42fd75c60b0e6c31d46b163d3"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-study-learning-full.png",
+      "bytes": 55880,
+      "modifiedAt": "2026-10-04T15:14:24.184Z",
+      "sha256": "5d85543a8860bc423400df8c2c51f45e8f27b0448f1742cc8eca55596777f6bd"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-study-learning.png",
+      "bytes": 59105,
+      "modifiedAt": "2026-10-04T15:12:34.820Z",
+      "sha256": "b085d5d0e9fcfb5067533b6028c5f78e542eefa65803a9ff4d8eb355f43649b4"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-study-return.png",
+      "bytes": 30566,
+      "modifiedAt": "2026-10-04T15:14:24.686Z",
+      "sha256": "44fe7b01f08bc6e711e140cdc6bccf7ec9cadbc83b0b8a5ea7066b1e3ec62c7c"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-study-scrolled.png",
+      "bytes": 57239,
+      "modifiedAt": "2026-10-04T15:14:23.855Z",
+      "sha256": "c7001a6b95d513651a27cd399beb9e7a0e10706cf89d4619dc9718444b91e3a9"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-study.png",
+      "bytes": 58732,
+      "modifiedAt": "2026-10-04T15:10:52.421Z",
+      "sha256": "281288038bb6905b46bea76671bd5f87c093699ed46a993c35bf3db1c3534ee6"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-unread-home.png",
+      "bytes": 30941,
+      "modifiedAt": "2026-10-04T15:12:32.009Z",
+      "sha256": "fd78449be656d09a6e3ec9665c180afa07bbbf2e345f751878c4bb0030795784"
+    },
+    {
+      "path": "evidence/tablet-landscape-learner-unread-panel.png",
+      "bytes": 39022,
+      "modifiedAt": "2026-10-04T15:12:32.482Z",
+      "sha256": "3532667a7d61cb2c71fc4f734d9c27c4f61b603ee3a4974992226315a1b1cf41"
+    },
+    {
+      "path": "evidence/tablet-portrait-instructor-classroom-detail.png",
+      "bytes": 66083,
+      "modifiedAt": "2026-10-04T15:10:48.723Z",
+      "sha256": "ba1bcf07defb6c6bf3480995fdb746b5770870e7377632315c191c7256c057c3"
+    },
+    {
+      "path": "evidence/tablet-portrait-instructor-classrooms.png",
+      "bytes": 30006,
+      "modifiedAt": "2026-10-04T15:10:46.616Z",
+      "sha256": "0d9ecfca6f1ba58ff5384883e655bff3c7328a1c52a7ce01235b452946772efc"
+    },
+    {
+      "path": "evidence/tablet-portrait-instructor-notifications.png",
+      "bytes": 35601,
+      "modifiedAt": "2026-10-04T15:10:48.124Z",
+      "sha256": "6e9ca951a77b557d3d7a69652d47081dd62cc6dc01c40ab7bfd95e61c3b9660c"
+    },
+    {
+      "path": "evidence/tablet-portrait-instructor-profile.png",
+      "bytes": 36996,
+      "modifiedAt": "2026-10-04T15:10:47.152Z",
+      "sha256": "51633611530b3bf632ab2dfe17b0e8b29c42a327b40d0bfe6f89ee4df35e8c3c"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-classroom-detail.png",
+      "bytes": 51346,
+      "modifiedAt": "2026-10-04T15:10:44.434Z",
+      "sha256": "9852e1fec503c8a34ccd1d7c1d1197c1d4031feb165e791dfba843b27a4e6d92"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-classrooms.png",
+      "bytes": 25575,
+      "modifiedAt": "2026-10-04T15:10:41.454Z",
+      "sha256": "6d864c830e0673f5cdd0586b5ba0b57f4aa5ec3e7bba25d1991858bfc724ce55"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-notifications.png",
+      "bytes": 31176,
+      "modifiedAt": "2026-10-04T15:10:43.501Z",
+      "sha256": "c8d2e014b023970073122770d8e53eaaffa8bfa8b66036cc79ac3db5f61e24d2"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-overflow-destination.png",
+      "bytes": 40952,
+      "modifiedAt": "2026-10-04T15:10:42.508Z",
+      "sha256": "aa88e4ecf453ade5b6fbf3259e409ee42c2b7da2b7fbe977084591502ca3579d"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-profile.png",
+      "bytes": 34376,
+      "modifiedAt": "2026-10-04T15:10:41.989Z",
+      "sha256": "27b3b6b7e3a8f0834c15c9f99293788cee77a2bf2c7a9ff808ed9944746874ef"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-study-learning-full.png",
+      "bytes": 46514,
+      "modifiedAt": "2026-10-04T15:14:26.702Z",
+      "sha256": "36ced72841938dd4f229f7076a1c1cadd1d64ba8e10a900305b67d51bd01a6b7"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-study-learning.png",
+      "bytes": 51443,
+      "modifiedAt": "2026-10-04T15:12:30.869Z",
+      "sha256": "8d9a22d204c33fdee4710b59c91abf367b58ad8341521014e8bc1d5961738dfe"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-study-return.png",
+      "bytes": 25575,
+      "modifiedAt": "2026-10-04T15:14:27.206Z",
+      "sha256": "6d864c830e0673f5cdd0586b5ba0b57f4aa5ec3e7bba25d1991858bfc724ce55"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-study-scrolled.png",
+      "bytes": 51443,
+      "modifiedAt": "2026-10-04T15:14:26.386Z",
+      "sha256": "8d9a22d204c33fdee4710b59c91abf367b58ad8341521014e8bc1d5961738dfe"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-study.png",
+      "bytes": 51443,
+      "modifiedAt": "2026-10-04T15:10:45.437Z",
+      "sha256": "8d9a22d204c33fdee4710b59c91abf367b58ad8341521014e8bc1d5961738dfe"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-unread-home.png",
+      "bytes": 25575,
+      "modifiedAt": "2026-10-04T15:12:28.536Z",
+      "sha256": "6d864c830e0673f5cdd0586b5ba0b57f4aa5ec3e7bba25d1991858bfc724ce55"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-unread-panel.png",
+      "bytes": 33515,
+      "modifiedAt": "2026-10-04T15:12:29.499Z",
+      "sha256": "51fc9a90435fbc57b1ef8cc96dc80d3eb109c3e19965d9156f92dad4555136cd"
+    },
+    {
+      "path": "evidence/tablet-portrait-learner-unread-profile.png",
+      "bytes": 34828,
+      "modifiedAt": "2026-10-04T15:12:29.009Z",
+      "sha256": "804c73e44d9c28c7ae448918748904a48f105e38714868f2efcf2266eaf80d78"
+    }
+  ]
+}
