@@ -47,7 +47,23 @@ describe('responsive viewport mode', () => {
   })
 
   it('keeps a tablet with a trackpad in tablet mode when touch remains available', () => {
-    expect(getResponsiveViewportMode({ coarsePointer: false, anyCoarsePointer: true, screenWidth: 820, screenHeight: 1180 })).toBe('tablet-portrait')
+    expect(getResponsiveViewportMode({
+      coarsePointer: false,
+      anyCoarsePointer: true,
+      maxTouchPoints: 5,
+      screenWidth: 820,
+      screenHeight: 1180,
+    })).toBe('tablet-portrait')
+  })
+
+  it('ignores a spurious any-coarse pointer report without touch points', () => {
+    expect(getResponsiveViewportMode({
+      coarsePointer: false,
+      anyCoarsePointer: true,
+      maxTouchPoints: 0,
+      screenWidth: 1366,
+      screenHeight: 768,
+    })).toBe('desktop')
   })
 
   it('keeps device mode when only split-window and keyboard bounds change', () => {
