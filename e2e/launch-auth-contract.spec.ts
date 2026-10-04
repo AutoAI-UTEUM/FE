@@ -23,11 +23,12 @@ test.beforeEach(async ({ context }) => {
 test('opening/prefetching link never confirms; URL/history/storage/referrer are scrubbed', async ({ page, context }) => {
   const requests: { url: string; method: string; referer: string | undefined }[] = []
   context.on('request', (request) => requests.push({ url: request.url(), method: request.method(), referer: request.headers().referer }))
-  await page.goto(`/verify-email?token=${token}&returnTo=unsafe#token=${token}`)
+  await page.goto(`/verify-email?returnTo=unsafe#token=${token}`)
   await expect(page.getByRole('heading', { name: '이메일 확인', exact: true })).toBeVisible()
   await expect(page).toHaveURL('/verify-email')
   expect(requests.filter((request) => request.url.includes('/email-verification/confirm'))).toHaveLength(0)
   expect(requests.filter((request) => request.referer?.includes(token))).toHaveLength(0)
+  expect(requests.some((request) => request.url.includes(token))).toBe(false)
   expect(await page.evaluate(() => JSON.stringify({ state: history.state, local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain(token)
   if (!enabled) {
     await expect(page.getByText('이메일 확인 기능을 준비 중입니다.', { exact: false })).toBeVisible()
@@ -48,7 +49,7 @@ test('explicit confirm is single POST and creates no login session', async ({ pa
     expect(route.request().headers().authorization).toBeUndefined()
     await route.fulfill({ json: envelope({ emailVerification: 'VERIFIED', emailVerificationRequired: false, emailVerifiedAt: '2026-10-04T10:00:00Z' }) })
   })
-  await page.goto(`/verify-email?token=${token}`)
+  await page.goto(`/verify-email#token=${token}`)
   await page.getByRole('button', { name: '이메일 확인하기' }).evaluate((button: HTMLButtonElement) => { button.click(); button.click() })
   await expect(page.getByText('링크에 연결된 계정의 이메일을 확인했습니다.', { exact: false })).toBeVisible()
   expect(calls).toBe(1)
@@ -56,11 +57,120 @@ test('explicit confirm is single POST and creates no login session', async ({ pa
   await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
 })
 
+for (const [index, suffix] of [`?token=${token}`, `?token=${token}#token=${token}`, `?%74oken=${token}#token=${token}`].entries()) {
+  test(`old query link ${index} is never consumed and offers reissue guidance`, async ({ page, context }) => {
+    let confirms = 0
+    context.on('request', (request) => { if (request.url().includes('/email-verification/confirm')) confirms++ })
+    await page.goto('/verify-email' + suffix)
+    await expect(page).toHaveURL('/verify-email')
+    await expect(page.getByText('이전 형식의 이메일 링크는 사용할 수 없습니다.', { exact: false })).toBeVisible()
+    await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
+    expect(await page.evaluate(() => window.__uteumEmailLink?.read() ?? null)).toBeNull()
+    expect(confirms).toBe(0)
+  })
+}
+
+test('malformed fragment is scrubbed and gives reissue guidance', async ({ page }) => {
+  await page.goto(`/verify-email#token=${token}&token=${token}`)
+  await expect(page).toHaveURL('/verify-email')
+  await expect(page.getByText('이메일 링크 형식이 올바르지 않습니다.', { exact: false })).toBeVisible()
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
+})
+
+test('readiness OFF discards a new SPA fragment without any new auth API', async ({ page, context }) => {
+  test.skip(enabled, 'default-OFF compatibility')
+  const requests: string[] = []
+  context.on('request', (request) => requests.push(request.url()))
+  await page.goto('/verify-email')
+  await expect(page.getByRole('heading', { name: '이메일 확인', exact: true })).toBeVisible()
+  await page.evaluate((next) => {
+    history.pushState({ idx: 1, key: 'synthetic-off' }, '', `/verify-email#token=${next}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, token)
+  await expect(page).toHaveURL('/verify-email')
+  expect(await page.evaluate(() => window.__uteumEmailLink?.read() ?? null)).toBeNull()
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
+  expect(requests.some((url) => url.includes('/email-verification/'))).toBe(false)
+})
+
+test('pagehide during confirm releases management buttons and ignores the late result', async ({ page }) => {
+  test.skip(!enabled, 'readiness OFF')
+  let release: (() => void) | undefined
+  let confirms = 0
+  let requests = 0
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/refresh')) return route.fulfill({ json: envelope({ accessToken: 'synthetic-access', expiresIn: 3600 }) })
+    if (path.endsWith('/me')) return route.fulfill({ json: envelope(user) })
+    if (path.endsWith('/confirm')) {
+      confirms++
+      await new Promise<void>((resolve) => { release = resolve })
+      return route.fulfill({ json: envelope({ emailVerification: 'VERIFIED', emailVerificationRequired: false }) }).catch(() => undefined)
+    }
+    if (path.endsWith('/request')) { requests++; return route.fulfill({ status: 202, json: envelope(null) }) }
+    return route.fulfill({ json: envelope({ emailVerification: 'PENDING', emailVerificationRequired: true, emailVerifiedAt: null }) })
+  })
+  await page.goto(`/verify-email#token=${token}`)
+  await expect(page.getByText('현재 로그인 계정: account-b@example.invalid')).toBeVisible()
+  await page.getByRole('button', { name: '이메일 확인하기' }).click()
+  await expect.poll(() => confirms).toBe(1)
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '확인 이메일 다시 요청' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '현재 계정 상태 다시 확인' })).toBeEnabled()
+  release!()
+  await page.getByRole('button', { name: '확인 이메일 다시 요청' }).click()
+  await expect.poll(() => requests).toBe(1)
+  await expect(page.getByText('발송·수신 완료를 의미하지 않습니다.', { exact: false })).toBeVisible()
+  await expect(page.getByText('링크에 연결된 계정의 이메일을 확인했습니다.', { exact: false })).toHaveCount(0)
+})
+
+test('SPA link replacement cancels a pending confirm and ignores its late result', async ({ page }) => {
+  test.skip(!enabled, 'readiness OFF')
+  const replacement = 'B'.repeat(43)
+  const bodies: unknown[] = []
+  let release: (() => void) | undefined
+  await page.route('**/api/auth/email-verification/confirm', async (route) => {
+    bodies.push(route.request().postDataJSON())
+    if (bodies.length === 1) await new Promise<void>((resolve) => { release = resolve })
+    await route.fulfill({ json: envelope({ emailVerification: 'VERIFIED', emailVerificationRequired: false }) }).catch(() => undefined)
+  })
+  await page.goto(`/verify-email#token=${token}`)
+  await page.getByRole('button', { name: '이메일 확인하기' }).click()
+  await expect.poll(() => bodies.length).toBe(1)
+  await page.evaluate((next) => {
+    history.pushState({ idx: 1, key: 'synthetic-next' }, '', `/verify-email#token=${next}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, replacement)
+  await expect(page).toHaveURL('/verify-email')
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toBeEnabled()
+  release!()
+  await expect(page.getByText('링크에 연결된 계정의 이메일을 확인했습니다.', { exact: false })).toHaveCount(0)
+  await page.getByRole('button', { name: '이메일 확인하기' }).click()
+  await expect(page.getByText('링크에 연결된 계정의 이메일을 확인했습니다.', { exact: false })).toBeVisible()
+  expect(bodies).toEqual([{ token }, { token: replacement }])
+})
+
+test('back navigation and pagehide do not restore a pending secret', async ({ page }) => {
+  test.skip(!enabled, 'readiness OFF')
+  await page.goto(`/verify-email#token=${token}`)
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toBeVisible()
+  await page.getByRole('link', { name: '로그인', exact: true }).click()
+  await expect(page).toHaveURL('/login')
+  await page.goBack()
+  await expect(page).toHaveURL('/verify-email')
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
+  await page.goto(`/verify-email#token=${token}`)
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toBeVisible()
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+  await expect(page.getByRole('button', { name: '이메일 확인하기' })).toHaveCount(0)
+})
+
 test('encoded and uppercase verify routes scrub tokens before router matching', async ({ page }) => {
-  await page.goto(`/%76erify-email?token=${token}`)
+  await page.goto(`/%76erify-email#token=${token}`)
   await expect(page.getByRole('heading', { name: '이메일 확인', exact: true })).toBeVisible()
   await expect(page).toHaveURL('/verify-email')
-  await page.goto(`/VERIFY-EMAIL/?token=${token}`)
+  await page.goto(`/VERIFY-EMAIL/#token=${token}`)
   await expect(page.getByRole('heading', { name: '이메일 확인', exact: true })).toBeVisible()
   await expect(page).toHaveURL('/verify-email')
 })
@@ -69,7 +179,7 @@ for (const scenario of ['expired', 'reissued', 'used']) {
   test(`${scenario} tokens share the invalid-link message and are cleared`, async ({ page }) => {
     test.skip(!enabled, 'readiness OFF')
     await page.route('**/api/auth/email-verification/confirm', (route) => route.fulfill({ status: 400, json: invalid }))
-    await page.goto(`/verify-email?token=${token}`)
+    await page.goto(`/verify-email#token=${token}`)
     await page.getByRole('button', { name: '이메일 확인하기' }).click()
     await expect(page.getByText('유효하지 않거나 만료된 링크입니다.', { exact: false })).toBeVisible()
     expect(await page.evaluate(() => window.__uteumEmailLink?.read() ?? null)).toBeNull()
@@ -97,7 +207,7 @@ test('another-account confirm reloads own status/me; 202 and 429 never claim del
     }
     return route.fulfill({ json: envelope(null) })
   })
-  await page.goto(`/verify-email?token=${token}`)
+  await page.goto(`/verify-email#token=${token}`)
   await expect(page.getByText('현재 로그인 계정: account-b@example.invalid')).toBeVisible()
   const before = authCalls.filter((path) => path === '/api/users/me').length
   await page.getByRole('button', { name: '이메일 확인하기' }).click()
@@ -197,7 +307,7 @@ test('another tab confirmation is reflected by own status/me on focus', async ({
   await page.goto('/verify-email')
   await expect(page.getByText('현재 계정의 이메일 확인이 필요합니다.')).toBeVisible()
   const second = await context.newPage()
-  await second.goto(`/verify-email?token=${token}`)
+  await second.goto(`/verify-email#token=${token}`)
   await second.getByRole('button', { name: '이메일 확인하기' }).click()
   await expect(second.getByText('현재 계정의 이메일 확인이 완료되었습니다.')).toBeVisible()
   await page.bringToFront()
