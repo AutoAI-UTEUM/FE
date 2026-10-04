@@ -10,6 +10,7 @@ import { ClassroomWorkspaceLayout } from './pages/classroom/ClassroomWorkspaceLa
 import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
 import { SettingsPage } from './pages/SettingsPage'
 import { routes } from './routes'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
 
 const AuthCallbackPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.AuthCallbackPage })))
 const ResetPasswordPage = lazy(() => import('./pages/AuthCapabilityPages').then((module) => ({ default: module.ResetPasswordPage })))
@@ -53,6 +54,7 @@ export function AppRoutes() {
       />
 
       <Route element={<AuthLayout />}>
+        <Route path={routes.verifyEmail} element={<VerifyEmailPage />} />
         <Route path={routes.login} element={<LoginPage />} />
         <Route
           path={routes.forgotPassword}

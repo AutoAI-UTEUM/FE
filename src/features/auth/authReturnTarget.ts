@@ -23,6 +23,7 @@ const PUBLIC_AUTH_PATHS = new Set([
   routes.forgotPassword,
   routes.resetPassword,
   routes.authCallback,
+  routes.verifyEmail,
 ])
 
 interface AuthReturnTarget {

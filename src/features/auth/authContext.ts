@@ -1,4 +1,6 @@
 import { createContext } from 'react'
+import type { EmailVerificationFields } from './launchAuthContract'
+import type { SignupAccount } from './authRepository'
 
 import type {
   ApiRequestOptions,
@@ -11,7 +13,7 @@ import type {
   SignupFormValues,
 } from './authValidation'
 
-export interface AuthUser {
+export interface AuthUser extends EmailVerificationFields {
   affiliation?: string
   avatarUrl?: string
   email: string
@@ -39,12 +41,13 @@ export type AuthenticatedRawRequest = (
 ) => Promise<Response>
 
 export type SignupResult =
-  | { status: 'account-created' }
-  | { status: 'authenticated' }
+  | { status: 'account-created'; account?: SignupAccount }
+  | { status: 'authenticated'; user?: AuthUser }
 
 export interface AuthContextValue {
   apiRequest: AuthenticatedRequest
   rawApiRequest: AuthenticatedRawRequest
+  refreshCurrentUser?: (signal?: AbortSignal) => Promise<AuthUser | null>
   checkEmailAvailability: (
     email: string,
     signal?: AbortSignal,

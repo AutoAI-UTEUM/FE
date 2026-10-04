@@ -7,6 +7,8 @@ import {
   type PropsWithChildren,
 } from 'react'
 
+import { isAccountManagementRequest, isEmailVerificationError, requiresEmailVerification } from './launchAuthContract'
+import { getEmailVerificationStatus } from './emailVerificationRepository'
 import {
   apiRequest as requestApi,
   ApiClientError,
@@ -101,6 +103,7 @@ export function AuthProvider({
   )
   const [identityReplacementSequence, setIdentityReplacementSequence] = useState(0)
   const sessionRef = useRef(session)
+  const emailStateRevisionRef = useRef(0)
   const sessionRevisionRef = useRef(0)
   // Grant/activity revisions can advance harmlessly in another tab. Only a
   // local session transition invalidates an in-flight identity restoration.
@@ -821,29 +824,29 @@ export function AuthProvider({
       signal?: AbortSignal,
     ): Promise<SignupResult> => {
       const signupTransition = sessionTransitionRef.current
-      await repository.signup(values, signal)
+      const account = await repository.signup(values, signal)
       if (
         signal?.aborted ||
         sessionTransitionRef.current !== signupTransition
       ) {
-        return { status: 'account-created' }
+        return { status: 'account-created', ...(account ? { account } : {}) }
       }
 
       let result
       try {
         result = await repository.login(values, signal)
       } catch {
-        return { status: 'account-created' }
+        return { status: 'account-created', ...(account ? { account } : {}) }
       }
 
       if (
         signal?.aborted ||
         sessionTransitionRef.current !== signupTransition
       ) {
-        return { status: 'account-created' }
+        return { status: 'account-created', ...(account ? { account } : {}) }
       }
       beginSession(result, result.user)
-      return { status: 'authenticated' }
+      return { status: 'authenticated', user: result.user }
     },
     [beginSession, repository],
   )
@@ -861,6 +864,9 @@ export function AuthProvider({
   const updateUser = useCallback((user: AuthUser) => {
     const current = sessionRef.current
     if (!current) return
+    if (user.emailVerification !== undefined || user.emailVerificationRequired !== undefined) {
+      emailStateRevisionRef.current += 1
+    }
     const nextSession = { ...current, user: { ...current.user, ...user } }
     sessionRef.current = nextSession
     setSession(nextSession)
@@ -870,6 +876,7 @@ export function AuthProvider({
     async (path, options = {}) => {
       const requestSession = sessionRef.current
       const requestTransition = sessionTransitionRef.current
+      const emailRevision = emailStateRevisionRef.current
       const requestUserId = requestSession?.user.id
       const accessToken = requestSession?.accessToken
       const isRequestSessionCurrent = () =>
@@ -880,10 +887,24 @@ export function AuthProvider({
         throw createAuthRequiredError()
       }
 
+      if (requiresEmailVerification(requestSession.user) && !isAccountManagementRequest(path)) {
+        throw new ApiClientError({ code: 'EMAIL_VERIFICATION_REQUIRED', status: 403, message: '이메일 확인이 필요합니다.' })
+      }
+
       try {
         return await requestApi(path, { ...options, accessToken })
       } catch (error) {
         if (!isRequestSessionCurrent()) throw error
+        if (isEmailVerificationError(error)) {
+          const current = sessionRef.current
+          if (current && emailRevision === emailStateRevisionRef.current) {
+            emailStateRevisionRef.current += 1
+            const next = { ...current, user: { ...current.user, emailVerificationRequired: true } }
+            sessionRef.current = next
+            setSession(next)
+          }
+          throw error
+        }
         const directReason = getTerminalLogoutReason(error)
         if (directReason) {
           clearSession(directReason)
@@ -902,6 +923,15 @@ export function AuthProvider({
             accessToken: grant.accessToken,
           })
         } catch (retryError) {
+          if (isRequestSessionCurrent() && isEmailVerificationError(retryError)) {
+            const current = sessionRef.current
+            if (current && emailRevision === emailStateRevisionRef.current) {
+              emailStateRevisionRef.current += 1
+              const next = { ...current, user: { ...current.user, emailVerificationRequired: true } }
+              sessionRef.current = next
+              setSession(next)
+            }
+          }
           if (
             isRequestSessionCurrent() &&
             isUnauthorizedOrInactive(retryError)
@@ -923,6 +953,7 @@ export function AuthProvider({
     async (path, options = {}) => {
       const requestSession = sessionRef.current
       const requestTransition = sessionTransitionRef.current
+      const emailRevision = emailStateRevisionRef.current
       const requestUserId = requestSession?.user.id
       const accessToken = requestSession?.accessToken
       const isRequestSessionCurrent = () =>
@@ -933,10 +964,24 @@ export function AuthProvider({
         throw createAuthRequiredError()
       }
 
+      if (requiresEmailVerification(requestSession.user) && !isAccountManagementRequest(path)) {
+        throw new ApiClientError({ code: 'EMAIL_VERIFICATION_REQUIRED', status: 403, message: '이메일 확인이 필요합니다.' })
+      }
+
       try {
         return await requestRawApi(path, { ...options, accessToken })
       } catch (error) {
         if (!isRequestSessionCurrent()) throw error
+        if (isEmailVerificationError(error)) {
+          const current = sessionRef.current
+          if (current && emailRevision === emailStateRevisionRef.current) {
+            emailStateRevisionRef.current += 1
+            const next = { ...current, user: { ...current.user, emailVerificationRequired: true } }
+            sessionRef.current = next
+            setSession(next)
+          }
+          throw error
+        }
         const directReason = getTerminalLogoutReason(error)
         if (directReason) {
           clearSession(directReason)
@@ -955,6 +1000,15 @@ export function AuthProvider({
             accessToken: grant.accessToken,
           })
         } catch (retryError) {
+          if (isRequestSessionCurrent() && isEmailVerificationError(retryError)) {
+            const current = sessionRef.current
+            if (current && emailRevision === emailStateRevisionRef.current) {
+              emailStateRevisionRef.current += 1
+              const next = { ...current, user: { ...current.user, emailVerificationRequired: true } }
+              sessionRef.current = next
+              setSession(next)
+            }
+          }
           if (
             isRequestSessionCurrent() &&
             isUnauthorizedOrInactive(retryError)
@@ -969,6 +1023,26 @@ export function AuthProvider({
     },
     [clearSession, hasExplicitInitialUser, renewAccessToken],
   )
+
+  const selfLookupSequenceRef = useRef(0)
+  const refreshCurrentUser = useCallback(async (signal?: AbortSignal) => {
+    const sequence = ++selfLookupSequenceRef.current
+    const transition = sessionTransitionRef.current
+    const current = sessionRef.current
+    if (!current) return null
+    const status = await getEmailVerificationStatus(authenticatedRequest, signal)
+    if (signal?.aborted || sequence !== selfLookupSequenceRef.current || sessionTransitionRef.current !== transition ||
+        sessionRef.current?.user.id !== current.user.id) return null
+    const active = sessionRef.current
+    if (!active) return null
+    const me = await repository.getMe(active.accessToken, signal)
+    if (signal?.aborted || sequence !== selfLookupSequenceRef.current || sessionTransitionRef.current !== transition ||
+        sessionRef.current?.user.id !== current.user.id ||
+        me.id !== current.user.id || me.email !== current.user.email) return null
+    const user = { ...status, ...me }
+    updateUser(user)
+    return user
+  }, [authenticatedRequest, repository, updateUser])
 
   const withdraw = useCallback(
     async (password: string) => {
@@ -985,6 +1059,7 @@ export function AuthProvider({
     () => ({
       apiRequest: authenticatedRequest,
       rawApiRequest: authenticatedRawRequest,
+      refreshCurrentUser,
       checkEmailAvailability,
       clearGoogleSignup,
       isAuthenticated: session !== null,
@@ -1004,6 +1079,7 @@ export function AuthProvider({
     [
       authenticatedRequest,
       authenticatedRawRequest,
+      refreshCurrentUser,
       checkEmailAvailability,
       clearGoogleSignup,
       isInitializing,

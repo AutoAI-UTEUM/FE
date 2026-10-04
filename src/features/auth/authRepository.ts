@@ -1,5 +1,6 @@
 import { apiRequest, ApiClientError } from '../../shared/api'
 import type { AuthUser } from './authContext'
+import { isLaunchAuthReady, type EmailVerificationFields } from './launchAuthContract'
 import { AuthValidationError } from './authErrors'
 import type {
   GoogleAuthValues,
@@ -50,7 +51,14 @@ export interface AuthRepository {
     signal?: AbortSignal,
   ) => Promise<string>
   refresh: (signal?: AbortSignal) => Promise<AccessGrant>
-  signup: (values: SignupFormValues, signal?: AbortSignal) => Promise<void>
+  signup: (values: SignupFormValues, signal?: AbortSignal) => Promise<SignupAccount | void>
+}
+
+export interface SignupAccount extends EmailVerificationFields {
+  userId?: number
+  email: string
+  name: string
+  role?: string
 }
 
 interface LoginResponseDto {
@@ -58,7 +66,7 @@ interface LoginResponseDto {
   expiresIn: number
   session?: AuthSessionPolicy
   tokenType: string
-  user: {
+  user: EmailVerificationFields & {
     affiliation?: string
     avatarUrl?: string
     email: string
@@ -83,7 +91,7 @@ const LEGACY_ACCESS_TTL_SECONDS = 60 * 60
 const LEGACY_IDLE_TIMEOUT_SECONDS = 30 * 60
 const LEGACY_ABSOLUTE_TTL_MS = 14 * 24 * 60 * 60 * 1000
 
-interface UserResponseDto {
+interface UserResponseDto extends EmailVerificationFields {
   affiliation?: string
   avatarUrl?: string
   email: string
@@ -139,6 +147,9 @@ const repository: AuthRepository = {
       body: {
         affiliation: values.affiliation?.trim() || undefined,
         idToken: values.idToken,
+        ...(isLaunchAuthReady() && values.role ? {
+          dateOfBirth: values.dateOfBirth, consents: values.consents,
+        } : {}),
         learningEmailOptIn: values.learningEmailOptIn,
         role: values.role,
       },
@@ -202,10 +213,13 @@ const repository: AuthRepository = {
 
   async signup(values, signal) {
     try {
-      await apiRequest<UserResponseDto>('/api/auth/signup', {
+      const { data } = await apiRequest<SignupAccount>('/api/auth/signup', {
         body: {
           affiliation: values.affiliation?.trim() || undefined,
           email: values.email.trim().toLowerCase(),
+          ...(isLaunchAuthReady() ? {
+            dateOfBirth: values.dateOfBirth, consents: values.consents,
+          } : {}),
           learningEmailOptIn: values.learningEmailOptIn ?? false,
           name: values.name.trim(),
           password: values.password,
@@ -214,6 +228,7 @@ const repository: AuthRepository = {
         method: 'POST',
         signal,
       })
+      return data
     } catch (error) {
       throw mapRemoteAuthError(error, 'signup')
     }
@@ -256,6 +271,9 @@ function mapUser(user: UserResponseDto): AuthUser {
     affiliation: user.affiliation,
     avatarUrl: user.avatarUrl,
     email: user.email,
+    ...(user.emailVerification === undefined ? {} : { emailVerification: user.emailVerification }),
+    ...(user.emailVerificationRequired === undefined ? {} : { emailVerificationRequired: user.emailVerificationRequired }),
+    ...(user.emailVerifiedAt === undefined ? {} : { emailVerifiedAt: user.emailVerifiedAt }),
     id: user.id ?? user.userId,
     learningEmailOptIn: user.learningEmailOptIn,
     name: user.name,
@@ -296,7 +314,7 @@ function mapRemoteAuthError(
     : error
 }
 
-const FORM_FIELDS = ['affiliation', 'email', 'name', 'password', 'role'] as const
+const FORM_FIELDS = ['affiliation', 'email', 'name', 'password', 'role', 'dateOfBirth'] as const
 
 function isFieldDetail(
   detail: unknown,
