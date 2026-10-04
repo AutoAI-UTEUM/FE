@@ -21,6 +21,22 @@ import { useResponsiveViewport } from '../../shared/responsive'
 
 type SettingsSection = 'account' | 'appearance' | 'assistant' | 'notification' | 'password' | 'profile'
 
+interface PreferenceSnapshot {
+  owner: string
+  values: UserPreferences
+}
+
+interface PreferenceSaveLock {
+  controller: AbortController
+  generation: number
+  owner: string
+}
+
+interface PreferencesLoadError {
+  message: string
+  owner: string
+}
+
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: '프로필' },
   { id: 'appearance', label: '화면 모드' },
@@ -73,6 +89,9 @@ function SettingsContent() {
   const [answerStyle, setAnswerStyle] = useState<AiAnswerStyle>('NORMAL')
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(true)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
+  const [loadedPreferencesOwner, setLoadedPreferencesOwner] = useState<string | null>(null)
+  const [preferencesError, setPreferencesError] = useState<PreferencesLoadError | null>(null)
+  const [preferencesLoadAttempt, setPreferencesLoadAttempt] = useState(0)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -84,12 +103,83 @@ function SettingsContent() {
   const [passwordError, setPasswordError] = useState<string | undefined>()
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
+  const confirmedPreferencesRef = useRef<PreferenceSnapshot | null>(null)
+  const preferencesGenerationRef = useRef(0)
+  const preferencesOwner = user
+    ? user.id === undefined
+      ? `email:${user.email}`
+      : `id:${user.id}`
+    : null
+  const preferencesOwnerRef = useRef(preferencesOwner)
+  const preferencesSaveLockRef = useRef<PreferenceSaveLock | null>(null)
+  preferencesOwnerRef.current = preferencesOwner
   const repository = useMemo(() => createUserSettingsRepository(apiRequest, rawApiRequest), [apiRequest, rawApiRequest])
+  const arePreferencesReady = Boolean(
+    preferencesOwner
+      && loadedPreferencesOwner === preferencesOwner
+      && confirmedPreferencesRef.current?.owner === preferencesOwner
+      && !isLoadingPreferences
+      && preferencesError?.owner !== preferencesOwner,
+  )
+  const currentPreferencesError = preferencesError?.owner === preferencesOwner
+    ? preferencesError.message
+    : null
 
   useEffect(() => {
-    repository.getPreferences().then((preferences) => {
-      applyPreferences(preferences)
-    }).catch(() => undefined).finally(() => setIsLoadingPreferences(false))
+    const generation = ++preferencesGenerationRef.current
+    const controller = new AbortController()
+    preferencesSaveLockRef.current?.controller.abort()
+    preferencesSaveLockRef.current = null
+    confirmedPreferencesRef.current = null
+
+    if (preferencesOwner) {
+      repository.getPreferences(controller.signal).then((preferences) => {
+        if (
+          controller.signal.aborted
+          || preferencesGenerationRef.current !== generation
+          || preferencesOwnerRef.current !== preferencesOwner
+        ) return
+        confirmedPreferencesRef.current = { owner: preferencesOwner, values: preferences }
+        applyPreferences(preferences)
+        setLoadedPreferencesOwner(preferencesOwner)
+        setPreferencesError(null)
+        setIsSavingPreferences(false)
+      }).catch((error: unknown) => {
+        if (
+          controller.signal.aborted
+          || preferencesGenerationRef.current !== generation
+          || preferencesOwnerRef.current !== preferencesOwner
+        ) return
+        setLoadedPreferencesOwner(null)
+        setPreferencesError({
+          message: getRequestErrorMessage(error, '환경설정을 불러오지 못했습니다.'),
+          owner: preferencesOwner,
+        })
+        setIsSavingPreferences(false)
+      }).finally(() => {
+        if (
+          controller.signal.aborted
+          || preferencesGenerationRef.current !== generation
+          || preferencesOwnerRef.current !== preferencesOwner
+        ) return
+        setIsLoadingPreferences(false)
+      })
+    }
+
+    return () => {
+      controller.abort()
+      if (preferencesGenerationRef.current === generation) {
+        preferencesGenerationRef.current += 1
+      }
+      const saveLock = preferencesSaveLockRef.current
+      if (saveLock?.generation === generation) {
+        saveLock.controller.abort()
+        preferencesSaveLockRef.current = null
+      }
+    }
+  }, [preferencesLoadAttempt, preferencesOwner, repository])
+
+  useEffect(() => {
     if (!user?.avatarUrl) return
     let objectUrl: string | null = null
     repository.getAvatar().then((blob) => { objectUrl = URL.createObjectURL(blob); setAvatarUrl(objectUrl) }).catch(() => undefined)
@@ -118,18 +208,51 @@ function SettingsContent() {
   }
 
   async function savePreferences(patch: Partial<UserPreferences>) {
-    if (isLoadingPreferences || isSavingPreferences) return
-    const previous: UserPreferences = { aiAnswerStyle: answerStyle, newMaterialNotification, studyReminder }
+    const confirmed = confirmedPreferencesRef.current
+    const generation = preferencesGenerationRef.current
+    if (
+      !preferencesOwner
+      || !arePreferencesReady
+      || preferencesSaveLockRef.current
+      || confirmed?.owner !== preferencesOwner
+    ) return
+    const previous = confirmed.values
     const next = { ...previous, ...patch }
+    const lock: PreferenceSaveLock = {
+      controller: new AbortController(),
+      generation,
+      owner: preferencesOwner,
+    }
+    preferencesSaveLockRef.current = lock
     applyPreferences(next)
     setIsSavingPreferences(true)
     try {
-      applyPreferences(await repository.updatePreferences(next))
+      const updated = await repository.updatePreferences(next, lock.controller.signal)
+      if (
+        lock.controller.signal.aborted
+        || preferencesSaveLockRef.current !== lock
+        || preferencesGenerationRef.current !== generation
+        || preferencesOwnerRef.current !== lock.owner
+      ) return
+      confirmedPreferencesRef.current = { owner: lock.owner, values: updated }
+      applyPreferences(updated)
     } catch (error) {
+      if (
+        lock.controller.signal.aborted
+        || preferencesSaveLockRef.current !== lock
+        || preferencesGenerationRef.current !== generation
+        || preferencesOwnerRef.current !== lock.owner
+      ) return
       applyPreferences(previous)
       showToast(getRequestErrorMessage(error), 'danger')
     } finally {
-      setIsSavingPreferences(false)
+      if (preferencesSaveLockRef.current === lock) {
+        preferencesSaveLockRef.current = null
+      }
+      if (
+        preferencesGenerationRef.current === generation
+        && preferencesOwnerRef.current === lock.owner
+      ) setIsSavingPreferences(false)
     }
   }
 
@@ -343,19 +466,41 @@ function SettingsContent() {
 
           {section === 'notification' || section === 'assistant' ? (
             <Card as="section" className="border-0 px-0">
+              {currentPreferencesError ? (
+                <div
+                  className="mb-2 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2"
+                  role="alert"
+                >
+                  <p className="min-w-0 flex-1 type-caption text-rose-800">{currentPreferencesError}</p>
+                  <Button
+                    disabled={isLoadingPreferences}
+                    onClick={() => {
+                      setLoadedPreferencesOwner(null)
+                      setPreferencesError(null)
+                      setIsLoadingPreferences(true)
+                      setPreferencesLoadAttempt((attempt) => attempt + 1)
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    {isLoadingPreferences ? '불러오는 중' : '다시 시도'}
+                  </Button>
+                </div>
+              ) : null}
               {section !== 'assistant' ? (
                 <>
                   <ToggleRow
                     checked={newMaterialNotification}
                     description="강의자가 자료를 올리면 알려드려요"
-                    disabled={isLoadingPreferences || isSavingPreferences}
+                    disabled={!arePreferencesReady || isSavingPreferences}
                     label="새 자료 알림"
                     onChange={(checked) => void savePreferences({ newMaterialNotification: checked })}
                   />
                   <ToggleRow
                     checked={studyReminder}
                     description="3일 이상 접속하지 않으면 이메일 발송"
-                    disabled={isLoadingPreferences || isSavingPreferences}
+                    disabled={!arePreferencesReady || isSavingPreferences}
                     isLast={section === 'notification'}
                     label="학습 리마인더"
                     onChange={(checked) => void savePreferences({ studyReminder: checked })}
@@ -375,7 +520,7 @@ function SettingsContent() {
                   <label className="ml-auto shrink-0">
                     <span className="sr-only">AI 답변 스타일</span>
                     <Select
-                      disabled={isLoadingPreferences || isSavingPreferences}
+                      disabled={!arePreferencesReady || isSavingPreferences}
                       onChange={(event) => void savePreferences({ aiAnswerStyle: event.target.value as AiAnswerStyle })}
                       value={answerStyle}
                     >
