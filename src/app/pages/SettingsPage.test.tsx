@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useAuth } from '../../features/auth'
 import { TestAuthProvider } from '../../test/TestAuthProvider'
-import { installApiFixtureServer } from '../../test/apiFixtureServer'
+import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiFixtureServer'
 import { SettingsPage } from './SettingsPage'
 
 beforeEach(() => {
@@ -16,9 +17,10 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-function renderSettings() {
+function renderSettings({ withAccountSwitcher = false } = {}) {
   return render(
     <TestAuthProvider>
+      {withAccountSwitcher ? <AccountSwitcher /> : null}
       <MemoryRouter initialEntries={['/settings']}>
         <Routes>
           <Route path="/settings" element={<SettingsPage />} />
@@ -26,6 +28,24 @@ function renderSettings() {
         </Routes>
       </MemoryRouter>
     </TestAuthProvider>,
+  )
+}
+
+function AccountSwitcher() {
+  const { updateUser } = useAuth()
+
+  return (
+    <button
+      onClick={() => updateUser({
+        email: 'other@example.com',
+        id: 2,
+        name: 'other',
+        role: 'LEARNER',
+      })}
+      type="button"
+    >
+      switch account
+    </button>
   )
 }
 
@@ -101,6 +121,216 @@ describe('SettingsPage', () => {
         studyReminder: false,
       })
     })
+  })
+
+  it('keeps preference editing blocked after a load failure and retries explicitly', async () => {
+    let preferenceGets = 0
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method !== 'GET' || url.pathname !== '/api/users/me/preferences') return undefined
+      preferenceGets += 1
+      return preferenceGets === 1
+        ? apiFailure('PREFERENCES_UNAVAILABLE', '환경설정을 불러오지 못했습니다.', 503)
+        : apiSuccess({
+            aiAnswerStyle: 'DETAILED',
+            newMaterialNotification: false,
+            studyReminder: true,
+          })
+    })
+
+    renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: '알림' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('환경설정을 불러오지 못했습니다.')
+    const materialNotification = screen.getByRole('switch', { name: '새 자료 알림' })
+    expect(materialNotification).toBeDisabled()
+    fireEvent.click(materialNotification)
+    expect(getPreferenceUpdates()).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+    expect(materialNotification).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('switch', { name: '학습 리마인더' })).toHaveAttribute('aria-checked', 'true')
+    expect(preferenceGets).toBe(2)
+  })
+
+  it('preserves confirmed non-default values in the full payload and locks duplicate saves', async () => {
+    let resolvePatch!: (response: Response) => void
+    const patchResponse = new Promise<Response>((resolve) => { resolvePatch = resolve })
+    let patchCalls = 0
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (url.pathname !== '/api/users/me/preferences') return undefined
+      if (request.method === 'GET') {
+        return apiSuccess({
+          aiAnswerStyle: 'DETAILED',
+          newMaterialNotification: false,
+          studyReminder: true,
+        })
+      }
+      if (request.method === 'PATCH') {
+        patchCalls += 1
+        return patchResponse
+      }
+      return undefined
+    })
+
+    renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: '알림' }))
+    const materialNotification = screen.getByRole('switch', { name: '새 자료 알림' })
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+
+    act(() => {
+      materialNotification.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      materialNotification.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await waitFor(() => expect(patchCalls).toBe(1))
+    expect(getPreferenceUpdates()).toEqual([{
+      aiAnswerStyle: 'DETAILED',
+      newMaterialNotification: true,
+      studyReminder: true,
+    }])
+
+    resolvePatch(apiSuccess({
+      aiAnswerStyle: 'DETAILED',
+      newMaterialNotification: true,
+      studyReminder: true,
+    }))
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+  })
+
+  it('ignores a late preference GET from the previous account', async () => {
+    let resolveFirstGet!: (response: Response) => void
+    const firstGet = new Promise<Response>((resolve) => { resolveFirstGet = resolve })
+    let firstGetRequest: Request | undefined
+    let preferenceGets = 0
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method !== 'GET' || url.pathname !== '/api/users/me/preferences') return undefined
+      preferenceGets += 1
+      if (preferenceGets === 1) firstGetRequest = request
+      return preferenceGets === 1
+        ? firstGet
+        : apiSuccess({
+            aiAnswerStyle: 'CONCISE',
+            newMaterialNotification: false,
+            studyReminder: true,
+          })
+    })
+
+    renderSettings({ withAccountSwitcher: true })
+    fireEvent.click(screen.getByRole('button', { name: '알림' }))
+    const materialNotification = screen.getByRole('switch', { name: '새 자료 알림' })
+    expect(materialNotification).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'switch account' }))
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+    expect(firstGetRequest?.signal.aborted).toBe(true)
+    expect(materialNotification).toHaveAttribute('aria-checked', 'false')
+
+    await act(async () => {
+      resolveFirstGet(apiSuccess({
+        aiAnswerStyle: 'DETAILED',
+        newMaterialNotification: true,
+        studyReminder: false,
+      }))
+      await firstGet
+    })
+
+    expect(materialNotification).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('switch', { name: '학습 리마인더' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('ignores and aborts a late preference PATCH after the account changes', async () => {
+    let resolvePatch!: (response: Response) => void
+    const patchResponse = new Promise<Response>((resolve) => { resolvePatch = resolve })
+    let currentAccount = 1
+    let patchRequest: Request | undefined
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (url.pathname !== '/api/users/me/preferences') return undefined
+      if (request.method === 'PATCH') {
+        patchRequest = request
+        return patchResponse
+      }
+      currentAccount += 1
+      return apiSuccess(currentAccount === 2
+        ? { aiAnswerStyle: 'DETAILED', newMaterialNotification: false, studyReminder: true }
+        : { aiAnswerStyle: 'CONCISE', newMaterialNotification: true, studyReminder: false })
+    })
+
+    renderSettings({ withAccountSwitcher: true })
+    fireEvent.click(screen.getByRole('button', { name: '알림' }))
+    const materialNotification = screen.getByRole('switch', { name: '새 자료 알림' })
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+    fireEvent.click(materialNotification)
+    await waitFor(() => expect(patchRequest).toBeDefined())
+
+    fireEvent.click(screen.getByRole('button', { name: 'switch account' }))
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+    expect(patchRequest?.signal.aborted).toBe(true)
+    expect(materialNotification).toHaveAttribute('aria-checked', 'true')
+
+    await act(async () => {
+      resolvePatch(apiSuccess({
+        aiAnswerStyle: 'DETAILED',
+        newMaterialNotification: true,
+        studyReminder: true,
+      }))
+      await patchResponse
+    })
+
+    expect(materialNotification).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('switch', { name: '학습 리마인더' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('aborts an in-flight preference GET on unmount', async () => {
+    let pendingRequest: Request | undefined
+    const neverResolves = new Promise<Response>(() => undefined)
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/api/users/me/preferences') {
+        pendingRequest = request
+        return neverResolves
+      }
+      return undefined
+    })
+
+    const view = renderSettings()
+    await waitFor(() => expect(pendingRequest).toBeDefined())
+    view.unmount()
+
+    expect(pendingRequest?.signal.aborted).toBe(true)
+  })
+
+  it('aborts an in-flight preference PATCH on unmount', async () => {
+    let pendingRequest: Request | undefined
+    const neverResolves = new Promise<Response>(() => undefined)
+    installApiFixtureServer((request) => {
+      const url = new URL(request.url)
+      if (url.pathname !== '/api/users/me/preferences') return undefined
+      if (request.method === 'GET') {
+        return apiSuccess({
+          aiAnswerStyle: 'NORMAL',
+          newMaterialNotification: true,
+          studyReminder: false,
+        })
+      }
+      pendingRequest = request
+      return neverResolves
+    })
+
+    const view = renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: '알림' }))
+    const materialNotification = screen.getByRole('switch', { name: '새 자료 알림' })
+    await waitFor(() => expect(materialNotification).toBeEnabled())
+    fireEvent.click(materialNotification)
+    await waitFor(() => expect(pendingRequest).toBeDefined())
+    view.unmount()
+
+    expect(pendingRequest?.signal.aborted).toBe(true)
   })
 
   it('changes a local password and requires login again', async () => {

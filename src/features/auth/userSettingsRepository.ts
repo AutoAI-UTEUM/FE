@@ -35,7 +35,7 @@ export function createUserSettingsRepository(request: AuthenticatedRequest, rawR
       const { data } = await request<UserPreferences>('/api/users/me/preferences', { signal })
       return data
     },
-    async updatePreferences(input: UserPreferences) {
+    async updatePreferences(input: UserPreferences, signal?: AbortSignal) {
       const { data } = await request<UserPreferences>('/api/users/me/preferences', {
         body: {
           aiAnswerStyle: input.aiAnswerStyle,
@@ -43,6 +43,7 @@ export function createUserSettingsRepository(request: AuthenticatedRequest, rawR
           studyReminder: input.studyReminder,
         },
         method: 'PATCH',
+        ...(signal ? { signal } : {}),
       })
       return data
     },
