@@ -70,7 +70,7 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
-  it('uses four bottom navigation slots with profile last in tablet portrait', async () => {
+  it('uses four bottom navigation slots with More last in tablet portrait', async () => {
     vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
       isMobileWeb: true,
       isPhone: false,
@@ -89,13 +89,13 @@ describe('AppRoutes', () => {
       'min-h-[calc(4.25rem+env(safe-area-inset-bottom))]',
       'items-center',
     )
-    expect(within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' })).toBe(
+    expect(within(bottomNavigation).getByRole('button', { name: /^더보기 메뉴/ })).toBe(
       bottomNavigation.lastElementChild,
     )
     expect(screen.getByRole('complementary')).toHaveClass('hidden')
   })
 
-  it('reduces narrow tablet split view to three slots and moves the remaining menu into profile', async () => {
+  it('keeps all three core tabs visible in narrow tablet split view', async () => {
     vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
       isMobileWeb: true,
       isPhone: false,
@@ -109,13 +109,14 @@ describe('AppRoutes', () => {
     renderRoute('/classrooms')
 
     const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
-    expect(within(bottomNavigation).getAllByRole('link')).toHaveLength(2)
-    fireEvent.click(within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' }))
-    expect(within(bottomNavigation).getByRole('menuitem', { name: '복습 퀴즈' })).toBeInTheDocument()
+    expect(within(bottomNavigation).getAllByRole('link')).toHaveLength(3)
+    fireEvent.click(within(bottomNavigation).getByRole('button', { name: /^더보기 메뉴/ }))
+    expect(within(bottomNavigation).getByRole('link', { name: '복습 퀴즈' })).toHaveAttribute('href', '/review-quizzes')
+    expect(within(bottomNavigation).queryByRole('menuitem', { name: '복습 퀴즈' })).not.toBeInTheDocument()
     expect(within(bottomNavigation).getByRole('menuitem', { name: '시험' })).toBeInTheDocument()
   })
 
-  it('opens the settings page instead of a dialog from tablet portrait profile', async () => {
+  it('opens the settings page instead of a dialog from tablet portrait More', async () => {
     vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
       isMobileWeb: true,
       isPhone: false,
@@ -129,7 +130,7 @@ describe('AppRoutes', () => {
     renderRoute('/classrooms')
 
     const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
-    fireEvent.click(within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' }))
+    fireEvent.click(within(bottomNavigation).getByRole('button', { name: /^더보기 메뉴/ }))
     fireEvent.click(within(bottomNavigation).getByRole('menuitem', { name: '설정' }))
 
     expect(await screen.findByRole('heading', { name: '설정' })).toBeInTheDocument()
@@ -155,7 +156,7 @@ describe('AppRoutes', () => {
     })
 
     const bottomNavigation = await screen.findByRole('navigation', { name: '하단 주요 메뉴' })
-    const profileTrigger = within(bottomNavigation).getByRole('button', { name: '프로필 메뉴' })
+    const profileTrigger = within(bottomNavigation).getByRole('button', { name: /^더보기 메뉴/ })
     expect(profileTrigger).toHaveAttribute('aria-current', 'page')
 
     fireEvent.click(profileTrigger)

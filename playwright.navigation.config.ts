@@ -19,6 +19,17 @@ export default defineConfig({
     trace: 'retain-on-failure', screenshot: 'only-on-failure',
   },
   projects: [
+    ['phone-320', 320, 740, true],
+    ['phone-419', 419, 844, true],
+    ['phone-420', 420, 844, true],
+    ['phone-599', 599, 900, true],
+    ['tablet-edge-600', 600, 900, true],
+    ['tablet-split', 375, 980, true, 768, 1024],
+    ['tablet-edge-1023', 1023, 768, true],
+    ['desktop-edge-1023', 1023, 800, false],
+    ['desktop-edge-1024', 1024, 800, false],
+    ['tablet-longedge-1366', 1366, 1024, true],
+    ['touch-desktop-1367', 1367, 1024, true],
     ['phone-390', 390, 844, true],
     ['phone-430', 430, 932, true],
     ['phone-landscape', 844, 390, true],
@@ -27,12 +38,12 @@ export default defineConfig({
     ['tablet-rail', 820, 600, true],
     ['desktop', 1440, 900, false],
     ['desktop-narrow', 844, 800, false],
-  ].map(([name, width, height, hasTouch]) => ({
+  ].map(([name, width, height, hasTouch, screenWidth = width, screenHeight = height]) => ({
     name: name as string,
     use: {
       ...devices['Desktop Chrome'],
       viewport: { width: width as number, height: height as number },
-      screen: { width: width as number, height: height as number },
+      screen: { width: screenWidth as number, height: screenHeight as number },
       hasTouch: hasTouch as boolean,
     },
   })),

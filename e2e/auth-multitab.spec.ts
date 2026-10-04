@@ -89,7 +89,7 @@ async function authenticatedPage(context: BrowserContext) {
 
 async function logout(page: Page) {
   const bottomNavigation = page.getByRole('navigation', { name: '하단 주요 메뉴' })
-  const bottomProfileButton = bottomNavigation.getByRole('button', { name: '프로필 메뉴' })
+  const bottomProfileButton = bottomNavigation.getByRole('button', { name: /^더보기 메뉴/ })
   if (await bottomProfileButton.isVisible().catch(() => false)) {
     await bottomProfileButton.click()
     await bottomNavigation.getByRole('menuitem', { name: '로그아웃', exact: true }).click()
