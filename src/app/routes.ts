@@ -6,6 +6,7 @@ export const routes = {
   authCallback: '/auth/callback',
   signup: '/signup',
   verifyEmail: '/verify-email',
+  guardianRequest: '/guardian-request',
   admin: '/admin',
   classrooms: '/classrooms',
   classroomDetail: '/classrooms/:classroomId',

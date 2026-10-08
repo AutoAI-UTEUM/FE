@@ -7,6 +7,7 @@ import { hasEmailVerificationSupport, isLaunchAuthReady } from '../../features/a
 import { ApiClientError } from '../../shared/api'
 import { Button } from '../../shared/ui'
 import { routes } from '../routes'
+import { isGuardianTeamReady } from '../../features/guardian/guardianContract'
 
 export function VerifyEmailPage() {
   const auth = useAuth()
@@ -147,6 +148,7 @@ export function VerifyEmailPage() {
     <div className="flex flex-wrap gap-4">
       <Link to={routes.login} onClick={discardPending}>로그인</Link>
       {auth.isAuthenticated ? <Link to={routes.settings} onClick={discardPending}>계정 관리</Link> : null}
+      {auth.isAuthenticated && isGuardianTeamReady() ? <Link to={routes.guardianRequest} onClick={discardPending}>보호자 신청 상태</Link> : null}
       {auth.user && auth.user.emailVerificationRequired !== true ? <Link to={routes.classrooms} onClick={discardPending}>강의실</Link> : null}
     </div>
   </div>

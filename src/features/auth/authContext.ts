@@ -56,7 +56,7 @@ export interface AuthContextValue {
   isAuthenticated: boolean
   isInitializing: boolean
   login: (values: LoginFormValues) => Promise<AuthUser>
-  loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthUser>
+  loginWithGoogle: (values: GoogleAuthValues, signal?: AbortSignal) => Promise<AuthUser>
   logoutReason: LogoutReason | null
   logout: () => Promise<void>
   pendingGoogleIdToken: string | null

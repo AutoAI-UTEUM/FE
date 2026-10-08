@@ -1,6 +1,6 @@
 import { Monitor, Moon, Sun, UserX, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { createUserSettingsRepository, getRoleLabel, useAuth, type AiAnswerStyle, type UserPreferences } from '../../features/auth'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
@@ -18,6 +18,7 @@ import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { useTheme, type ThemeMode } from '../../shared/theme'
 import { useResponsiveViewport } from '../../shared/responsive'
+import { isGuardianTeamReady } from '../../features/guardian/guardianContract'
 
 type SettingsSection = 'account' | 'appearance' | 'assistant' | 'notification' | 'password' | 'profile'
 
@@ -71,6 +72,7 @@ export function SettingsPage() {
       {/* 모바일은 제목과 저장 작업이 한 행이라 SettingsContent가 헤더까지 그린다. */}
       {isMobileWeb ? null : <PageHeader title="설정" />}
       <SettingsContent />
+      {isGuardianTeamReady() ? <Link className="underline" to={routes.guardianRequest}>보호자 신청 상태</Link> : null}
     </PageContainer>
   )
 }

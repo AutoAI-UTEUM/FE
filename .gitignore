@@ -10,6 +10,7 @@ coverage/
 playwright-report/
 qa-artifacts/
 test-results/
+.cache/playwright/
 
 # Local environment files
 .env

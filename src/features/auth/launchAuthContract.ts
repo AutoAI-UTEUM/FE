@@ -1,3 +1,5 @@
+import { isGuardianManagementRequest } from '../guardian/guardianContract'
+
 /** Preparation only. Never infer deployment readiness from an HTTP response. */
 export const LAUNCH_AUTH_CONTRACT = 'be-auth-ee69e425-v1'
 
@@ -26,11 +28,11 @@ export function isEmailVerificationError(error: unknown): boolean {
 }
 
 /** Only routes/endpoints explicitly allowed before verification bypass the UI hold. */
-export function isAccountManagementRequest(path: string): boolean {
+export function isAccountManagementRequest(path: string, method = 'GET'): boolean {
   const pathname = path.split('?')[0]
   return /^\/api\/users\/me(?:\/(?:password|preferences|avatar|consents))?$/.test(pathname) ||
     /^\/api\/auth\/(?:email-verification|session|refresh|logout)(?:\/|$)/.test(pathname) ||
-    /^\/api\/policies(?:\/|$)/.test(pathname)
+    /^\/api\/policies(?:\/|$)/.test(pathname) || isGuardianManagementRequest(path, method)
 }
 
 export interface PolicyConsentChoice { type: string; version: string }
