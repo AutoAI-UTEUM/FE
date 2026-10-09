@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
-import { isGuardianTeamReady, type GuardianEntry, type GuardianState, type GuardianView } from '../../features/guardian/guardianContract'
+import { isGuardianTeamReady, isGuardianWorkflowReady, type GuardianEntry, type GuardianLink, type GuardianState, type GuardianStatus, type GuardianView } from '../../features/guardian/guardianContract'
+import { GuardianIssuedLink, GuardianSelfActions } from '../../features/guardian/GuardianSelfActions'
 import { getGuardianEntry } from '../../features/guardian/guardianRepository'
 import { ApiClientError } from '../../shared/api'
 import { Button, PageContainer, PageHeader } from '../../shared/ui'
@@ -55,13 +56,18 @@ export function GuardianRequestPage() {
   const [snapshot, setSnapshot] = useState<{ owner: string; entry: GuardianEntry } | null>(null)
   const [error, setError] = useState<{ owner: string; message: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [issuedLink, setIssuedLink] = useState<{ owner: string; link: GuardianLink } | null>(null)
+  const [operationLock, setOperationLock] = useState<{ owner: string; pending: boolean } | null>(null)
+  const mutationLock = useRef<{ owner: string; pending: boolean } | null>(null)
+  const onPendingChange = useCallback((pending: boolean) => { mutationLock.current = { owner, pending }; setOperationLock({ owner, pending }) }, [owner])
   const activeRef = useRef<AbortController | null>(null)
   const reload = useCallback(async () => {
-    if (!ready || activeRef.current) return
+    if (!ready || activeRef.current || (mutationLock.current?.owner === owner && mutationLock.current.pending)) return
     const controller = new AbortController()
     activeRef.current = controller
     setBusy(true)
     setSnapshot(null)
+    setIssuedLink(null)
     setError(null)
     try {
       const entry = await getGuardianEntry(apiRequest, controller.signal)
@@ -82,16 +88,22 @@ export function GuardianRequestPage() {
   }, [apiRequest, owner, ready])
   useEffect(() => {
     let active = true
-    const discard = () => { activeRef.current?.abort(); activeRef.current = null; setSnapshot(null); setError(null); setBusy(false) }
+    const discard = () => { activeRef.current?.abort(); activeRef.current = null; setSnapshot(null); setIssuedLink(null); setError(null); setBusy(false) }
     queueMicrotask(() => { if (active) void reload() })
     window.addEventListener('pagehide', discard)
     return () => { active = false; activeRef.current?.abort(); activeRef.current = null; window.removeEventListener('pagehide', discard) }
   }, [reload])
   const entry = snapshot?.owner === owner ? snapshot.entry : null
+  function updated(result: GuardianView | GuardianStatus | GuardianLink) {
+    if (!entry) return
+    const view = 'forms' in result ? result : entry.request ? { ...entry.request, status: 'status' in result ? result.status : result, forms: {} } : null
+    setSnapshot({ owner, entry: { ...entry, canStartRequest: false, request: view } })
+    setIssuedLink('url' in result ? { owner, link: result } : null)
+  }
   return <main className="mx-auto max-w-3xl p-4 sm:p-8"><PageContainer><PageHeader title="보호자 확인 신청 상태" /><div className="space-y-4">
-    <p>보호자 확인 대상과 현재 신청 상태를 확인할 수 있습니다. 접수와 철회 연결은 준비 중입니다.</p>
+    <p>보호자 확인 대상과 현재 신청 상태를 확인할 수 있습니다.{!isGuardianWorkflowReady() ? ' 접수와 철회 연결은 준비 중입니다.' : ''}</p>
     {!ready ? <p role="status">보호자 팀 확인 절차를 준비하고 있습니다.</p> : <>
-      <Button disabled={busy} onClick={() => void reload()}>현재 신청 상태 다시 확인</Button>
+      <Button disabled={busy || (operationLock?.owner === owner && operationLock.pending)} onClick={() => void reload()}>현재 신청 상태 다시 확인</Button>
       {busy ? <p role="status">신청 상태를 확인하는 중입니다.</p> : null}
       {error?.owner === owner ? <p role="alert">{error.message}</p> : null}
       {entry ? <>
@@ -101,8 +113,10 @@ export function GuardianRequestPage() {
         {!entry.teamReviewAvailable ? <p>보호자 팀 확인 절차를 준비하고 있습니다. 이 응답의 신청 없음 표시는 과거 신청 부재를 의미하지 않습니다.</p>
           : entry.request ? <GuardianRequestStatus view={entry.request} />
           : entry.requirement === 'REQUIRED' ? <p>현재 신청 기록이 반환되지 않았습니다.</p> : null}
-        {entry.canStartRequest ? <p>서버 조회 시점에는 새 신청이 가능합니다. 현재 화면에서는 접수하지 않습니다. 회신 방법: {channel(entry.replyChannel)}</p> : null}
+        {entry.canStartRequest ? <p>서버 조회 시점에는 새 신청이 가능합니다. 회신 방법: {channel(entry.replyChannel)}</p> : null}
+        {isGuardianWorkflowReady() ? <GuardianSelfActions key={owner} entry={entry} onPendingChange={onPendingChange} onUpdated={updated} onInvalidate={(message) => { setSnapshot(null); setIssuedLink(null); if (message) setError({ owner, message }) }} /> : null}
       </> : null}
+      {issuedLink?.owner === owner ? <GuardianIssuedLink link={issuedLink.link} /> : null}
     </>}
     <div className="flex gap-4"><Link to={routes.settings}>계정 관리</Link><Link to={routes.verifyEmail}>이메일 확인</Link></div>
   </div></PageContainer></main>

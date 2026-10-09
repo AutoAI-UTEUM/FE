@@ -18,7 +18,8 @@ import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 import { useTheme, type ThemeMode } from '../../shared/theme'
 import { useResponsiveViewport } from '../../shared/responsive'
-import { isGuardianTeamReady } from '../../features/guardian/guardianContract'
+import { isGuardianTeamReady, isGuardianWorkflowReady } from '../../features/guardian/guardianContract'
+import { isAdminRole } from '../../features/auth/authRoles'
 
 type SettingsSection = 'account' | 'appearance' | 'assistant' | 'notification' | 'password' | 'profile'
 
@@ -64,6 +65,7 @@ const THEME_OPTIONS: Array<{
 ]
 
 export function SettingsPage() {
+  const { user } = useAuth()
   usePageTitle('설정')
   const { isMobileWeb } = useResponsiveViewport()
 
@@ -73,6 +75,7 @@ export function SettingsPage() {
       {isMobileWeb ? null : <PageHeader title="설정" />}
       <SettingsContent />
       {isGuardianTeamReady() ? <Link className="underline" to={routes.guardianRequest}>보호자 신청 상태</Link> : null}
+      {isGuardianWorkflowReady() && isAdminRole(user?.role) ? <Link className="ml-4 underline" to={routes.guardianReview}>보호자 지정 담당자 검토</Link> : null}
     </PageContainer>
   )
 }
