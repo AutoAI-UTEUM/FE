@@ -26,6 +26,19 @@
         window.addEventListener('pagehide', () => { token = null }, { once: true })
       })()
     </script>
+    <script>
+      ;(() => {
+        let path
+        try { path = decodeURIComponent(window.location.pathname).toLowerCase().replace(/\/+$/, '') } catch { return }
+        if (path !== '/guardian-consent') return
+        window.__uteumGuardianLink?.clear()
+        const match = /^#token=([A-Za-z0-9_-]{43})$/.exec(window.location.hash)
+        let token = !window.location.search && match ? match[1] : null
+        window.history.replaceState(null, '', '/guardian-consent')
+        window.__uteumGuardianLink = { read: () => token, clear: () => { token = null } }
+        window.addEventListener('pagehide', () => { token = null }, { once: true })
+      })()
+    </script>
     <!--
       viewport-fit=cover가 없으면 env(safe-area-inset-*)가 iOS에서 모두 0으로 계산되어
       index.css의 mobile-safe-top/x/bottom 유틸리티가 아무 효과도 내지 못한다.

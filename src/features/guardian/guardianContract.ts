@@ -3,11 +3,16 @@ import { ApiClientError } from '../../shared/api'
 /** Preparation only. This value is absent from deployment configuration. */
 export const GUARDIAN_TEAM_CONTRACT = 'be-guardian-461b8533-v1'
 export const isGuardianTeamReady = () => import.meta.env.VITE_GUARDIAN_TEAM_READINESS === GUARDIAN_TEAM_CONTRACT
+export const GUARDIAN_WORKFLOW_CONTRACT = 'be-guardian-workflows-29259371-v1'
+export const GUARDIAN_POLICY_REVIEW = 'guardian-policy-review-attested-v1'
+export const isGuardianWorkflowReady = () => isGuardianTeamReady() && import.meta.env.VITE_GUARDIAN_WORKFLOW_READINESS === GUARDIAN_WORKFLOW_CONTRACT && import.meta.env.VITE_GUARDIAN_POLICY_REVIEW_READINESS === GUARDIAN_POLICY_REVIEW
 
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
 export function isGuardianManagementRequest(path: string, method = 'GET'): boolean {
   if (!isGuardianTeamReady()) return false
   const pathname = path.split('?')[0]
+  if (isGuardianWorkflowReady() && method.toUpperCase() === 'POST' &&
+      (pathname === '/api/users/me/guardian-requests' || new RegExp(`^/api/users/me/guardian-requests/${uuidPattern}/link$`).test(pathname))) return true
   return (method.toUpperCase() === 'GET' &&
     ['/api/users/me/guardian-requests/entry', '/api/users/me/guardian-requests'].includes(pathname)) ||
     (method.toUpperCase() === 'POST' && new RegExp(`^/api/users/me/guardian-requests/${uuidPattern}/withdraw$`).test(pathname))
@@ -70,6 +75,16 @@ export interface GuardianDetail {
 }
 export interface GuardianLink { url: string | null; expiresAt: string | null; replayed: boolean; status: GuardianStatus }
 export interface GuardianMutation { idempotencyKey: string; generation: number; revision: number }
+export type GuardianRelationship = 'PARENT' | 'MINOR_GUARDIAN'
+export interface GuardianList { content: GuardianStatus[]; page: number; size: number; totalElements: number; totalPages: number }
+export function isGuardianRequestId(value: string): boolean { return new RegExp(`^${uuidPattern}$`).test(value) }
+export function isGuardianPending(status: GuardianStatus): boolean { return ['AWAITING_CONSENT', 'DECLARED', 'REVIEW_PENDING', 'NEEDS_INFORMATION'].includes(status.state) }
+export function parseGuardianList(value: unknown): GuardianList {
+  const v = object(value)
+  const nonnegative = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : invalid()
+  if (!Array.isArray(v.content)) invalid()
+  return { content: v.content.map(parseGuardianStatus), page: nonnegative(v.page), size: positive(v.size), totalElements: nonnegative(v.totalElements), totalPages: nonnegative(v.totalPages) }
+}
 
 export function confirmationMethodFor(channel: GuardianReplyChannel | null): GuardianConfirmationMethod | null {
   return channel === 'PHONE_CALLBACK' ? 'PHONE' : channel === 'EMAIL_REPLY' ? 'EMAIL_REPLY' : null

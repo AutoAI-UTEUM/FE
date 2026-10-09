@@ -7,6 +7,8 @@ export const routes = {
   signup: '/signup',
   verifyEmail: '/verify-email',
   guardianRequest: '/guardian-request',
+  guardianConsent: '/guardian-consent',
+  guardianReview: '/admin/guardian-requests',
   admin: '/admin',
   classrooms: '/classrooms',
   classroomDetail: '/classrooms/:classroomId',
