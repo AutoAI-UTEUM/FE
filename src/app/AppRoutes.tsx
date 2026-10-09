@@ -43,6 +43,7 @@ const SessionDetailPage = lazy(() => import('./pages/SessionDetailPage').then((m
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
 const UpdatesPage = lazy(() => import('./pages/UpdatesPage').then((module) => ({ default: module.UpdatesPage })))
 const AdminPage = lazy(() => import('./pages/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
+const GuardianRequestPage = lazy(() => import('./pages/GuardianRequestPage').then((module) => ({ default: module.GuardianRequestPage })))
 
 export function AppRoutes() {
   return (
@@ -66,6 +67,7 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<RequireAuth />}>
+        <Route path={routes.guardianRequest} element={<GuardianRequestPage />} />
         <Route element={<AppLayout />}>
           <Route element={<RequireAdmin />}>
             <Route path={routes.admin} element={<AdminPage />} />

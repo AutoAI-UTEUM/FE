@@ -34,7 +34,7 @@ export interface AuthRepository {
     signal?: AbortSignal,
   ) => Promise<boolean>
   getMe: (accessToken: string, signal?: AbortSignal) => Promise<AuthUser>
-  loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthSessionResult>
+  loginWithGoogle: (values: GoogleAuthValues, signal?: AbortSignal) => Promise<AuthSessionResult>
   login: (
     values: LoginFormValues,
     signal?: AbortSignal,
@@ -142,7 +142,7 @@ const repository: AuthRepository = {
     }
   },
 
-  async loginWithGoogle(values) {
+  async loginWithGoogle(values, signal) {
     const { data } = await apiRequest<LoginResponseDto>('/api/auth/google', {
       body: {
         affiliation: values.affiliation?.trim() || undefined,
@@ -154,6 +154,7 @@ const repository: AuthRepository = {
         role: values.role,
       },
       method: 'POST',
+      signal,
     })
 
     return {

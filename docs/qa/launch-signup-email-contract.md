@@ -10,6 +10,8 @@
 
 ## 구현과 호환성
 
+2026-10-08 계약 보완: [BE PR541 exact head](https://github.com/AutoAI-UTEUM/BE/pull/541)의 `58df7c95f11fa10c3b70a97e4a6fa9ecd152ed2e`는 `signup-consent-required=true`인데 유효한 필수 문서가 없으면 LOCAL·신규 Google 가입에 `SIGNUP_POLICY_NOT_READY` 503을 반환한다. 정상 문서에 대한 사용자 선택 누락·중복·버전 불일치인 `POLICY_CONSENT_REQUIRED` 400과 다르다. 설정 false에서는 빈 문서 배열도 유효할 수 있으므로 목록 길이로 준비 여부를 추론하지 않는다. 기존 Google token-only 로그인은 이 신규 가입 제한의 예외다. 최신 구현·검증은 [가입·보호자 조회 준비 기록](guardian-signup-preparation-20261008.md)을 따른다. 아래 검증 표는 이전 변경의 역사적 증거다.
+
 - LOCAL과 신규 Google 연속 가입에 달력 날짜 DOB, 현재 requiresConsent 대상의 `{type, version}`만 전달한다. 정책 갱신 오류는 선택을 비우고 재조회·재동의를 요구한다. 기존 Google token-only 로그인에는 신규 입력을 강제하지 않는다. 이메일 충돌과 만료된 Google 인증은 가입 계속 상태와 구별한다.
 - DOB는 저장 입력일 뿐이다. 만14세/성인, 보호자 관계·승인, AI 동의 완료를 만들지 않는다. 형식/존재하는 날짜/연도 1–9999만 검사한다. 미래일 제한 및 수정 API·연령정책은 미확정이다.
 - login/me optional 이메일 3필드를 그대로 보존한다. 구형 서버의 필드 부재는 부재로 남고 지원 여부를 명시한다. signup의 userId와 확인시각 부재를 구별한다. UNKNOWN/PENDING + required=false는 업무 이용을 유지하지만 확인 완료 UI는 표시하지 않는다.
@@ -40,7 +42,7 @@ Frontend CI에 exact PR head checkout의 default-off/synthetic-ready browser mat
 ## 부모에게 남기는 미확정 계약
 
 1. DOB 미래일·정정 절차·나이 계산 기준일/시간대·윤년 정책. 전역 guardian/agegate는 미완성이며 이 변경이 완성시키지 않는다.
-2. requiresConsent 문서가 0개인 경우: 후보 runtime은 빈 배열을 허용하지만 옛 문서와 차이가 있다. 합성 인수는 관찰된 후보 동작을 따른다. 정책 운영 조건은 BE/정책 담당자 확인이 필요하다.
+2. 빈 문서 배열의 가입 허용 여부는 서버 설정으로 결정된다. 필수 설정 true + 유효 필수 문서 없음은 503 준비 오류이며, false에서는 빈 배열이 유효할 수 있다. FE는 배열만으로 이를 판정하지 않으며 위 2026-10-08 보완을 따른다. 실제 문구·필수 유형·게시와 운영 설정 결정은 이번 범위 밖이다.
 3. 명시적 runtime 배포 신호/FE 활성화 시점 및 메일 base URL·실제 발송/수신 조건. readiness 환경값의 실제 설정은 부모 확인 전 수행하지 않는다.
 4. 초기 메일 링크의 HTTP navigation query는 FE 실행 전에 서버에 도착한다. 브라우저 history/Referer/FE storage/log 정리는 검증했지만, 웹서버 접근 로그·메일 provider의 로그 정책은 이 FE 작업으로 변경하거나 검증하지 않았다. 토큰 redaction 정책은 실제 활성화 사전 점검에서 확인해야 한다.
 

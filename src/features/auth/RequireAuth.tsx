@@ -5,6 +5,7 @@ import { RouteLoadingScreen } from '../../shared/ui'
 import { createAuthReturnState } from './authReturnTarget'
 import { useAuth } from './useAuth'
 import { requiresEmailVerification } from './launchAuthContract'
+import { isGuardianTeamReady } from '../guardian/guardianContract'
 
 export function RequireAuth() {
   const { isAuthenticated, isInitializing, logoutReason, user } = useAuth()
@@ -40,6 +41,7 @@ export function RequireAuth() {
   }
 
   if (requiresEmailVerification(user) &&
+      !(isGuardianTeamReady() && location.pathname === routes.guardianRequest) &&
       ![routes.settings, routes.feedback, routes.updates].some((path) => location.pathname === path)) {
     return <Navigate to={routes.verifyEmail} replace />
   }

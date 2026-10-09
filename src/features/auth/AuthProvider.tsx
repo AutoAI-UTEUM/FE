@@ -795,8 +795,12 @@ export function AuthProvider({
   )
 
   const loginWithGoogle = useCallback(
-    async (values: GoogleAuthValues) => {
-      const result = await repository.loginWithGoogle(values)
+    async (values: GoogleAuthValues, signal?: AbortSignal) => {
+      const transition = sessionTransitionRef.current
+      const result = await repository.loginWithGoogle(values, signal)
+      if (signal?.aborted || transition !== sessionTransitionRef.current) {
+        throw new ApiClientError({ code: 'REQUEST_ABORTED', message: '요청이 취소되었습니다.' })
+      }
       setPendingGoogleIdToken(null)
       beginSession(result, result.user)
       return result.user
@@ -887,7 +891,7 @@ export function AuthProvider({
         throw createAuthRequiredError()
       }
 
-      if (requiresEmailVerification(requestSession.user) && !isAccountManagementRequest(path)) {
+      if (requiresEmailVerification(requestSession.user) && !isAccountManagementRequest(path, options.method)) {
         throw new ApiClientError({ code: 'EMAIL_VERIFICATION_REQUIRED', status: 403, message: '이메일 확인이 필요합니다.' })
       }
 
@@ -964,7 +968,7 @@ export function AuthProvider({
         throw createAuthRequiredError()
       }
 
-      if (requiresEmailVerification(requestSession.user) && !isAccountManagementRequest(path)) {
+      if (requiresEmailVerification(requestSession.user) && !isAccountManagementRequest(path, options.method)) {
         throw new ApiClientError({ code: 'EMAIL_VERIFICATION_REQUIRED', status: 403, message: '이메일 확인이 필요합니다.' })
       }
 

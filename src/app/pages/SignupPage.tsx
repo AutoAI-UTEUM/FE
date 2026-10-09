@@ -28,6 +28,7 @@ import {
 import { ApiClientError } from '../../shared/api'
 import { SignupContractFields } from '../../features/auth/SignupContractFields'
 import { useSignupContract } from '../../features/auth/useSignupContract'
+import { isPolicyConsentRequired, isSignupPolicyNotReady, SIGNUP_POLICY_NOT_READY_MESSAGE } from '../../features/auth/signupPolicyError'
 import { validateDateOfBirth, requiresEmailVerification } from '../../features/auth/launchAuthContract'
 import { Button } from '../../shared/ui'
 import { routes } from '../routes'
@@ -104,6 +105,7 @@ export function SignupPage() {
   const [googleSignupStopped, setGoogleSignupStopped] = useState(false)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
   const googleAttemptRef = useRef(false)
+  const googleControllerRef = useRef<AbortController | null>(null)
   const emailAvailabilitySupportedRef = useRef(true)
   const activeSignupAttemptRef = useRef<AbortController | null>(null)
 
@@ -158,13 +160,19 @@ export function SignupPage() {
     values.email,
   ])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const discard = () => {
       activeSignupAttemptRef.current?.abort()
       activeSignupAttemptRef.current = null
-    },
-    [],
-  )
+      googleControllerRef.current?.abort()
+      googleControllerRef.current = null
+      googleAttemptRef.current = false
+      setIsSubmitting(false)
+      setIsGoogleSubmitting(false)
+    }
+    window.addEventListener('pagehide', discard)
+    return () => { window.removeEventListener('pagehide', discard); discard() }
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -213,7 +221,12 @@ export function SignupPage() {
       ) {
         return
       }
-      if (error instanceof ApiClientError && error.code === 'POLICY_CONSENT_REQUIRED') {
+      if (isSignupPolicyNotReady(error)) {
+        contract.markPolicyNotReady()
+        setServerError(SIGNUP_POLICY_NOT_READY_MESSAGE)
+        return
+      }
+      if (isPolicyConsentRequired(error)) {
         void contract.reload()
         setServerError('정책이 변경되었습니다. 최신 정책을 확인하고 다시 동의해 주세요.')
         return
@@ -245,6 +258,7 @@ export function SignupPage() {
   async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!pendingGoogleIdToken || googleAttemptRef.current) return
+    if (contract.policyNotReady) return
     if (contract.enabled) {
       const dateError = validateDateOfBirth(values.dateOfBirth)
       if (dateError || !contract.complete) {
@@ -253,6 +267,8 @@ export function SignupPage() {
       }
     }
     googleAttemptRef.current = true
+    const controller = new AbortController()
+    googleControllerRef.current = controller
 
     setIsGoogleSubmitting(true)
     setGoogleError(null)
@@ -261,9 +277,11 @@ export function SignupPage() {
         idToken: pendingGoogleIdToken,
         role: googleRole,
         ...(contract.enabled ? { dateOfBirth: values.dateOfBirth, consents: contract.consents } : {}),
-      })
+      }, controller.signal)
+      if (controller.signal.aborted || googleControllerRef.current !== controller) return
       navigate(requiresEmailVerification(googleUser) ? routes.verifyEmail : routes.classrooms, { replace: true })
     } catch (error) {
+      if (controller.signal.aborted || googleControllerRef.current !== controller) return
       if (
         error instanceof ApiClientError &&
         error.status === 409 &&
@@ -286,7 +304,12 @@ export function SignupPage() {
         )
         return
       }
-      if (error instanceof ApiClientError && error.code === 'POLICY_CONSENT_REQUIRED') {
+      if (isSignupPolicyNotReady(error)) {
+        contract.markPolicyNotReady()
+        setGoogleError(SIGNUP_POLICY_NOT_READY_MESSAGE)
+        return
+      }
+      if (isPolicyConsentRequired(error)) {
         void contract.reload()
         setGoogleError('정책이 변경되었습니다. 최신 정책을 확인하고 다시 동의해 주세요.')
         return
@@ -297,12 +320,18 @@ export function SignupPage() {
       }
       setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
     } finally {
-      googleAttemptRef.current = false
-      setIsGoogleSubmitting(false)
+      if (googleControllerRef.current === controller) {
+        googleControllerRef.current = null
+        googleAttemptRef.current = false
+        setIsGoogleSubmitting(false)
+      }
     }
   }
 
   function cancelGoogleSignup() {
+    googleControllerRef.current?.abort()
+    googleControllerRef.current = null
+    googleAttemptRef.current = false
     clearGoogleSignup()
     navigate(routes.login, { replace: true })
   }
@@ -428,14 +457,13 @@ export function SignupPage() {
           <div className="mt-5 flex gap-2">
             <Button
               className="h-11 flex-1"
-              disabled={isGoogleSubmitting}
+              disabled={isGoogleSubmitting || contract.policyNotReady}
               type="submit"
             >
               {isGoogleSubmitting ? '가입 중' : '가입하기'}
             </Button>
             <Button
               className="h-11"
-              disabled={isGoogleSubmitting}
               onClick={cancelGoogleSignup}
               type="button"
               variant="secondary"
@@ -810,6 +838,7 @@ export function SignupPage() {
             className="h-11 flex-1"
             disabled={
               isSubmitting ||
+              contract.policyNotReady ||
               emailAvailability === 'checking' ||
               emailAvailability === 'taken'
             }

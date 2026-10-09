@@ -11,6 +11,12 @@ export function SignupContractFields({ contract, dateOfBirth, onDateChange, date
   const [content, setContent] = useState<string | null>(null)
   const detailRef = useRef<AbortController | null>(null)
   useEffect(() => () => detailRef.current?.abort(), [])
+  useEffect(() => {
+    if (contract.documents === null || contract.policyNotReady) {
+      detailRef.current?.abort()
+      queueMicrotask(() => setContent(null))
+    }
+  }, [contract.documents, contract.policyNotReady])
   if (!contract.enabled) return null
   async function showDocument(document: PolicyDocument) {
     detailRef.current?.abort()
@@ -33,7 +39,11 @@ export function SignupContractFields({ contract, dateOfBirth, onDateChange, date
     {dateError ? <p id="signup-date-error" role="alert">{dateError}</p> : null}
     <p>생년월일 입력은 나이 확인이나 보호자 승인을 완료하지 않습니다.</p>
     {contract.error ? <p role="alert">{contract.error}</p> : null}
-    {contract.documents === null ? <button type="button" onClick={() => void contract.reload()}>현재 정책 다시 조회</button> : null}
+    {contract.policyNotReady ? <div role="status">
+      <p>서버에서 가입 정책을 준비 중입니다. 정책 목록만으로 가입 가능 여부를 판단하지 않습니다.</p>
+      {contract.retryUsed ? <p>이번 화면의 재확인을 사용했습니다. 나중에 다시 방문해 주세요.</p>
+        : <button type="button" disabled={contract.loading} onClick={() => void contract.retryPolicyLookup()}>현재 정책 한 번 다시 확인</button>}
+    </div> : contract.documents === null ? <button type="button" disabled={contract.loading} onClick={() => void contract.reload()}>현재 정책 다시 조회</button> : null}
     {contract.documents?.map((document) => <div key={`${document.type}:${document.version}`}>
       <button type="button" className="underline" onClick={() => void showDocument(document)}>{document.title} 전문 보기</button>
       {document.requiresConsent ? <label className="mt-2 flex gap-2">
