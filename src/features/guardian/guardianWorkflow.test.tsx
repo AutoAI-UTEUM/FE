@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@t
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AuthProvider, useAuth } from '../auth'
-import { guardianDetail, guardianEntry, guardianPendingUser, guardianStatus, guardianView } from '../../test/guardianFixtures'
+import { GUARDIAN_TEST_NOW, guardianDetail, guardianEntry, guardianPendingUser, guardianStatus, guardianView } from '../../test/guardianFixtures'
 import { GuardianRequestPage } from '../../app/pages/GuardianRequestPage'
 import { GuardianConsentPage } from '../../app/pages/GuardianConsentPage'
 import { GuardianReviewPage } from '../../app/pages/GuardianReviewPage'
@@ -23,6 +23,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_API_BASE_URL', '/api'); vi.stubEnv('VITE_GUARDIAN_TEAM_READINESS', GUARDIAN_TEAM_CONTRACT)
   vi.stubEnv('VITE_GUARDIAN_WORKFLOW_READINESS', GUARDIAN_WORKFLOW_CONTRACT); vi.stubEnv('VITE_GUARDIAN_POLICY_REVIEW_READINESS', GUARDIAN_POLICY_REVIEW)
   vi.stubGlobal('BroadcastChannel', undefined)
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(GUARDIAN_TEST_NOW))
 })
 afterEach(() => { cleanup(); clearGuardianLinkToken(); window.history.replaceState(null, '', '/'); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 function page(element: React.ReactNode, admin = false) { return render(<StrictMode><AuthProvider initialUser={admin ? { ...guardianPendingUser, id: 900099, role: 'ADMIN', emailVerificationRequired: false } : guardianPendingUser}><MemoryRouter>{element}</MemoryRouter></AuthProvider></StrictMode>) }
@@ -36,6 +37,22 @@ function mockReview(write?: Response) {
     if (options?.method === 'POST') return write ?? success({ ...guardianStatus, revision: 4, state: 'REVIEW_PENDING' })
     return success(detail)
   })
+}
+function reviewResponse(value: unknown, write?: () => Promise<Response>) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+    if (String(url).includes('?page=')) return success({ content: [guardianStatus], page: 0, size: 20, totalElements: 1, totalPages: 1 })
+    if (options?.method === 'POST') return write ? write() : success({ ...guardianStatus, revision: 4, state: 'REVIEW_PENDING' })
+    return success(value)
+  })
+}
+function chooseReply(ai = false) {
+  fireEvent.click(screen.getByLabelText(/운영 고지·관계 확인/))
+  fireEvent.change(screen.getByLabelText('관계'), { target: { value: 'PARENT' } })
+  fireEvent.click(screen.getByLabelText('확인 범위 SERVICE'))
+  if (ai) fireEvent.click(screen.getByLabelText('확인 범위 EXTERNAL_AI'))
+  fireEvent.change(screen.getByLabelText('제한된 증거 참조'), { target: { value: 'case.synthetic-001' } })
+  fireEvent.change(screen.getByLabelText('실제 회신 수신 시각 (UTC ISO)'), { target: { value: '2026-10-08T01:00:00Z' } })
+  for (const label of [/회신 신청번호·차수/, /실제 회신·통화에/, /법정대리인 선언을/, /고지 버전·범위와/, /현재 확인 수단과/]) fireEvent.click(screen.getByLabelText(label))
 }
 it.each(['', 'true', 'typo'])('write OFF %j forbids networking and new pending exceptions', async (flag) => {
   vi.stubEnv('VITE_GUARDIAN_WORKFLOW_READINESS', flag)
@@ -168,7 +185,7 @@ it.each([403, 409, 503])('reviewer decision %s wipes contact and shows parent er
   await screen.findByRole('alert'); expect(screen.queryByRole('region', { name: '담당자 상세' })).not.toBeInTheDocument(); expect(screen.queryByLabelText('제한된 증거 참조')).not.toBeInTheDocument()
 })
 it('stale reviewer can revoke with current coordinates but never confirm or approve', async () => {
-  const stale = { ...detail, status: { ...detail.status, currentNotice: false }, forms: {}, replyChannel: null }
+  const stale = { ...detail, status: { ...detail.status, currentNotice: false }, requiredScopes: [], optionalAiScope: null, forms: {}, replyChannel: null }
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(success({ content: [stale.status], page: 0, size: 20, totalElements: 1, totalPages: 1 })).mockResolvedValueOnce(success(stale)).mockResolvedValue(success({ ...guardianStatus, revision: 4, state: 'REVOKED', reason: 'OPERATOR_REVOKED' }))
   page(<GuardianReviewPage />, true); await loadDetail(); fireEvent.click(screen.getByLabelText(/운영 고지·관계 확인/))
   expect(screen.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeDisabled(); expect(screen.getByRole('button', { name: '최종 승인 확인' })).toBeDisabled()
@@ -226,4 +243,176 @@ it.each([500, 502, 503])('unknown infrastructure %s keeps identical request rath
   act(() => result.current.prepare(createGuardianOperation('withdraw', id, { generation: 2, revision: 3 })))
   await act(async () => result.current.send()); expect(result.current.uncertain).toBe(true); expect(invalidate).not.toHaveBeenCalled()
   await act(async () => result.current.send()); expect(request.mock.calls[0][1].body).toBe(request.mock.calls[1][1].body)
+})
+it('manual reply offers only current AI policy, starts unchecked, and uncertain confirmation retries the identical body/key once', async () => {
+  let reject!: (error: unknown) => void
+  let writes = 0
+  const manual = { ...detail, declaredScopes: [], relationship: null, status: { ...guardianStatus, state: 'AWAITING_CONSENT', webDeclaredAt: null } }
+  const fetch = reviewResponse(manual, async () => { writes++; return writes === 1 ? new Promise((_, no) => { reject = no }) : success({ ...guardianStatus, revision: 4, state: 'REVIEW_PENDING' }) })
+  page(<GuardianReviewPage />, true); await loadDetail()
+  expect(screen.getByText(/선언 범위: 없음/)).toBeInTheDocument()
+  for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).not.toBeChecked()
+  chooseReply(true)
+  fireEvent.click(screen.getByRole('button', { name: '명시적 회신 등록 확인' }))
+  act(() => { fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' })); fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' })) })
+  expect(writes).toBe(1)
+  await act(async () => reject(new TypeError('synthetic lost response')))
+  expect(screen.getByRole('button', { name: '현재 담당자 상세 다시 확인' })).toBeDisabled()
+  expect(screen.getByLabelText('확인 범위 EXTERNAL_AI')).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: '같은 요청 다시 확인' }))
+  await waitFor(() => expect(writes).toBe(2))
+  const posts = fetch.mock.calls.filter(([, options]) => options?.method === 'POST')
+  expect(posts[0][1]!.body).toBe(posts[1][1]!.body)
+  expect(JSON.parse(posts[0][1]!.body as string)).toMatchObject({ scopes: ['SERVICE', 'EXTERNAL_AI'], relationship: 'PARENT', method: 'PHONE', generation: 2, revision: 3 })
+})
+it.each([null, '', '\u3000'])('declaredScopes without webDeclaredAt cannot invent optional AI policy %j', async (optionalAiScope) => {
+  reviewResponse({ ...detail, optionalAiScope, declaredScopes: ['SERVICE', 'EXTERNAL_AI'], status: { ...guardianStatus, webDeclaredAt: null } })
+  page(<GuardianReviewPage />, true); await loadDetail()
+  expect(screen.queryByLabelText('확인 범위 EXTERNAL_AI')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('확인 범위 SERVICE')).not.toBeChecked()
+  chooseReply()
+  expect(screen.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeEnabled()
+})
+it('web SERVICE declaration forbids adding AI despite a current policy option', async () => {
+  const fetch = reviewResponse(detail)
+  page(<GuardianReviewPage />, true); await loadDetail()
+  expect(screen.getByText(/선택 AI 범위: EXTERNAL_AI/)).toBeInTheDocument()
+  expect(screen.queryByLabelText('확인 범위 EXTERNAL_AI')).not.toBeInTheDocument()
+  chooseReply()
+  fireEvent.click(screen.getByRole('button', { name: '명시적 회신 등록 확인' })); fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' }))
+  await waitFor(() => expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1))
+  expect(JSON.parse(fetch.mock.calls.find(([, options]) => options?.method === 'POST')![1]!.body as string).scopes).toEqual(['SERVICE'])
+})
+it('web AI declaration requires exact scopes and relationship, without automatic checks or scope reduction', async () => {
+  const fetch = reviewResponse({ ...detail, declaredScopes: ['SERVICE', 'EXTERNAL_AI'] })
+  page(<GuardianReviewPage />, true); await loadDetail()
+  expect(screen.getByLabelText('확인 범위 EXTERNAL_AI')).not.toBeChecked()
+  chooseReply()
+  const submit = screen.getByRole('button', { name: '명시적 회신 등록 확인' })
+  expect(submit).toBeDisabled()
+  fireEvent.click(screen.getByLabelText('확인 범위 EXTERNAL_AI')); expect(submit).toBeEnabled()
+  fireEvent.change(screen.getByLabelText('관계'), { target: { value: 'MINOR_GUARDIAN' } }); expect(submit).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('관계'), { target: { value: 'PARENT' } })
+  fireEvent.click(screen.getByLabelText('확인 범위 EXTERNAL_AI')); expect(submit).toBeDisabled()
+  expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0)
+})
+it('same-coordinate detail refresh discards every input/check and cannot reuse policy before a stale response', async () => {
+  const manual = { ...detail, status: { ...guardianStatus, webDeclaredAt: null }, declaredScopes: [] }
+  let reads = 0
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+    if (String(url).includes('?page=')) return success({ content: [guardianStatus], page: 0, size: 20, totalElements: 1, totalPages: 1 })
+    reads++
+    return success(reads === 1 ? manual : reads === 2 ? { ...manual, optionalAiScope: null }
+      : { ...manual, status: { ...manual.status, currentNotice: false }, requiredScopes: [], optionalAiScope: null, replyChannel: null, forms: {} })
+  })
+  page(<GuardianReviewPage />, true); await loadDetail(); chooseReply(true)
+  fireEvent.click(screen.getByRole('button', { name: '현재 담당자 상세 다시 확인' }))
+  await screen.findByText(/선택 AI 범위: 없음/)
+  expect(reads).toBe(2)
+  for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).not.toBeChecked()
+  expect(screen.getByLabelText('관계')).toHaveValue('')
+  expect(screen.getByLabelText('제한된 증거 참조')).toHaveValue('')
+  expect(screen.getByLabelText('실제 회신 수신 시각 (UTC ISO)')).toHaveValue('')
+  expect(screen.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: '현재 담당자 상세 다시 확인' }))
+  await screen.findByText(/최신 고지·확인 창구가 부족/)
+  fireEvent.click(screen.getByLabelText(/운영 고지·관계 확인/))
+  expect(screen.getByRole('button', { name: '반려 확인' })).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('사유'), { target: { value: 'OPERATOR_REVOKED' } })
+  expect(screen.getByRole('button', { name: '담당자 철회 확인' })).toBeEnabled()
+  expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0)
+})
+it.each(['EXPIRED', 'REJECTED', 'REVOKED', 'WITHDRAWN', 'elapsed-request', 'elapsed-approval', 'missing-deadline'])('reviewer %s remains readable but every mutation is closed', async (kind) => {
+  const status = { ...guardianStatus, state: kind === 'elapsed-approval' ? 'APPROVED' : kind.includes('-') ? 'DECLARED' : kind,
+    requestExpiresAt: kind === 'elapsed-request' ? GUARDIAN_TEST_NOW : kind === 'missing-deadline' ? null : guardianStatus.requestExpiresAt,
+    approvedUntil: kind === 'elapsed-approval' ? GUARDIAN_TEST_NOW : null }
+  const fetch = reviewResponse({ ...detail, status })
+  page(<GuardianReviewPage />, true); await loadDetail()
+  fireEvent.click(screen.getByLabelText(/운영 고지·관계 확인/))
+  for (const name of ['명시적 회신 등록 확인', '최종 승인 확인', '반려 확인', '보완 요청 확인', '담당자 철회 확인']) expect(screen.getByRole('button', { name })).toBeDisabled()
+  expect(screen.queryByText(/현재 차수 철회는 별도 확인 후 진행/)).not.toBeInTheDocument()
+  expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0)
+})
+it('unsent confirmation cannot cross the deadline at final send', async () => {
+  const fetch = reviewResponse(detail)
+  page(<GuardianReviewPage />, true); await loadDetail(); chooseReply()
+  fireEvent.click(screen.getByRole('button', { name: '명시적 회신 등록 확인' }))
+  vi.mocked(Date.now).mockReturnValue(Date.parse(guardianStatus.requestExpiresAt!))
+  fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('기한이 지났습니다')
+  expect(screen.queryByRole('region', { name: '담당자 상세' })).not.toBeInTheDocument()
+  expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(0)
+})
+it.each([[403, 'ACCESS_DENIED'], [409, 'GUARDIAN_TEAM_CONFIGURATION_CHANGED'], [503, 'GUARDIAN_TEAM_UNAVAILABLE']])('confirmation %s clears current policy and sensitive inputs', async (status, code) => {
+  const fetch = reviewResponse({ ...detail, status: { ...guardianStatus, webDeclaredAt: null } }, async () => failure(status as number, code as string))
+  page(<GuardianReviewPage />, true); await loadDetail(); chooseReply(true)
+  fireEvent.click(screen.getByRole('button', { name: '명시적 회신 등록 확인' })); fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' }))
+  await screen.findByRole('alert')
+  expect(screen.queryByRole('region', { name: '담당자 상세' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: '같은 요청 다시 확인' })).not.toBeInTheDocument()
+  expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1)
+})
+it('pagehide ignores a late detail read and cannot resurrect current scope options', async () => {
+  let release!: (response: Response) => void
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(success({ content: [guardianStatus], page: 0, size: 20, totalElements: 1, totalPages: 1 }))
+    .mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+  page(<GuardianReviewPage />, true)
+  fireEvent.click(screen.getByRole('button', { name: '담당자 권한·목록 확인' })); fireEvent.click(await screen.findByRole('button', { name: `상세 ${id}` }))
+  act(() => window.dispatchEvent(new Event('pagehide')))
+  expect(fetch.mock.calls[1][1]!.signal!.aborted).toBe(true)
+  await act(async () => release(success(detail)))
+  expect(screen.queryByRole('region', { name: '담당자 상세' })).not.toBeInTheDocument()
+})
+it('malformed reviewer policy fails closed before any input appears', async () => {
+  reviewResponse({ ...detail, optionalAiScope: 'SERVICE' })
+  page(<GuardianReviewPage />, true)
+  fireEvent.click(screen.getByRole('button', { name: '담당자 권한·목록 확인' })); fireEvent.click(await screen.findByRole('button', { name: `상세 ${id}` }))
+  await screen.findByRole('alert')
+  expect(screen.queryByRole('region', { name: '담당자 상세' })).not.toBeInTheDocument()
+})
+it('deadline timer closes idle detail without requiring a new input or network request', async () => {
+  const end = Date.parse(GUARDIAN_TEST_NOW) + 500
+  const fetch = reviewResponse({ ...detail, status: { ...guardianStatus, requestExpiresAt: new Date(end).toISOString() } })
+  page(<GuardianReviewPage />, true); await loadDetail()
+  vi.mocked(Date.now).mockReturnValue(end)
+  await screen.findByText(/신청 또는 승인 기한이 지났거나/)
+  expect(screen.getByRole('button', { name: '담당자 철회 확인' })).toBeDisabled()
+  expect(fetch).toHaveBeenCalledTimes(2)
+})
+it('expiry after an uncertain confirmation preserves its exact replay body and does not invent a new operation', async () => {
+  let writes = 0
+  const end = Date.parse(GUARDIAN_TEST_NOW) + 10_000
+  const fetch = reviewResponse({ ...detail, status: { ...guardianStatus, requestExpiresAt: new Date(end).toISOString() } }, async () => {
+    writes++; if (writes === 1) throw new TypeError('synthetic lost response')
+    return success({ ...guardianStatus, state: 'EXPIRED', revision: 4, reason: 'DEADLINE_EXPIRED' })
+  })
+  page(<GuardianReviewPage />, true); await loadDetail(); chooseReply()
+  fireEvent.click(screen.getByRole('button', { name: '명시적 회신 등록 확인' })); fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' }))
+  await screen.findByRole('button', { name: '같은 요청 다시 확인' })
+  vi.mocked(Date.now).mockReturnValue(end)
+  fireEvent.click(screen.getByRole('button', { name: '같은 요청 다시 확인' }))
+  await waitFor(() => expect(writes).toBe(2))
+  const posts = fetch.mock.calls.filter(([, options]) => options?.method === 'POST')
+  expect(posts[0][1]!.body).toBe(posts[1][1]!.body)
+})
+it.each(['scope', 'method'])('final approval rejects confirmed %s outside current policy', async (kind) => {
+  reviewResponse({ ...detail, optionalAiScope: null, declaredScopes: kind === 'scope' ? ['SERVICE', 'EXTERNAL_AI'] : ['SERVICE'],
+    confirmationMethod: kind === 'method' ? 'EMAIL_REPLY' : 'PHONE', evidenceReference: 'synthetic.case-001',
+    status: { ...guardianStatus, state: 'REVIEW_PENDING', explicitResponseAt: '2026-10-08T01:00:00Z' } })
+  page(<GuardianReviewPage />, true); await loadDetail(); fireEvent.click(screen.getByLabelText(/운영 고지·관계 확인/))
+  for (const label of [/승인된 운영 기준에/, /회신 연락처와/, /현재 차수의 제한된/, /현재 고지와 승인할/]) fireEvent.click(screen.getByLabelText(label))
+  expect(screen.getByRole('button', { name: '최종 승인 확인' })).toBeDisabled()
+})
+it('reviewer account switch aborts confirmation and ignores a late approval response', async () => {
+  let release!: (response: Response) => void
+  const fetch = reviewResponse(detail, () => new Promise((resolve) => { release = resolve }))
+  page(<><ChangeAccount /><GuardianReviewPage /></>, true); await loadDetail(); chooseReply()
+  fireEvent.click(screen.getByRole('button', { name: '명시적 회신 등록 확인' })); fireEvent.click(screen.getByRole('button', { name: '확인 후 전송' }))
+  const post = fetch.mock.calls.find(([, options]) => options?.method === 'POST')!
+  fireEvent.click(screen.getByRole('button', { name: '합성 계정 전환' }))
+  expect(post[1]!.signal!.aborted).toBe(true)
+  await act(async () => release(success({ ...guardianStatus, state: 'APPROVED', serviceApproved: true })))
+  expect(screen.queryByRole('region', { name: '담당자 상세' })).not.toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('담당자 접근 권한')
 })

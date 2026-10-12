@@ -19,6 +19,7 @@ function GuardianReviewSession() {
   const { apiRequest, user } = useAuth()
   const [list, setList] = useState<GuardianList | null>(null)
   const [detail, setDetail] = useState<GuardianDetail | null>(null)
+  const [detailRead, setDetailRead] = useState(0)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [operationLocked, setOperationLocked] = useState(false)
@@ -33,6 +34,9 @@ function GuardianReviewSession() {
   async function load(page: number, id?: string) {
     if (active.current || mutationLock.current) return
     const controller = new AbortController(); active.current = controller; setBusy(true); setDetail(null); setError('')
+    // A policy-only change can keep every request coordinate unchanged.
+    // Every explicit read must remount the inputs, even with an immediate reply.
+    setDetailRead((value) => value + 1)
     if (!id) setList(null)
     try {
       if (id) { const result = await getGuardianReviewDetail(apiRequest, id, controller.signal); if (!controller.signal.aborted) setDetail(result) }
@@ -49,7 +53,7 @@ function GuardianReviewSession() {
       <Button disabled={busy || operationLocked || list.page === 0} onClick={() => void load(list.page - 1)}>이전 목록</Button>
       <Button disabled={busy || operationLocked || list.page + 1 >= list.totalPages} onClick={() => void load(list.page + 1)}>다음 목록</Button>
     </section> : null}
-    {detail ? <GuardianReviewDetail key={`${detail.status.requestId}:${detail.status.generation}:${detail.status.revision}`} detail={detail} selfId={user?.id} onPendingChange={onPendingChange} onInvalidate={(message) => { setList(null); setDetail(null); if (message) setError(message) }} onRefresh={() => void load(list?.page ?? 0, detail.status.requestId)} /> : null}
+    {detail ? <GuardianReviewDetail key={`${detailRead}:${detail.status.requestId}:${detail.status.generation}:${detail.status.revision}`} detail={detail} selfId={user?.id} onPendingChange={onPendingChange} onInvalidate={(message) => { setList(null); setDetail(null); if (message) setError(message) }} onRefresh={() => void load(list?.page ?? 0, detail.status.requestId)} /> : null}
     <Link to={routes.settings}>계정 관리</Link>
   </div></PageContainer></main>
 }
@@ -76,38 +80,53 @@ function GuardianReviewDetail({ detail, selfId, onInvalidate, onRefresh, onPendi
   const [evidence, setEvidence] = useState('')
   const [receivedAt, setReceivedAt] = useState('')
   const [inputTime, setInputTime] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
   const [policyReviewed, setPolicyReviewed] = useState(false)
   const [reason, setReason] = useState<'INCOMPLETE_RESPONSE' | 'RELATIONSHIP_UNCONFIRMED' | 'CONSENT_DECLINED' | 'OPERATOR_REVOKED'>('INCOMPLETE_RESPONSE')
   const action = useGuardianOperation(apiRequest, () => { onInvalidate(); onRefresh() }, onInvalidate, onPendingChange)
   const s = detail.status
   const pending = isGuardianPending(s)
+  const deadline = Date.parse((s.state === 'APPROVED' ? s.approvedUntil : s.requestExpiresAt) ?? '')
+  const liveAt = (time: number) => (pending || s.state === 'APPROVED') && Number.isFinite(deadline) && deadline > time
+  useEffect(() => {
+    if (!Number.isFinite(deadline) || deadline <= now) return
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(deadline - now, 2_147_483_647))
+    return () => window.clearTimeout(timer)
+  }, [deadline, now])
   const method = confirmationMethodFor(detail.replyChannel)
-  const current = s.currentNotice && Boolean(method) && Boolean(detail.forms.consent_email?.trim()) && !/TBD|\[\[|미확정/.test(Object.values(detail.forms).join(' '))
+  const live = liveAt(now)
+  const current = live && s.currentNotice && detail.requiredScopes.length === 1 && detail.requiredScopes[0] === 'SERVICE' && Boolean(method) && Boolean(detail.forms.consent_email?.trim()) && !/TBD|\[\[|미확정/.test(Object.values(detail.forms).join(' '))
   const ownerKnown = selfId !== undefined && detail.userId !== null && selfId !== detail.userId
-  const canProcess = ownerKnown && policyReviewed && !action.operation
+  const canProcess = live && ownerKnown && policyReviewed && !action.operation
+  const offersAi = detail.optionalAiScope === 'EXTERNAL_AI' && (!s.webDeclaredAt || detail.declaredScopes.includes('EXTERNAL_AI'))
   const scopes = ['SERVICE', ...(ai ? ['EXTERNAL_AI'] : [])]
   const matchesDeclaration = !s.webDeclaredAt || (relationship === detail.relationship && JSON.stringify([...detail.declaredScopes].sort()) === JSON.stringify([...scopes].sort()))
+  const confirmedScopesCurrent = detail.declaredScopes.includes('SERVICE') && detail.declaredScopes.every((scope) => scope === 'SERVICE' || detail.optionalAiScope === scope)
   const validTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(receivedAt) && detail.generationStartedAt !== null && Date.parse(receivedAt) >= Date.parse(detail.generationStartedAt) && Date.parse(receivedAt) <= inputTime
   function prepare(command: 'confirmation' | 'decision' | 'revoke', fields: Record<string, unknown>) {
-    if (!canProcess || (command !== 'revoke' && !current)) return
+    if (!canProcess || !liveAt(Date.now()) || (command !== 'revoke' && !current)) return
     action.prepare(createGuardianOperation(command, s.requestId, { generation: s.generation, revision: s.revision, ...fields }))
   }
   function checklist(labels: Record<string, string>) { return Object.entries(labels).map(([name, label]) => <label key={name} className="block"><input type="checkbox" disabled={!current} checked={checks[name as CheckName] === true} onChange={(e) => setChecks({ ...checks, [name]: e.target.checked })} /> {label}</label>) }
   return <section aria-label="담당자 상세" className="space-y-4 border-t pt-4">
+    <Button disabled={Boolean(action.operation)} onClick={onRefresh}>현재 담당자 상세 다시 확인</Button>
     <p className="break-all">신청 {s.requestId} · 차수 {s.generation} · 수정번호 {s.revision} · 상태 {s.state}</p>
     <p>서비스 승인: {s.serviceApproved ? '승인됨' : '유효한 승인 없음'} · 외부 AI 승인: {s.externalAiApproved ? '승인됨' : '유효한 승인 없음'}</p>
     <p>차수 시작 (UTC): {detail.generationStartedAt ?? '기록 없음'} · 웹 선언 (UTC): {s.webDeclaredAt ?? '기록 없음'}</p>
     <p>이름: {detail.guardianName ?? '기록 없음'} · 연락처: {detail.guardianContact ?? '기록 없음'} · 입력 출처: {detail.contactOrigin ?? '기록 없음'}</p>
     <p>선언 범위: {detail.declaredScopes.join(', ') || '없음'} · 관계: {detail.relationship ?? '기록 없음'}</p>
+    <p>현재 정책 필수 범위: {detail.requiredScopes.join(', ') || '없음'} · 선택 AI 범위: {detail.optionalAiScope ?? '없음'}</p>
     <p>확인 수단: {detail.confirmationMethod ?? '기록 없음'} · 증거 참조: {detail.evidenceReference ?? '기록 없음'} · 명시적 확인 (UTC): {s.explicitResponseAt ?? '기록 없음'}</p>
-    {!current ? <p role="status">최신 고지·확인 창구가 부족하여 회신 등록·승인·반려·보완 요청을 할 수 없습니다. 현재 차수 철회는 별도 확인 후 진행할 수 있습니다.</p> : <section aria-label="담당자 양식 미리 보기"><p>아래 전체 양식은 미리 보기이며 현재 신청 상태가 아닙니다.</p>{Object.entries(detail.forms).map(([key, text]) => <p key={key} className="whitespace-pre-wrap break-words">{text}</p>)}</section>}
+    {!current ? <p role="status">최신 고지·확인 창구가 부족하여 회신 등록·승인·반려·보완 요청을 할 수 없습니다.{live ? ' 현재 차수 철회는 별도 확인 후 진행할 수 있습니다.' : ''}</p> : <section aria-label="담당자 양식 미리 보기"><p>아래 전체 양식은 미리 보기이며 현재 신청 상태가 아닙니다.</p>{Object.entries(detail.forms).map(([key, text]) => <p key={key} className="whitespace-pre-wrap break-words">{text}</p>)}</section>}
     {!ownerKnown ? <p role="status">본인 신청이거나 대상·담당자 식별이 부족하므로 처리할 수 없습니다.</p> : null}
+    {!live ? <p role="status">신청 또는 승인 기한이 지났거나 종료·기한 미확인 상태이므로 처리할 수 없습니다.</p> : null}
     <label className="block"><input type="checkbox" checked={policyReviewed} disabled={!ownerKnown || Boolean(action.operation)} onChange={(e) => setPolicyReviewed(e.target.checked)} /> 운영 고지·관계 확인·선택 AI·보유/파기 기준의 별도 승인을 확인했습니다.</label>
     <p>기준이 미정이면 체크하지 마세요. 이 확인은 법무/개인정보 판단이나 지정 담당자 권한을 부여하지 않습니다.</p>
     <fieldset disabled={!canProcess} className="space-y-3">
       <label className="block">관계 <select disabled={!current} value={relationship} onChange={(e) => setRelationship(e.target.value as GuardianRelationship | '')}><option value="">직접 선택</option><option value="PARENT">부모</option><option value="MINOR_GUARDIAN">미성년후견인</option></select></label>
       <label className="block"><input type="checkbox" disabled={!current} checked={service} onChange={(e) => setService(e.target.checked)} /> 확인 범위 SERVICE</label>
-      {s.webDeclaredAt && detail.declaredScopes.includes('EXTERNAL_AI') ? <label className="block"><input type="checkbox" disabled={!current} checked={ai} onChange={(e) => setAi(e.target.checked)} /> 확인 범위 EXTERNAL_AI</label> : <p>선택 AI의 현재 운영 범위를 구조화된 응답으로 확인할 수 없는 경우 수동으로 추가하지 않습니다.</p>}
+      {offersAi ? <label className="block"><input type="checkbox" disabled={!current} checked={ai} onChange={(e) => setAi(e.target.checked)} /> 확인 범위 EXTERNAL_AI</label> : <p>현재 정책 선택지가 없거나 웹 선언에 없는 AI 범위는 추가하지 않습니다.</p>}
+      <p>정책 선택지와 기존 선언은 별개입니다. 실제 회신 근거로 직접 확인하며, 웹 선언이 있으면 관계·범위를 추가하거나 줄이지 않습니다.</p>
       <label className="block">제한된 증거 참조 <input disabled={!current} value={evidence} maxLength={100} onChange={(e) => setEvidence(e.target.value)} /></label>
       <p>회신 본문·신분증·주민번호·연락처·토큰·외부 URL을 입력하지 마세요.</p>
       <label className="block">실제 회신 수신 시각 (UTC ISO) <input disabled={!current} placeholder="YYYY-MM-DDTHH:mm:ssZ" value={receivedAt} onChange={(e) => { setReceivedAt(e.target.value); setInputTime(Date.now()) }} /></label>
@@ -115,12 +134,17 @@ function GuardianReviewDetail({ detail, selfId, onInvalidate, onRefresh, onPendi
       {checklist(confirmationChecks)}
       <Button disabled={!current || !pending || !service || !relationship || !matchesDeclaration || !validTime || !/^[A-Za-z0-9_.:-]{1,100}$/.test(evidence) || !Object.keys(confirmationChecks).every((key) => checks[key as CheckName])} onClick={() => prepare('confirmation', { method, relationship, scopes, evidenceReference: evidence, responseReceivedAt: receivedAt, noticeVersion: s.noticeVersion, noticeDigest: s.noticeDigest, ...Object.fromEntries(Object.keys(confirmationChecks).map((key) => [key, checks[key as CheckName] === true])) })}>명시적 회신 등록 확인</Button>
       {checklist(decisionChecks)}
-      <Button disabled={!current || s.state !== 'REVIEW_PENDING' || !s.explicitResponseAt || !detail.evidenceReference || !detail.confirmationMethod || !detail.declaredScopes.includes('SERVICE') || !Object.keys(decisionChecks).every((key) => checks[key as CheckName])} onClick={() => prepare('decision', { decision: 'APPROVE', ...Object.fromEntries(Object.keys(decisionChecks).map((key) => [key, checks[key as CheckName] === true])) })}>최종 승인 확인</Button>
+      <Button disabled={!current || s.state !== 'REVIEW_PENDING' || !s.explicitResponseAt || !detail.evidenceReference || detail.confirmationMethod !== method || !confirmedScopesCurrent || !Object.keys(decisionChecks).every((key) => checks[key as CheckName])} onClick={() => prepare('decision', { decision: 'APPROVE', ...Object.fromEntries(Object.keys(decisionChecks).map((key) => [key, checks[key as CheckName] === true])) })}>최종 승인 확인</Button>
       <label className="block">사유 <select value={reason} onChange={(e) => setReason(e.target.value as typeof reason)}><option value="INCOMPLETE_RESPONSE">응답 불충분</option><option value="RELATIONSHIP_UNCONFIRMED">관계 미확인</option><option value="CONSENT_DECLINED">동의 거절</option><option value="OPERATOR_REVOKED">담당자 철회</option></select></label>
       <Button disabled={!current || !pending || reason === 'OPERATOR_REVOKED'} onClick={() => prepare('decision', { decision: 'REJECT', reason })}>반려 확인</Button>
       <Button disabled={!current || !pending || !['INCOMPLETE_RESPONSE', 'RELATIONSHIP_UNCONFIRMED'].includes(reason)} onClick={() => prepare('decision', { decision: 'NEEDS_INFORMATION', reason })}>보완 요청 확인</Button>
       <Button disabled={(!pending && s.state !== 'APPROVED') || reason === 'INCOMPLETE_RESPONSE'} onClick={() => prepare('revoke', { reason })}>담당자 철회 확인</Button>
     </fieldset>
-    <GuardianOperationPanel action={action} />
+    <GuardianOperationPanel action={{ ...action, send: () => {
+      // An unresolved POST must retain its exact replay payload, even if time
+      // passes. A prepared but unsent operation must not cross the deadline.
+      if (!action.uncertain && !liveAt(Date.now())) { action.clear(); onInvalidate('신청 또는 승인 기한이 지났습니다. 현재 상태를 다시 조회하세요.'); return Promise.resolve() }
+      return action.send()
+    } }} />
   </section>
 }

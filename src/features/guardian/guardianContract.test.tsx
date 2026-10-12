@@ -49,6 +49,33 @@ describe('pinned guardian contract', () => {
     expect(() => parseGuardianView({ ...guardianView, optionalAiScope: 'UNKNOWN' })).toThrow()
     expect(() => parseGuardianView({ ...guardianView, optionalAiScope: undefined })).toThrow()
   })
+  it.each([null, '', ' ', '\t\n', '\u001c\u2003', '\u3000'])('Detail normalizes Java blank %j without inferring a declaration', (optionalAiScope) => {
+    const parsed = parseGuardianDetail({ ...guardianDetail, optionalAiScope, declaredScopes: ['EXTERNAL_AI'] })
+    expect(parsed.requiredScopes).toEqual(['SERVICE'])
+    expect(parsed.optionalAiScope).toBeNull()
+    expect(parsed.declaredScopes).toEqual(['EXTERNAL_AI'])
+    expect(parsed.status.externalAiApproved).toBe(false)
+  })
+  it.each([undefined, null, [], ['EXTERNAL_AI'], ['SERVICE', 'SERVICE'], ['SERVICE', 'EXTERNAL_AI'], ['UNKNOWN']])('Detail rejects invalid current required scopes %j', (requiredScopes) => {
+    expect(() => parseGuardianDetail({ ...guardianDetail, requiredScopes })).toThrow()
+  })
+  it.each([undefined, 'SERVICE', 'UNKNOWN', ' EXTERNAL_AI ', '\u00a0', '\u2007', '\u202f', '\u200b'])('Detail rejects absent/non-policy optional scope %j', (optionalAiScope) => {
+    expect(() => parseGuardianDetail({ ...guardianDetail, optionalAiScope })).toThrow()
+  })
+  it('Detail requires both policy fields and rejects duplicate declarations', () => {
+    for (const key of ['requiredScopes', 'optionalAiScope']) {
+      const value: Record<string, unknown> = { ...guardianDetail }; delete value[key]
+      expect(() => parseGuardianDetail(value)).toThrow()
+    }
+    expect(() => parseGuardianDetail({ ...guardianDetail, declaredScopes: ['SERVICE', 'SERVICE'] })).toThrow()
+  })
+  it('normal stale Detail remains readable without current scopes/channel/forms; malformed stale policy fails closed', () => {
+    const stale = { ...guardianDetail, status: { ...guardianStatus, currentNotice: false }, requiredScopes: [], optionalAiScope: null, replyChannel: null, forms: {} }
+    expect(parseGuardianDetail(stale)).toEqual(stale)
+    for (const changed of [{ requiredScopes: ['SERVICE'] }, { optionalAiScope: 'EXTERNAL_AI' }, { replyChannel: 'EMAIL_REPLY' }, { forms: { consent_email: 'old' } }]) {
+      expect(() => parseGuardianDetail({ ...stale, ...changed })).toThrow()
+    }
+  })
   it('read repositories use exact self paths with no-store/no-referrer and never mutate', async () => {
     vi.stubEnv('VITE_GUARDIAN_TEAM_READINESS', GUARDIAN_TEAM_CONTRACT)
     const request = vi.fn().mockResolvedValueOnce({ data: guardianEntry }).mockResolvedValueOnce({ data: guardianView })
