@@ -17,4 +17,5 @@ export type {
   ExamSubmissionStatus,
   GenerateExamDraftInput,
   InstructorSubmissionSummary,
+  ManualScoreAdjustmentInput,
 } from './examsRepository'

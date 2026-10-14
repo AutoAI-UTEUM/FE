@@ -110,6 +110,7 @@ export interface ExamSubmission {
     feedback?: string
     maxScore: number
     manualScore?: number
+    manualScoreReason?: string
     questionId: string
     score?: number
     verdict?: 'CORRECT' | 'PARTIAL' | 'WRONG'
@@ -137,6 +138,11 @@ export interface InstructorSubmissionSummary {
   userName: string
 }
 
+export interface ManualScoreAdjustmentInput {
+  score: number
+  reason?: string | null
+}
+
 export interface ExamsRepository {
   close: (examId: string, signal?: AbortSignal) => Promise<Exam>
   create: (classroomId: string, input: CreateExamInput, signal?: AbortSignal) => Promise<Exam>
@@ -145,7 +151,7 @@ export interface ExamsRepository {
   getAttemptDraft: (examId: string, signal?: AbortSignal) => Promise<ExamAttemptDraft | null>
   getMySubmission: (examId: string, attemptNo?: number, signal?: AbortSignal) => Promise<ExamSubmission>
   getSubmission: (examId: string, submissionId: string, signal?: AbortSignal) => Promise<ExamSubmission>
-  adjustScore: (examId: string, submissionId: string, questionId: string, score: number, signal?: AbortSignal) => Promise<ExamSubmission>
+  adjustScore: (examId: string, submissionId: string, questionId: string, input: ManualScoreAdjustmentInput, signal?: AbortSignal) => Promise<ExamSubmission>
   generateDraftQuestions: (classroomId: string, examId: string, input: GenerateExamDraftInput, signal?: AbortSignal) => Promise<ExamDraftResult>
   list: (classroomId: string, status?: ExamStatus, signal?: AbortSignal) => Promise<ExamSummary[]>
   listSubmissions: (examId: string, signal?: AbortSignal) => Promise<InstructorSubmissionSummary[]>
@@ -248,7 +254,7 @@ interface ExamSubmissionDto {
   attemptNo: number
   durationSeconds?: number | null
   gradedAt?: string | null
-  items?: Array<{ adjustedAt?: string | null; answer?: string | null; correctAnswer?: ExamCorrectAnswer | null; explanation?: string | null; feedback?: string | null; manualScore?: number | null; maxScore: number; questionId: string; score?: number | null; verdict?: 'CORRECT' | 'PARTIAL' | 'WRONG' | null }>
+  items?: Array<{ adjustedAt?: string | null; answer?: string | null; correctAnswer?: ExamCorrectAnswer | null; explanation?: string | null; feedback?: string | null; manualScore?: number | null; manualScoreReason?: string | null; maxScore: number; questionId: string; score?: number | null; verdict?: 'CORRECT' | 'PARTIAL' | 'WRONG' | null }>
   maxScore?: number | null
   normalizedScore?: number | null
   reviewAvailable?: boolean
@@ -286,13 +292,13 @@ export function createExamsRepository(
   rawRequest?: AuthenticatedRawRequest,
 ): ExamsRepository {
   return {
-    async adjustScore(examId, submissionId, questionId, score, signal) {
+    async adjustScore(examId, submissionId, questionId, input, signal) {
       const { data } = await request<ExamSubmissionDto>(`/api/exams/${encodeURIComponent(examId)}/submissions/${encodeURIComponent(submissionId)}/answers/${encodeURIComponent(questionId)}/score`, {
-        body: { score },
+        body: { score: input.score, ...(input.reason === undefined ? {} : { reason: input.reason }) },
         method: 'PATCH',
         signal,
       })
-      return mapSubmission(data)
+      return mapSubmission(data, true)
     },
     async close(examId, signal) {
       const { data } = await request<ExamDto>(`/api/exams/${encodeURIComponent(examId)}/close`, { method: 'POST', signal })
@@ -343,7 +349,7 @@ export function createExamsRepository(
     },
     async getSubmission(examId, submissionId, signal) {
       const { data } = await request<ExamSubmissionDto>(`/api/exams/${encodeURIComponent(examId)}/submissions/${encodeURIComponent(submissionId)}`, { signal })
-      return mapSubmission(data)
+      return mapSubmission(data, true)
     },
     async list(classroomId, status, signal) {
       const params = new URLSearchParams({ page: '0', size: '100' })
@@ -364,7 +370,7 @@ export function createExamsRepository(
         method: 'POST',
         signal,
       })
-      return mapSubmission(data)
+      return mapSubmission(data, true)
     },
     async regradeMySubmission(examId, signal) {
       const { data } = await request<ExamSubmissionDto>(
@@ -578,13 +584,13 @@ function mapLatestSubmission(value: ExamSubmissionSummaryDto): ExamSubmissionSum
   }
 }
 
-function mapSubmission(value: ExamSubmissionDto): ExamSubmission {
+function mapSubmission(value: ExamSubmissionDto, includeManualReason = false): ExamSubmission {
   return {
     attemptNo: value.attemptNo,
     durationSeconds: value.durationSeconds ?? undefined,
     gradedAt: value.gradedAt ?? undefined,
     id: String(value.submissionId),
-    items: (value.items ?? []).map((item) => ({
+    items: (value.items ?? []).map(({ manualScoreReason, ...item }) => ({
       ...item,
       answer: item.answer ?? undefined,
       adjustedAt: item.adjustedAt ?? undefined,
@@ -592,6 +598,7 @@ function mapSubmission(value: ExamSubmissionDto): ExamSubmission {
       explanation: item.explanation ?? undefined,
       feedback: item.feedback ?? undefined,
       manualScore: item.manualScore ?? undefined,
+      ...(includeManualReason ? { manualScoreReason: manualScoreReason ?? undefined } : {}),
       score: item.score ?? undefined,
       verdict: item.verdict ?? undefined,
     })),
