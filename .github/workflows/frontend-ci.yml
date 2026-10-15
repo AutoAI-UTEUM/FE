@@ -13,6 +13,31 @@ permissions:
   contents: read
 
 jobs:
+  protected-file-cache:
+    name: protected-file-cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify legacy warm-cache isolation with native HTTP (no interception)
+        run: npx playwright test --config playwright.file-cache.config.ts
+      - name: Upload file-cache regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protected-file-cache
+          path: qa-artifacts/file-cache/
+          retention-days: 7
+
   launch-auth-contract:
     name: launch-auth-contract (${{ matrix.mode }})
     runs-on: ubuntu-latest

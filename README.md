@@ -96,6 +96,8 @@ src/
 - 인증된 repository 요청에는 메모리에 보관한 access token을 Bearer 헤더로 자동 주입합니다.
 - PDF와 SSE처럼 공통 JSON envelope를 사용하지 않는 응답은 `rawApiRequest`가
   같은 인증 갱신·401 만료 정책을 적용합니다.
+- PDF 원본과 강의실 첨부 파일을 새로 요청할 때는 `cache: 'no-store'`로 기존
+  HTTP 캐시를 건너뛰고 응답을 저장하지 않습니다. 이미 전달된 Blob과 다운로드 파일은 이 정책의 범위 밖입니다.
 - refresh token은 BE의 HttpOnly 쿠키로 관리하며, 앱 시작 시 refresh API와 `/api/users/me`로 세션을 복원합니다.
 - 인증 요청이 401을 반환하면 access token을 한 번 갱신하고 원요청을 재시도합니다. 갱신 실패 또는 재시도 실패 시 세션을 종료합니다.
 - 30분 동안 사용자 활동이 없으면 refresh 쿠키를 폐기하고 `?reason=idle`로 로그인 화면에 이동합니다.
@@ -111,6 +113,17 @@ npm run build
 ```
 
 GitHub Actions의 `frontend-ci`가 `main`·`develop` 대상 PR과 `develop` push에서 동일한 검증을 실행합니다.
+
+### 보호 파일 브라우저 캐시 회귀
+
+```bash
+npx playwright install chromium
+npx playwright test --config playwright.file-cache.config.ts
+```
+
+`protected-file-cache` CI는 실제 loopback HTTP 서버와 production 파일 repository·raw client를 번들한 페이지를 사용합니다. 구 `private, max-age=3600, immutable` 응답의 캐시 적중을 확인한 뒤, 멤버십 철회·계정 전환 후 새 파일 요청의 404와 허용 사용자 원본 바이트를 검사합니다. 새 `no-store, private` 응답이 이후 기본 캐시 요청에도 재사용되지 않는지 확인합니다. 요청 interception·캐시 삭제·cache-busting query를 사용하지 않습니다. PDF 요청은 `Accept: application/pdf, application/json`으로 공통 오류를 받을 수 있으며 성공 응답의 PDF 검사는 유지합니다.
+
+기본 모드는 합성 API이며 React 전체 화면·배포 인수를 대신하지 않습니다. BE의 `ProtectedFileCacheHttpTest`에서 `FILE_CACHE_FE_ROOT`를 이 checkout으로 지정하면 같은 suite를 실제 Spring 로그인·인가·JPA·격리 저장소에 연결합니다. 이 모드의 loopback proxy는 캐시를 채우는 단계에서만 구 캐시 헤더를 재현합니다. 설치된 Chrome을 쓰려면 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`에 실행 파일 경로를 지정할 수 있습니다. 일반 테스트 산출물은 `qa-artifacts/file-cache/`에 남으며 합성/실제 Spring 모드를 구분합니다. 이미 전달된 Blob·다운로드 파일의 회수는 검증 범위 밖입니다.
 
 ## 정적 배포 준비
 
