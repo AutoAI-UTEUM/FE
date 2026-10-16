@@ -20,4 +20,6 @@ Additional content source: `[울산대학교] 우수작품관_김종훈.pdf`, pa
 
 ## Preview
 
-Run the existing Vite development server and open `/intro`. The same URL can be opened from a phone on the same network using the server computer's LAN IP and port. Production availability requires the normal FE deployment and SPA route fallback.
+Run the existing Vite development server and open `/intro`. The same URL can be opened from a phone on the same network using the server computer's LAN IP and port.
+
+`npm run build` also generates `dist/intro/index.html` from the built SPA entry. The deployed URL is `/intro/` (Nginx redirects `/intro` to this directory), so direct visits and reloads work with the existing restricted SPA allowlist. Unknown paths still return 404. Deployment smoke tests verify the introduction entry and its three images.
