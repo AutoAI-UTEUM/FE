@@ -113,6 +113,12 @@ jobs:
             if printf '%s' "$live_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY"; then
               curl --fail --silent --show-error \
                 "https://dev.uteum.com${EXPECTED_ENTRY}" > /dev/null
+              intro_html="$(curl --fail --silent --show-error "https://dev.uteum.com/intro/")"
+              printf '%s' "$intro_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY"
+              for image in learning quiz feedback; do
+                curl --fail --silent --show-error \
+                  "https://dev.uteum.com/intro/${image}.webp" > /dev/null
+              done
               echo "FE deployed with expected entry: $EXPECTED_ENTRY"
               exit 0
             fi
