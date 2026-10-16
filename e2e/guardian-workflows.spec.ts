@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { guardianDetail, guardianEntry, guardianPendingUser, guardianStatus, guardianView } from '../src/test/guardianFixtures'
+import { GUARDIAN_TEST_NOW, guardianDetail, guardianEntry, guardianPendingUser, guardianStatus, guardianView } from '../src/test/guardianFixtures'
+import type { GuardianDetail } from '../src/features/guardian/guardianContract'
 const ready = process.env.QA_GUARDIAN_WORKFLOW_READY === 'synthetic-ready'
 const id = guardianStatus.requestId
 const token = 'S'.repeat(43)
@@ -8,6 +9,7 @@ const failure = (code: string) => ({ success: false, error: { code, message: 'sy
 const consentView = { ...guardianView, status: { ...guardianStatus, state: 'AWAITING_CONSENT' as const }, noticeUrl: 'https://notice.example.invalid/synthetic', forms: { consent_email: '합성 서비스 고지·선택 AI·거부 영향·회신 창구', reply_form: '<img src=x onerror=alert(1)> 합성 회신 양식' } }
 const violations = new WeakMap<Page, string[]>()
 test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date(GUARDIAN_TEST_NOW))
   const errors: string[] = []; violations.set(page, errors)
   page.on('pageerror', (e) => errors.push(e.message))
   await page.route('**/*', (route) => {
@@ -100,3 +102,157 @@ test('pending email account still cannot reach reviewer or business routes', asy
   await page.goto('/admin/guardian-requests'); await expect(page).toHaveURL('/verify-email')
   await page.goto('/classrooms'); await expect(page).toHaveURL('/verify-email')
 })
+
+const manualDetail: GuardianDetail = { ...guardianDetail, status: { ...guardianStatus, state: 'AWAITING_CONSENT', webDeclaredAt: null },
+  declaredScopes: [], relationship: null, forms: { consent_email: '합성 현재 고지·선택 범위·확인 기준', approved: '합성 승인 미리 보기' } }
+async function reviewer(page: Page, read: () => GuardianDetail) {
+  await account(page, true)
+  await page.route('**/api/admin/guardian-requests?*', (route) => route.fulfill({ json: envelope({ content: [read().status], page: 0, size: 20, totalElements: 1, totalPages: 1 }) }))
+  await page.route(`**/api/admin/guardian-requests/${id}`, (route) => route.fulfill({ json: envelope(read()) }))
+}
+async function openReview(page: Page) {
+  await page.goto('/admin/guardian-requests')
+  await page.getByRole('button', { name: '담당자 권한·목록 확인' }).click()
+  await page.getByRole('button', { name: `상세 ${id}` }).click()
+  await expect(page.getByRole('region', { name: '담당자 상세' })).toBeVisible()
+}
+async function chooseReply(page: Page, ai = false) {
+  await page.getByLabel(/운영 고지·관계 확인/).check()
+  await page.getByRole('combobox', { name: '관계', exact: true }).selectOption('PARENT')
+  await page.getByLabel('확인 범위 SERVICE').check()
+  if (ai) await page.getByLabel('확인 범위 EXTERNAL_AI').check()
+  await page.getByRole('textbox', { name: '제한된 증거 참조', exact: true }).fill('synthetic.case-001')
+  await page.getByLabel('실제 회신 수신 시각 (UTC ISO)').fill('2026-10-08T01:00:00Z')
+  for (const label of [/회신 신청번호·차수/, /실제 회신·통화에/, /법정대리인 선언을/, /고지 버전·범위와/, /현재 확인 수단과/]) await page.getByLabel(label).check()
+}
+test('manual current AI reply starts unchecked, double click/retry preserves body, approval follows explicit server flags', async ({ page }, info) => {
+  test.skip(!ready, 'synthetic-ready only')
+  let detail = manualDetail
+  const bodies: string[] = []
+  await reviewer(page, () => detail)
+  await page.route(`**/api/admin/guardian-requests/${id}/confirmation`, (route) => {
+    bodies.push(route.request().postData()!)
+    expect(route.request().postDataJSON()).toMatchObject({ scopes: ['SERVICE', 'EXTERNAL_AI'], relationship: 'PARENT', method: 'PHONE', generation: 2, revision: 3 })
+    detail = { ...detail, declaredScopes: ['SERVICE', 'EXTERNAL_AI'], relationship: 'PARENT', confirmationMethod: 'PHONE', evidenceReference: 'synthetic.case-001',
+      status: { ...detail.status, revision: 4, state: 'REVIEW_PENDING', explicitResponseAt: '2026-10-08T01:00:00Z' } }
+    return bodies.length === 1 ? route.abort('failed') : route.fulfill({ json: envelope(detail.status) })
+  })
+  await page.route(`**/api/admin/guardian-requests/${id}/decision`, (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ generation: 2, revision: 4, decision: 'APPROVE' })
+    detail = { ...detail, status: { ...detail.status, revision: 5, state: 'APPROVED', serviceApproved: true, externalAiApproved: true, approvedUntil: '2026-10-09T01:00:00Z' } }
+    return route.fulfill({ json: envelope(detail.status) })
+  })
+  await openReview(page)
+  await expect(page.getByLabel('확인 범위 EXTERNAL_AI')).not.toBeChecked()
+  await expect(page.getByLabel('확인 범위 SERVICE')).not.toBeChecked()
+  await chooseReply(page, true); await page.getByRole('button', { name: '명시적 회신 등록 확인' }).click()
+  await page.getByRole('button', { name: '확인 후 전송' }).evaluate((button: HTMLButtonElement) => { button.click(); button.click() })
+  await expect(page.getByRole('button', { name: '같은 요청 다시 확인' })).toBeVisible()
+  expect(bodies).toHaveLength(1)
+  await expect(page.getByRole('button', { name: '현재 담당자 상세 다시 확인' })).toBeDisabled()
+  await expect(page.getByLabel('확인 범위 EXTERNAL_AI')).toBeDisabled()
+  await page.getByRole('button', { name: '같은 요청 다시 확인' }).click()
+  await expect(page.getByText(/수정번호 4/).first()).toBeVisible()
+  expect(bodies[0]).toBe(bodies[1])
+  await expect(page.getByLabel(/운영 고지·관계 확인/)).not.toBeChecked()
+  await expect(page.getByText('서비스 승인: 유효한 승인 없음 · 외부 AI 승인: 유효한 승인 없음')).toBeVisible()
+  await page.getByLabel(/운영 고지·관계 확인/).check()
+  for (const label of [/승인된 운영 기준에/, /회신 연락처와/, /현재 차수의 제한된/, /현재 고지와 승인할/]) await page.getByLabel(label).check()
+  await page.getByRole('button', { name: '최종 승인 확인' }).click(); await page.getByRole('button', { name: '확인 후 전송' }).click()
+  await expect(page.getByText('서비스 승인: 승인됨 · 외부 AI 승인: 승인됨')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath('manual-ai-approved.png'), fullPage: true })
+})
+test('web declaration cannot gain AI or lose AI/relationship even when policy options are available', async ({ page }) => {
+  test.skip(!ready, 'synthetic-ready only')
+  let detail: GuardianDetail = { ...manualDetail, status: guardianStatus, declaredScopes: ['SERVICE'], relationship: 'PARENT' }
+  await reviewer(page, () => detail); await openReview(page)
+  await expect(page.getByText(/선택 AI 범위: EXTERNAL_AI/)).toBeVisible()
+  await expect(page.getByLabel('확인 범위 EXTERNAL_AI')).toHaveCount(0)
+  detail = { ...detail, declaredScopes: ['SERVICE', 'EXTERNAL_AI'] }
+  await page.getByRole('button', { name: '현재 담당자 상세 다시 확인' }).click()
+  await expect(page.getByLabel('확인 범위 EXTERNAL_AI')).not.toBeChecked()
+  await chooseReply(page)
+  await expect(page.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeDisabled()
+  await page.getByLabel('확인 범위 EXTERNAL_AI').check()
+  await expect(page.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeEnabled()
+  await page.getByRole('combobox', { name: '관계', exact: true }).selectOption('MINOR_GUARDIAN')
+  await expect(page.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeDisabled()
+  await page.getByRole('combobox', { name: '관계', exact: true }).selectOption('PARENT'); await page.getByLabel('확인 범위 EXTERNAL_AI').uncheck()
+  await expect(page.getByRole('button', { name: '명시적 회신 등록 확인' })).toBeDisabled()
+})
+test('same coordinates requery clears choices/evidence and normal stale detail still permits only current-generation revoke', async ({ page }, info) => {
+  test.skip(!ready, 'synthetic-ready only')
+  let detail = manualDetail
+  let revoked = 0
+  await reviewer(page, () => detail)
+  await page.route(`**/api/admin/guardian-requests/${id}/revoke`, (route) => {
+    revoked++; expect(route.request().postDataJSON()).toMatchObject({ generation: 2, revision: 3, reason: 'OPERATOR_REVOKED' })
+    detail = { ...detail, status: { ...detail.status, state: 'REVOKED', revision: 4, reason: 'OPERATOR_REVOKED' } }
+    return route.fulfill({ json: envelope(detail.status) })
+  })
+  await openReview(page); await chooseReply(page, true)
+  detail = { ...detail, optionalAiScope: null }
+  await page.getByRole('button', { name: '현재 담당자 상세 다시 확인' }).click()
+  await expect(page.getByText(/선택 AI 범위: 없음/)).toBeVisible()
+  await expect(page.getByLabel('확인 범위 EXTERNAL_AI')).toHaveCount(0)
+  await expect(page.getByLabel('확인 범위 SERVICE')).not.toBeChecked()
+  await expect(page.getByLabel(/운영 고지·관계 확인/)).not.toBeChecked()
+  await expect(page.getByRole('textbox', { name: '제한된 증거 참조', exact: true })).toBeEmpty()
+  await expect(page.getByLabel('실제 회신 수신 시각 (UTC ISO)')).toBeEmpty()
+  await expect(page.getByRole('combobox', { name: '관계', exact: true })).toHaveValue('')
+  detail = { ...detail, status: { ...detail.status, currentNotice: false }, requiredScopes: [], optionalAiScope: null, replyChannel: null, forms: {} }
+  await page.getByRole('button', { name: '현재 담당자 상세 다시 확인' }).click()
+  await expect(page.getByText(/최신 고지·확인 창구가 부족/)).toBeVisible()
+  await page.getByLabel(/운영 고지·관계 확인/).check()
+  for (const name of ['명시적 회신 등록 확인', '최종 승인 확인', '반려 확인', '보완 요청 확인']) await expect(page.getByRole('button', { name })).toBeDisabled()
+  await page.getByRole('combobox', { name: '사유', exact: true }).selectOption('OPERATOR_REVOKED')
+  await page.getByRole('button', { name: '담당자 철회 확인' }).click(); await page.getByRole('button', { name: '전송 전 취소' }).click(); expect(revoked).toBe(0)
+  await page.getByRole('button', { name: '담당자 철회 확인' }).click(); await page.getByRole('button', { name: '확인 후 전송' }).click()
+  await expect(page.getByText(/상태 REVOKED/).last()).toBeVisible(); expect(revoked).toBe(1)
+  await page.screenshot({ path: info.outputPath('stale-revoked.png'), fullPage: true })
+})
+test('back/close abandons a pending confirmation and its late reply cannot resurrect the old detail', async ({ page }) => {
+  test.skip(!ready, 'synthetic-ready only')
+  let release!: () => void
+  let posts = 0
+  await reviewer(page, () => manualDetail)
+  await page.route(`**/api/admin/guardian-requests/${id}/confirmation`, async (route) => {
+    posts++; await new Promise<void>((resolve) => { release = resolve })
+    await route.fulfill({ json: envelope({ ...guardianStatus, state: 'REVIEW_PENDING', revision: 4 }) }).catch(() => {})
+  })
+  await page.goto('/verify-email'); await openReview(page); await chooseReply(page, true)
+  await page.getByRole('button', { name: '명시적 회신 등록 확인' }).click(); await page.getByRole('button', { name: '확인 후 전송' }).click()
+  await expect.poll(() => posts).toBe(1)
+  await page.goBack(); await expect(page).toHaveURL('/verify-email'); release()
+  await page.goForward(); await expect(page).toHaveURL('/admin/guardian-requests')
+  await expect(page.getByRole('button', { name: '담당자 권한·목록 확인' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '담당자 상세' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: '최종 확인' })).toHaveCount(0)
+})
+test('elapsed or closed reviewer detail cannot prepare a mutation', async ({ page }) => {
+  test.skip(!ready, 'synthetic-ready only')
+  let detail: GuardianDetail = { ...manualDetail, status: { ...manualDetail.status, requestExpiresAt: GUARDIAN_TEST_NOW } }
+  await reviewer(page, () => detail); await openReview(page)
+  await page.getByLabel(/운영 고지·관계 확인/).check()
+  for (const name of ['명시적 회신 등록 확인', '최종 승인 확인', '반려 확인', '보완 요청 확인', '담당자 철회 확인']) await expect(page.getByRole('button', { name })).toBeDisabled()
+  await expect(page.getByText(/현재 차수 철회는 별도 확인 후 진행/)).toHaveCount(0)
+  detail = { ...manualDetail, status: { ...manualDetail.status, state: 'EXPIRED' } }
+  await page.getByRole('button', { name: '현재 담당자 상세 다시 확인' }).click()
+  await expect(page.getByText(/상태 EXPIRED/).last()).toBeVisible()
+  await expect(page.getByRole('button', { name: '담당자 철회 확인' })).toBeDisabled()
+})
+for (const [status, code] of [[403, 'ACCESS_DENIED'], [409, 'GUARDIAN_TEAM_CONFIGURATION_CHANGED'], [503, 'GUARDIAN_TEAM_UNAVAILABLE']] as const) {
+  test(`manual confirmation ${status} clears policy choices/evidence and never retries automatically`, async ({ page }) => {
+    test.skip(!ready, 'synthetic-ready only')
+    let posts = 0
+    await reviewer(page, () => manualDetail)
+    await page.route(`**/api/admin/guardian-requests/${id}/confirmation`, (route) => { posts++; return route.fulfill({ status, json: failure(code) }) })
+    await openReview(page); await chooseReply(page, true)
+    await page.getByRole('button', { name: '명시적 회신 등록 확인' }).click(); await page.getByRole('button', { name: '확인 후 전송' }).click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page.getByRole('region', { name: '담당자 상세' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '같은 요청 다시 확인' })).toHaveCount(0)
+    expect(posts).toBe(1)
+  })
+}

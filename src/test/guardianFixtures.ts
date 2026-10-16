@@ -1,5 +1,7 @@
 import type { GuardianDetail, GuardianEntry, GuardianStatus, GuardianView } from '../features/guardian/guardianContract'
 
+// Keep synthetic response/expiry scenarios independent of the wall clock.
+export const GUARDIAN_TEST_NOW = '2026-10-08T02:00:00Z'
 export const guardianStatus: GuardianStatus = {
   requestId: '00000000-0000-4000-8000-000000000001', generation: 2, revision: 3,
   state: 'DECLARED', noticeVersion: 'synthetic-v1', noticeDigest: 'a'.repeat(64),
@@ -13,6 +15,7 @@ export const guardianEntry: GuardianEntry = { requirement: 'REQUIRED', teamRevie
   canStartRequest: false, replyChannel: 'EMAIL_REPLY', request: guardianView }
 export const guardianDetail: GuardianDetail = { status: guardianStatus, userId: 900001, guardianName: null,
   guardianContact: null, contactOrigin: 'NONE', generationStartedAt: '2026-10-07T01:00:00Z', declaredScopes: [],
+  requiredScopes: ['SERVICE'], optionalAiScope: 'EXTERNAL_AI',
   replyChannel: 'PHONE_CALLBACK', relationship: null, confirmationMethod: null, evidenceReference: null, events: [], forms: {} }
 export const guardianPendingUser = { id: 900001, email: 'synthetic@example.invalid', name: '합성 계정', role: 'LEARNER',
   emailVerification: 'PENDING' as const, emailVerificationRequired: true }
