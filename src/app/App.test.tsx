@@ -70,6 +70,14 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
+  it('opens the festival introduction without a login and links to the service', async () => {
+    renderRoute('/intro', null)
+
+    expect(await screen.findByRole('heading', { level: 1, name: '으뜸 UTEUM' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '으뜸 사용하기' })).toHaveAttribute('href', '/classrooms')
+    expect(screen.queryByRole('textbox', { name: '이메일' })).not.toBeInTheDocument()
+  })
+
   it('uses four bottom navigation slots with More last in tablet portrait', async () => {
     vi.spyOn(responsive, 'useResponsiveViewport').mockReturnValue({
       isMobileWeb: true,
