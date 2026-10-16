@@ -108,7 +108,7 @@ export function createClassroomResourcesRepository(
       }
       const response = await rawRequest(
         `/api/resources/${encodeURIComponent(resourceId)}/file`,
-        { signal },
+        { cache: 'no-store', signal },
       )
       return response.blob()
     },
