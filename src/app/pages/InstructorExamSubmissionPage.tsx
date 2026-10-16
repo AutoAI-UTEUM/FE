@@ -39,6 +39,7 @@ function InstructorExamSubmissionScope({ classroomId, examId, submissionId }: { 
   const [adjustmentError, setAdjustmentError] = useState<string | null>(null)
   const [adjustingQuestionId, setAdjustingQuestionId] = useState<string | null>(null)
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({})
+  const [reasonDrafts, setReasonDrafts] = useState<Record<string, string>>({})
   const [loadAttempt, setLoadAttempt] = useState(0)
   const isMountedRef = useRef(true)
   const adjustmentInFlightRef = useRef(false)
@@ -72,6 +73,7 @@ function InstructorExamSubmissionScope({ classroomId, examId, submissionId }: { 
         summary,
       })
       setScoreDrafts(Object.fromEntries(submission.items.map((item) => [item.questionId, item.score === undefined ? '' : String(item.score)])))
+      setReasonDrafts(Object.fromEntries(submission.items.map((item) => [item.questionId, item.manualScoreReason ?? ''])))
       setError(null)
     }).catch((requestError) => {
       if (isCurrent && !controller.signal.aborted) setError(getRequestErrorMessage(requestError))
@@ -96,16 +98,25 @@ function InstructorExamSubmissionScope({ classroomId, examId, submissionId }: { 
       setAdjustmentError(`점수는 0점부터 ${formatScore(maxScore)}점까지 소수 둘째 자리 이내로 입력하세요.`)
       return
     }
+    const reason = reasonDrafts[questionId] ?? ''
+    if (reason.length > 500) {
+      setAdjustmentError('점수 변경 사유는 500자 이내로 입력하세요.')
+      return
+    }
     const controller = new AbortController()
     adjustmentInFlightRef.current = true
     adjustmentControllerRef.current = controller
     setAdjustingQuestionId(questionId)
     setAdjustmentError(null)
     try {
-      const submission = await examsRepository.adjustScore(examId, submissionId, questionId, score, controller.signal)
+      const submission = await examsRepository.adjustScore(examId, submissionId, questionId, { score, reason }, controller.signal)
       if (!isMountedRef.current || controller.signal.aborted || submission.id !== submissionId) return
       setData((current) => current ? { ...current, submission } : current)
-      setScoreDrafts(Object.fromEntries(submission.items.map((item) => [item.questionId, item.score === undefined ? '' : String(item.score)])))
+      const adjustedItem = submission.items.find((item) => item.questionId === questionId)
+      if (adjustedItem) {
+        setScoreDrafts((current) => ({ ...current, [questionId]: adjustedItem.score === undefined ? '' : String(adjustedItem.score) }))
+        setReasonDrafts((current) => ({ ...current, [questionId]: adjustedItem.manualScoreReason ?? '' }))
+      }
       show('문항 점수를 저장했습니다.', 'success')
     } catch (requestError) {
       if (isMountedRef.current && !controller.signal.aborted) setAdjustmentError(getRequestErrorMessage(requestError))
@@ -182,7 +193,7 @@ function InstructorExamSubmissionScope({ classroomId, examId, submissionId }: { 
           const question = data.exam.questions.find((candidate) => candidate.id === item.questionId)
           const correctAnswer = formatCorrectAnswer(question)
           return (
-            <article className="rounded-lg border border-stone-200 bg-white p-4" key={item.questionId}>
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4" key={item.questionId}>
               <div className="flex flex-wrap items-center gap-2">
                 <strong className="type-body text-stone-950">{index + 1}번</strong>
                 {item.verdict ? <Badge size="compact" tone={verdictTone(item.verdict)}>{verdictLabel(item.verdict)}</Badge> : null}
@@ -195,7 +206,17 @@ function InstructorExamSubmissionScope({ classroomId, examId, submissionId }: { 
               {correctAnswer ? <AnswerBox correct label="정답" value={correctAnswer} /> : null}
               {item.feedback ? <div className="mt-3 flex gap-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2.5 type-caption leading-5 text-stone-700"><Sparkles aria-hidden="true" className="mt-0.5 shrink-0 text-brand-600" size={13} /><p>{item.feedback}</p></div> : null}
               {question?.explanation ? <div className="mt-3 border-t border-stone-100 pt-3"><p className="type-caption font-semibold text-stone-500">해설</p><p className="mt-1 whitespace-pre-wrap type-caption leading-5 text-stone-600">{question.explanation}</p></div> : null}
-              {data.submission.status === 'GRADED' ? <div className="mt-4 flex items-end gap-2 border-t border-stone-100 pt-3"><label className="min-w-0 flex-1 type-caption font-semibold text-stone-600">점수<input aria-label={`${index + 1}번 점수`} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-control text-stone-900 outline-none focus:border-brand-600" max={item.maxScore} min={0} onChange={(event) => { setScoreDrafts((current) => ({ ...current, [item.questionId]: event.target.value })); setAdjustmentError(null) }} step="0.01" type="number" value={scoreDrafts[item.questionId] ?? ''} /></label><Button disabled={adjustingQuestionId !== null} onClick={() => void adjustScore(item.questionId, item.maxScore)} size="sm" variant="secondary">{adjustingQuestionId === item.questionId ? '저장 중' : '점수 저장'}</Button></div> : null}
+              {item.manualScoreReason !== undefined ? <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 print:hidden"><p className="type-caption font-semibold text-stone-500">저장된 점수 변경 사유</p><p className="mt-1 whitespace-pre-wrap break-words type-caption leading-5 text-stone-700">{item.manualScoreReason}</p></div> : null}
+              {data.submission.status === 'GRADED' ? <div className="mt-4 border-t border-stone-100 pt-3 print:hidden">
+                <div className="flex items-end gap-2">
+                  <label className="min-w-0 flex-1 type-caption font-semibold text-stone-600">점수<input aria-label={`${index + 1}번 점수`} className="mt-1 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 type-control text-stone-900 outline-none focus:border-brand-600" disabled={adjustingQuestionId !== null} max={item.maxScore} min={0} onChange={(event) => { setScoreDrafts((current) => ({ ...current, [item.questionId]: event.target.value })); setAdjustmentError(null) }} step="0.01" type="number" value={scoreDrafts[item.questionId] ?? ''} /></label>
+                  <Button disabled={adjustingQuestionId !== null} onClick={() => void adjustScore(item.questionId, item.maxScore)} size="sm" variant="secondary">{adjustingQuestionId === item.questionId ? '저장 중' : '점수 저장'}</Button>
+                </div>
+                <label className="mt-3 block type-caption font-semibold text-stone-600">점수 변경 사유 (선택)
+                  <textarea aria-describedby={`score-reason-help-${index}`} aria-label={`${index + 1}번 점수 변경 사유 (선택)`} className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 type-control font-normal text-stone-900 outline-none focus:border-brand-600" disabled={adjustingQuestionId !== null} maxLength={500} onChange={(event) => { setReasonDrafts((current) => ({ ...current, [item.questionId]: event.target.value })); setAdjustmentError(null) }} rows={3} value={reasonDrafts[item.questionId] ?? ''} />
+                </label>
+                <p className="mt-1 type-caption text-stone-500" id={`score-reason-help-${index}`}>소유 강사에게만 표시됩니다. 비우고 저장하면 기존 사유가 삭제됩니다. ({(reasonDrafts[item.questionId] ?? '').length}/500자)</p>
+              </div> : null}
             </article>
           )
         })}

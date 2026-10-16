@@ -133,10 +133,16 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Local synthetic navigation and popup acceptance
         run: npx playwright test --config playwright.navigation.config.ts
+      - name: Synthetic instructor score reason and submission isolation acceptance
+        env:
+          QA_ENV: mock
+        run: npx playwright test e2e/manual-score-reason.spec.ts e2e/instructor-exam-submission-isolation.spec.ts --project chromium-1440 --project phone-390 --workers 2
       - name: Upload navigation screenshots and interaction evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: navigation-browser-regressions
-          path: qa-artifacts/navigation/
+          path: |
+            qa-artifacts/navigation/
+            qa-artifacts/mock/
           retention-days: 7
