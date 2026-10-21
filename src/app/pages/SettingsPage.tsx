@@ -7,7 +7,6 @@ import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { cx } from '../../shared/lib/cx'
 import {
   Button,
-  Card,
   PageContainer,
   PageHeader,
   Select,
@@ -417,7 +416,7 @@ function SettingsContent() {
           ) : null}
 
           {section === 'account' ? (
-            <section className="bg-white">
+            <section>
               <h2 className="type-section-title font-bold text-rose-900">회원 탈퇴</h2>
               <p className="mt-1 type-body text-stone-500">
                 탈퇴하면 자료와 학습 세션이 삭제되고 복구할 수 없습니다. 계속하려면
@@ -470,7 +469,7 @@ function SettingsContent() {
           ) : null}
 
           {section === 'notification' || section === 'assistant' ? (
-            <Card as="section" className="border-0 px-0">
+            <section>
               {currentPreferencesError ? (
                 <div
                   className="mb-2 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2"
@@ -538,7 +537,7 @@ function SettingsContent() {
                   </label>
                 </div>
               ) : null}
-            </Card>
+            </section>
           ) : null}
 
           {section === 'profile' && !isMobileWeb ? (
@@ -591,7 +590,7 @@ function AppearanceSection({
   onChange: (mode: ThemeMode) => void
 }) {
   return (
-    <Card as="section" className="border-0 p-0">
+    <section>
       <h2 className="type-section-title font-bold text-stone-950">화면 모드</h2>
       <div className="mt-5 grid gap-2 sm:grid-cols-3">
         {THEME_OPTIONS.map((option) => (
@@ -613,7 +612,7 @@ function AppearanceSection({
           </button>
         ))}
       </div>
-    </Card>
+    </section>
   )
 }
 
@@ -698,7 +697,7 @@ function ProfileSection({
   }
 
   return (
-    <Card as="section" className="border-0 p-0">
+    <section>
       <h2 className="type-section-title font-bold text-stone-950">프로필</h2>
 
       <div className="mt-5 flex items-center gap-4.5">
@@ -736,7 +735,7 @@ function ProfileSection({
         />
         <TextInput disabled id="settings-role" label="역할" readOnly value={role} />
       </div>
-    </Card>
+    </section>
   )
 }
 
