@@ -19,6 +19,7 @@ export interface Classroom {
   instructorName: string
   inviteCode?: string
   learnerCount: number
+  lastStudied?: { sessionId: string; materialId: string; materialTitle: string; pageNumber: number; updatedAt: string }
   materialCount?: number
   name: string
   pendingRequestCount: number
@@ -171,6 +172,7 @@ interface ClassroomDto {
   instructorName: string
   inviteCode?: string
   learnerCount?: number
+  lastStudied?: { sessionId: number | string; materialId: number | string; materialTitle: string; pageNumber: number; updatedAt: string } | null
   materialCount?: number
   name: string
   pendingRequestCount?: number
@@ -476,7 +478,7 @@ export function createClassroomsRepository(request: AuthenticatedRequest) {
 }
 
 function mapClassroom(value: ClassroomDto): Classroom {
-  return { ...value, id: String(value.classroomId), learnerCount: value.learnerCount ?? 0, materialCount: value.materialCount ?? 0, pendingRequestCount: value.pendingRequestCount ?? 0, progressRate: value.averageProgressRate ?? value.progressRate ?? 0 }
+  return { ...value, lastStudied: value.lastStudied ? { ...value.lastStudied, materialId: String(value.lastStudied.materialId), sessionId: String(value.lastStudied.sessionId) } : undefined, id: String(value.classroomId), learnerCount: value.learnerCount ?? 0, materialCount: value.materialCount ?? 0, pendingRequestCount: value.pendingRequestCount ?? 0, progressRate: value.averageProgressRate ?? value.progressRate ?? 0 }
 }
 
 function mapWeek(value: WeekDto): ClassroomWeek {

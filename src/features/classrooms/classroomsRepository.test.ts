@@ -4,6 +4,12 @@ import type { AuthenticatedRequest } from '../auth'
 import { createClassroomsRepository } from './classroomsRepository'
 
 describe('classrooms repository', () => {
+  it('maps the existing learner lastStudied contract without another session-list request', async () => {
+    const request = vi.fn().mockResolvedValue({ data: { ...classroomDto, lastStudied: { sessionId: 100, materialId: 10, materialTitle: '기초', pageNumber: 3, updatedAt: '2026-11-01T00:00:00Z' } } })
+    const classroom = await createClassroomsRepository(request as AuthenticatedRequest).get('12')
+    expect(classroom.lastStudied).toEqual({ sessionId: '100', materialId: '10', materialTitle: '기초', pageNumber: 3, updatedAt: '2026-11-01T00:00:00Z' })
+    expect(request).toHaveBeenCalledOnce()
+  })
   it('shares simultaneous identical classroom list requests across repository instances', async () => {
     let resolveRequest: ((value: { data: { items: (typeof classroomDto)[] } }) => void) | undefined
     const request = vi.fn().mockImplementation(() => new Promise((resolve) => {

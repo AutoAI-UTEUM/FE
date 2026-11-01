@@ -1,5 +1,5 @@
 import { Bell, BookOpen, ClipboardList, LoaderCircle, MoreHorizontal, RefreshCw, Upload } from 'lucide-react'
-import { useState, type DragEvent } from 'react'
+import { useState, type DragEvent, type ReactNode } from 'react'
 
 import { formatClassroomWeekPeriod, type ClassroomWeek } from '../../../features/classrooms'
 import { useResponsiveViewport } from '../../../shared/responsive'
@@ -55,6 +55,7 @@ export function ClassroomContentPanel({
   draggingWeek,
   errors,
   filter,
+  footer,
   globalItems,
   isUploading,
   items,
@@ -75,6 +76,7 @@ export function ClassroomContentPanel({
   draggingWeek: number | null
   errors: Partial<Record<ResourceKey, string>>
   filter: ClassroomContentFilter
+  footer?: ReactNode
   globalItems: ClassroomContentItem[]
   isUploading: boolean
   items: ClassroomContentItem[]
@@ -95,14 +97,14 @@ export function ClassroomContentPanel({
   const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null)
 
   function dragOver(event: DragEvent<HTMLElement>) {
-    if (!canManage || selectedWeekNumber === null) return
+    if (!canManage || isUploading) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
     setDragging(selectedWeekNumber)
   }
 
   function drop(event: DragEvent<HTMLElement>) {
-    if (!canManage || selectedWeekNumber === null) return
+    if (!canManage || isUploading) return
     event.preventDefault()
     setDragging(null)
     const file = event.dataTransfer.files[0]
@@ -114,6 +116,7 @@ export function ClassroomContentPanel({
       <ContentFilterButtons filter={filter} onFilter={onFilter} />
       {canManage ? <AddItemButtons disabled={isUploading} onAdd={onAdd} /> : null}
     </div>
+    {canManage ? <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-3 type-caption text-stone-600">PDF 파일을 이 영역으로 끌어 놓거나 수업 생성을 선택하세요. 업로드 전에 주차와 제목을 확인할 수 있습니다.</p> : null}
 
     {Object.entries(errors).map(([key, message]) => message ? <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3" key={key}><p className="type-control text-rose-800">{resourceLabel(key as ResourceKey)}을 불러오지 못했습니다. {message}</p><Button onClick={() => onRetry(key as ResourceKey)} size="sm" variant="secondary"><RefreshCw size={13} />재시도</Button></div> : null)}
 
@@ -129,6 +132,7 @@ export function ClassroomContentPanel({
         {items.length > 0 ? items.map((item) => <ContentRow canManage={canManage} isMenuOpen={openMenuItemId === item.id} item={item} key={item.id} onItem={onItem} onMenuToggle={() => setOpenMenuItemId((current) => current === item.id ? null : item.id)} onRemoveMaterial={onRemoveMaterial} onRenameMaterial={onRenameMaterial} openingMaterialId={openingMaterialId} />) : processingMaterialTitle || globalItems.length > 0 ? null : <EmptyState description="추가된 항목이 없습니다." title="항목 없음" />}
       </section>
     </div>
+    {footer}
   </div>
 }
 
