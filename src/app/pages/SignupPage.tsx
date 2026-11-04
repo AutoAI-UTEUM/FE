@@ -26,12 +26,18 @@ import {
   type SignupRole,
 } from '../../features/auth'
 import { ApiClientError } from '../../shared/api'
+import { SignupContractFields } from '../../features/auth/SignupContractFields'
+import { BirthDateField } from '../../features/auth/BirthDateField'
+import { useSignupContract } from '../../features/auth/useSignupContract'
+import { isPolicyConsentRequired, isSignupPolicyNotReady, SIGNUP_POLICY_NOT_READY_MESSAGE } from '../../features/auth/signupPolicyError'
+import { validateDateOfBirth, requiresEmailVerification } from '../../features/auth/launchAuthContract'
 import { Button } from '../../shared/ui'
 import { routes } from '../routes'
 import { usePageTitle } from '../../shared/lib/usePageTitle'
 
 const initialValues: SignupFormValues = {
   affiliation: '',
+  dateOfBirth: '',
   email: '',
   name: '',
   password: '',
@@ -78,6 +84,7 @@ export function SignupPage() {
     pendingGoogleIdToken,
     signup,
   } = useAuth()
+  const contract = useSignupContract()
   const navigate = useNavigate()
   const [step, setStep] = useState<SignupStep>('role')
   const [values, setValues] = useState<SignupFormValues>(initialValues)
@@ -86,6 +93,8 @@ export function SignupPage() {
   const [errors, setErrors] = useState<SignupFormErrors>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [signupCompletedWithoutLogin, setSignupCompletedWithoutLogin] =
+    useState(false)
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [confirmPasswordError, setConfirmPasswordError] = useState<
@@ -97,7 +106,10 @@ export function SignupPage() {
   const [googleError, setGoogleError] = useState<string | null>(null)
   const [googleSignupStopped, setGoogleSignupStopped] = useState(false)
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
+  const googleAttemptRef = useRef(false)
+  const googleControllerRef = useRef<AbortController | null>(null)
   const emailAvailabilitySupportedRef = useRef(true)
+  const activeSignupAttemptRef = useRef<AbortController | null>(null)
 
   const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
     values.email.trim(),
@@ -150,9 +162,28 @@ export function SignupPage() {
     values.email,
   ])
 
+  useEffect(() => {
+    const discard = () => {
+      activeSignupAttemptRef.current?.abort()
+      activeSignupAttemptRef.current = null
+      googleControllerRef.current?.abort()
+      googleControllerRef.current = null
+      googleAttemptRef.current = false
+      setIsSubmitting(false)
+      setIsGoogleSubmitting(false)
+    }
+    window.addEventListener('pagehide', discard)
+    return () => { window.removeEventListener('pagehide', discard); discard() }
+  }, [])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (activeSignupAttemptRef.current) return
     const nextErrors = validateSignupForm(values)
+    if (!contract.complete) {
+      setServerError('현재 필수 정책을 조회하고 동의해 주세요.')
+      return
+    }
     const nextConfirmPasswordError = !confirmPassword
       ? '비밀번호를 한 번 더 입력하세요.'
       : confirmPassword !== values.password
@@ -171,33 +202,96 @@ export function SignupPage() {
       return
     }
 
+    const controller = new AbortController()
+    activeSignupAttemptRef.current = controller
     setIsSubmitting(true)
     setServerError(null)
     try {
-      await signup(values)
-      navigate(routes.classrooms, { replace: true })
+      const result = await signup({ ...values, ...(contract.enabled ? { consents: contract.consents } : {}) }, controller.signal)
+      if (activeSignupAttemptRef.current !== controller) return
+      if (result.status === 'authenticated') {
+        navigate(requiresEmailVerification(result.user ?? null) ? routes.verifyEmail : routes.classrooms, { replace: true })
+      } else if (result.status === 'account-created') {
+        setValues((current) => ({ ...current, password: '' }))
+        setConfirmPassword('')
+        setSignupCompletedWithoutLogin(true)
+      }
     } catch (error) {
+      if (
+        controller.signal.aborted ||
+        activeSignupAttemptRef.current !== controller
+      ) {
+        return
+      }
+      if (isSignupPolicyNotReady(error)) {
+        contract.markPolicyNotReady()
+        setServerError(SIGNUP_POLICY_NOT_READY_MESSAGE)
+        return
+      }
+      if (isPolicyConsentRequired(error)) {
+        void contract.reload()
+        setServerError('정책이 변경되었습니다. 최신 정책을 확인하고 다시 동의해 주세요.')
+        return
+      }
+      if (error instanceof ApiClientError && ['MALFORMED_REQUEST', 'VALIDATION_FAILED'].includes(error.code) && error.details.length === 0) {
+        setServerError('가입 정보와 생년월일의 날짜 형식을 확인해 주세요.')
+        return
+      }
       const formErrors = mapAuthErrorToFormErrors(error)
       if (formErrors) setErrors(formErrors as SignupFormErrors)
       else setServerError('회원가입 요청을 처리하지 못했습니다.')
     } finally {
-      setIsSubmitting(false)
+      if (activeSignupAttemptRef.current === controller) {
+        activeSignupAttemptRef.current = null
+        setIsSubmitting(false)
+      }
+    }
+  }
+
+  function cancelSignupAttempt() {
+    const activeAttempt = activeSignupAttemptRef.current
+    activeAttempt?.abort()
+    if (activeAttempt) {
+      setValues((current) => ({ ...current, password: '' }))
+      setConfirmPassword('')
     }
   }
 
   async function handleGoogleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!pendingGoogleIdToken) return
+    if (!pendingGoogleIdToken || googleAttemptRef.current) return
+    if (contract.policyNotReady) return
+    const dateError = validateDateOfBirth(values.dateOfBirth)
+    setErrors({ dateOfBirth: dateError })
+    if (dateError) {
+      setGoogleError(null)
+      return
+    }
+    if (!contract.complete) {
+      setGoogleError('현재 필수 정책을 조회하고 동의해 주세요.')
+      return
+    }
+    googleAttemptRef.current = true
+    const controller = new AbortController()
+    googleControllerRef.current = controller
 
     setIsGoogleSubmitting(true)
     setGoogleError(null)
     try {
-      await loginWithGoogle({
+      const googleUser = await loginWithGoogle({
         idToken: pendingGoogleIdToken,
         role: googleRole,
-      })
-      navigate(routes.classrooms, { replace: true })
+        dateOfBirth: values.dateOfBirth,
+        ...(contract.enabled ? { consents: contract.consents } : {}),
+      }, controller.signal)
+      if (controller.signal.aborted || googleControllerRef.current !== controller) return
+      navigate(requiresEmailVerification(googleUser) ? routes.verifyEmail : routes.classrooms, { replace: true })
     } catch (error) {
+      if (controller.signal.aborted || googleControllerRef.current !== controller) return
+      if (error instanceof ApiClientError && error.code === 'SIGNUP_REQUIRED') {
+        setGoogleError('역할과 생년월일을 확인한 뒤 가입하기를 다시 눌러 주세요.')
+        return
+      }
       if (
         error instanceof ApiClientError &&
         error.status === 409 &&
@@ -220,13 +314,40 @@ export function SignupPage() {
         )
         return
       }
+      if (isSignupPolicyNotReady(error)) {
+        contract.markPolicyNotReady()
+        setGoogleError(SIGNUP_POLICY_NOT_READY_MESSAGE)
+        return
+      }
+      if (isPolicyConsentRequired(error)) {
+        void contract.reload()
+        setGoogleError('정책이 변경되었습니다. 최신 정책을 확인하고 다시 동의해 주세요.')
+        return
+      }
+      const formErrors = mapAuthErrorToFormErrors(error)
+      if (formErrors) {
+        setErrors(formErrors as SignupFormErrors)
+        setGoogleError('표시된 가입 정보를 확인해 주세요.')
+        return
+      }
+      if (error instanceof ApiClientError && ['MALFORMED_REQUEST', 'VALIDATION_FAILED'].includes(error.code)) {
+        setGoogleError('가입 정보와 생년월일의 날짜 형식을 확인해 주세요.')
+        return
+      }
       setGoogleError('Google 회원가입 요청을 처리하지 못했습니다.')
     } finally {
-      setIsGoogleSubmitting(false)
+      if (googleControllerRef.current === controller) {
+        googleControllerRef.current = null
+        googleAttemptRef.current = false
+        setIsGoogleSubmitting(false)
+      }
     }
   }
 
   function cancelGoogleSignup() {
+    googleControllerRef.current?.abort()
+    googleControllerRef.current = null
+    googleAttemptRef.current = false
     clearGoogleSignup()
     navigate(routes.login, { replace: true })
   }
@@ -243,6 +364,7 @@ export function SignupPage() {
       )
     }
     setServerError(null)
+    setGoogleError(null)
   }
 
   function updateConfirmPassword(value: string) {
@@ -254,6 +376,26 @@ export function SignupPage() {
   const selectedRoleLabel =
     values.role === 'INSTRUCTOR' ? '강의자' : '학습자'
   const passwordStrength = getPasswordStrength(values.password)
+
+  if (signupCompletedWithoutLogin) {
+    return (
+      <div>
+        <h1 className="type-page-title font-bold text-stone-900">
+          회원가입이 완료되었습니다
+        </h1>
+        <p className="mt-4 type-body text-stone-600">
+          계정은 생성되었지만 자동 로그인하지 못했습니다. 로그인 화면에서 다시
+          로그인해 주세요.
+        </p>
+        <Link
+          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-brand-700 px-4 type-control font-semibold text-white hover:bg-brand-800"
+          to={routes.login}
+        >
+          로그인하러 가기
+        </Link>
+      </div>
+    )
+  }
 
   if (googleSignupStopped) {
     return (
@@ -288,7 +430,7 @@ export function SignupPage() {
           </p>
         </div>
 
-        <form className="mt-6" onSubmit={handleGoogleSignup}>
+        <form className="mt-6 space-y-4" noValidate onSubmit={handleGoogleSignup}>
           <div
             aria-label="Google 가입 역할"
             className="grid grid-cols-2 rounded-lg bg-stone-100 p-1"
@@ -310,7 +452,7 @@ export function SignupPage() {
                       : 'text-stone-500 hover:text-stone-800',
                   ].join(' ')}
                   key={role}
-                  onClick={() => setGoogleRole(role)}
+                  onClick={() => { setGoogleRole(role); setErrors((current) => ({ ...current, role: undefined })); setGoogleError(null) }}
                   role="radio"
                   type="button"
                 >
@@ -319,6 +461,10 @@ export function SignupPage() {
               )
             })}
           </div>
+
+          {errors.role ? <p className="type-caption text-rose-700" role="alert">{errors.role}</p> : null}
+          <BirthDateField value={values.dateOfBirth} onChange={(value) => updateValue('dateOfBirth', value)} error={errors.dateOfBirth} />
+          <SignupContractFields contract={contract} />
 
           {googleError ? (
             <p className="mt-3 type-body font-medium text-rose-700" role="alert">
@@ -329,14 +475,13 @@ export function SignupPage() {
           <div className="mt-5 flex gap-2">
             <Button
               className="h-11 flex-1"
-              disabled={isGoogleSubmitting}
+              disabled={isGoogleSubmitting || contract.policyNotReady}
               type="submit"
             >
               {isGoogleSubmitting ? '가입 중' : '가입하기'}
             </Button>
             <Button
               className="h-11"
-              disabled={isGoogleSubmitting}
               onClick={cancelGoogleSignup}
               type="button"
               variant="secondary"
@@ -453,6 +598,8 @@ export function SignupPage() {
       </div>
 
       <form className="mt-6 space-y-4" noValidate onSubmit={handleSubmit}>
+        <BirthDateField value={values.dateOfBirth} onChange={(value) => updateValue('dateOfBirth', value)} error={errors.dateOfBirth} />
+        <SignupContractFields contract={contract} />
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <label
@@ -695,6 +842,7 @@ export function SignupPage() {
           <Button
             className="h-11 shrink-0 px-5"
             onClick={() => {
+              cancelSignupAttempt()
               setEmailAvailability('idle')
               setStep('role')
             }}
@@ -708,6 +856,7 @@ export function SignupPage() {
             className="h-11 flex-1"
             disabled={
               isSubmitting ||
+              contract.policyNotReady ||
               emailAvailability === 'checking' ||
               emailAvailability === 'taken'
             }

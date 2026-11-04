@@ -1,3 +1,6 @@
+import { type PolicyConsentChoice } from './launchAuthContract'
+import { validateDateOfBirth } from './dateOfBirth'
+
 export interface LoginFormValues {
   email: string
   password: string
@@ -5,14 +8,21 @@ export interface LoginFormValues {
 
 export type SignupRole = 'INSTRUCTOR' | 'LEARNER'
 
-export interface GoogleAuthValues {
+interface GoogleAuthOptions {
+  consents?: PolicyConsentChoice[]
   affiliation?: string
   idToken: string
   learningEmailOptIn?: boolean
-  role?: SignupRole
 }
 
+export type GoogleAuthValues = GoogleAuthOptions & (
+  | { role?: undefined; dateOfBirth?: never }
+  | { role: SignupRole; dateOfBirth: string }
+)
+
 export interface SignupFormValues extends LoginFormValues {
+  dateOfBirth: string
+  consents?: PolicyConsentChoice[]
   affiliation: string
   learningEmailOptIn?: boolean
   name: string
@@ -64,6 +74,9 @@ export function validateSignupForm(values: SignupFormValues): SignupFormErrors {
   } else if (values.affiliation.trim().length > 100) {
     errors.affiliation = '소속은 100자 이하로 입력하세요.'
   }
+
+  const dateError = validateDateOfBirth(values.dateOfBirth)
+  if (dateError) errors.dateOfBirth = dateError
 
   return errors
 }

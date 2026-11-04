@@ -15,7 +15,7 @@ export { useAuth } from './useAuth'
 export { createUserSettingsRepository } from './userSettingsRepository'
 export type { AiAnswerStyle, UserPreferences } from './userSettingsRepository'
 export { getRoleLabel, isAdminRole, isInstructorRole } from './authRoles'
-export type { AuthContextValue, AuthUser } from './authContext'
+export type { AuthContextValue, AuthUser, SignupResult } from './authContext'
 export type {
   AccessGrant,
   AuthSessionPolicy,

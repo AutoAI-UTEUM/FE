@@ -5,6 +5,7 @@ import { getAuthRepository } from './authRepository'
 
 beforeEach(() => {
   vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8080')
+  vi.stubEnv('VITE_AUTH_CONTRACT_READINESS', '')
 })
 
 afterEach(() => {
@@ -51,6 +52,7 @@ describe('remote auth repository', () => {
       )
     const repository = getAuthRepository()
     const values = {
+      dateOfBirth: '2000-02-29',
       affiliation: ' 울산대학교 ',
       email: ' Learner@example.com ',
       name: ' 학습자 ',
@@ -77,6 +79,7 @@ describe('remote auth repository', () => {
 
     expectJsonRequest(fetchMock, 0, '/api/auth/signup', {
       affiliation: '울산대학교',
+      dateOfBirth: '2000-02-29',
       email: 'learner@example.com',
       learningEmailOptIn: false,
       name: '학습자',
@@ -113,6 +116,7 @@ describe('remote auth repository', () => {
 
     const failure = await getAuthRepository()
       .signup({
+        dateOfBirth: '2000-02-29',
         affiliation: '울산대학교',
         email: 'learner@example.com',
         name: '학습자',
@@ -178,11 +182,13 @@ describe('remote auth repository', () => {
     )
 
     await getAuthRepository().loginWithGoogle({
+      dateOfBirth: '2000-02-29',
       idToken: 'google-id-token',
       role: 'INSTRUCTOR',
     })
 
     expectJsonRequest(fetchMock, 0, '/api/auth/google', {
+      dateOfBirth: '2000-02-29',
       idToken: 'google-id-token',
       role: 'INSTRUCTOR',
     })
@@ -294,7 +300,7 @@ function expectJsonRequest(
   const [url, init] = fetchMock.mock.calls[index] ?? []
   expect(url).toBe(`http://localhost:8080${path}`)
   expect(init?.method).toBe('POST')
-  expect(init?.body).toBe(JSON.stringify(body))
+  expect(JSON.parse(String(init?.body))).toEqual(body)
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
