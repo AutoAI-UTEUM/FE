@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_GUARDIAN_PRIOR_CONSENT_READINESS?: string
   readonly VITE_GUARDIAN_WORKFLOW_READINESS?: string
   readonly VITE_GUARDIAN_POLICY_REVIEW_READINESS?: string
   readonly VITE_GUARDIAN_TEAM_READINESS?: string

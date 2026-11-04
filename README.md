@@ -138,3 +138,7 @@ BE #8이 완료되기 전에는 실제 health/CORS 연동이 확인됐다고 표
 - refresh token과 HttpOnly cookie 전환
 - 자료 삭제·업로드 취소·재처리 remote API
 - FastAPI 직접 호출
+
+## 준비 중인 FE 연동
+
+- [보관된 대면 사전 동의 검토](docs/guardian-prior-consent-fe.md): 별도 준비 조건과 서버 옵션으로 차단된 관리자 흐름
