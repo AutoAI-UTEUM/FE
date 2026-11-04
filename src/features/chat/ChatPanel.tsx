@@ -1,3 +1,6 @@
+import { useComposerPrediction } from './useComposerPrediction'
+import { isComposerPredictionReady, type PredictionTarget } from './composerPrediction'
+import type { AuthenticatedRawRequest } from '../auth'
 import {
   ArrowUp,
   CheckCircle2,
@@ -54,6 +57,10 @@ import {
 } from './learningTextSize'
 
 interface ChatPanelProps {
+  predictionRequest?: AuthenticatedRawRequest
+  predictionTarget?: PredictionTarget
+  predictionBlocked?: boolean
+
   chat: SessionChat
   className?: string
   /** 서버 결정·퀴즈 유형 선택을 대화 로그의 AI 메시지로 표시한다. */
@@ -127,6 +134,9 @@ function createRequestId(): string {
 export function ChatPanel({
   chat,
   className,
+  predictionRequest,
+  predictionTarget,
+  predictionBlocked = true,
   conversationAction,
   currentPage,
   onExplainCurrentPage,
@@ -159,8 +169,10 @@ export function ChatPanel({
   const question = questionDraft.key === questionDraftKey
     ? questionDraft.value
     : readQuestionDraft(questionDraftKey)
+  const [predictionEnabled, setPredictionEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<ChatPanelTab>('chat')
+  const prediction = useComposerPrediction({ request: predictionRequest, sessionId, scope: JSON.stringify([textSizeOwnerId, sessionId, currentPage, tab]), target: predictionTarget, empty: question.length === 0, blocked: predictionBlocked || chat.isTurnPending || tab !== 'chat', enabled: predictionEnabled })
   const [notes, setNotes] = useState<Note[]>([])
   const [notesError, setNotesError] = useState<string | null>(null)
   const [messageActionStatus, setMessageActionStatus] = useState('')
@@ -186,6 +198,7 @@ export function ChatPanel({
   const isSavingNoteDraft = savingNoteDraftSessionId === sessionId
 
   function setQuestion(value: string) {
+    prediction.discard()
     writeQuestionDraft(questionDraftKey, value)
     setQuestionDraft({ key: questionDraftKey, value })
   }
@@ -380,6 +393,7 @@ export function ChatPanel({
   }
 
   function handleQuestionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Tab' && !event.shiftKey && !event.nativeEvent.isComposing && prediction.suggestion && !event.currentTarget.value) { const suggestion = prediction.takeSuggestion(); if (suggestion) { event.preventDefault(); setQuestion(suggestion); return } }
     if (
       event.key !== 'Enter' ||
       event.shiftKey ||
@@ -392,6 +406,7 @@ export function ChatPanel({
   }
 
   function handleQuickAction(kind: (typeof QUICK_ACTIONS)[number]['kind']) {
+    prediction.discard()
     if (kind === 'explain') {
       onExplainCurrentPage?.()
       return
@@ -797,6 +812,7 @@ export function ChatPanel({
             <Paperclip aria-hidden="true" size={15} />
           </button>
           <textarea
+            aria-describedby={prediction.suggestion ? 'composer-prediction' : undefined}
             aria-invalid={error ? true : undefined}
             className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-0.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
             disabled={chat.isTurnPending}
@@ -833,6 +849,8 @@ export function ChatPanel({
           </button>
         </div>
 
+        {isComposerPredictionReady() && predictionRequest ? <label className="block type-caption"><input type="checkbox" checked={predictionEnabled} onChange={e => { prediction.discard(); setPredictionEnabled(e.target.checked) }} /> 다음 질문 제안 표시</label> : null}
+        {prediction.suggestion ? <div id="composer-prediction" role="status" className="mt-2 text-stone-600"><p>{prediction.suggestion}</p><button type="button" className="min-h-11 rounded border px-3" onClick={() => { if (!questionInputRef.current?.value) { const suggestion = prediction.takeSuggestion(); if (suggestion) { setQuestion(suggestion); questionInputRef.current?.focus() } } }}>제안을 초안에 넣기 (Tab)</button></div> : null}
         {error ? (
           <p className="mt-1.5 type-caption font-medium text-rose-700" role="alert">
             {error}
