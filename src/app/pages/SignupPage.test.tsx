@@ -81,6 +81,9 @@ function ClassroomsProbe() {
 
 function completeAccountForm(email: string) {
   fireEvent.click(screen.getByRole('button', { name: '다음' }))
+  fireEvent.change(screen.getByLabelText('생년월일'), {
+    target: { value: '2000-02-29' },
+  })
   fireEvent.change(screen.getByLabelText('이름'), {
     target: { value: '학습자' },
   })
@@ -136,6 +139,7 @@ describe('SignupPage', () => {
 
     expect(screen.getByText('이름을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('소속을 입력하세요.')).toBeInTheDocument()
+    expect(screen.getByText('생년월일을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('이메일을 입력하세요.')).toBeInTheDocument()
     expect(screen.getByText('비밀번호를 입력하세요.')).toBeInTheDocument()
     expect(
@@ -185,6 +189,9 @@ describe('SignupPage', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: /^강의자/ }))
     fireEvent.click(screen.getByRole('button', { name: '다음' }))
+    fireEvent.change(screen.getByLabelText('생년월일'), {
+      target: { value: '2000-02-29' },
+    })
     fireEvent.change(screen.getByLabelText('이름'), {
       target: { value: '학습자' },
     })
@@ -214,6 +221,7 @@ describe('SignupPage', () => {
       )
     const signupBody = JSON.parse(String(signupCall?.[1]?.body))
     expect(signupBody).toMatchObject({
+      dateOfBirth: '2000-02-29',
       email: 'new@example.com',
       affiliation: '울산대학교',
       learningEmailOptIn: false,
