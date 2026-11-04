@@ -13,6 +13,32 @@ permissions:
   contents: read
 
 jobs:
+  launch-auth-contract:
+    name: launch-auth-contract (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - mode: default-off
+            readiness: ''
+          - mode: synthetic-ready
+            readiness: be-auth-ee69e425-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Check signup and email contracts with synthetic local accounts
+        env:
+          QA_ENV: mock
+          QA_AUTH_CONTRACT_READINESS: ${{ matrix.readiness }}
+        run: npx playwright test --config playwright.launch-auth.config.ts
   quality:
     name: frontend-ci
     runs-on: ubuntu-latest

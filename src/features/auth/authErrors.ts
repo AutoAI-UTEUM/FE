@@ -17,7 +17,17 @@ export class AuthValidationError extends Error {
 export function mapAuthErrorToFormErrors(
   error: unknown,
 ): LoginFormErrors | SignupFormErrors | null {
-  return error instanceof AuthValidationError ? error.formErrors : null
+  if (error instanceof AuthValidationError) return error.formErrors
+  if (!(error instanceof ApiClientError) || error.code !== 'VALIDATION_FAILED') return null
+  const errors: SignupFormErrors = {}
+  const fields = ['affiliation', 'email', 'name', 'password', 'role', 'dateOfBirth'] as const
+  for (const detail of error.details) {
+    if (typeof detail !== 'object' || detail === null ||
+      !('field' in detail) || !('reason' in detail) || typeof detail.reason !== 'string') continue
+    const field = fields.find((value) => value === detail.field)
+    if (field) errors[field] = detail.reason
+  }
+  return Object.keys(errors).length > 0 ? errors : null
 }
 
 /**

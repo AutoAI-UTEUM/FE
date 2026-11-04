@@ -1,4 +1,6 @@
 import { createContext } from 'react'
+import type { EmailVerificationFields } from './launchAuthContract'
+import type { SignupAccount } from './authRepository'
 
 import type {
   ApiRequestOptions,
@@ -11,7 +13,7 @@ import type {
   SignupFormValues,
 } from './authValidation'
 
-export interface AuthUser {
+export interface AuthUser extends EmailVerificationFields {
   affiliation?: string
   avatarUrl?: string
   email: string
@@ -38,9 +40,14 @@ export type AuthenticatedRawRequest = (
   options?: RawApiRequestOptions,
 ) => Promise<Response>
 
+export type SignupResult =
+  | { status: 'account-created'; account?: SignupAccount }
+  | { status: 'authenticated'; user?: AuthUser }
+
 export interface AuthContextValue {
   apiRequest: AuthenticatedRequest
   rawApiRequest: AuthenticatedRawRequest
+  refreshCurrentUser?: (signal?: AbortSignal) => Promise<AuthUser | null>
   checkEmailAvailability: (
     email: string,
     signal?: AbortSignal,
@@ -49,13 +56,16 @@ export interface AuthContextValue {
   isAuthenticated: boolean
   isInitializing: boolean
   login: (values: LoginFormValues) => Promise<AuthUser>
-  loginWithGoogle: (values: GoogleAuthValues) => Promise<AuthUser>
+  loginWithGoogle: (values: GoogleAuthValues, signal?: AbortSignal) => Promise<AuthUser>
   logoutReason: LogoutReason | null
   logout: () => Promise<void>
   pendingGoogleIdToken: string | null
   prepareGoogleSignup: (idToken: string) => void
   setExamInProgress: (isInProgress: boolean) => void
-  signup: (values: SignupFormValues) => Promise<void>
+  signup: (
+    values: SignupFormValues,
+    signal?: AbortSignal,
+  ) => Promise<SignupResult>
   user: AuthUser | null
   updateUser: (user: AuthUser) => void
   withdraw: (password: string) => Promise<void>
