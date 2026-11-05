@@ -45,6 +45,8 @@ const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ d
 const UpdatesPage = lazy(() => import('./pages/UpdatesPage').then((module) => ({ default: module.UpdatesPage })))
 const AdminPage = lazy(() => import('./pages/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
 
+const GuardianReviewPage = lazy(() => import('./pages/GuardianReviewPage').then((module) => ({ default: module.GuardianReviewPage })))
+
 export function AppRoutes() {
   return (
     <Suspense fallback={<RouteLoadingScreen />}>
@@ -68,6 +70,7 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<RequireAuth />}>
+        <Route element={<RequireAdmin />}><Route path={routes.guardianReview} element={<GuardianReviewPage />} /></Route>
         <Route element={<AppLayout />}>
           <Route element={<RequireAdmin />}>
             <Route path={routes.admin} element={<AdminPage />} />

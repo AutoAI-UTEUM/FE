@@ -70,6 +70,13 @@ function renderRoute(path: string, initialUser: AuthUser | null = authenticatedU
 }
 
 describe('AppRoutes', () => {
+  it('keeps the selectively released guardian admin route OFF with no guardian requests', async () => {
+    vi.stubEnv('VITE_GUARDIAN_WORKFLOW_READINESS', '')
+    renderRoute('/admin/guardian-requests', { ...authenticatedUser, id: 999, role: 'ADMIN' })
+    expect(await screen.findByText('보호자 담당자 절차를 준비하고 있습니다.')).toBeInTheDocument()
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url).includes('/guardian-requests'))).toBe(false)
+  })
+
   it('opens the festival introduction without a login and links to the service', async () => {
     renderRoute('/intro', null)
 
