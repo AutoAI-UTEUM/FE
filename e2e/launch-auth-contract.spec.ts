@@ -32,6 +32,9 @@ test('opening/prefetching link never confirms; URL/history/storage/referrer are 
   expect(await page.evaluate(() => JSON.stringify({ state: history.state, local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain(token)
   if (!enabled) {
     await expect(page.getByText('이메일 확인 기능을 준비 중입니다.', { exact: false })).toBeVisible()
+    await expect(page.getByText('지금은 인증 버튼과 확인 이메일 재요청을 사용할 수 없습니다.', { exact: false })).toBeVisible()
+    await expect(page.getByText('아래 버튼으로 확인해 주세요.', { exact: false })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /이메일 확인하기|확인 이메일 다시 요청/ })).toHaveCount(0)
     expect(requests.some((request) => request.url.includes('/email-verification/') || request.url.includes('/policies/'))).toBe(false)
   }
   await page.reload()
