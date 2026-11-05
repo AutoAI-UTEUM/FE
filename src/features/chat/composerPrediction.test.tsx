@@ -4,8 +4,8 @@ import { COMPOSER_PREDICTION_CONTRACT, parseComposerPrediction, requestComposerP
 import { useComposerPrediction } from './useComposerPrediction'
 import { ChatPanel } from './ChatPanel'
 import type { SessionChat } from './useSessionChat'
-const target = { sourceMessageId: 123, contextVersion: 'server-context-1', activity: 'QA' as const }
-const payload = { schemaVersion: '1.0', sourceMessageId: 123, sourceTurnId: 'message-123', contextVersion: target.contextVersion, suggestion: '학습률을 바꾸면 어떻게 돼?', warnings: [] }
+const target = { sourceMessageId: 123, activity: 'QA' as const }
+const payload = { schemaVersion: '1.0', sourceMessageId: 123, sourceTurnId: 'message-123', contextVersion: 'a'.repeat(64), suggestion: '학습률을 바꾸면 어떻게 돼?', warnings: [] }
 const response = (p: unknown = payload) => new Response(`event: prediction\ndata: ${JSON.stringify(p)}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
 beforeEach(() => vi.stubEnv('VITE_COMPOSER_PREDICTION_READINESS', COMPOSER_PREDICTION_CONTRACT))
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); window.localStorage.clear() })
@@ -14,13 +14,13 @@ it('uses the separate POST SSE endpoint and sends only the persisted source id',
   expect(await requestComposerPrediction(request, 's/1', target, signal)).toEqual(payload)
   expect(request).toHaveBeenCalledWith('/api/sessions/s%2F1/composer-prediction', expect.objectContaining({ method: 'POST', signal, body: '{"sourceMessageId":123}', cache: 'no-store', headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' } }))
 })
-it('OFF and unsupported stages send nothing; null, mismatched versions, and invalid events do not produce drafts', async () => {
+it('OFF and unsupported stages send nothing; null contexts and invalid events do not produce drafts', async () => {
   const request = vi.fn().mockResolvedValue(response()); vi.stubEnv('VITE_COMPOSER_PREDICTION_READINESS', '')
   expect(await requestComposerPrediction(request, '1', target, new AbortController().signal)).toBeNull(); expect(request).not.toHaveBeenCalled()
   vi.stubEnv('VITE_COMPOSER_PREDICTION_READINESS', COMPOSER_PREDICTION_CONTRACT)
   for (const activity of ['QUIZ', 'DIAGNOSIS', 'TEACHBACK', 'OTHER']) await requestComposerPrediction(request, '1', { ...target, activity } as typeof target, new AbortController().signal)
   expect(request).not.toHaveBeenCalled()
-  request.mockResolvedValue(response({ ...payload, contextVersion: 'stale' })); expect(await requestComposerPrediction(request, '1', target, new AbortController().signal)).toBeNull()
+  request.mockResolvedValue(response({ ...payload, contextVersion: null, suggestion: null, warnings: [{ type: 'PREDICTION_UNAVAILABLE', message: 'optional failure' }] })); expect(await requestComposerPrediction(request, '1', target, new AbortController().signal)).toBeNull()
   expect(() => parseComposerPrediction({ ...payload, suggestion: 'x'.repeat(161) })).toThrow(); expect(() => parseComposerPrediction({ ...payload, sourceTurnId: 'learning-run-uuid' })).toThrow()
 })
 it('typing aborts and discards a late response even if the transport ignores abort; clearing input never repeats that completion', async () => {
@@ -58,4 +58,10 @@ it('accepts only the first prediction SSE event and rejects mismatched persisted
   expect((await requestComposerPrediction(request, '1', target, new AbortController().signal))?.suggestion).toBe(payload.suggestion)
   request.mockResolvedValue(response({ ...payload, sourceMessageId: 124, sourceTurnId: 'message-124' }))
   expect(await requestComposerPrediction(request, '1', target, new AbortController().signal)).toBeNull()
+})
+
+it('rejects malformed context, multi-line suggestions, and non-object warnings', () => {
+  expect(() => parseComposerPrediction({ ...payload, contextVersion: 'local-page-1' })).toThrow()
+  expect(() => parseComposerPrediction({ ...payload, suggestion: 'first\nsecond' })).toThrow()
+  expect(() => parseComposerPrediction({ ...payload, warnings: ['PREDICTION_UNAVAILABLE'] })).toThrow()
 })

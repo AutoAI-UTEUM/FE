@@ -812,6 +812,7 @@ export function ChatPanel({
             <Paperclip aria-hidden="true" size={15} />
           </button>
           <textarea
+            onCompositionStart={() => prediction.discard()}
             aria-describedby={prediction.suggestion ? 'composer-prediction' : undefined}
             aria-invalid={error ? true : undefined}
             className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-0.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
