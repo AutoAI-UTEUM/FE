@@ -55,3 +55,30 @@ node node_modules/@playwright/test/cli.js test --config playwright.teacher-feedb
 초기 실패를 최종 통과 수에 합산하지 않는다: API 환경 변수 누락, Playwright 브라우저 미설치, 합성 최근 자료와 주차 ID 불일치를 각각 수정/보완했다. 기존 500kB 번들 경고가 있다. 실 BE 통합·Safari/Firefox·실기기 펜은 별도 인수 범위다.
 
 BE 요청과 게시 상태: [Discord 게시용 요청](teacher-feedback-be-requests-20261101.md).
+
+## 2026-11-05 최신 develop 통합 검토
+
+FE develop `fc039a17f4881b2091a12c36ef832537482bf568`(#247 포함)에 기능 커밋
+`c0cad911909fce0cd5f97f9a4b2a78fc1fa459e6`을 격리 적용했다. 충돌은 없었고,
+이미 develop에 있는 캘린더 Date 보정은 중복 적용하지 않았다. 기존 #239/#240/#241과
+#249는 미병합이므로 이 후보에 섞지 않았다.
+
+답안 복원은 최초 mount에서만 저장값을 검사하고 있어 두 문제를 재현했다.
+같은 퀴즈 ID에서 문항 스냅샷이 바뀌어도 이전 복원 버튼이 남았고, 오래 열린 탭에서
+7일 보관 기간이 지난 뒤 클릭하면 만료된 답안을 복원했다. 회귀 2개를 추가해 수정 전
+실패를 확인했으며, 문항 스냅샷/계정/퀴즈 변경 시 내부 상태를 다시 구성하고 명시적
+불러오기 시점에 저장값·서명·문항·만료를 다시 검사하도록 수정했다.
+
+- 수정 후 최신 develop 통합 후보: 전체 **113파일·1,199개 통과**, 실패/skip 0.
+- 기존 #244 head 기반의 수정 후보: 전체 **110파일·1,165개 통과**, 실패/skip 0.
+  전체 lint·typecheck·production build도 통과. 기존 500kB chunk 경고 유지.
+- 최신 develop 통합 후보의 기존 teacher-feedback Chromium suite: desktop/phone/tablet
+  **9개 통과**, 실패/skip/flaky/retry 0. 답안·글자·펜 저장/복원, 이어하기·진행률,
+  드롭 후 확인 대화상자, 미제출 상태와 기존 메모 격리를 검증했다.
+- 기존 #247의 보호자·composer 준비 코드가 포함된 전체 회귀가 통과했다. 기능 readiness,
+  운영 설정·보호자 활성화·외부 AI 호출은 변경하지 않았다. phone 퀴즈/세션 화면도 직접 확인했다.
+
+기존 PR과 원본 두 커밋을 보존하고 같은 PR 브랜치에 후속 커밋만 추가한다. 병합·배포,
+실제 계정·메일·개인정보·DB 변경 및 Discord 게시는 수행하지 않았다. 실제 BE 인수,
+Safari/Firefox·실기기 펜/IME는 별도이며, 기기간 동기화·난이도 선택 주체·수업페이지 직접
+입력 의미·TTS/OCR·보호자 학습 보조 권한은 기존 협의 대기로 남긴다.

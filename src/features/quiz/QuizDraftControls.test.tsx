@@ -11,6 +11,27 @@ beforeEach(() => localStorage.clear())
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('personal quiz drafts', () => {
+  it('invalidates a restorable draft when the same quiz receives a different question snapshot', () => {
+    writeWorkspaceValue(key, { answers: { q1: 'old' }, signature: JSON.stringify(quiz.questions) })
+    const restore = vi.fn()
+    const view = render(<QuizDraftControls answers={{}} onRestore={restore} owner="id:1" quiz={quiz} submitted={false} />)
+    expect(screen.getByRole('button', { name: '저장한 답안 불러오기' })).toBeInTheDocument()
+    view.rerender(<QuizDraftControls answers={{}} onRestore={restore} owner="id:1" quiz={{ ...quiz, questions: [{ ...quiz.questions[0], prompt: '새로 받은 문항' }] }} submitted={false} />)
+    expect(screen.queryByRole('button', { name: '저장한 답안 불러오기' })).not.toBeInTheDocument()
+    expect(restore).not.toHaveBeenCalled()
+  })
+
+  it('rechecks retention at explicit restore time instead of trusting a long-open tab', () => {
+    writeWorkspaceValue(key, { answers: { q1: 'expired while open' }, signature: JSON.stringify(quiz.questions) })
+    const restore = vi.fn()
+    render(<QuizDraftControls answers={{}} onRestore={restore} owner="id:1" quiz={quiz} submitted={false} />)
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.now() + 8 * 24 * 60 * 60 * 1000)
+    fireEvent.click(screen.getByRole('button', { name: '저장한 답안 불러오기' }))
+    expect(restore).not.toHaveBeenCalled()
+    expect(localStorage.getItem(key)).toBeNull()
+  })
+
   it('writes changed answers synchronously, restores explicitly after reload, and isolates accounts', async () => {
     const restore = vi.fn()
     const view = render(<QuizDraftControls answers={{}} onRestore={restore} owner="id:1" quiz={quiz} submitted={false} />)
