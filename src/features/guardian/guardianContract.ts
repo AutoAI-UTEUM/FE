@@ -20,7 +20,7 @@ export function isGuardianManagementRequest(path: string, method = 'GET'): boole
 
 export type GuardianRequirement = 'REQUIRED' | 'NOT_REQUIRED' | 'BIRTHDATE_REQUIRED'
 export type GuardianReplyChannel = 'EMAIL_REPLY' | 'PHONE_CALLBACK'
-export type GuardianConfirmationMethod = 'EMAIL_REPLY' | 'PHONE'
+export type GuardianConfirmationMethod = 'EMAIL_REPLY' | 'PHONE' | 'PRIOR_RECORD'
 export type GuardianScope = 'SERVICE' | 'EXTERNAL_AI'
 const guardianReasons = ['APPROVED', 'INCOMPLETE_RESPONSE', 'RELATIONSHIP_UNCONFIRMED', 'CONSENT_DECLINED', 'REQUESTER_WITHDREW', 'OPERATOR_REVOKED', 'DEADLINE_EXPIRED', 'ACCOUNT_WITHDRAWN', 'NOTICE_CHANGED'] as const
 export const guardianStates = ['AWAITING_CONSENT', 'DECLARED', 'REVIEW_PENDING', 'NEEDS_INFORMATION', 'APPROVED', 'REJECTED', 'REVOKED', 'EXPIRED', 'WITHDRAWN'] as const
@@ -71,6 +71,7 @@ export interface GuardianDetail {
   replyChannel: GuardianReplyChannel | null
   relationship: 'PARENT' | 'MINOR_GUARDIAN' | null
   confirmationMethod: GuardianConfirmationMethod | null
+  priorConsentEvidence?: { method: string; receivedAt: string | null; reviewedAt: string | null; consentValidUntil: string | null } | null
   evidenceReference: string | null
   events: { generation: number; revision: number; type: string; state: GuardianState; actorId: number | null; at: string | null }[]
   forms: Record<string, string>
@@ -177,7 +178,8 @@ export function parseGuardianDetail(value: unknown): GuardianDetail {
     guardianContact: nullableString(v.guardianContact), contactOrigin: v.contactOrigin === null ? null : enumValue(v.contactOrigin, ['NONE', 'CHILD', 'GUARDIAN'] as const), generationStartedAt: timestamp(v.generationStartedAt),
     requiredScopes, optionalAiScope, declaredScopes, replyChannel: channel,
     relationship: v.relationship === null ? null : enumValue(v.relationship, ['PARENT', 'MINOR_GUARDIAN'] as const),
-    confirmationMethod: v.confirmationMethod === null ? null : enumValue(v.confirmationMethod, ['EMAIL_REPLY', 'PHONE'] as const),
+    confirmationMethod: v.confirmationMethod === null ? null : enumValue(v.confirmationMethod, ['EMAIL_REPLY', 'PHONE', 'PRIOR_RECORD'] as const),
+    priorConsentEvidence: v.priorConsentEvidence == null ? null : (() => { const e = object(v.priorConsentEvidence); return { method: enumValue(e.method, ['IN_PERSON', 'EMAIL_REPLY', 'PHONE', 'SIGNED_DOCUMENT'] as const), receivedAt: timestamp(e.receivedAt), reviewedAt: timestamp(e.reviewedAt), consentValidUntil: timestamp(e.consentValidUntil) } })(),
     evidenceReference: nullableString(v.evidenceReference), forms: detailForms,
     events: v.events.map((event) => { const e = object(event); return { generation: positive(e.generation), revision: positive(e.revision),
       type: string(e.type), state: enumValue(e.state, guardianStates), actorId: nullableId(e.actorId), at: timestamp(e.at) } }) }

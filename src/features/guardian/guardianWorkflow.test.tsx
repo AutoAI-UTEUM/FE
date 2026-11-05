@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AuthProvider, useAuth } from '../auth'
@@ -12,6 +12,7 @@ import { createGuardianOperation, getPublicGuardianView, sendGuardianOperation }
 import { clearGuardianLinkToken, readGuardianLinkToken } from './guardianLinkToken'
 import { useGuardianOperation } from './useGuardianOperation'
 import { ApiClientError } from '../../shared/api'
+import { PRIOR_CONSENT_CONTRACT } from './priorConsentContract'
 
 const token = 'S'.repeat(43)
 const id = guardianStatus.requestId
@@ -54,6 +55,42 @@ function chooseReply(ai = false) {
   fireEvent.change(screen.getByLabelText('실제 회신 수신 시각 (UTC ISO)'), { target: { value: '2026-10-08T01:00:00Z' } })
   for (const label of [/회신 신청번호·차수/, /실제 회신·통화에/, /법정대리인 선언을/, /고지 버전·범위와/, /현재 확인 수단과/]) fireEvent.click(screen.getByLabelText(label))
 }
+
+function mockPriorReview() {
+  vi.stubEnv('VITE_GUARDIAN_PRIOR_CONSENT_READINESS', PRIOR_CONSENT_CONTRACT)
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+    if (String(url).includes('/prior-consent/options')) return success({ available: true, noticeVersion: guardianStatus.noticeVersion, noticeDigest: guardianStatus.noticeDigest, noticeUrl: 'https://notice.example.invalid', methods: ['IN_PERSON'], maxAge: 'PT720H', requiredScopes: ['SERVICE'], optionalAiScope: 'EXTERNAL_AI' })
+    if (String(url).includes('?page=')) return success({ content: [guardianStatus], page: 0, size: 20, totalElements: 1, totalPages: 1 })
+    return success({ ...detail, status: { ...detail.status, generation: 1, webDeclaredAt: null } })
+  })
+}
+
+it('same-coordinate detail refresh discards the prior-consent options and entered evidence too', async () => {
+  mockPriorReview(); page(<GuardianReviewPage />, true); await loadDetail()
+  fireEvent.click(screen.getByRole('button', { name: '사전 동의 옵션 확인' }))
+  const evidence = await screen.findByLabelText('보관 원본 참조')
+  fireEvent.change(evidence, { target: { value: 'old-policy-evidence' } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '현재 담당자 상세 다시 확인' })) })
+  await screen.findByRole('region', { name: '담당자 상세' })
+  expect(screen.queryByLabelText('보관 원본 참조')).not.toBeInTheDocument()
+})
+
+it('a prepared prior-consent operation locks the ordinary detail refresh control', async () => {
+  const fetch = mockPriorReview(); page(<GuardianReviewPage />, true); await loadDetail()
+  fireEvent.click(screen.getByRole('button', { name: '사전 동의 옵션 확인' }))
+  await screen.findByLabelText('보관 원본 참조')
+  const prior = within(screen.getByRole('region', { name: '보관 사전 동의 검토' }))
+  fireEvent.change(prior.getByLabelText('원본 확인 수단'), { target: { value: 'IN_PERSON' } })
+  fireEvent.change(prior.getByLabelText('원본의 관계'), { target: { value: 'PARENT' } })
+  fireEvent.change(prior.getByLabelText('보관 원본 참조'), { target: { value: 'synthetic-prior' } })
+  fireEvent.change(prior.getByLabelText('실제 대면 동의 확인일 (UTC ISO)'), { target: { value: '2026-10-01T00:00:00Z' } })
+  fireEvent.change(prior.getByLabelText('원본 동의 유효기한 (UTC ISO)'), { target: { value: '2026-10-30T00:00:00Z' } })
+  prior.getAllByRole('checkbox').forEach(box => fireEvent.click(box))
+  fireEvent.click(prior.getByRole('button', { name: '사전 동의 승인 최종 확인' }))
+  expect(await prior.findByRole('button', { name: '확인 후 전송' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '현재 담당자 상세 다시 확인' })).toBeDisabled()
+  expect(fetch.mock.calls.every(([, options]) => !options?.method || options.method === 'GET')).toBe(true)
+})
 it.each(['', 'true', 'typo'])('write OFF %j forbids networking and new pending exceptions', async (flag) => {
   vi.stubEnv('VITE_GUARDIAN_WORKFLOW_READINESS', flag)
   const request = vi.fn()

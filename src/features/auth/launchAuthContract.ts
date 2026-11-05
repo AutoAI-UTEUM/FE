@@ -37,15 +37,4 @@ export function isAccountManagementRequest(path: string, method = 'GET'): boolea
 
 export interface PolicyConsentChoice { type: string; version: string }
 
-/** Validate a calendar date only; no age, future-date or guardian policy is invented. */
-export function validateDateOfBirth(value?: string): string | undefined {
-  if (!value) return '생년월일을 입력하세요.'
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000')) {
-    return '생년월일을 YYYY-MM-DD 형식으로 입력하세요.'
-  }
-  const parsed = new Date(`${value}T00:00:00Z`)
-  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    return '올바른 날짜를 입력하세요.'
-  }
-  return undefined
-}
+export { validateDateOfBirth } from './dateOfBirth'

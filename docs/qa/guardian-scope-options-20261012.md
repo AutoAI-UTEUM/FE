@@ -34,3 +34,31 @@ FE base는 `develop`의 `0ae5650e5796ce3b217c389e253b676265b89e48`이다. BE [PR
 초기 전체 검사는 CI API/capability 환경을 빠뜨려 93개 기존 화면 테스트가 실패했고 올바른 환경으로 재실행했다. 초기 테스트 helper 구문 오류도 수정했다. 로컬 npx가 system32의 다른 실행 파일을 먼저 선택해 검사하지 않은 호출은 통과로 계산하지 않았다. 설치된 `node node_modules/@playwright/test/cli.js`와 `node node_modules/vitest/vitest.mjs`로 실제 실행/JSON 증거를 확인했다. Vitest 전달 인자 중 일부가 npm.ps1에서 빠져 생성되지 않은 보고서 경로는 증거로 주장하지 않는다.
 
 최종 로컬 증거는 `qa-artifacts/guardian-scope-options`와 `qa-artifacts/guardian-workflows/{ready,off}/browser.json`, 작업 root의 `guardian-scope-options/result.json`에 기록한다. Draft PR의 exact head CI는 별도로 확인해 결과 보고에 URL/head를 붙인다. 실제 BE 인수·OAuth/메일·실제 개인정보·기기/Safari/전체 업무 브라우저 matrix·성능 검사는 미실행이며 이 합성 결과로 통과를 주장하지 않는다.
+
+## 2026-11-05 최신 develop / #247 통합 검토
+
+기준은 FE develop `fc039a17f4881b2091a12c36ef832537482bf568`이다. #238 원본
+`e00d63825879e048793d75353aa7811f3ce4ada4`와 #247 사전 동의의 두 파일 충돌을
+해결했다. 현재 정책 선택지/선언 검사, PRIOR_RECORD·priorConsentEvidence 원본 출처,
+일반 회신/사전 동의의 상호 잠금을 함께 보존했다. 기존 PR 브랜치에 develop 이력을
+동기화해 원본 커밋을 보존하며 develop/main의 PR 병합·배포는 하지 않는다.
+
+- 명시적인 상세 재조회는 일반 회신과 사전 동의 양쪽 상태를 새 read 세대로 초기화한다.
+  사전 동의 작업 중 일반 상세 재조회 버튼·정책 확인 체크에도 상호 잠금을 전달한다.
+  새 상호 잠금 회귀는 수정 전 활성 버튼을 재현했고 수정 후 통과했다.
+- 사전 동의를 준비한 뒤 원본 동의/신청 기한이 지나면 아직 전송하지 않은 요청은
+  전송 전에 폐기하고 재조회를 요구한다. 이미 응답이 불확실한 POST의 동일 body/key
+  명시적 재확인은 기한이 지나도 보존한다. 새 만료 회귀의 수정 전 POST 발생을 확인했다.
+- 최종 전체 Vitest **110파일·1,239개 통과**, 실패/skip 0. 전체 lint·typecheck와
+  production OFF build 통과. 기존 500kB chunk 경고는 유지한다.
+- 최종 소스의 PC/phone 합성 browser: synthetic-ready **28개 통과**, default OFF
+  **4개 통과·ready 전용 24개 skip**, 실패/flaky/retry 0. 옵션·고지·범위·stale·기한,
+  권한/409/503, 중복·늦은 응답·동일 요청 재확인 및 OFF 무입력/쓰기 차단을 검증했다.
+- 최초 전체 실행의 기존 SessionDetailPage page-baseline unmount 검사는 1회 실패했다.
+  해당 경로는 수정하지 않았고 최종 전체에서 통과했으며 초기 실패를 통과 수에 합산하지 않는다.
+
+운영 고지·관계 증거·지정 담당자·원본 재사용/최대 기간·연락처/증적 보유·파기 정책은
+확정하지 않았다. 서버가 주는 SERVICE/선택 AI와 전용 사전 동의 options를 사용하며,
+정책 값·readiness 상수·배포 환경·인증 allowlist·서버/권한 설정을 변경하지 않는다.
+실제 BE 배포 인수·메일·실기기/Safari·실제 계정 승인/철회는 별도다. 합성 테스트의
+readiness와 데이터를 실제 활성화나 개인정보 검토 완료로 취급하지 않는다.

@@ -13,7 +13,7 @@ export const guardianView: GuardianView = { status: guardianStatus, noticeUrl: n
   optionalAiScope: 'EXTERNAL_AI', replyChannel: 'PHONE_CALLBACK', forms: { review_pending: '합성 담당자 검토 안내', reply_form: '<img src=x onerror=alert(1)> 합성 텍스트' } }
 export const guardianEntry: GuardianEntry = { requirement: 'REQUIRED', teamReviewAvailable: true,
   canStartRequest: false, replyChannel: 'EMAIL_REPLY', request: guardianView }
-export const guardianDetail: GuardianDetail = { status: guardianStatus, userId: 900001, guardianName: null,
+export const guardianDetail: GuardianDetail = { priorConsentEvidence: null, status: guardianStatus, userId: 900001, guardianName: null,
   guardianContact: null, contactOrigin: 'NONE', generationStartedAt: '2026-10-07T01:00:00Z', declaredScopes: [],
   requiredScopes: ['SERVICE'], optionalAiScope: 'EXTERNAL_AI',
   replyChannel: 'PHONE_CALLBACK', relationship: null, confirmationMethod: null, evidenceReference: null, events: [], forms: {} }

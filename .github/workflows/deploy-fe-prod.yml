@@ -128,6 +128,12 @@ jobs:
                 "https://www.uteum.com${EXPECTED_ENTRY}" > /dev/null
               curl --fail --silent --show-error \
                 "https://www.uteum.com${EXPECTED_STYLE}" > /dev/null
+              intro_html="$(curl --fail --silent --show-error "https://www.uteum.com/intro/")"
+              printf '%s' "$intro_html" | grep --fixed-strings --quiet "$EXPECTED_ENTRY"
+              for image in learning quiz feedback; do
+                curl --fail --silent --show-error \
+                  "https://www.uteum.com/intro/${image}.webp" > /dev/null
+              done
               echo "Production FE deployed with expected entry: $EXPECTED_ENTRY"
               exit 0
             fi
