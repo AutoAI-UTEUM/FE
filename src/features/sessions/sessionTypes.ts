@@ -1,6 +1,7 @@
 export type LearningSessionStatus = 'ACTIVE' | 'COMPLETED' | 'DELETED' | 'PAUSED'
 
 export interface LearningSession {
+  predictionUnsafe?: boolean
   activeQuizId?: string
   currentPage: number
   id: string
@@ -68,6 +69,7 @@ export interface SessionMessage {
 }
 
 export interface SessionTurnResult {
+  predictionUnsafe?: boolean
   activeQuizId?: string | null
   currentPage?: number
   messages: SessionMessage[]

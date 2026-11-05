@@ -12,8 +12,10 @@ import type {
   UiAction,
 } from '../sessions'
 import type { ChatMessage } from './chatTypes'
+import { selectPredictionTarget, type PredictionTarget } from './composerPrediction'
 
 export interface SessionChat {
+  predictionTarget?: PredictionTarget
   appendLocalMessage: (message: ChatMessage) => void
   appendMessages: (messages: SessionMessage[]) => void
   cancelTurn: () => Promise<boolean>
@@ -88,7 +90,18 @@ interface TurnRecoveryBaseline {
 export function useSessionChat(
   repository: SessionsRepository,
   sessionId: string,
+  predictionScope = sessionId,
 ): SessionChat {
+  const [predictionTarget, setPredictionTarget] = useState<PredictionTarget>()
+  const [predictionContext, setPredictionContext] = useState({ repository, sessionId, predictionScope })
+  if (predictionContext.repository !== repository || predictionContext.sessionId !== sessionId || predictionContext.predictionScope !== predictionScope) {
+    setPredictionContext({ repository, sessionId, predictionScope })
+    setPredictionTarget(undefined)
+  }
+  const predictionLifecycle = useRef(0)
+  useLayoutEffect(() => {
+    predictionLifecycle.current++
+  }, [repository, sessionId, predictionScope])
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [historyCursor, setHistoryCursor] = useState<string | undefined>()
@@ -216,6 +229,7 @@ export function useSessionChat(
   }, [])
 
   const reloadHistory = useCallback(() => {
+    setPredictionTarget(undefined)
     setHistoryError(null)
     setHistoryCursor(undefined)
     setHasOlderMessages(false)
@@ -248,6 +262,8 @@ export function useSessionChat(
         })
       }
       isTurnPendingRef.current = true
+      setPredictionTarget(undefined)
+      const predictionGeneration = predictionLifecycle.current
       setIsTurnPending(true)
       setStreamNotice('실시간 응답을 연결하는 중입니다.')
       setStreamUiActions([])
@@ -501,6 +517,9 @@ export function useSessionChat(
         setStreamUiActionSource(result.uiActions.length > 0 ? turn.eventType : undefined)
         if (result.noteDraft) setNoteDraft(result.noteDraft)
         onResult?.(result)
+        if (!attempt.cancellationRequested && predictionGeneration === predictionLifecycle.current) {
+          setPredictionTarget(selectPredictionTarget(result, turn.eventType))
+        }
         setStreamNotice(null)
         preserveQuizQuestionPreview = turn.eventType === 'QUIZ_TYPE_SELECTED'
           && Boolean(result.activeQuizId)
@@ -694,6 +713,7 @@ export function useSessionChat(
 
   const startNewConversation = useCallback(async () => {
     if (isTurnPending) return
+    setPredictionTarget(undefined)
     setIsTurnPending(true)
     try {
       await repository.startNewConversation(sessionId)
@@ -715,6 +735,7 @@ export function useSessionChat(
     quizBaseline?: QuizRecoveryBaseline,
   ) => {
     if (isTurnPendingRef.current) return undefined
+    setPredictionTarget(undefined)
     isTurnPendingRef.current = true
     setIsTurnPending(true)
     setStreamNotice(TURN_IN_PROGRESS_NOTICE)
@@ -842,6 +863,7 @@ export function useSessionChat(
   }, [appendMessages, repository, sessionId])
 
   return {
+    predictionTarget,
     appendLocalMessage,
     appendMessages,
     cancelTurn,

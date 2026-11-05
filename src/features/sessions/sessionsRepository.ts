@@ -755,6 +755,7 @@ function mapCompletedTurnResult(
 
 function mapTurnResult(data: SessionTurnDto): SessionTurnResult {
   return {
+    ...(hasUnmappedActions(data.uiActions) ? { predictionUnsafe: true } : {}),
     activeQuizId: mapNullableId(data.state, 'activeQuizId'),
     currentPage: data.state?.currentPage,
     messages: (data.messages ?? []).map(mapMessage),
@@ -770,6 +771,7 @@ function mapSession(
 ): LearningSession {
   const detail = session as SessionDetailDto
   return {
+    ...(hasUnmappedActions(detail.uiActions) ? { predictionUnsafe: true } : {}),
     activeQuizId: toOptionalString(detail.activeQuizId),
     currentPage: session.currentPage,
     id: String(session.sessionId),
@@ -868,6 +870,11 @@ function mapUiActions(actions: UiActionDto[] | undefined): UiAction[] {
 
     return []
   })
+}
+
+// Unknown actions are hidden by the general UI, but must still block optional prediction.
+function hasUnmappedActions(actions: UiActionDto[] | undefined): boolean {
+  return Boolean(actions && mapUiActions(actions).length !== actions.length)
 }
 
 function mapPendingDiagnosis(

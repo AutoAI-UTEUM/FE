@@ -15,6 +15,7 @@ import { apiFailure, apiSuccess, installApiFixtureServer } from '../../test/apiF
 import { rememberClassroomId } from '../../features/classrooms'
 import { ResponsiveViewportProvider } from '../../shared/responsive'
 import { SessionDetailPage } from './SessionDetailPage'
+import { COMPOSER_PREDICTION_CONTRACT } from '../../features/chat/composerPrediction'
 
 beforeEach(() => {
   installApiFixtureServer()
@@ -85,6 +86,48 @@ function renderPhoneSessionDetail(path = '/sessions/100') {
 }
 
 describe('SessionDetailPage', () => {
+  it.each(['ready', 'off', 'unknown-action'])('connects persisted turn prediction through the real page with %s gates', async (mode) => {
+    vi.stubEnv('VITE_COMPOSER_PREDICTION_READINESS', mode === 'off' ? '' : COMPOSER_PREDICTION_CONTRACT)
+    let resolvePost!: (response: Response) => void
+    let posts = 0
+    const predictions: Request[] = []
+    installApiFixtureServer(request => {
+      if (request.method === 'POST' && request.url.endsWith('/sessions/100/turns')) {
+        posts++
+        return new Promise<Response>(resolve => { resolvePost = resolve })
+      }
+      if (request.url.endsWith('/composer-prediction')) {
+        predictions.push(request)
+        return new Response(`event: prediction\ndata: ${JSON.stringify({ schemaVersion: '1.0', sourceMessageId: 777, sourceTurnId: 'message-777', contextVersion: 'a'.repeat(64), suggestion: '다른 예시도 알려줘', warnings: [] })}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
+      }
+    })
+    renderSessionDetail()
+    const input = await screen.findByLabelText('질문')
+    expect(predictions).toHaveLength(0) // Initial history is never a prediction trigger.
+    fireEvent.change(input, { target: { value: '학습 질문' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(posts).toBe(1))
+    expect(predictions).toHaveLength(0) // Fixture stream already completed; POST has not.
+    await act(async () => resolvePost(apiSuccess({
+      messages: [{ messageId: 777, senderType: 'AI', status: 'COMPLETED', messageType: 'QA', pageNumber: 1, content: '저장된 합성 답변', createdAt: '2026-11-05T00:00:00Z' }],
+      state: { currentPage: 1, pageStatus: 'EXPLAINED', activeQuizId: null, pendingDiagnosis: null },
+      uiActions: mode === 'unknown-action' ? [{ type: 'BINARY_DECISION', yesEvent: 'TEACHBACK', noEvent: 'WAIT', content: '평가' }] : [],
+    })))
+    await screen.findByText('저장된 합성 답변')
+    if (mode === 'ready') {
+      await screen.findByText('다른 예시도 알려줘')
+      expect(predictions).toHaveLength(1)
+      expect(await predictions[0].json()).toEqual({ sourceMessageId: 777 })
+      fireEvent.click(screen.getByText('제안을 초안에 넣기 (Tab)'))
+      expect(input).toHaveValue('다른 예시도 알려줘')
+      expect(posts).toBe(1)
+      fireEvent.change(input, { target: { value: '' } })
+      expect(predictions).toHaveLength(1)
+    } else {
+      expect(predictions).toHaveLength(0)
+      expect(screen.queryByText('다른 예시도 알려줘')).not.toBeInTheDocument()
+    }
+  })
   it('switches phone workspace panes without losing the drafted question', async () => {
     renderPhoneSessionDetail()
 

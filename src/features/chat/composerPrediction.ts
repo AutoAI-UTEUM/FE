@@ -1,5 +1,6 @@
 import type { AuthenticatedRawRequest } from '../auth'
 import { consumeSseStream } from '../sessions/sseParser'
+import type { SessionTurnRequest, SessionTurnResult, UiAction } from '../sessions'
 
 /** Intentionally absent from deployment configuration. Requires a current server context contract. */
 export const COMPOSER_PREDICTION_CONTRACT = 'spring-composer-prediction-sse-v1'
@@ -7,6 +8,29 @@ export const isComposerPredictionReady = () => import.meta.env.VITE_COMPOSER_PRE
 export interface PredictionTarget {
   sourceMessageId: number
   activity: 'EXPLAIN' | 'QA'
+}
+
+export function isPredictionActionSafe(action: UiAction): boolean {
+  return action.kind === 'BINARY_DECISION'
+    && ['MOVE_NEXT_PAGE', 'COMPLETE_SESSION', 'NOTE_REQUESTED'].includes(action.yesEvent)
+    && action.noEvent === 'WAIT'
+}
+
+/** Only an acknowledged turn POST may nominate a source; never history or stream completion. */
+export function selectPredictionTarget(result: SessionTurnResult, event: SessionTurnRequest['eventType']): PredictionTarget | undefined {
+  if (!['EXPLAIN_CURRENT_PAGE', 'USER_QUESTION'].includes(event)
+    || result.predictionUnsafe || result.pageStatus !== 'EXPLAINED' || result.activeQuizId || result.pendingDiagnosis
+    || !result.uiActions.every(isPredictionActionSafe)) return undefined
+  const message = result.messages.at(-1)
+  if (!message || message.senderType !== 'AI' || message.status !== 'COMPLETED'
+    || !message.content.trim() || message.pageNumber !== result.currentPage
+    || !Number.isSafeInteger(result.currentPage) || (result.currentPage ?? 0) <= 0
+    || !/^[1-9]\d*$/.test(message.id)) return undefined
+  const sourceMessageId = Number(message.id)
+  if (!Number.isSafeInteger(sourceMessageId)) return undefined
+  if (message.messageType === 'EXPLANATION') return { sourceMessageId, activity: 'EXPLAIN' }
+  if (message.messageType === 'QA') return { sourceMessageId, activity: 'QA' }
+  return undefined
 }
 export interface ComposerPrediction {
   schemaVersion: '1.0'; sourceMessageId: number; sourceTurnId: string; contextVersion: string | null
@@ -23,7 +47,7 @@ export async function requestComposerPrediction(request: AuthenticatedRawRequest
   const response = await request(`/api/sessions/${encodeURIComponent(sessionId)}/composer-prediction`, {
     method: 'POST', body: JSON.stringify({ sourceMessageId: target.sourceMessageId }), headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' }, signal, cache: 'no-store',
   })
-  if (!response.body || !response.headers.get('Content-Type')?.includes('text/event-stream')) throw new Error('Prediction SSE required')
+  if (!response.ok || !response.body || !response.headers.get('Content-Type')?.includes('text/event-stream')) throw new Error('Prediction SSE required')
   let result: ComposerPrediction | null = null
   let received = false
   await consumeSseStream(response.body, event => {

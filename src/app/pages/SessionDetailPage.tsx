@@ -6,6 +6,7 @@ import { useAuth } from '../../features/auth'
 import { getRememberedClassroomId } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { ChatPanel, isSupersededTurnError, useSessionChat } from '../../features/chat'
+import { isPredictionActionSafe } from '../../features/chat/composerPrediction'
 import { DocumentChatPanel } from '../../features/documentChat'
 import { createMaterialsRepository, type MaterialOverview } from '../../features/materials'
 import type { QuizKind } from '../../features/quiz'
@@ -116,7 +117,7 @@ export function SessionDetailPage() {
   const queuedPageMoveRef = useRef<QueuedPageMove | null>(null)
   const pageMoveLifecycleRef = useRef({ active: false, sessionId })
   const pageMoveBaselineControllerRef = useRef<AbortController | null>(null)
-  const chat = useSessionChat(sessionsRepository, sessionId ?? '')
+  const chat = useSessionChat(sessionsRepository, sessionId ?? '', JSON.stringify([user?.id ?? user?.email, currentPage]))
   const chatTurnPendingRef = useRef(chat.isTurnPending)
   const rememberedClassroomId = getRememberedClassroomId()
   const weekPagePath = rememberedClassroomId
@@ -395,6 +396,7 @@ export function SessionDetailPage() {
     setSession((current) => current
       ? {
           ...current,
+          predictionUnsafe: result.predictionUnsafe,
           activeQuizId: result.activeQuizId === undefined
             ? current.activeQuizId
             : result.activeQuizId ?? undefined,
@@ -892,6 +894,12 @@ export function SessionDetailPage() {
               request={apiRequest}
             />
           ) : <ChatPanel
+            predictionRequest={rawApiRequest}
+            predictionTarget={chat.predictionTarget}
+            predictionBlocked={isActionPending || isSelectingQuizType || learningHidden
+              || activeSession.predictionUnsafe || activeSession.status !== 'ACTIVE' || activeSession.pageStatus !== 'EXPLAINED'
+              || Boolean(activeSession.activeQuizId || activeSession.pendingDiagnosis || embeddedQuizId || lockedQuizId)
+              || !rawUiActions.every(isPredictionActionSafe)}
             request={apiRequest}
             chat={chat}
             className="!rounded-none !border-0"

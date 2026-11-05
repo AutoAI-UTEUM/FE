@@ -1,12 +1,25 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { COMPOSER_PREDICTION_CONTRACT, parseComposerPrediction, requestComposerPrediction } from './composerPrediction'
+import { COMPOSER_PREDICTION_CONTRACT, parseComposerPrediction, requestComposerPrediction, selectPredictionTarget } from './composerPrediction'
+import type { SessionTurnResult } from '../sessions'
 import { useComposerPrediction } from './useComposerPrediction'
 import { ChatPanel } from './ChatPanel'
 import type { SessionChat } from './useSessionChat'
 const target = { sourceMessageId: 123, activity: 'QA' as const }
 const payload = { schemaVersion: '1.0', sourceMessageId: 123, sourceTurnId: 'message-123', contextVersion: 'a'.repeat(64), suggestion: '학습률을 바꾸면 어떻게 돼?', warnings: [] }
 const response = (p: unknown = payload) => new Response(`event: prediction\ndata: ${JSON.stringify(p)}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
+it('selects only the final saved public AI source with explicit eligible state and no evaluation actions', () => {
+  const saved: SessionTurnResult = { currentPage: 1, pageStatus: 'EXPLAINED', uiActions: [], messages: [{ id: '123', content: 'answer', createdAt: '', senderType: 'AI', status: 'COMPLETED', messageType: 'QA', pageNumber: 1 }] }
+  expect(selectPredictionTarget(saved, 'USER_QUESTION')).toEqual(target)
+  for (const patch of [{ pageStatus: undefined }, { pageStatus: 'TEACHBACK' }, { activeQuizId: '2' }, { pendingDiagnosis: { diagnosisId: '3' } }, { currentPage: 2 }, { uiActions: [{ kind: 'BINARY_DECISION', label: 'teachback', yesEvent: 'TEACHBACK', noEvent: 'WAIT' }] }]) {
+    expect(selectPredictionTarget({ ...saved, ...patch } as SessionTurnResult, 'USER_QUESTION')).toBeUndefined()
+  }
+  for (const patch of [{ status: 'PENDING' }, { status: 'FAILED' }, { status: undefined }, { messageType: 'TEACHBACK' }, { messageType: 'QUIZ' }, { id: 'stream-123' }, { id: '9007199254740992' }, { senderType: 'USER' }]) {
+    expect(selectPredictionTarget({ ...saved, messages: [{ ...saved.messages[0], ...patch }] } as SessionTurnResult, 'USER_QUESTION')).toBeUndefined()
+  }
+  expect(selectPredictionTarget(saved, 'QUIZ_TYPE_SELECTED')).toBeUndefined()
+  expect(selectPredictionTarget({ ...saved, messages: [...saved.messages, { ...saved.messages[0], id: '124', messageType: 'NOTE' }] }, 'USER_QUESTION')).toBeUndefined()
+})
 beforeEach(() => vi.stubEnv('VITE_COMPOSER_PREDICTION_READINESS', COMPOSER_PREDICTION_CONTRACT))
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); window.localStorage.clear() })
 it('uses the separate POST SSE endpoint and sends only the persisted source id', async () => {
@@ -64,4 +77,23 @@ it('rejects malformed context, multi-line suggestions, and non-object warnings',
   expect(() => parseComposerPrediction({ ...payload, contextVersion: 'local-page-1' })).toThrow()
   expect(() => parseComposerPrediction({ ...payload, suggestion: 'first\nsecond' })).toThrow()
   expect(() => parseComposerPrediction({ ...payload, warnings: ['PREDICTION_UNAVAILABLE'] })).toThrow()
+})
+
+it('blocks a newly completed source throughout IME composition, including an empty composing input', async () => {
+  const request = vi.fn().mockResolvedValue(response())
+  const chat = { messages: [], isTurnPending: false, hasOlderMessages: false, isLoadingHistory: false, isLoadingOlderMessages: false, historyError: null, streamUiActions: [], quizQuestionPreview: [] } as unknown as SessionChat
+  const { rerender } = render(<ChatPanel chat={chat} sessionId="1" predictionRequest={request} predictionBlocked={false} />)
+  fireEvent.compositionStart(screen.getByLabelText('질문'))
+  rerender(<ChatPanel chat={chat} sessionId="1" predictionRequest={request} predictionBlocked={false} predictionTarget={target} />)
+  expect(request).not.toHaveBeenCalled()
+  fireEvent.compositionEnd(screen.getByLabelText('질문'))
+  await screen.findByText(payload.suggestion)
+  expect(request).toHaveBeenCalledTimes(1)
+  fireEvent.compositionStart(screen.getByLabelText('질문'))
+  expect(screen.queryByText(payload.suggestion)).not.toBeInTheDocument()
+})
+
+it('rejects unsuccessful HTTP responses even when their body claims to be SSE', async () => {
+  const request = vi.fn().mockResolvedValue(new Response(`event: prediction\ndata: ${JSON.stringify(payload)}\n\n`, { status: 500, headers: { 'Content-Type': 'text/event-stream' } }))
+  await expect(requestComposerPrediction(request, '1', target, new AbortController().signal)).rejects.toThrow('Prediction SSE required')
 })

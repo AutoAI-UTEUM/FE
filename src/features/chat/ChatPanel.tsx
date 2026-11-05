@@ -170,9 +170,10 @@ export function ChatPanel({
     ? questionDraft.value
     : readQuestionDraft(questionDraftKey)
   const [predictionEnabled, setPredictionEnabled] = useState(true)
+  const [isComposingQuestion, setIsComposingQuestion] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<ChatPanelTab>('chat')
-  const prediction = useComposerPrediction({ request: predictionRequest, sessionId, scope: JSON.stringify([textSizeOwnerId, sessionId, currentPage, tab]), target: predictionTarget, empty: question.length === 0, blocked: predictionBlocked || chat.isTurnPending || tab !== 'chat', enabled: predictionEnabled })
+  const prediction = useComposerPrediction({ request: predictionRequest, sessionId, scope: JSON.stringify([textSizeOwnerId, sessionId, currentPage, tab]), target: predictionTarget, empty: question.length === 0, blocked: predictionBlocked || chat.isTurnPending || isComposingQuestion || tab !== 'chat', enabled: predictionEnabled })
   const [notes, setNotes] = useState<Note[]>([])
   const [notesError, setNotesError] = useState<string | null>(null)
   const [messageActionStatus, setMessageActionStatus] = useState('')
@@ -812,7 +813,8 @@ export function ChatPanel({
             <Paperclip aria-hidden="true" size={15} />
           </button>
           <textarea
-            onCompositionStart={() => prediction.discard()}
+            onCompositionStart={() => { prediction.discard(); setIsComposingQuestion(true) }}
+            onCompositionEnd={() => setIsComposingQuestion(false)}
             aria-describedby={prediction.suggestion ? 'composer-prediction' : undefined}
             aria-invalid={error ? true : undefined}
             className="min-h-8 max-h-40 flex-1 resize-none bg-transparent px-1.5 py-0.5 type-chat-body text-stone-950 placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"

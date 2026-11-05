@@ -21,6 +21,38 @@ afterEach(() => {
 })
 
 describe('useSessionChat stream readiness', () => {
+  it('nominates a prediction only after POST success, clears on reset and never revives across page changes', async () => {
+    let handlers!: SessionStreamHandlers
+    let finish!: (value: SessionTurnResult) => void
+    const completed: SessionTurnResult = {
+      currentPage: 1, pageStatus: 'EXPLAINED', uiActions: [],
+      messages: [{ id: '123', content: 'saved answer', createdAt: '2026-11-05T00:00:00Z', senderType: 'AI', status: 'COMPLETED', messageType: 'QA', pageNumber: 1 }],
+    }
+    const repository = createRepository({
+      stream: vi.fn().mockImplementation((_id, next, signal) => { handlers = next; return resolveWhenAborted(signal) }),
+      submitTurn: vi.fn().mockImplementation(() => new Promise<SessionTurnResult>(resolve => { finish = resolve })),
+    })
+    const { result, rerender } = renderHook(({ scope }) => useSessionChat(repository, '573', scope), { initialProps: { scope: 'owner:1/page:1' } })
+    await waitFor(() => expect(result.current.isLoadingHistory).toBe(false))
+    expect(result.current.predictionTarget).toBeUndefined()
+    let pending!: Promise<SessionTurnResult>
+    act(() => { pending = result.current.submitTurn(turn('prediction')) })
+    act(() => handlers.onReady?.({ sessionId: '573' }))
+    await waitFor(() => expect(repository.submitTurn).toHaveBeenCalledOnce())
+    act(() => handlers.onCompleted?.(undefined, completed))
+    expect(result.current.predictionTarget).toBeUndefined()
+    await act(async () => { finish(completed); await pending })
+    expect(result.current.predictionTarget).toEqual({ sourceMessageId: 123, activity: 'QA' })
+    await act(async () => { await result.current.startNewConversation() })
+    expect(result.current.predictionTarget).toBeUndefined()
+    act(() => { pending = result.current.submitTurn(turn('old-page')) })
+    act(() => handlers.onReady?.({ sessionId: '573' }))
+    await waitFor(() => expect(repository.submitTurn).toHaveBeenCalledTimes(2))
+    rerender({ scope: 'owner:1/page:2' })
+    await act(async () => { finish(completed); await pending })
+    rerender({ scope: 'owner:1/page:1' })
+    expect(result.current.predictionTarget).toBeUndefined()
+  })
   it('posts once after ready for each consecutive question, even with duplicate ready events', async () => {
     const attempts: SessionStreamHandlers[] = []
     const submitTurn = vi.fn().mockResolvedValue(emptyTurnResult())
