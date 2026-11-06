@@ -15,3 +15,9 @@ Validation on Node 22:
 - Screenshots visually inspected for phone policy cards and desktop completion. Fixtures use synthetic data and mocked APIs; no real accounts or emails were exercised.
 
 No deployment configuration, policy approval, production data or backend behavior changes are included.
+
+## Isolated production candidate
+
+The main candidate is based on dd218f703a48de70d80beec012aa6c168568e97b and ports only this UI change. It does not promote the accumulated develop changes or add guardian/composer capabilities. Existing dev/prod deployment workflows are byte-for-byte unchanged.
+
+Main-specific local validation: lint/typecheck passed; 83 unit files / 632 tests passed; UI browser suite 9 passed; existing launch authentication enabled 18 passed / 2 skipped and disabled 8 passed / 12 skipped. These counts differ from the develop baseline above.
