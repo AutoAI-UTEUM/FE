@@ -262,6 +262,7 @@ describe('LoginPage', () => {
       }),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('radio', { name: '강의자' }))
+    fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '2000-02-29' } })
     expect(screen.queryByText(/만 14세 이상/)).not.toBeInTheDocument()
     expect(screen.queryByText(/이용약관/)).not.toBeInTheDocument()
     expect(screen.queryByText(/개인정보 처리방침/)).not.toBeInTheDocument()
@@ -272,6 +273,7 @@ describe('LoginPage', () => {
       .mocked(globalThis.fetch)
       .mock.calls.filter(([input]) => String(input).endsWith('/api/auth/google'))
     expect(JSON.parse(String(googleCalls[1]?.[1]?.body))).toEqual({
+      dateOfBirth: '2000-02-29',
       idToken: 'new-google-id-token',
       role: 'INSTRUCTOR',
     })
@@ -336,6 +338,7 @@ describe('LoginPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Google 계정으로 계속' }))
     expect(await screen.findByRole('heading', { name: 'Google 가입을 완료해 주세요' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '2000-02-29' } })
     fireEvent.click(screen.getByRole('button', { name: '가입하기' }))
 
     expect(await screen.findByRole('heading', { name: 'Google 회원가입을 계속할 수 없습니다' })).toBeInTheDocument()

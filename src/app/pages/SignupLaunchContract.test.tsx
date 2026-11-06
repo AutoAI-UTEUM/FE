@@ -25,6 +25,7 @@ function renderPage(google = true) {
   render(<AuthProvider initialUser={null}><MemoryRouter initialEntries={['/signup']}><AuthProbe /><GoogleStart /><Routes>
     <Route path="/signup" element={<SignupPage />} /><Route path="/verify-email" element={<p>확인 안내 화면</p>} />
     <Route path="/login" element={<p>로그인 안내 화면</p>} />
+    <Route path="/classrooms" element={<p>가입 후 강의실</p>} />
   </Routes></MemoryRouter></AuthProvider>)
   if (google) fireEvent.click(screen.getByRole('button', { name: '합성 Google 시작' }))
 }
@@ -171,5 +172,47 @@ it.each(['cancel', 'pagehide', 'unmount'])('Google %s ignores late success, abor
   await act(async () => { release(failure(fixtures.responses.newGoogleSignup)) })
   if (kind !== 'unmount') expect(screen.getByTestId('auth-state')).toHaveTextContent('false')
   expect(screen.queryByText('확인 안내 화면')).not.toBeInTheDocument()
+})
+
+it('requires Google birthdate with readiness OFF and sends the exact date only after valid input', async () => {
+  vi.stubEnv('VITE_AUTH_CONTRACT_READINESS', '')
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(failure(fixtures.responses.newGoogleSignup))
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: '가입하기' }))
+  expect(screen.getByText('생년월일을 입력하세요.')).toBeInTheDocument()
+  expect(fetch).not.toHaveBeenCalled()
+  fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '9999-12-31' } })
+  fireEvent.click(screen.getByRole('button', { name: '가입하기' }))
+  expect(screen.getByText('생년월일은 오늘 이후 날짜일 수 없습니다.')).toBeInTheDocument()
+  expect(fetch).not.toHaveBeenCalled()
+  fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '2000-02-29' } })
+  fireEvent.click(screen.getByRole('button', { name: '가입하기' }))
+  expect(await screen.findByText('확인 안내 화면')).toBeInTheDocument()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
+    idToken: fixtures.inputs.existingGoogleLogin.idToken, role: 'LEARNER', dateOfBirth: '2000-02-29',
+  })
+})
+
+it.each([
+  ['SIGNUP_REQUIRED', 409, '역할과 생년월일을 확인한 뒤 가입하기를 다시 눌러 주세요.'],
+  ['VALIDATION_FAILED', 400, '표시된 가입 정보를 확인해 주세요.'],
+] as const)('keeps Google continuation after %s, restores the button and never retries automatically', async (code, status, message) => {
+  vi.stubEnv('VITE_AUTH_CONTRACT_READINESS', '')
+  let release!: (value: Response) => void
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise((resolve) => { release = resolve }))
+  renderPage()
+  fireEvent.change(screen.getByLabelText('생년월일'), { target: { value: '2000-02-29' } })
+  const form = screen.getByRole('button', { name: '가입하기' }).closest('form')!
+  fireEvent.submit(form); fireEvent.submit(form)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('button', { name: '가입 중' })).toBeDisabled()
+  await act(async () => { release(failure({ status, body: { success: false, error: { code, message: 'synthetic', details: code === 'VALIDATION_FAILED' ? [{ field: 'dateOfBirth', reason: '생년월일을 다시 확인하세요.' }] : [] } } })) })
+  expect(await screen.findByText(message)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '가입하기' })).toBeEnabled()
+  expect(screen.getByRole('heading', { name: 'Google 가입을 완료해 주세요' })).toBeInTheDocument()
+  expect(screen.getByLabelText('생년월일')).toHaveValue('2000-02-29')
+  if (code === 'VALIDATION_FAILED') expect(screen.getByLabelText('생년월일')).toHaveAttribute('aria-invalid', 'true')
+  expect(fetch).toHaveBeenCalledTimes(1)
 })
 

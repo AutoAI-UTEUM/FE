@@ -1,3 +1,4 @@
+import { PriorConsentReview } from '../../features/guardian/PriorConsentReview'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
@@ -49,7 +50,8 @@ function GuardianReviewSession() {
       <Button disabled={busy || operationLocked || list.page === 0} onClick={() => void load(list.page - 1)}>이전 목록</Button>
       <Button disabled={busy || operationLocked || list.page + 1 >= list.totalPages} onClick={() => void load(list.page + 1)}>다음 목록</Button>
     </section> : null}
-    {detail ? <GuardianReviewDetail key={`${detail.status.requestId}:${detail.status.generation}:${detail.status.revision}`} detail={detail} selfId={user?.id} onPendingChange={onPendingChange} onInvalidate={(message) => { setList(null); setDetail(null); if (message) setError(message) }} onRefresh={() => void load(list?.page ?? 0, detail.status.requestId)} /> : null}
+    {detail ? <GuardianReviewDetail key={`${detail.status.requestId}:${detail.status.generation}:${detail.status.revision}`} detail={detail} disabled={operationLocked} selfId={user?.id} onPendingChange={onPendingChange} onInvalidate={(message) => { setList(null); setDetail(null); if (message) setError(message) }} onRefresh={() => void load(list?.page ?? 0, detail.status.requestId)} /> : null}
+    <PriorConsentReview key={detail?.status.requestId ?? 'no-case'} detail={detail} disabled={busy || operationLocked} onPendingChange={onPendingChange} onInvalidate={(message) => { setDetail(null); setList(null); if (message) setError(message) }} />
     <Link to={routes.settings}>계정 관리</Link>
   </div></PageContainer></main>
 }
@@ -67,7 +69,7 @@ const decisionChecks = {
   noticeAndScopesChecked: '현재 고지와 승인할 서비스·AI 범위를 검토했습니다.',
 }
 type CheckName = keyof typeof confirmationChecks | keyof typeof decisionChecks
-function GuardianReviewDetail({ detail, selfId, onInvalidate, onRefresh, onPendingChange }: { detail: GuardianDetail; selfId?: number; onInvalidate: (message?: string) => void; onRefresh: () => void; onPendingChange: (pending: boolean) => void }) {
+function GuardianReviewDetail({ detail, disabled, selfId, onInvalidate, onRefresh, onPendingChange }: { detail: GuardianDetail; disabled: boolean; selfId?: number; onInvalidate: (message?: string) => void; onRefresh: () => void; onPendingChange: (pending: boolean) => void }) {
   const { apiRequest } = useAuth()
   const [checks, setChecks] = useState<Partial<Record<CheckName, boolean>>>({})
   const [relationship, setRelationship] = useState<GuardianRelationship | ''>('')
@@ -84,7 +86,7 @@ function GuardianReviewDetail({ detail, selfId, onInvalidate, onRefresh, onPendi
   const method = confirmationMethodFor(detail.replyChannel)
   const current = s.currentNotice && Boolean(method) && Boolean(detail.forms.consent_email?.trim()) && !/TBD|\[\[|미확정/.test(Object.values(detail.forms).join(' '))
   const ownerKnown = selfId !== undefined && detail.userId !== null && selfId !== detail.userId
-  const canProcess = ownerKnown && policyReviewed && !action.operation
+  const canProcess = ownerKnown && policyReviewed && !action.operation && !disabled
   const scopes = ['SERVICE', ...(ai ? ['EXTERNAL_AI'] : [])]
   const matchesDeclaration = !s.webDeclaredAt || (relationship === detail.relationship && JSON.stringify([...detail.declaredScopes].sort()) === JSON.stringify([...scopes].sort()))
   const validTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(receivedAt) && detail.generationStartedAt !== null && Date.parse(receivedAt) >= Date.parse(detail.generationStartedAt) && Date.parse(receivedAt) <= inputTime
@@ -100,6 +102,7 @@ function GuardianReviewDetail({ detail, selfId, onInvalidate, onRefresh, onPendi
     <p>이름: {detail.guardianName ?? '기록 없음'} · 연락처: {detail.guardianContact ?? '기록 없음'} · 입력 출처: {detail.contactOrigin ?? '기록 없음'}</p>
     <p>선언 범위: {detail.declaredScopes.join(', ') || '없음'} · 관계: {detail.relationship ?? '기록 없음'}</p>
     <p>확인 수단: {detail.confirmationMethod ?? '기록 없음'} · 증거 참조: {detail.evidenceReference ?? '기록 없음'} · 명시적 확인 (UTC): {s.explicitResponseAt ?? '기록 없음'}</p>
+    {detail.priorConsentEvidence ? <p>보관된 동의 출처: {detail.priorConsentEvidence.method === 'IN_PERSON' ? '대면 확인' : detail.priorConsentEvidence.method} · 실제 확인일 (UTC): {detail.priorConsentEvidence.receivedAt} · 서버 검토일 (UTC): {detail.priorConsentEvidence.reviewedAt} · 원본 유효기한 (UTC): {detail.priorConsentEvidence.consentValidUntil}</p> : null}
     {!current ? <p role="status">최신 고지·확인 창구가 부족하여 회신 등록·승인·반려·보완 요청을 할 수 없습니다. 현재 차수 철회는 별도 확인 후 진행할 수 있습니다.</p> : <section aria-label="담당자 양식 미리 보기"><p>아래 전체 양식은 미리 보기이며 현재 신청 상태가 아닙니다.</p>{Object.entries(detail.forms).map(([key, text]) => <p key={key} className="whitespace-pre-wrap break-words">{text}</p>)}</section>}
     {!ownerKnown ? <p role="status">본인 신청이거나 대상·담당자 식별이 부족하므로 처리할 수 없습니다.</p> : null}
     <label className="block"><input type="checkbox" checked={policyReviewed} disabled={!ownerKnown || Boolean(action.operation)} onChange={(e) => setPolicyReviewed(e.target.checked)} /> 운영 고지·관계 확인·선택 AI·보유/파기 기준의 별도 승인을 확인했습니다.</label>
