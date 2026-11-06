@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { apiRequest } from '../../shared/api'
 import { type PolicyDocument, type useSignupContract } from './useSignupContract'
 
-export function SignupContractFields({ contract, dateOfBirth, onDateChange, dateError }: {
+export function SignupContractFields({ contract }: {
   contract: ReturnType<typeof useSignupContract>
-  dateOfBirth: string
-  onDateChange: (value: string) => void
-  dateError?: string
 }) {
   const [content, setContent] = useState<string | null>(null)
   const detailRef = useRef<AbortController | null>(null)
@@ -31,13 +28,7 @@ export function SignupContractFields({ contract, dateOfBirth, onDateChange, date
     }
   }
   return <fieldset className="space-y-3">
-    <legend className="font-semibold">가입 정보 및 정책 동의</legend>
-    <label className="block" htmlFor="signup-date-of-birth">생년월일</label>
-    <input className="h-11 w-full rounded-lg border border-stone-300 px-3" id="signup-date-of-birth"
-      type="date" value={dateOfBirth} onChange={(event) => onDateChange(event.target.value)}
-      aria-invalid={Boolean(dateError)} aria-describedby={dateError ? 'signup-date-error' : undefined} />
-    {dateError ? <p id="signup-date-error" role="alert">{dateError}</p> : null}
-    <p>생년월일 입력은 나이 확인이나 보호자 승인을 완료하지 않습니다.</p>
+    <legend className="font-semibold">정책 동의</legend>
     {contract.error ? <p role="alert">{contract.error}</p> : null}
     {contract.policyNotReady ? <div role="status">
       <p>서버에서 가입 정책을 준비 중입니다. 정책 목록만으로 가입 가능 여부를 판단하지 않습니다.</p>

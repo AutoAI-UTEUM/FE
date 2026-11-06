@@ -44,7 +44,7 @@ async function localForm(page: Page) {
   await page.locator('#signup-email').fill('synthetic@example.invalid')
   await page.locator('#signup-password').fill('Synthetic123!')
   await page.locator('#signup-confirm-password').fill('Synthetic123!')
-  if (ready) await page.getByLabel('생년월일', { exact: true }).fill('2000-02-29')
+  await page.getByLabel('생년월일', { exact: true }).fill('2000-02-29')
 }
 async function google(page: Page) {
   // The Google library and credential are synthetic and entirely in this page.

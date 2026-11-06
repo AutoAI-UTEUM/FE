@@ -27,6 +27,7 @@ import {
 } from '../../features/auth'
 import { ApiClientError } from '../../shared/api'
 import { SignupContractFields } from '../../features/auth/SignupContractFields'
+import { BirthDateField } from '../../features/auth/BirthDateField'
 import { useSignupContract } from '../../features/auth/useSignupContract'
 import { isPolicyConsentRequired, isSignupPolicyNotReady, SIGNUP_POLICY_NOT_READY_MESSAGE } from '../../features/auth/signupPolicyError'
 import { validateDateOfBirth, requiresEmailVerification } from '../../features/auth/launchAuthContract'
@@ -36,6 +37,7 @@ import { usePageTitle } from '../../shared/lib/usePageTitle'
 
 const initialValues: SignupFormValues = {
   affiliation: '',
+  dateOfBirth: '',
   email: '',
   name: '',
   password: '',
@@ -259,12 +261,15 @@ export function SignupPage() {
     event.preventDefault()
     if (!pendingGoogleIdToken || googleAttemptRef.current) return
     if (contract.policyNotReady) return
-    if (contract.enabled) {
-      const dateError = validateDateOfBirth(values.dateOfBirth)
-      if (dateError || !contract.complete) {
-        setGoogleError(dateError ?? '현재 필수 정책을 조회하고 동의해 주세요.')
-        return
-      }
+    const dateError = validateDateOfBirth(values.dateOfBirth)
+    setErrors({ dateOfBirth: dateError })
+    if (dateError) {
+      setGoogleError(null)
+      return
+    }
+    if (!contract.complete) {
+      setGoogleError('현재 필수 정책을 조회하고 동의해 주세요.')
+      return
     }
     googleAttemptRef.current = true
     const controller = new AbortController()
@@ -276,12 +281,17 @@ export function SignupPage() {
       const googleUser = await loginWithGoogle({
         idToken: pendingGoogleIdToken,
         role: googleRole,
-        ...(contract.enabled ? { dateOfBirth: values.dateOfBirth, consents: contract.consents } : {}),
+        dateOfBirth: values.dateOfBirth,
+        ...(contract.enabled ? { consents: contract.consents } : {}),
       }, controller.signal)
       if (controller.signal.aborted || googleControllerRef.current !== controller) return
       navigate(requiresEmailVerification(googleUser) ? routes.verifyEmail : routes.classrooms, { replace: true })
     } catch (error) {
       if (controller.signal.aborted || googleControllerRef.current !== controller) return
+      if (error instanceof ApiClientError && error.code === 'SIGNUP_REQUIRED') {
+        setGoogleError('역할과 생년월일을 확인한 뒤 가입하기를 다시 눌러 주세요.')
+        return
+      }
       if (
         error instanceof ApiClientError &&
         error.status === 409 &&
@@ -312,6 +322,12 @@ export function SignupPage() {
       if (isPolicyConsentRequired(error)) {
         void contract.reload()
         setGoogleError('정책이 변경되었습니다. 최신 정책을 확인하고 다시 동의해 주세요.')
+        return
+      }
+      const formErrors = mapAuthErrorToFormErrors(error)
+      if (formErrors) {
+        setErrors(formErrors as SignupFormErrors)
+        setGoogleError('표시된 가입 정보를 확인해 주세요.')
         return
       }
       if (error instanceof ApiClientError && ['MALFORMED_REQUEST', 'VALIDATION_FAILED'].includes(error.code)) {
@@ -348,6 +364,7 @@ export function SignupPage() {
       )
     }
     setServerError(null)
+    setGoogleError(null)
   }
 
   function updateConfirmPassword(value: string) {
@@ -413,7 +430,7 @@ export function SignupPage() {
           </p>
         </div>
 
-        <form className="mt-6" onSubmit={handleGoogleSignup}>
+        <form className="mt-6 space-y-4" noValidate onSubmit={handleGoogleSignup}>
           <div
             aria-label="Google 가입 역할"
             className="grid grid-cols-2 rounded-lg bg-stone-100 p-1"
@@ -435,7 +452,7 @@ export function SignupPage() {
                       : 'text-stone-500 hover:text-stone-800',
                   ].join(' ')}
                   key={role}
-                  onClick={() => setGoogleRole(role)}
+                  onClick={() => { setGoogleRole(role); setErrors((current) => ({ ...current, role: undefined })); setGoogleError(null) }}
                   role="radio"
                   type="button"
                 >
@@ -445,8 +462,9 @@ export function SignupPage() {
             })}
           </div>
 
-          <SignupContractFields contract={contract} dateOfBirth={values.dateOfBirth ?? ''}
-            onDateChange={(value) => updateValue('dateOfBirth', value)} dateError={errors.dateOfBirth} />
+          {errors.role ? <p className="type-caption text-rose-700" role="alert">{errors.role}</p> : null}
+          <BirthDateField value={values.dateOfBirth} onChange={(value) => updateValue('dateOfBirth', value)} error={errors.dateOfBirth} />
+          <SignupContractFields contract={contract} />
 
           {googleError ? (
             <p className="mt-3 type-body font-medium text-rose-700" role="alert">
@@ -580,8 +598,8 @@ export function SignupPage() {
       </div>
 
       <form className="mt-6 space-y-4" noValidate onSubmit={handleSubmit}>
-        <SignupContractFields contract={contract} dateOfBirth={values.dateOfBirth ?? ''}
-            onDateChange={(value) => updateValue('dateOfBirth', value)} dateError={errors.dateOfBirth} />
+        <BirthDateField value={values.dateOfBirth} onChange={(value) => updateValue('dateOfBirth', value)} error={errors.dateOfBirth} />
+        <SignupContractFields contract={contract} />
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <label

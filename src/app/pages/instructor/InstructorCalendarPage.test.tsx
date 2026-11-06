@@ -23,7 +23,7 @@ beforeEach(() => {
   auth.user = { email: 'instructor@example.com', id: 1, name: '강의자', role: 'INSTRUCTOR' }
 })
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.useRealTimers() })
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -421,6 +421,8 @@ describe('InstructorCalendarPage dialog accessibility and schedule validation', 
   })
 
   it('keeps valid date values when editing and saving an existing all-day range', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-14T00:00:00Z'))
     const existing = schedule({
       endsAt: new Date('2026-10-13T23:59:59').toISOString(),
       hasTime: false,
@@ -455,6 +457,8 @@ describe('InstructorCalendarPage dialog accessibility and schedule validation', 
   })
 
   it('displays a single timed event once instead of repeating the same timestamp as a range', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-14T00:00:00Z'))
     const startsAt = new Date('2026-10-14T09:30:00').toISOString()
     auth.apiRequest.mockResolvedValue(success({ items: [schedule({
       endsAt: startsAt,

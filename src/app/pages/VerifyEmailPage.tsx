@@ -131,8 +131,8 @@ export function VerifyEmailPage() {
     {linkIssue === 'obsolete-query' ? <p role="status">이전 형식의 이메일 링크는 사용할 수 없습니다. 로그인 후 확인 이메일을 다시 요청해 주세요.</p>
       : linkIssue === 'invalid-fragment' ? <p role="status">이메일 링크 형식이 올바르지 않습니다. 로그인 후 확인 이메일을 다시 요청해 주세요.</p> : null}
     <h1 className="type-page-title font-bold">이메일 확인</h1>
-    <p>메일 링크를 여는 것만으로 확인되지 않습니다. 아래 버튼으로 확인해 주세요.</p>
-    {!ready ? <p role="status">이메일 확인 기능을 준비 중입니다. 사용 가능 안내 후 새 링크를 열어 주세요.</p> : <>
+    {ready && hasToken ? <p>메일 링크를 여는 것만으로 확인되지 않습니다. 아래 버튼으로 확인해 주세요.</p> : null}
+    {!ready ? <p role="status">이메일 확인 기능을 준비 중입니다. 지금은 인증 버튼과 확인 이메일 재요청을 사용할 수 없습니다. 사용 가능 안내 후 새 링크를 열어 주세요.</p> : <>
       {hasToken ? <Button disabled={busy} onClick={() => void act('confirm')}>이메일 확인하기</Button> : null}
       {auth.user ? <>
         <p>현재 로그인 계정: {auth.user.email}</p>

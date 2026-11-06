@@ -147,8 +147,9 @@ const repository: AuthRepository = {
       body: {
         affiliation: values.affiliation?.trim() || undefined,
         idToken: values.idToken,
+        ...(values.role ? { dateOfBirth: values.dateOfBirth } : {}),
         ...(isLaunchAuthReady() && values.role ? {
-          dateOfBirth: values.dateOfBirth, consents: values.consents,
+          consents: values.consents,
         } : {}),
         learningEmailOptIn: values.learningEmailOptIn,
         role: values.role,
@@ -218,8 +219,9 @@ const repository: AuthRepository = {
         body: {
           affiliation: values.affiliation?.trim() || undefined,
           email: values.email.trim().toLowerCase(),
+          dateOfBirth: values.dateOfBirth,
           ...(isLaunchAuthReady() ? {
-            dateOfBirth: values.dateOfBirth, consents: values.consents,
+            consents: values.consents,
           } : {}),
           learningEmailOptIn: values.learningEmailOptIn ?? false,
           name: values.name.trim(),
