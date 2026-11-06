@@ -249,7 +249,7 @@ describe('exams repository', () => {
     })
     await repository.getMySubmission('10', 1)
     await repository.getSubmission('10', '300')
-    await repository.adjustScore('10', '300', 'q1', 18.5)
+    await repository.adjustScore('10', '300', 'q1', { score: 18.5 })
     await expect(repository.regrade('10', '300')).resolves.toMatchObject({ id: '300', status: 'SUBMITTED' })
     await expect(repository.listSubmissions('10')).resolves.toMatchObject([{ id: '300', userId: '7' }])
 
@@ -260,6 +260,42 @@ describe('exams repository', () => {
     expect(request).toHaveBeenNthCalledWith(5, '/api/exams/10/submissions/300/answers/q1/score', { body: { score: 18.5 }, method: 'PATCH', signal: undefined })
     expect(request).toHaveBeenNthCalledWith(6, '/api/exams/10/submissions/300/regrade', { method: 'POST', signal: undefined })
     expect(request).toHaveBeenNthCalledWith(7, '/api/exams/10/submissions?page=0&size=100', { signal: undefined })
+  })
+
+  it.each([undefined, null, '기존 점수 변경 사유'])('maps nullable instructor reasons from GET and PATCH (%s)', async (manualScoreReason) => {
+    const response = { ...submissionDto, items: [{ ...submissionDto.items[0], manualScoreReason }] }
+    const request = vi.fn().mockResolvedValue(success(response))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+    const controller = new AbortController()
+    const input = { score: 18.5, reason: '  재검토\n\u00a0근거  ' }
+
+    const detail = await repository.getSubmission('10', '300', controller.signal)
+    const adjusted = await repository.adjustScore('10', '300', 'q1', input, controller.signal)
+
+    expect(detail.items[0].manualScoreReason).toBe(manualScoreReason ?? undefined)
+    expect(adjusted.items[0].manualScoreReason).toBe(manualScoreReason ?? undefined)
+    expect(request).toHaveBeenLastCalledWith('/api/exams/10/submissions/300/answers/q1/score', { body: input, method: 'PATCH', signal: controller.signal })
+  })
+
+  it.each([null, '', ' \t\n '])('sends an explicit empty reason without restoring the previous reason (%s)', async (reason) => {
+    const request = vi.fn().mockResolvedValue(success(submissionDto))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+    await repository.adjustScore('10', '300', 'q1', { score: 18.5, reason })
+    expect(request).toHaveBeenCalledWith('/api/exams/10/submissions/300/answers/q1/score', { body: { score: 18.5, reason }, method: 'PATCH', signal: undefined })
+  })
+
+  it('discards instructor-only reasons on every learner submission response path', async () => {
+    const response = { ...submissionDto, items: [{ ...submissionDto.items[0], manualScoreReason: '강사 전용 검토 사유' }] }
+    const request = vi.fn().mockResolvedValue(success(response))
+    const repository = createExamsRepository(request as AuthenticatedRequest)
+    for (const result of [
+      await repository.getMySubmission('10'),
+      await repository.submit('10', { q1: '답' }, 'request-1'),
+      await repository.regradeMySubmission('10'),
+    ]) {
+      expect(result.items[0]).not.toHaveProperty('manualScoreReason')
+      expect(JSON.stringify(result)).not.toContain('강사 전용 검토 사유')
+    }
   })
 
   it('loads, saves, and exposes version conflicts for server-side attempt drafts', async () => {

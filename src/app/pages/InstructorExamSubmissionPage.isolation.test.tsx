@@ -33,6 +33,7 @@ describe('InstructorExamSubmissionPage state isolation', () => {
     renderSubmissionPage('/classrooms/30/exams/10/submissions/300')
     expect(await screen.findByText('answer-a')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '7' } })
+    fireEvent.change(screen.getByLabelText('1번 점수 변경 사유 (선택)'), { target: { value: 'unsaved learner A reason' } })
 
     fireEvent.click(nextLearnerLink())
 
@@ -44,6 +45,8 @@ describe('InstructorExamSubmissionPage state isolation', () => {
     learnerB.resolve(success(submission(301, 'answer-b', 8)))
     expect(await screen.findByText('answer-b')).toBeInTheDocument()
     expect(screen.getByRole('spinbutton')).toHaveValue(8)
+    expect(screen.getByLabelText('1번 점수 변경 사유 (선택)')).toHaveValue('answer-b-reason')
+    expect(screen.queryByText('answer-a-reason')).not.toBeInTheDocument()
   })
 
   it('ignores a learner A read that resolves after learner B', async () => {
@@ -69,6 +72,7 @@ describe('InstructorExamSubmissionPage state isolation', () => {
     expect(screen.getByText('answer-b')).toBeInTheDocument()
     expect(screen.queryByText('late-answer-a')).not.toBeInTheDocument()
     expect(screen.getByRole('spinbutton')).toHaveValue(8)
+    expect(screen.getByLabelText('1번 점수 변경 사유 (선택)')).toHaveValue('answer-b-reason')
   })
 
   it('ignores a late learner A score response after learner B is loaded', async () => {
@@ -96,6 +100,7 @@ describe('InstructorExamSubmissionPage state isolation', () => {
     expect(screen.getByText('answer-b')).toBeInTheDocument()
     expect(screen.queryByText('late-answer-a')).not.toBeInTheDocument()
     expect(screen.getByRole('spinbutton')).toHaveValue(8)
+    expect(screen.getByLabelText('1번 점수 변경 사유 (선택)')).toHaveValue('answer-b-reason')
   })
 
   it('hides learner A on a delayed learner B 403 and retries the read', async () => {
@@ -258,7 +263,7 @@ function submission(submissionId: number, answer: string, score: number) {
   return {
     attemptNo: 1,
     gradedAt: '2026-09-09T01:02:00Z',
-    items: [{ answer, maxScore: 10, questionId: 'q1', score, verdict: 'CORRECT' }],
+    items: [{ answer, manualScoreReason: `${answer}-reason`, maxScore: 10, questionId: 'q1', score, verdict: 'CORRECT' }],
     maxScore: 10,
     normalizedScore: score * 10,
     score,

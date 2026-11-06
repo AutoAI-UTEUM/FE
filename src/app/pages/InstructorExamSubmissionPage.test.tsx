@@ -117,7 +117,7 @@ describe('InstructorExamSubmissionPage', () => {
     await waitFor(() => expect(screen.getByText('직접 수정됨')).toBeInTheDocument())
     expect(screen.getByText('10', { selector: 'strong' })).toBeInTheDocument()
     const scoreCall = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).endsWith('/api/exams/10/submissions/300/answers/q1/score'))
-    expect(JSON.parse(String(scoreCall?.[1]?.body))).toEqual({ score: 10 })
+    expect(JSON.parse(String(scoreCall?.[1]?.body))).toEqual({ score: 10, reason: '' })
   })
 
   it('does not convert an ungraded instructor result into a zero score', async () => {
