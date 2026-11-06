@@ -13,6 +13,39 @@ permissions:
   contents: read
 
 jobs:
+  composer-browser:
+    name: composer-browser (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - mode: default-off
+            readiness: ''
+          - mode: synthetic-ready
+            readiness: spring-composer-prediction-sse-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Synthetic composer browser acceptance
+        env:
+          QA_ENV: mock
+          QA_COMPOSER_READINESS: ${{ matrix.readiness }}
+        run: npx playwright test --config playwright.composer.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: composer-${{ matrix.mode }}
+          path: qa-artifacts/composer/
+          retention-days: 7
+
   launch-auth-contract:
     name: launch-auth-contract (${{ matrix.mode }})
     runs-on: ubuntu-latest

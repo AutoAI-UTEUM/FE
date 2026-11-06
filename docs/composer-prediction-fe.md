@@ -47,3 +47,24 @@ gate, 프록시 buffering·HTTP 취소·실모델/MySQL E2E와 모바일/스크�
 
 합성 테스트: 별도 SSE body, OFF/평가 단계 무요청, 취소 무시한 늦은 응답,
 페이지/문맥 변경, null/실패 무표시, 중복 이벤트, Tab/클릭→편집→명시 전송.
+
+
+## 2026-11-06 브라우저 회귀 보강
+
+`playwright.composer.config.ts`는 로컬 mock 빌드에만 `QA_COMPOSER_READINESS`를
+전달한다. 기본 OFF와 synthetic-ready를 별도로 실행하며 배포 workflow·환경은 바꾸지 않는다.
+실제 Chromium desktop 1440×900 / phone 390×844 / tablet 820×1180에서
+동일 시나리오를 실행하고 CI에 두 모드를 연결했다.
+
+저장 POST 응답 전 무요청, 초기/재조회 이력 무요청, 정확한 인증 POST SSE 본문,
+중복 이벤트 억제, Tab·클릭 수락과 수정 후 별도 전송, 44px 버튼·status/설명 연결,
+타이핑 시 브라우저 요청 취소, 늦은 응답·페이지 이동·화면 이탈·패널 숨김·조합 이벤트,
+평가/미지원 액션 차단, null/503/다른 source 응답 무표시와 비차단, 현재 화면 opt-out을
+검증한다. API는 localhost 합성 응답이며 외부 서비스 요청은 검사에서 허용하지 않는다.
+최종 소스에서 전체 Vitest 110파일·1,199개, lint/typecheck, ready 브라우저 44개 통과
+(데스크톱 패널 전환 1개 해당 없음), OFF 브라우저 3개 통과(ready 전용 42개 미실행).
+각 모드의 production build도 통과했다. 정확한 head CI는 #249 검증란에 기록한다.
+
+자동 조합 이벤트는 실제 한글 IME·스크린리더·모바일 키보드 인수가 아니다.
+브라우저의 abort 확인은 프록시→Spring→AI/provider 취소 또는 과금 중단의 증거가 아니다.
+서버 정책/비용 한도·평가 단계 계약·영속 opt-out·실환경 E2E는 계속 별도이며 기능 OFF다.

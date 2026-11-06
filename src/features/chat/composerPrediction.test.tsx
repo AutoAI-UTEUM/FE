@@ -97,3 +97,18 @@ it('rejects unsuccessful HTTP responses even when their body claims to be SSE', 
   const request = vi.fn().mockResolvedValue(new Response(`event: prediction\ndata: ${JSON.stringify(payload)}\n\n`, { status: 500, headers: { 'Content-Type': 'text/event-stream' } }))
   await expect(requestComposerPrediction(request, '1', target, new AbortController().signal)).rejects.toThrow('Prediction SSE required')
 })
+
+it.each(['blocked', 'scope', 'empty', 'enabled'] as const)('does not resurrect an already displayed draft after a %s boundary and return', async (boundary) => {
+  const request = vi.fn().mockResolvedValue(response())
+  const initial = { scope: 'user:1/page:1', empty: true, blocked: false, enabled: true }
+  const { result, rerender } = renderHook((props) => useComposerPrediction({ request, sessionId: '1', target, ...props }), { initialProps: initial })
+  await waitFor(() => expect(result.current.suggestion).toBe(payload.suggestion))
+  const changed = boundary === 'scope' ? { scope: 'user:1/page:2', blocked: true }
+    : boundary === 'empty' ? { empty: false }
+    : boundary === 'enabled' ? { enabled: false } : { blocked: true }
+  rerender({ ...initial, ...changed })
+  expect(result.current.suggestion).toBeNull()
+  rerender(initial)
+  expect(result.current.suggestion).toBeNull()
+  expect(request).toHaveBeenCalledTimes(1)
+})

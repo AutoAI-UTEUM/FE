@@ -35,3 +35,23 @@ Composer Spring/AI 배포, 정책 승인·양의 한도/비용 예약값, 명시
 프록시 buffering·disconnect 전파·실기기 접근성/IME 인수 및 영속 opt-out API.
 기존 FE readiness 값은 운영/개발 환경에 추가하지 않았다. 서버·보안·권한 설정,
 실계정·메일·개인정보·DB, 병합·배포·기능 활성화는 변경하지 않았다.
+
+## 2026-11-06 후속 확인
+
+- #249: 실제 Chromium의 기본 OFF/로컬 synthetic-ready 전용 suite와 CI를 추가했다.
+  패널 숨김 후 복귀 시 이미 표시된 추천이 되살아나는 문제를 브라우저에서 재현했고,
+  hook이 표시 경계를 벗어난 이미 받은 초안을 즉시 폐기하도록 보완했다. 진행 중 요청 취소는 유지한다.
+  blocked/scope/empty/enabled 경계의 새 회귀 4개는 수정 전 실패·수정 후 통과했다.
+- #244: 기존 Draft에 Firefox·WebKit 3개 화면 크기를 추가했다. `ccd1806`의 Linux CI
+  teacher-feedback-browser는 Chromium/Firefox/WebKit **27개 통과**. macOS WebKit은
+  **9개 통과**, macOS Firefox는 프로필 폴더 오류로 시작 전 종료되어 로컬 통과로 세지 않는다.
+- #140: 최신 develop `70af34c`의 기존 합성 검사에서 /classrooms·/calendar·/notes 중복
+  GET 모두 0, 무거운 PDF worker/editor의 불필요한 초기 로드도 없다. 해당 조건에서 재현되지 않았다.
+- #141: 같은 최신 develop, Chromium 390×844·4배 CPU·1.6Mbps/150ms 조건에서 다른 로컬
+  브라우저 작업 없이 2회 재측정해 **323.9ms / 307.8ms**로 기존 200ms 비밀번호 찾기 전환
+  기준 초과를 재현했다. cold/warm 총 12개 전환은 307.8–329.1ms였고 LCP/CLS/long task/
+  중복 GET 검사는 통과했다. 기준 변경·이슈 종료·성능 해결 처리는 하지 않았다.
+
+위 결과는 localhost 합성 API·헤드리스 엔진 검증이다. 실제 Safari·펜·IME·스크린리더,
+BE/AI/provider·프록시 취소·MySQL 인수와 구분한다. 기능 플래그 OFF 유지, 실계정·메일·개인정보·
+DB·서버 설정·병합·배포 변경 없음. 최신 전체 검사와 head CI는 각 Draft PR의 검증란에 기록한다.
