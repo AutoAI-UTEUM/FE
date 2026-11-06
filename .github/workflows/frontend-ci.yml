@@ -13,6 +13,57 @@ permissions:
   contents: read
 
 jobs:
+  email-readiness-smoke:
+    name: email-readiness-smoke (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - mode: default-off
+            readiness: ''
+          - mode: synthetic-ready
+            readiness: be-auth-ee69e425-v1
+    env:
+      VITE_API_BASE_URL: /api
+      VITE_API_CAPABILITIES: reports,policy-consent
+      VITE_AUTH_CONTRACT_READINESS: ${{ matrix.readiness }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Verify smoke accepts ON and rejects OFF served builds
+        shell: bash
+        env:
+          SMOKE_MODE: ${{ matrix.mode }}
+        run: |
+          set -euo pipefail
+          node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4190 --strictPort > /tmp/email-smoke-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4190/verify-email; then break; fi
+            sleep 1
+          done
+          export EMAIL_SMOKE_BASE_URL=http://127.0.0.1:4190
+          export EXPECTED_ENTRY="$(node --input-type=module -e 'import {readFileSync} from "node:fs"; const html=readFileSync("dist/index.html","utf8"); const entry=html.match(/src="(\/assets\/index-[^"]+\.js)"/); if (!entry) process.exit(1); console.log(entry[1])')"
+          if [ "$SMOKE_MODE" = synthetic-ready ]; then
+            node scripts/smoke-email-verification.mjs
+          else
+            if node scripts/smoke-email-verification.mjs > /tmp/email-smoke-result.json 2>&1; then
+              echo 'OFF build unexpectedly passed activation smoke'
+              exit 1
+            fi
+            grep --fixed-strings '"stage":"active confirmation button"' /tmp/email-smoke-result.json
+          fi
+
   launch-auth-contract:
     name: launch-auth-contract (${{ matrix.mode }})
     runs-on: ubuntu-latest
