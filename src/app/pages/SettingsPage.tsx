@@ -698,7 +698,7 @@ function ProfileSection({
   }
 
   return (
-    <Card as="section" className="border-0 p-0">
+    <Card as="section" className="border-0 p-5 sm:p-6">
       <h2 className="type-section-title font-bold text-stone-950">프로필</h2>
 
       <div className="mt-5 flex items-center gap-4.5">
