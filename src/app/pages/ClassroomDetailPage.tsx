@@ -19,6 +19,7 @@ import { useElementWidth, useFocusScope, useResponsiveViewport } from '../../sha
 import { Button, EmptyState, Select, useToast } from '../../shared/ui'
 import { examDetailPath, sessionDetailPath } from '../routes'
 import { ClassroomContentPanel, ClassroomContentRail } from './classroom/ClassroomContentView'
+import { LearnerStudySummary } from './classroom/LearnerStudySummary'
 import { ExamContentPanel, NoticeContentPanel, NoticeDetailPanel } from './classroom/ClassroomContentPanels'
 import {
   ClassroomResourceEditDialog,
@@ -34,8 +35,9 @@ type ResourceKey = 'exams' | 'notices' | 'resources' | 'weeks'
 
 export function ClassroomDetailPage() {
   const { classroomId = '' } = useParams()
+  const { user } = useAuth()
   // Each route owns its state and pending work, including direct/legacy mounts.
-  return <ClassroomDetailPageScope classroomId={classroomId} key={classroomId} />
+  return <ClassroomDetailPageScope classroomId={classroomId} key={`${user?.id ?? user?.email}:${classroomId}`} />
 }
 
 function ClassroomDetailPageScope({ classroomId }: { classroomId: string }) {
@@ -474,6 +476,7 @@ function ClassroomDetailPageScope({ classroomId }: { classroomId: string }) {
           weekTitle={weeks.find((week) => week.weekNumber === resourcePreview.weekNumber)?.title}
         /> : null}
         {!viewingNotice && !editingNotice && !editingExam && !resourcePreview ? <ClassroomContentPanel
+            footer={!isInstructor ? <LearnerStudySummary classroom={classroom} weeks={weeks} /> : undefined}
           canManage={canManage}
           errors={resourceErrors}
           filter={filter}
@@ -491,8 +494,7 @@ function ClassroomDetailPageScope({ classroomId }: { classroomId: string }) {
             } else updateQuery({ panel: `${kind}-new` })
           }}
           onDrop={(file) => {
-            if (selectedWeekNumber === null) return
-            setUploadTargetWeek(selectedWeekNumber)
+              setUploadTargetWeek(selectedWeekNumber ?? weeks[0]?.weekNumber ?? null)
             setUploadInitialFile(file)
             setIsUploadDialogOpen(true)
           }}

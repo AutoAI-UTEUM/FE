@@ -324,6 +324,12 @@ describe('InstructorCalendarPage mutation safety', () => {
 })
 
 describe('InstructorCalendarPage dialog accessibility and schedule validation', () => {
+  beforeEach(() => {
+    // These fixtures intentionally cover October dates; keep the visible month stable.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-12T12:00:00'))
+  })
+  afterEach(() => vi.useRealTimers())
   it('traps focus in both dialogs, closes on Escape, and restores each opener', async () => {
     vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
       () => ([{}] as unknown as DOMRectList),

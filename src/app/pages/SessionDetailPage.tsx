@@ -7,6 +7,7 @@ import { getRememberedClassroomId } from '../../features/classrooms'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import { ChatPanel, isSupersededTurnError, useSessionChat } from '../../features/chat'
 import { DocumentChatPanel } from '../../features/documentChat'
+import { StudyScratchpad } from '../../features/notes/StudyScratchpad'
 import { createMaterialsRepository, type MaterialOverview } from '../../features/materials'
 import type { QuizKind } from '../../features/quiz'
 import {
@@ -63,6 +64,12 @@ interface QueuedPageMove {
 }
 
 export function SessionDetailPage() {
+  const { user } = useAuth()
+  const { sessionId } = useParams()
+  return <SessionDetailPageScope key={`${user?.id ?? user?.email}:${sessionId}`} />
+}
+
+function SessionDetailPageScope() {
   usePageTitle('학습 공간')
   const { sessionId } = useParams()
   const navigate = useNavigate()
@@ -774,13 +781,17 @@ export function SessionDetailPage() {
   }
 
   return (
-    <div className="h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
       <h1 className="sr-only">학습 공간</h1>
       <p className="sr-only">
         {activeSession.materialTitle} 학습 화면입니다.
       </p>
 
-      <section className={`flex h-full min-h-0 ${isTablet || isPhone ? 'flex-col' : ''}`} ref={measureArea}>
+      <div className="shrink-0 border-b border-stone-200 bg-white px-3 py-2">
+        <ButtonLink size="sm" to={weekPagePath} variant="secondary">강의실 메인으로</ButtonLink>
+        {!lockedQuizId && !embeddedQuizId && !hasProgressiveQuiz ? <div className="max-h-[45dvh] overflow-y-auto"><StudyScratchpad owner={user?.id === undefined ? `email:${user?.email ?? 'anonymous'}` : `id:${user.id}`} scope={`session:${activeSession.id}:page:${currentPage}`} /></div> : null}
+      </div>
+      <section className={`flex min-h-0 flex-1 ${isTablet || isPhone ? 'flex-col' : ''}`} ref={measureArea}>
         {isPhone ? (
           <MobileWorkspaceTabs
             active={mobilePane}

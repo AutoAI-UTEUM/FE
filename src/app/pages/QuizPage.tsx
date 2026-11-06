@@ -17,6 +17,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth, type AuthenticatedRequest } from '../../features/auth'
 import { DocumentChatPanel } from '../../features/documentChat'
+import { StudyScratchpad } from '../../features/notes/StudyScratchpad'
+import { QuizDraftControls } from '../../features/quiz/QuizDraftControls'
 import { ApiClientError, getRequestErrorMessage } from '../../shared/api'
 import {
   createQuizRepository,
@@ -81,6 +83,7 @@ export function QuizWorkspace({
     <QuizWorkspaceState
       {...props}
       apiRequest={apiRequest}
+      owner={accountIdentity}
       key={`${accountIdentity}:quiz-workspace`}
       quizId={quizId}
     />
@@ -89,11 +92,13 @@ export function QuizWorkspace({
 
 interface QuizWorkspaceStateProps extends Omit<QuizWorkspaceProps, 'quizId'> {
   apiRequest: AuthenticatedRequest
+  owner: string
   quizId?: string
 }
 
 function QuizWorkspaceState({
   apiRequest,
+  owner,
   embedded = false,
   expectedQuestionCount,
   materialId: materialIdProp,
@@ -485,6 +490,7 @@ function QuizWorkspaceState({
       >
       <section aria-label="퀴즈 문항" className={`${(isPhone && mobileReviewPane !== 'quiz') || (isTablet && shouldShowReviewChat && activeTabletPane === 'learning') ? 'hidden' : ''} h-full min-h-0 min-w-0 overflow-y-auto rounded-xl border border-stone-200 bg-white lg:rounded-none lg:border-0`}>
         <form className="p-4 sm:p-6" onSubmit={handleSubmit}>
+          {quiz ? <QuizDraftControls answers={answers} key={`${owner}:${quiz.id}`} onRestore={setAnswers} owner={owner} quiz={quiz} submitted={isReadOnly} /> : null}
           <div className="flex min-h-6 items-center justify-between gap-3">
             {isGenerating ? (
               <p className="flex min-w-0 items-center gap-2 type-caption font-semibold text-brand-700" role="status">
@@ -508,6 +514,7 @@ function QuizWorkspaceState({
             question={question}
             value={answers[question.id] ?? ''}
           />
+          {quiz && !isReadOnly ? <StudyScratchpad owner={owner} scope={`quiz:${quiz.id}:question:${question.id}`} /> : null}
 
           {result ? (
             <QuestionResultDetails
@@ -771,7 +778,7 @@ function QuizFrame({
   if (!embedded) {
     return (
       <PageContainer>
-        <PageHeader title="퀴즈" />
+        <PageHeader actions={<ButtonLink to={routes.classrooms} variant="secondary">강의실 메인으로</ButtonLink>} title="퀴즈" />
         {children}
       </PageContainer>
     )

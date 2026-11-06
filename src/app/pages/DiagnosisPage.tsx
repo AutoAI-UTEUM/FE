@@ -198,6 +198,7 @@ function DiagnosisWorkspace() {
   return (
     <PageContainer>
       <PageHeader
+        actions={<ButtonLink to={routes.classrooms} variant="secondary">강의실 메인으로</ButtonLink>}
         title="진단·교정"
       />
 
