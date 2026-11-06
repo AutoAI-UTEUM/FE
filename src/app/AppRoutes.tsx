@@ -31,6 +31,7 @@ const InstructorReportCriteriaPage = lazy(() => import('./pages/instructor/Instr
 const InstructorReportDetailPage = lazy(() => import('./pages/instructor/InstructorReportsPage').then((module) => ({ default: module.InstructorReportDetailPage })))
 const InstructorStudentReportsPage = lazy(() => import('./pages/instructor/InstructorReportsPage').then((module) => ({ default: module.InstructorStudentReportsPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
+const IntroductionPage = lazy(() => import('./pages/IntroductionPage').then((module) => ({ default: module.IntroductionPage })))
 const LearnerNotesPage = lazy(() => import('./pages/learner/LearnerNotesPage').then((module) => ({ default: module.LearnerNotesPage })))
 const LearnerNoteCreatePage = lazy(() => import('./pages/learner/LearnerNotesPage').then((module) => ({ default: module.LearnerNoteCreatePage })))
 const LearnerNoteEditPage = lazy(() => import('./pages/learner/LearnerNotesPage').then((module) => ({ default: module.LearnerNoteEditPage })))
@@ -51,6 +52,7 @@ export function AppRoutes() {
   return (
     <Suspense fallback={<RouteLoadingScreen />}>
       <Routes>
+      <Route path={routes.intro} element={<IntroductionPage />} />
       <Route
         path={routes.root}
         element={<Navigate to={routes.classrooms} replace />}

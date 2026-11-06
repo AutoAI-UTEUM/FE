@@ -399,3 +399,24 @@ for (const role of ['LEARNER', 'INSTRUCTOR'] as const) {
     })
   })
 }
+
+
+test('profile fields stay inset inside the account card without horizontal overflow', async ({ page }, testInfo) => {
+  test.skip((process.env.QA_ENV ?? 'mock') !== 'mock', 'synthetic local-only test')
+  await loginAs(page, 'LEARNER')
+  await page.goto('/settings')
+  await waitForAppSettled(page)
+  const name = page.getByLabel('이름', { exact: true })
+  await expect(name).toBeVisible()
+  const card = name.locator('xpath=ancestor::section[1]')
+  for (const field of [name, page.getByLabel('소속', { exact: true })]) {
+    const bounds = await field.boundingBox()
+    const outer = await card.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(outer).not.toBeNull()
+    expect(bounds!.x - outer!.x).toBeGreaterThanOrEqual(16)
+    expect(outer!.x + outer!.width - bounds!.x - bounds!.width).toBeGreaterThanOrEqual(16)
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await capture(page, testInfo, 'profile-card-spacing')
+})
