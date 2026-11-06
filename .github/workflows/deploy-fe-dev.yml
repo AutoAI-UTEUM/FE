@@ -26,6 +26,7 @@ jobs:
       VITE_API_BASE_URL: /api
       VITE_API_CAPABILITIES: reports,password-reset,exam-attempt-drafts,exam-learner-regrade,policy-consent
       VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+      VITE_AUTH_CONTRACT_READINESS: be-auth-ee69e425-v1
 
     steps:
       - name: Checkout repository
@@ -47,7 +48,23 @@ jobs:
         run: npm run typecheck
 
       - name: Test
+        # Baseline unit fixtures set their own readiness; ON is covered below.
+        env:
+          VITE_AUTH_CONTRACT_READINESS: ''
         run: npm run test:run
+
+      - name: Validate auth contract readiness
+        shell: bash
+        run: test "${VITE_AUTH_CONTRACT_READINESS:-}" = "be-auth-ee69e425-v1"
+
+      - name: Install smoke browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Synthetic ready email contract acceptance
+        env:
+          QA_ENV: mock
+          QA_AUTH_CONTRACT_READINESS: be-auth-ee69e425-v1
+        run: npx playwright test --config playwright.launch-auth.config.ts
 
       - name: Build
         run: npm run build
@@ -126,3 +143,9 @@ jobs:
             sleep 5
           done
           exit 1
+
+      - name: Smoke test active email confirmation UI
+        env:
+          EMAIL_SMOKE_BASE_URL: https://dev.uteum.com
+          EXPECTED_ENTRY: ${{ steps.build_metadata.outputs.entry_asset }}
+        run: node scripts/smoke-email-verification.mjs
