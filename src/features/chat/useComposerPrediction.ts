@@ -10,6 +10,9 @@ export function useComposerPrediction({ request, sessionId, scope, target, empty
   const generation = useRef(0)
   const attempted = useRef(new Set<string>())
   const key = target ? JSON.stringify([scope, target.sourceMessageId, target.activity]) : ''
+  // A resolved draft must be forgotten across a fence, not merely hidden until
+  // the same source becomes visible again. Pending requests are aborted below.
+  if (suggestion && (suggestion.key !== key || !empty || blocked || !enabled)) setSuggestion(null)
   const live = useRef({ key, empty, blocked, enabled })
   const discard = useCallback(() => { generation.current++; active.current?.abort(); active.current = null; setSuggestion(null) }, [])
   useLayoutEffect(() => { live.current = { key, empty, blocked, enabled }; return () => { active.current?.abort() } }, [key, empty, blocked, enabled])
