@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 
-import { loginAs, waitForAppSettled } from './qa-helpers'
+import { loginAs, qaEnvironment, waitForAppSettled } from './qa-helpers'
 
 async function withinViewport(page: Page, surface: Locator) {
   const box = await surface.boundingBox()
@@ -25,6 +25,54 @@ async function openNotifications(page: Page, tabletPortrait: boolean) {
   }
   await expect(page.getByRole('dialog', { name: '알림', exact: true })).toBeVisible()
 }
+
+test('saved instructor score notification stays within the viewport', async ({ page }, testInfo) => {
+  test.skip(qaEnvironment !== 'mock', 'synthetic score notification regression only; no live score writes')
+  const violations: string[] = []
+  const patches: Array<{ score: number }> = []
+  await page.route('**/*', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.hostname !== '127.0.0.1' || url.pathname.endsWith('/stream')
+      || (url.pathname.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())
+        && !['/api/auth/login', '/api/auth/refresh'].includes(url.pathname))) {
+      violations.push(`${request.method()} ${url.origin}${url.pathname}`)
+      return route.abort('blockedbyclient')
+    }
+    return route.continue()
+  })
+  let score = 9
+  const submission = () => ({ submissionId: 300, attemptNo: 1, status: 'GRADED', score, maxScore: 10,
+    items: [{ questionId: 'q1', answer: '합성 답안', maxScore: 10, score }] })
+  const json = (data: unknown) => ({ json: { success: true, message: 'Synthetic score fixture', data } })
+  await page.route('**/api/exams/10', (route) => route.fulfill(json({ examId: 10, classroomId: 30,
+    title: '합성 점수 검토', status: 'PUBLISHED', totalScore: 10, questionCount: 1,
+    questions: [{ questionId: 'q1', questionText: '합성 문항', questionType: 'SHORT', maxScore: 10 }] })))
+  await page.route('**/api/exams/10/submissions/300', (route) => route.fulfill(json(submission())))
+  await page.route('**/api/exams/10/submissions?*', (route) => route.fulfill(json({ items: [
+    { submissionId: 300, userId: 8, userName: '합성 학습자', attemptNo: 1, attemptCount: 1,
+      status: 'GRADED', score: 9, maxScore: 10, submittedAt: '2026-10-13T10:00:00Z' },
+  ], page: 0, size: 100, totalElements: 1, totalPages: 1 })))
+  await page.route('**/api/classrooms/30/students?*', (route) => route.fulfill(json({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })))
+  await page.route('**/api/exams/10/submissions/300/answers/q1/score', (route) => {
+    expect(new URL(route.request().url()).hostname).toBe('127.0.0.1')
+    expect(route.request().method()).toBe('PATCH')
+    const body = route.request().postDataJSON() as { score: number }
+    patches.push({ score: body.score })
+    score = body.score
+    return route.fulfill(json(submission()))
+  })
+  expect(await loginAs(page, 'INSTRUCTOR')).toBe(true)
+  await page.goto('/classrooms/30/exams/10/submissions/300')
+  await page.getByLabel('1번 점수', { exact: true }).fill('8.25')
+  await page.getByRole('button', { name: '점수 저장', exact: true }).click()
+  const toast = page.getByRole('status').filter({ hasText: '문항 점수를 저장했습니다.' })
+  await expect(toast).toBeVisible()
+  await withinViewport(page, toast)
+  expect(patches).toEqual([{ score: 8.25 }])
+  expect(violations, 'score notification check must stay local with only the mocked score write').toEqual([])
+  await capture(page, testInfo, 'saved-score-toast-boundary')
+})
 
 for (const role of ['LEARNER', 'INSTRUCTOR'] as const) {
   test.describe(`${role} navigation popups`, () => {

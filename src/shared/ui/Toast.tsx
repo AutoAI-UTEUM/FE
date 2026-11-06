@@ -48,7 +48,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-full max-w-sm flex-col gap-2"
+        className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2"
         role="status"
       >
         {toasts.map((toast) => (
