@@ -32,6 +32,9 @@ test('opening/prefetching link never confirms; URL/history/storage/referrer are 
   expect(await page.evaluate(() => JSON.stringify({ state: history.state, local: { ...localStorage }, session: { ...sessionStorage } }))).not.toContain(token)
   if (!enabled) {
     await expect(page.getByText('이메일 확인 기능을 준비 중입니다.', { exact: false })).toBeVisible()
+    await expect(page.getByText('지금은 인증 버튼과 확인 이메일 재요청을 사용할 수 없습니다.', { exact: false })).toBeVisible()
+    await expect(page.getByText('아래 버튼으로 확인해 주세요.', { exact: false })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /이메일 확인하기|확인 이메일 다시 요청/ })).toHaveCount(0)
     expect(requests.some((request) => request.url.includes('/email-verification/') || request.url.includes('/policies/'))).toBe(false)
   }
   await page.reload()
@@ -250,7 +253,7 @@ test('LOCAL new signup submits DOB and current required policies only', async ({
   expect(body).toMatchObject({ dateOfBirth: '2015-01-02', consents: [{ type: 'TERMS', version: 'synthetic-1' }] })
 })
 
-test('readiness OFF keeps old LOCAL signup without DOB/policies', async ({ page }) => {
+test('readiness OFF sends required LOCAL DOB without enabling policies', async ({ page }) => {
   test.skip(enabled, 'default-OFF compatibility')
   let body: Record<string, unknown> | undefined
   const oldUser = { id: user.id, email: user.email, name: user.name, role: user.role }
@@ -259,7 +262,7 @@ test('readiness OFF keeps old LOCAL signup without DOB/policies', async ({ page 
   await page.route('**/api/auth/login', (route) => route.fulfill({ json: envelope({ accessToken: 'synthetic-access', expiresIn: 3600, user: oldUser }) }))
   await page.goto('/signup')
   await page.getByRole('button', { name: '다음', exact: true }).click()
-  await expect(page.getByLabel('생년월일', { exact: true })).toHaveCount(0)
+  await page.getByLabel('생년월일', { exact: true }).fill('2000-02-29')
   await page.locator('#signup-name').fill('합성 학습자')
   await page.locator('#signup-affiliation').fill('합성 학교')
   await page.locator('#signup-email').fill('synthetic@example.invalid')
@@ -267,7 +270,7 @@ test('readiness OFF keeps old LOCAL signup without DOB/policies', async ({ page 
   await page.locator('#signup-confirm-password').fill('Synthetic123!')
   await page.locator('button[type="submit"]').click()
   await expect(page).toHaveURL('/classrooms')
-  expect(body).not.toHaveProperty('dateOfBirth')
+  expect(body).toHaveProperty('dateOfBirth', '2000-02-29')
   expect(body).not.toHaveProperty('consents')
 })
 

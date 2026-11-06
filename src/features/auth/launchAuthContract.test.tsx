@@ -19,12 +19,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe('pinned launch auth contract with synthetic fixtures', () => {
-  it('defaults OFF, strips new signup fields, and refuses every new API without fetching', async () => {
+  it('defaults OFF, sends required DOB without consent, and refuses gated APIs without fetching', async () => {
     vi.stubEnv('VITE_AUTH_CONTRACT_READINESS', '')
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(fixtureResponse(fixtures.responses.localSignup))
     await getAuthRepository().signup(fixtures.inputs.localSignup as SignupFormValues)
     const body = JSON.parse(fetch.mock.calls[0][1]!.body as string)
-    expect(body).not.toHaveProperty('dateOfBirth')
+    expect(body.dateOfBirth).toBe(fixtures.inputs.localSignup.dateOfBirth)
     expect(body).not.toHaveProperty('consents')
     const request = vi.fn()
     await expect(getEmailVerificationStatus(request)).rejects.toMatchObject({ code: 'AUTH_CONTRACT_UNAVAILABLE' })
@@ -81,7 +81,8 @@ describe('pinned launch auth contract with synthetic fixtures', () => {
     const error = await getAuthRepository().signup(fixtures.inputs.localSignup as SignupFormValues).catch((error: unknown) => error)
     expect(mapAuthErrorToFormErrors(error)).toHaveProperty('dateOfBirth')
     for (const date of [undefined, '2000-02-30', '1900-02-29', '0000-01-01', '10000-01-01', '2001-2-3']) expect(validateDateOfBirth(date)).toBeTruthy()
-    for (const date of ['2000-02-29', '0001-01-01', '9999-12-31', '2015-01-02', '2099-01-01']) expect(validateDateOfBirth(date)).toBeUndefined()
+    for (const date of ['2000-02-29', '0001-01-01', '2015-01-02']) expect(validateDateOfBirth(date)).toBeUndefined()
+    for (const date of ['9999-12-31', '2099-01-01']) expect(validateDateOfBirth(date)).toBeTruthy()
   })
 
   it('confirm is public POST with no grant/cookies and yields no session/account result', async () => {

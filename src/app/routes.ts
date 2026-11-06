@@ -1,5 +1,6 @@
 export const routes = {
   root: '/',
+  intro: '/intro',
   login: '/login',
   forgotPassword: '/forgot-password',
   resetPassword: '/reset-password',
