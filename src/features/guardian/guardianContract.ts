@@ -65,6 +65,8 @@ export interface GuardianDetail {
   guardianContact: string | null
   contactOrigin: 'NONE' | 'CHILD' | 'GUARDIAN' | null
   generationStartedAt: string | null
+  requiredScopes: GuardianScope[]
+  optionalAiScope: 'EXTERNAL_AI' | null
   declaredScopes: GuardianScope[]
   replyChannel: GuardianReplyChannel | null
   relationship: 'PARENT' | 'MINOR_GUARDIAN' | null
@@ -162,13 +164,23 @@ export function parseGuardianEntry(value: unknown): GuardianEntry {
 export function parseGuardianDetail(value: unknown): GuardianDetail {
   const v = object(value)
   if (!Array.isArray(v.events)) invalid()
-  return { status: parseGuardianStatus(v.status), userId: nullableId(v.userId), guardianName: nullableString(v.guardianName),
+  const status = parseGuardianStatus(v.status)
+  const requiredScopes = scopes(v.requiredScopes)
+  const optionalAiScope = optionalScope(v.optionalAiScope)
+  const declaredScopes = scopes(v.declaredScopes)
+  const channel = replyChannel(v.replyChannel)
+  const detailForms = forms(v.forms)
+  if (optionalAiScope !== null && optionalAiScope !== 'EXTERNAL_AI') invalid()
+  if (new Set(declaredScopes).size !== declaredScopes.length) invalid()
+  if (status.currentNotice ? requiredScopes.length !== 1 || requiredScopes[0] !== 'SERVICE'
+    : requiredScopes.length !== 0 || optionalAiScope !== null || channel !== null || Object.keys(detailForms).length !== 0) invalid()
+  return { status, userId: nullableId(v.userId), guardianName: nullableString(v.guardianName),
     guardianContact: nullableString(v.guardianContact), contactOrigin: v.contactOrigin === null ? null : enumValue(v.contactOrigin, ['NONE', 'CHILD', 'GUARDIAN'] as const), generationStartedAt: timestamp(v.generationStartedAt),
-    declaredScopes: scopes(v.declaredScopes), replyChannel: replyChannel(v.replyChannel),
+    requiredScopes, optionalAiScope, declaredScopes, replyChannel: channel,
     relationship: v.relationship === null ? null : enumValue(v.relationship, ['PARENT', 'MINOR_GUARDIAN'] as const),
     confirmationMethod: v.confirmationMethod === null ? null : enumValue(v.confirmationMethod, ['EMAIL_REPLY', 'PHONE', 'PRIOR_RECORD'] as const),
     priorConsentEvidence: v.priorConsentEvidence == null ? null : (() => { const e = object(v.priorConsentEvidence); return { method: enumValue(e.method, ['IN_PERSON', 'EMAIL_REPLY', 'PHONE', 'SIGNED_DOCUMENT'] as const), receivedAt: timestamp(e.receivedAt), reviewedAt: timestamp(e.reviewedAt), consentValidUntil: timestamp(e.consentValidUntil) } })(),
-    evidenceReference: nullableString(v.evidenceReference), forms: forms(v.forms),
+    evidenceReference: nullableString(v.evidenceReference), forms: detailForms,
     events: v.events.map((event) => { const e = object(event); return { generation: positive(e.generation), revision: positive(e.revision),
       type: string(e.type), state: enumValue(e.state, guardianStates), actorId: nullableId(e.actorId), at: timestamp(e.at) } }) }
 }

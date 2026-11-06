@@ -16,18 +16,18 @@ beforeEach(() => {
   vi.stubEnv('VITE_GUARDIAN_TEAM_READINESS', GUARDIAN_TEAM_CONTRACT); vi.stubEnv('VITE_GUARDIAN_WORKFLOW_READINESS', GUARDIAN_WORKFLOW_CONTRACT); vi.stubEnv('VITE_GUARDIAN_POLICY_REVIEW_READINESS', GUARDIAN_POLICY_REVIEW); vi.stubEnv('VITE_GUARDIAN_PRIOR_CONSENT_READINESS', PRIOR_CONSENT_CONTRACT)
   request.mockReset().mockResolvedValue({ data: options }); invalidate.mockReset(); pending.mockReset()
 })
-afterEach(() => { cleanup(); vi.unstubAllEnvs() })
+afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.restoreAllMocks() })
 function page(detail: typeof guardianDetail | null = null) {
   return render(<AuthContext.Provider value={{ apiRequest: request, user: { id: 999 } } as unknown as AuthContextValue}><PriorConsentReview detail={detail} disabled={false} onPendingChange={pending} onInvalidate={invalidate} /></AuthContext.Provider>)
 }
 async function load() { fireEvent.click(screen.getByText('사전 동의 옵션 확인')); await screen.findByLabelText('대상 계정 ID') }
-function fill() {
+function fill(validUntil = '2099-01-01T00:00:00Z') {
   if (!(screen.getByLabelText('대상 계정 ID') as HTMLInputElement).disabled) fireEvent.change(screen.getByLabelText('대상 계정 ID'), { target: { value: '123' } })
   fireEvent.change(screen.getByLabelText('원본 확인 수단'), { target: { value: 'IN_PERSON' } })
   fireEvent.change(screen.getByLabelText('원본의 관계'), { target: { value: 'PARENT' } })
   fireEvent.change(screen.getByLabelText('보관 원본 참조'), { target: { value: 'synthetic-record-001' } })
   fireEvent.change(screen.getByLabelText('실제 대면 동의 확인일 (UTC ISO)'), { target: { value: '2026-01-01T00:00:00Z' } })
-  fireEvent.change(screen.getByLabelText('원본 동의 유효기한 (UTC ISO)'), { target: { value: '2099-01-01T00:00:00Z' } })
+  fireEvent.change(screen.getByLabelText('원본 동의 유효기한 (UTC ISO)'), { target: { value: validUntil } })
   screen.getAllByRole('checkbox').forEach(box => fireEvent.click(box))
 }
 it('default OFF sends no requests and unavailable options collect no evidence', async () => {
@@ -43,8 +43,22 @@ it('requires individual checks, never uploads originals, and sends one exact no-
 it('409 discards the prepared operation and requires re-query, never retries a fresh revision', async () => {
   page(); await load(); fill(); fireEvent.click(screen.getByText('사전 동의 승인 최종 확인')); request.mockRejectedValue(new ApiClientError({ status: 409, code: 'GUARDIAN_STATE_CONFLICT', message: 'synthetic' })); fireEvent.click(screen.getByText('확인 후 전송')); await act(async () => {}); expect(screen.queryByText('같은 요청 다시 확인')).toBeNull(); expect(invalidate).toHaveBeenCalledWith(expect.stringContaining('다시 조회'))
 })
-it('lost response preserves the exact serialized key and body for an explicit retry', async () => {
-  page(); await load(); fill(); fireEvent.click(screen.getByText('사전 동의 승인 최종 확인')); request.mockRejectedValueOnce(new Error('lost')); fireEvent.click(screen.getByText('확인 후 전송')); fireEvent.click(await screen.findByText('같은 요청 다시 확인')); await act(async () => {}); expect(request.mock.calls[1][1].body).toBe(request.mock.calls[2][1].body)
+it('lost response preserves the exact serialized key and body for an explicit retry even after expiry', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-05T00:00:00Z'))
+  page(); await load(); fill('2026-11-05T00:01:00Z'); fireEvent.click(screen.getByText('사전 동의 승인 최종 확인')); request.mockRejectedValueOnce(new Error('lost')); fireEvent.click(screen.getByText('확인 후 전송'))
+  const retry = await screen.findByText('같은 요청 다시 확인')
+  clock.mockReturnValue(Date.parse('2026-11-05T00:01:00Z'))
+  fireEvent.click(retry); await act(async () => {}); expect(request.mock.calls[1][1].body).toBe(request.mock.calls[2][1].body)
+})
+it('does not send an unsent prior-consent approval after its original consent expires', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-05T00:00:00Z'))
+  page(); await load(); fill('2026-11-05T00:01:00Z')
+  fireEvent.click(screen.getByText('사전 동의 승인 최종 확인'))
+  clock.mockReturnValue(Date.parse('2026-11-05T00:01:00Z'))
+  fireEvent.click(screen.getByText('확인 후 전송'))
+  await act(async () => {})
+  expect(request).toHaveBeenCalledTimes(1)
+  expect(invalidate).toHaveBeenCalledWith(expect.stringContaining('기한'))
 })
 it('existing first pending case sends its immutable snapshot; later generations and changed declarations cannot approve', async () => {
   const d = { ...guardianDetail, userId: 123, generationStartedAt: '2026-02-01T00:00:00Z', status: { ...guardianStatus, generation: 1, requestExpiresAt: '2099-01-01T00:00:00Z', webDeclaredAt: null } }; page(d); await load(); fill(); fireEvent.click(screen.getByText('사전 동의 승인 최종 확인')); request.mockResolvedValue({ data: guardianStatus }); fireEvent.click(screen.getByText('확인 후 전송')); await act(async () => {}); expect(JSON.parse(request.mock.calls[1][1].body)).toMatchObject({ requestId: d.status.requestId, generation: 1, revision: d.status.revision })

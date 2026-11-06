@@ -88,6 +88,15 @@ function PriorConsentForm({ detail, disabled, onPendingChange, onInvalidate }: P
       {Object.entries(checks).map(([key, label]) => <label key={key} className="block"><input type="checkbox" checked={reviewed[key] === true} onChange={e => setReviewed({ ...reviewed, [key]: e.target.checked })} /> {label}</label>)}
       <Button disabled={!valid} onClick={prepare}>사전 동의 승인 최종 확인</Button>
     </fieldset> : null}
-    <GuardianOperationPanel action={action} />
+    <GuardianOperationPanel action={{ ...action, send: () => {
+      const requestExpiry = detail?.status.requestExpiresAt
+      // Preserve exact replay for an uncertain POST; an unsent approval must stay live.
+      if (!action.uncertain && (Date.parse(validUntil) <= Date.now() || (requestExpiry && Date.parse(requestExpiry) <= Date.now()))) {
+        action.clear()
+        invalidate('원본 동의 또는 신청 기한이 지났습니다. 현재 옵션과 신청을 다시 조회하세요.')
+        return Promise.resolve()
+      }
+      return action.send()
+    } }} />
   </section>
 }
