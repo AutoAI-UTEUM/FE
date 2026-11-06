@@ -9,6 +9,7 @@ import { AuthLayout } from './layouts/AuthLayout'
 import { ClassroomWorkspaceLayout } from './pages/classroom/ClassroomWorkspaceLayout'
 import { ClassroomContentLegacyRedirect } from './pages/classroom/ClassroomContentLegacyRedirect'
 import { SettingsPage } from './pages/SettingsPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { routes } from './routes'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 
@@ -17,7 +18,6 @@ const ResetPasswordPage = lazy(() => import('./pages/AuthCapabilityPages').then(
 const ClassroomsPage = lazy(() => import('./pages/ClassroomsPage').then((module) => ({ default: module.ClassroomsPage })))
 const ClassroomDetailPage = lazy(() => import('./pages/ClassroomDetailPage').then((module) => ({ default: module.ClassroomDetailPage })))
 const DiagnosisPage = lazy(() => import('./pages/DiagnosisPage').then((module) => ({ default: module.DiagnosisPage })))
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })))
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then((module) => ({ default: module.FeedbackPage })))
 const EntranceRequestsPage = lazy(() => import('./pages/EntranceRequestsPage').then((module) => ({ default: module.EntranceRequestsPage })))
 const ExamDetailPage = lazy(() => import('./pages/ExamDetailPage').then((module) => ({ default: module.ExamDetailPage })))

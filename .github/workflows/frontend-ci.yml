@@ -13,6 +13,40 @@ permissions:
   contents: read
 
 jobs:
+  password-recovery-performance:
+    name: password-recovery-performance (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - mode: production-capabilities
+            capabilities: reports,policy-consent
+          - mode: dev-capabilities
+            capabilities: reports,password-reset,exam-attempt-drafts,exam-learner-regrade,policy-consent
+    env:
+      QA_ENV: mock
+      QA_API_CAPABILITIES: ${{ matrix.capabilities }}
+      VITE_AUTH_CONTRACT_READINESS: be-auth-ee69e425-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Existing mobile cold/warm budgets with local mock APIs
+        run: npx playwright test e2e/performance-qa.spec.ts --project phone-390 --grep 'login cold' --workers 1 --retries 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: password-recovery-${{ matrix.mode }}
+          path: qa-artifacts/mock/
+          retention-days: 7
+
   email-readiness-smoke:
     name: email-readiness-smoke (${{ matrix.mode }})
     runs-on: ubuntu-latest
