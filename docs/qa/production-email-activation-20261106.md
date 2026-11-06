@@ -3,7 +3,7 @@
 ## 상태: 활성화 전 중단, Draft 검토만 가능
 
 사용자는 운영 FE readiness 활성화·검증·main PR 병합과 배포를 요청했지만, 동일 준비값이
-일반·Google 신규 가입의 DOB·정책 조회·동의 UI/payload도 켠다. 준비 근거가 부족하면
+일반·Google 신규 가입의 정책 조회·동의 UI/payload도 켠다. 기존 DOB 필드·전송은 OFF에서도 유지된다. 준비 근거가 부족하면
 활성화 전에 중단하라는 범위에 따라 아래 확인 전에는 Draft·미병합을 유지하고 배포하지 않는다.
 
 - 공개 운영 `GET /api/policies/current`: TERMS/PRIVACY 모두 version `0.9`,
