@@ -122,3 +122,28 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  auth-ui-feedback:
+    name: auth-ui-feedback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Check signup policy cards and email confirmation
+        run: npx playwright test --config playwright.auth-ui.config.ts
+      - name: Upload synthetic authentication UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-ui-feedback
+          path: qa-artifacts/auth-ui/
+          retention-days: 7

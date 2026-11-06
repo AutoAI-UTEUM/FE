@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { CircleCheck, Mail } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
 import { clearEmailLinkToken, readEmailLinkIssue, readEmailLinkToken } from '../../features/auth/emailLinkToken'
 import { confirmEmailVerification, requestEmailVerification } from '../../features/auth/emailVerificationRepository'
 import { hasEmailVerificationSupport, isLaunchAuthReady } from '../../features/auth/launchAuthContract'
 import { ApiClientError } from '../../shared/api'
-import { Button } from '../../shared/ui'
+import { Button, ButtonLink } from '../../shared/ui'
 import { routes } from '../routes'
 
 export function VerifyEmailPage() {
@@ -17,6 +18,7 @@ export function VerifyEmailPage() {
   const [linkIssue, setLinkIssue] = useState(readEmailLinkIssue)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [confirmedLink, setConfirmedLink] = useState(false)
   const activeRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(false)
   const ready = isLaunchAuthReady()
@@ -41,6 +43,7 @@ export function VerifyEmailPage() {
       if (!ready) clearEmailLinkToken()
       setBusy(false)
       setMessage('')
+      setConfirmedLink(false)
       navigate(routes.verifyEmail, { replace: true, state: null })
     }
   }, [location.search, location.hash, navigate, ready])
@@ -98,8 +101,9 @@ export function VerifyEmailPage() {
         setHasToken(false)
         await confirmEmailVerification(token, controller.signal)
         if (controller.signal.aborted) return
-        setMessage('링크에 연결된 계정의 이메일을 확인했습니다. 로그인한 계정의 상태는 별도로 확인합니다.')
-        await refresh?.(controller.signal)
+        // Confirmation belongs to the link's account, not necessarily the signed-in one.
+        setConfirmedLink(true)
+        await refresh?.(controller.signal).catch(() => undefined)
       } else if (kind === 'resend') {
         await requestEmailVerification(auth.apiRequest, controller.signal)
         if (controller.signal.aborted) return
@@ -125,26 +129,39 @@ export function VerifyEmailPage() {
   }
 
   const supported = auth.user && hasEmailVerificationSupport(auth.user)
-  return <div className="space-y-4">
+  const complete = ready && (confirmedLink || (!hasToken && !linkIssue && !message && !busy && supported &&
+    auth.user?.emailVerification === 'VERIFIED' && auth.user.emailVerificationRequired === false))
+  if (complete) return <div className="space-y-6">
+    <span className="flex size-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><CircleCheck aria-hidden="true" size={28} /></span>
+    <div className="space-y-3">
+      <h1 className="type-page-title font-bold">이메일 인증 완료</h1>
+      <p role="status" className="type-body leading-relaxed text-stone-600">이메일 인증이 완료되었습니다. 확인한 이메일로 로그인해 으뜸을 시작하세요.</p>
+    </div>
+    <ButtonLink to={routes.login} onClick={discardPending} className="w-full">로그인</ButtonLink>
+  </div>
+  return <div className="space-y-5">
+    <span className="flex size-12 items-center justify-center rounded-2xl bg-stone-100 text-stone-600"><Mail aria-hidden="true" size={24} /></span>
+    <h1 className="type-page-title font-bold">이메일 확인</h1>
     {ready && !hasToken && !linkIssue && !message ? <p>확인할 링크가 없습니다. 이메일의 최신 링크를 다시 열거나 로그인 후 확인 이메일을 다시 요청해 주세요.</p> : null}
     {linkIssue === 'obsolete-query' ? <p role="status">이전 형식의 이메일 링크는 사용할 수 없습니다. 로그인 후 확인 이메일을 다시 요청해 주세요.</p>
       : linkIssue === 'invalid-fragment' ? <p role="status">이메일 링크 형식이 올바르지 않습니다. 로그인 후 확인 이메일을 다시 요청해 주세요.</p> : null}
-    <h1 className="type-page-title font-bold">이메일 확인</h1>
     {ready && hasToken ? <p>메일 링크를 여는 것만으로 확인되지 않습니다. 아래 버튼으로 확인해 주세요.</p> : null}
     {!ready ? <p role="status">이메일 확인 기능을 준비 중입니다. 지금은 인증 버튼과 확인 이메일 재요청을 사용할 수 없습니다. 사용 가능 안내 후 새 링크를 열어 주세요.</p> : <>
-      {hasToken ? <Button disabled={busy} onClick={() => void act('confirm')}>이메일 확인하기</Button> : null}
-      {auth.user ? <>
-        <p>현재 로그인 계정: {auth.user.email}</p>
-        <p>{!supported ? '서버에서 이메일 확인 상태를 제공하지 않습니다.'
+      {hasToken ? <Button className="w-full" disabled={busy} onClick={() => void act('confirm')}>이메일 확인하기</Button> : null}
+      {auth.user ? <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <p className="break-words type-caption text-stone-600">현재 로그인 계정: {auth.user.email}</p>
+        <p className="type-caption leading-relaxed text-stone-700">{!supported ? '서버에서 이메일 확인 상태를 제공하지 않습니다.'
           : auth.user.emailVerification === 'VERIFIED' ? '현재 계정의 이메일 확인이 완료되었습니다.'
           : auth.user.emailVerificationRequired === true ? '현재 계정의 이메일 확인이 필요합니다.'
           : '이메일 확인 완료 기록은 없으며 현재 계정은 이용할 수 있습니다.'}</p>
-        <Button disabled={busy} onClick={() => void act('resend')}>확인 이메일 다시 요청</Button>
-        <Button disabled={busy} onClick={() => void act('reload')}>현재 계정 상태 다시 확인</Button>
-      </> : <p>링크 확인은 로그인을 만들지 않습니다. 재요청하려면 로그인해 주세요.</p>}
+        <div className="flex flex-col gap-2">
+          <Button variant="secondary" disabled={busy} onClick={() => void act('resend')}>확인 이메일 다시 요청</Button>
+          <Button variant="ghost" disabled={busy} onClick={() => void act('reload')}>현재 계정 상태 다시 확인</Button>
+        </div>
+      </div> : <p className="type-caption leading-relaxed text-stone-500">링크 확인은 로그인을 만들지 않습니다. 재요청하려면 로그인해 주세요.</p>}
     </>}
-    {message ? <p role="status">{message}</p> : null}
-    <div className="flex flex-wrap gap-4">
+    {message ? <p role="status" className="rounded-xl border border-stone-200 bg-stone-50 p-4 type-caption leading-relaxed text-stone-700">{message}</p> : null}
+    <div className="flex flex-wrap gap-x-4 gap-y-3 border-t border-stone-100 pt-4 type-caption font-medium text-stone-600">
       <Link to={routes.login} onClick={discardPending}>로그인</Link>
       {auth.isAuthenticated ? <Link to={routes.settings} onClick={discardPending}>계정 관리</Link> : null}
       {auth.user && auth.user.emailVerificationRequired !== true ? <Link to={routes.classrooms} onClick={discardPending}>강의실</Link> : null}
