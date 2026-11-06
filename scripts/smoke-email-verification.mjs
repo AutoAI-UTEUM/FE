@@ -5,7 +5,7 @@ import { chromium } from '@playwright/test'
 // Read-only served-build check. A fresh, synthetic fragment exercises the real
 // token bootstrap/UI; it is never submitted to the backend or printed.
 const base = new URL(process.env.EMAIL_SMOKE_BASE_URL ?? 'https://www.uteum.com')
-assert(['https://www.uteum.com', 'http://127.0.0.1:4190'].includes(base.origin), 'Unsupported smoke origin')
+assert(['https://www.uteum.com', 'https://dev.uteum.com', 'http://127.0.0.1:4190'].includes(base.origin), 'Unsupported smoke origin')
 const expectedEntry = process.env.EXPECTED_ENTRY
 assert(expectedEntry?.startsWith('/assets/index-') && expectedEntry.endsWith('.js'), 'Expected built entry is required')
 let stage = 'launch'

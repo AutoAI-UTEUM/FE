@@ -1,10 +1,14 @@
 # 운영 이메일 확인 활성화 준비 — 2026-11-06
 
-## 상태: 활성화 전 중단, Draft 검토만 가능
+## 상태: 알려진 정책 상태를 유지한 main·dev 배포 승인
 
-사용자는 운영 FE readiness 활성화·검증·main PR 병합과 배포를 요청했지만, 동일 준비값이
-일반·Google 신규 가입의 정책 조회·동의 UI/payload도 켠다. 기존 DOB 필드·전송은 OFF에서도 유지된다. 준비 근거가 부족하면
-활성화 전에 중단하라는 범위에 따라 아래 확인 전에는 Draft·미병합을 유지하고 배포하지 않는다.
+사용자는 현재 약관/개인정보 문서가 법무 검토 전 초안이고 BE 가입 동의 필수 설정이
+미확인이라는 설명을 받은 뒤, 실메일 테스트는 나중에 하고 main·dev 모두 배포하도록
+명시적으로 승인했다. 따라서 FE readiness와 비변경 smoke만 두 환경에 반영한다.
+이 승인은 정책의 법무 검토 완료나 실제 메일 인수 완료를 뜻하지 않는다. 기존 DOB
+필드·전송은 OFF에서도 유지되고, 준비값은 정책 조회·안내·동의 payload를 함께 켠다.
+실제 메일·계정 테스트는 보류하며 BE/메일/정책/DB/서버 설정은 변경하지 않는다.
+아래 내용은 최초 활성화 전 점검에서 확인한 상태이며 그대로 알려진 제약으로 남는다.
 
 - 공개 운영 `GET /api/policies/current`: TERMS/PRIVACY 모두 version `0.9`,
   `requiresConsent=false`, 제목은 법무 검토 전 초안. 현재 초안 사용과 신규 가입 흐름의
@@ -21,7 +25,7 @@
 
 ## 수정안
 
-prod deploy.env에 정확한 계약값을 전달하고 build 전에 검증한다. unit baseline은 OFF,
+prod/dev deploy.env에 정확한 계약값을 전달하고 build 전에 검증한다. unit baseline은 OFF,
 별도 ready suite는 ON 계약을 검사하며 배포 Build는 ON이다. guardian/composer readiness,
 capability 목록과 BE/메일/정책/서버 설정은 변경하지 않는다.
 
