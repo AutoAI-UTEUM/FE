@@ -100,7 +100,8 @@ export function createMaterialsRepository(
       const response = await rawRequest(
         `/api/materials/${encodeURIComponent(materialId)}/file`,
         {
-          headers: { Accept: 'application/pdf' },
+          cache: 'no-store',
+          headers: { Accept: 'application/pdf, application/json' },
           signal,
         },
       )

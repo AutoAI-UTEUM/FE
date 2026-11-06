@@ -42,6 +42,8 @@ const crossBrowserProjects: Project[] = [
 
 export default defineConfig({
   testDir: './e2e',
+  // This CDP/cache suite has a dedicated Chromium config with tracing disabled.
+  testIgnore: '**/protected-file-cache.spec.ts',
   outputDir: `${artifactRoot}/test-results`,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),

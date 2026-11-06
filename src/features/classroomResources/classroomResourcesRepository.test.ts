@@ -57,7 +57,10 @@ describe('classroomResourcesRepository', () => {
       method: 'DELETE',
       signal: undefined,
     })
-    expect(rawRequest).toHaveBeenCalledWith('/api/resources/31/file', { signal: undefined })
+    expect(rawRequest).toHaveBeenCalledWith('/api/resources/31/file', {
+      cache: 'no-store',
+      signal: undefined,
+    })
   })
 
   it('uploads a file as multipart form data', async () => {

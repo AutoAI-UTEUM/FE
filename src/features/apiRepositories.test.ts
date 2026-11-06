@@ -129,7 +129,8 @@ describe('remote feature repositories', () => {
 
     await expect(repository.getFile('10')).resolves.toHaveProperty('size', 4)
     expect(rawRequest).toHaveBeenCalledWith('/api/materials/10/file', {
-      headers: { Accept: 'application/pdf' },
+      cache: 'no-store',
+      headers: { Accept: 'application/pdf, application/json' },
       signal: undefined,
     })
   })
