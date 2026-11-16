@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test'
 // phone landscape never silently exercises the desktop responsive mode.
 export default defineConfig({
   testDir: './e2e',
-  testMatch: 'navigation-popup-regressions.spec.ts',
+  testMatch: ['navigation-popup-regressions.spec.ts', 'session-page-jump.spec.ts'],
   timeout: 45_000,
   retries: 0,
   workers: 2,
