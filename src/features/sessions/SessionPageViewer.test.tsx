@@ -164,3 +164,57 @@ describe('SessionPageViewer', () => {
     expect(onMovePage).not.toHaveBeenCalled()
   })
 })
+
+
+describe('explicit page-number navigation', () => {
+  const setup = (isPending = false) => {
+    const onMovePage = vi.fn()
+    const view = render(<SessionPageViewer currentPage={2} totalPages={8} isPending={isPending} onMovePage={onMovePage} />)
+    return { ...view, onMovePage, input: screen.getByRole('textbox', { name: '이동할 페이지 번호 (1~8)' }) }
+  }
+
+  it('moves only on explicit submit and ignores the global arrow shortcuts while editing', () => {
+    const { input, onMovePage } = setup()
+    fireEvent.change(input, { target: { value: '5' } })
+    fireEvent.keyDown(input, { key: 'ArrowRight' })
+    expect(onMovePage).not.toHaveBeenCalled()
+    fireEvent.submit(screen.getByRole('form', { name: '페이지 번호로 이동' }))
+    expect(onMovePage).toHaveBeenCalledExactlyOnceWith(5)
+  })
+
+  it.each(['', '0', '9', '-1', '2.5', '1e0', 'abc', 'Infinity', '9007199254740993'])('rejects invalid page %s', (value) => {
+    const { input, onMovePage } = setup()
+    fireEvent.change(input, { target: { value } })
+    expect(screen.getByRole('button', { name: '이동' })).toBeDisabled()
+    fireEvent.submit(screen.getByRole('form', { name: '페이지 번호로 이동' }))
+    expect(onMovePage).not.toHaveBeenCalled()
+  })
+
+  it.each(['1', '8'])('accepts page boundary %s via button', (value) => {
+    const { input, onMovePage } = setup()
+    fireEvent.change(input, { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: '이동' }))
+    expect(onMovePage).toHaveBeenCalledExactlyOnceWith(Number(value))
+  })
+
+  it('disables pending and same-page submissions', () => {
+    const { input, onMovePage, rerender } = setup()
+    expect(screen.getByRole('button', { name: '이동' })).toBeDisabled()
+    fireEvent.change(input, { target: { value: '5' } })
+    rerender(<SessionPageViewer currentPage={2} totalPages={8} isPending onMovePage={onMovePage} />)
+    expect(input).toBeDisabled()
+    fireEvent.submit(screen.getByRole('form', { name: '페이지 번호로 이동' }))
+    expect(onMovePage).not.toHaveBeenCalled()
+  })
+
+  it('resets an abandoned draft on Escape or an externally changed page', () => {
+    const { input, onMovePage, rerender } = setup()
+    fireEvent.change(input, { target: { value: '5' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(input).toHaveValue('2')
+    fireEvent.change(input, { target: { value: '5' } })
+    rerender(<SessionPageViewer currentPage={3} totalPages={8} onMovePage={onMovePage} />)
+    expect(screen.getByRole('textbox', { name: '이동할 페이지 번호 (1~8)' })).toHaveValue('3')
+    expect(onMovePage).not.toHaveBeenCalled()
+  })
+})

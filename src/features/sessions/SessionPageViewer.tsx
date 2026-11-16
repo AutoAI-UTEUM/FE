@@ -458,6 +458,13 @@ function PageNavigation({
         onClick={() => onMovePage(currentPage - 1)}
         showLabel={false}
       />
+      <PageJump
+        key={`${currentPage}:${totalPages}`}
+        currentPage={currentPage}
+        isPending={isPending}
+        onMovePage={onMovePage}
+        totalPages={totalPages}
+      />
       <ToolbarButton
         disabled={isPending || currentPage >= totalPages}
         icon={ChevronRight}
@@ -466,6 +473,49 @@ function PageNavigation({
         showLabel={false}
       />
     </div>
+  )
+}
+
+function PageJump({ currentPage, totalPages, isPending, onMovePage }: {
+  currentPage: number
+  totalPages: number
+  isPending: boolean
+  onMovePage: (page: number) => void
+}) {
+  const [value, setValue] = useState(String(currentPage))
+  const target = Number(value)
+  const isValid = /^\d+$/.test(value) && Number.isSafeInteger(target) && target >= 1 && target <= totalPages
+  const canMove = isValid && target !== currentPage && !isPending
+
+  return (
+    <form
+      aria-label="페이지 번호로 이동"
+      className="flex items-center gap-1"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (canMove) onMovePage(target)
+      }}
+    >
+      <input
+        aria-label={`이동할 페이지 번호 (1~${totalPages})`}
+        aria-invalid={value !== '' && !isValid}
+        className="h-8 w-12 rounded border border-stone-300 bg-white px-1 text-center type-caption focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 mobile-web:h-11"
+        disabled={isPending || totalPages < 1}
+        inputMode="numeric"
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setValue(String(currentPage))
+        }}
+        type="text"
+        value={value}
+      />
+      <span className="type-caption text-stone-500">/ {totalPages}쪽</span>
+      <button
+        className="h-8 rounded-lg px-2 type-caption font-medium text-brand-700 hover:bg-brand-50 disabled:text-stone-400 mobile-web:h-11"
+        disabled={!canMove}
+        type="submit"
+      >이동</button>
+    </form>
   )
 }
 
